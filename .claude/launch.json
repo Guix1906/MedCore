@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "medcore-dev",
+      "runtimeExecutable": "cmd.exe",
+      "runtimeArgs": ["/c", "cd /d C:\\Users\\Win11\\Documents\\Medcore && npx vite dev --port 8080"],
+      "url": "http://localhost:8080"
+    }
+  ]
+}

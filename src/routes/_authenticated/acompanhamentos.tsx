@@ -1,0 +1,893 @@
+import type { DbRow } from "@/lib/types";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Plus,
+  Search,
+  Activity,
+  Calendar as CalIcon,
+  User as UserIcon,
+  ArrowRight,
+  X,
+  LayoutGrid,
+  Kanban,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  MessageCircle,
+  FileText,
+  TrendingUp,
+  Sparkles,
+  ChevronRight,
+} from "lucide-react";
+import { toast } from "sonner";
+import AppShell from "@/components/AppShell";
+import { supabase } from "@/integrations/supabase/client";
+
+export const Route = createFileRoute("/_authenticated/acompanhamentos")({
+  head: () => ({
+    meta: [
+      { title: "Acompanhamentos • MedCore" },
+      { name: "description", content: "Gestão completa de tratamentos, fases clínicas e acompanhamentos." },
+    ],
+  }),
+  component: AcompanhamentosPage,
+});
+
+export type Treatment = {
+  id: string;
+  patient_id: string;
+  doctor_id: string | null;
+  title: string;
+  objective: string | null;
+  start_date: string;
+  end_date: string | null;
+  status: "em_andamento" | "pausado" | "finalizado" | "cancelado";
+  total_value: number;
+  down_payment: number;
+  discount: number;
+  installments_count: number;
+  payment_method: string | null;
+  color: string;
+  return_days: number | null;
+  next_return_date: string | null;
+  notes: string | null;
+  created_at: string;
+  patients?: { name: string; phone?: string | null } | null;
+  doctors?: { name: string } | null;
+};
+
+const STATUS_LABEL: Record<Treatment["status"], { label: string; bg: string; fg: string }> = {
+  em_andamento: { label: "Em andamento", bg: "#DCFCE7", fg: "#166534" },
+  pausado: { label: "Pausado", bg: "#FEF3C7", fg: "#92400E" },
+  finalizado: { label: "Finalizado", bg: "#DBEAFE", fg: "#1E40AF" },
+  cancelado: { label: "Cancelado", bg: "#FEE2E2", fg: "#991B1B" },
+};
+
+const COLORS = ["#8B47FF", "#6C4CF7", "#10B981", "#F59E0B", "#EC4899", "#0EA5E9", "#EF4444"];
+
+const brl = (v: number) =>
+  Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+const daysBetween = (a: string | Date, b: string | Date) =>
+  Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000);
+
+function computeProgress(t: Treatment) {
+  if (t.status === "finalizado") return 100;
+  const totalDays = t.end_date ? daysBetween(t.start_date, t.end_date) : (t.return_days ?? 90);
+  if (totalDays <= 0) return 0;
+  const passed = Math.max(0, daysBetween(t.start_date, new Date()));
+  return Math.min(100, Math.round((passed / totalDays) * 100));
+}
+
+function AcompanhamentosPage() {
+  const queryClient = useQueryClient();
+  const [q, setQ] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"todos" | Treatment["status"]>("todos");
+  const [viewMode, setViewMode] = useState<"cards" | "kanban">("cards");
+  const [openNew, setOpenNew] = useState(false);
+
+  const { data: rows = [], isLoading: loading } = useQuery({
+    queryKey: ["treatments-list"],
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("treatments")
+        .select("*, patients(name, phone), doctors(name)")
+        .order("created_at", { ascending: false });
+      if (error) toast.error("Erro ao carregar acompanhamentos");
+      return (data ?? []) as unknown as Treatment[];
+    },
+  });
+
+  const load = () => {
+    queryClient.invalidateQueries({ queryKey: ["treatments-list"] });
+  };
+
+  const filtered = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    return rows.filter((r) => {
+      if (statusFilter !== "todos" && r.status !== statusFilter) return false;
+      if (!s) return true;
+      return (
+        r.title.toLowerCase().includes(s) ||
+        r.patients?.name?.toLowerCase().includes(s) ||
+        r.doctors?.name?.toLowerCase().includes(s)
+      );
+    });
+  }, [rows, q, statusFilter]);
+
+  const kpis = useMemo(() => {
+    const total = rows.length;
+    const ativos = rows.filter((r) => r.status === "em_andamento").length;
+    const finalizados = rows.filter((r) => r.status === "finalizado").length;
+    const receita = rows
+      .filter((r) => r.status !== "cancelado")
+      .reduce((s, r) => s + Number(r.total_value || 0), 0);
+    return { total, ativos, finalizados, receita };
+  }, [rows]);
+
+  // Agrupamento para Visão Kanban por fases clínicas
+  const kanbanColumns = useMemo(() => {
+    const f1: Treatment[] = [];
+    const f2: Treatment[] = [];
+    const f3: Treatment[] = [];
+    const f4: Treatment[] = [];
+
+    filtered.forEach((t) => {
+      if (t.status === "finalizado") {
+        f4.push(t);
+      } else if (t.status === "pausado") {
+        f3.push(t);
+      } else {
+        const prog = computeProgress(t);
+        if (prog <= 25) f1.push(t);
+        else if (prog <= 70) f2.push(t);
+        else f3.push(t);
+      }
+    });
+
+    return [
+      {
+        id: "fase1",
+        title: "1. Diagnóstico & Início",
+        subtitle: "Até 25% do protocolo",
+        badge: `${f1.length}`,
+        color: "#8B47FF",
+        items: f1,
+      },
+      {
+        id: "fase2",
+        title: "2. Intervenção Ativa",
+        subtitle: "25% a 70% do protocolo",
+        badge: `${f2.length}`,
+        color: "#0EA5E9",
+        items: f2,
+      },
+      {
+        id: "fase3",
+        title: "3. Manutenção & Retornos",
+        subtitle: "Fase final ou pausado",
+        badge: `${f3.length}`,
+        color: "#F59E0B",
+        items: f3,
+      },
+      {
+        id: "fase4",
+        title: "4. Concluído / Alta",
+        subtitle: "Protocolos finalizados",
+        badge: `${f4.length}`,
+        color: "#10B981",
+        items: f4,
+      },
+    ];
+  }, [filtered]);
+
+  const openWhatsAppPatient = (e: React.MouseEvent, t: Treatment) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const phone = t.patients?.phone?.replace(/\D/g, "");
+    if (!phone) {
+      toast.info("Paciente sem telefone cadastrado");
+      return;
+    }
+    const msg = encodeURIComponent(
+      `Olá ${t.patients?.name}! Entramos em contato da clínica sobre o seu acompanhamento "${t.title}". Como você está se sentindo?`
+    );
+    window.open(`https://wa.me/55${phone}?text=${msg}`, "_blank");
+  };
+
+  return (
+    <AppShell>
+      <div className="p-6 md:p-8 max-w-[1400px] mx-auto space-y-6">
+        {/* Cabeçalho */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold text-[#111827] tracking-tight">
+                Acompanhamentos
+              </h1>
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 text-purple-700">
+                Copiloto Clínico
+              </span>
+            </div>
+            <p className="text-[13.5px] text-[#6B7280] mt-1">
+              Fases de tratamento, cronograma de medicamentos, linha do tempo e financeiro.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            {/* Alternador Cards / Kanban */}
+            <div className="flex items-center bg-[#F3F4F6] p-1 rounded-xl border border-black/[0.04]">
+              <button
+                onClick={() => setViewMode("cards")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px] font-semibold transition ${
+                  viewMode === "cards"
+                    ? "bg-white text-[#111827] shadow-sm"
+                    : "text-[#6B7280] hover:text-[#111827]"
+                }`}
+                title="Visão em Cards"
+              >
+                <LayoutGrid size={15} />
+                <span className="hidden sm:inline">Cards</span>
+              </button>
+              <button
+                onClick={() => setViewMode("kanban")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px] font-semibold transition ${
+                  viewMode === "kanban"
+                    ? "bg-white text-[#111827] shadow-sm"
+                    : "text-[#6B7280] hover:text-[#111827]"
+                }`}
+                title="Visão em Fases / Kanban"
+              >
+                <Kanban size={15} />
+                <span className="hidden sm:inline">Fases / Kanban</span>
+              </button>
+            </div>
+
+            <button
+              onClick={() => setOpenNew(true)}
+              className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-[#8B47FF] hover:bg-[#7A3AE6] text-white text-[13.5px] font-bold shadow-md shadow-purple-500/20 active:scale-98 transition"
+            >
+              <Plus size={16} />
+              <span>Novo acompanhamento</span>
+            </button>
+          </div>
+        </div>
+
+        {/* KPIs */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+          {[
+            { label: "Total cadastrados", value: kpis.total, color: "#8B47FF", icon: Activity },
+            { label: "Em andamento", value: kpis.ativos, color: "#10B981", icon: TrendingUp },
+            { label: "Finalizados", value: kpis.finalizados, color: "#1E40AF", icon: CheckCircle2 },
+            { label: "Valor sob gestão", value: brl(kpis.receita), color: "#F59E0B", icon: Sparkles },
+          ].map((k, i) => {
+            const Icon = k.icon;
+            return (
+              <motion.div
+                key={k.label}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.05 }}
+                className="bg-white rounded-2xl border border-slate-200/80 p-4.5 shadow-sm flex items-center justify-between"
+              >
+                <div>
+                  <div className="text-[11.5px] font-bold uppercase tracking-wider text-slate-500">
+                    {k.label}
+                  </div>
+                  <div
+                    className="text-[22px] font-extrabold text-[#111827] mt-1"
+                    style={{ color: typeof k.value === "number" ? k.color : "#111827" }}
+                  >
+                    {k.value}
+                  </div>
+                </div>
+                <div
+                  className="h-11 w-11 rounded-2xl flex items-center justify-center shrink-0"
+                  style={{ background: k.color + "15", color: k.color }}
+                >
+                  <Icon size={20} />
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+
+        {/* Barra de Filtros e Busca */}
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 shadow-sm flex flex-wrap items-center gap-2.5">
+          <div className="relative flex-1 min-w-[240px]">
+            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Buscar por paciente, médico ou título do tratamento…"
+              className="w-full h-10 pl-10 pr-3 rounded-xl bg-slate-50 border border-slate-200 focus:border-purple-500 focus:bg-white outline-none text-[13.5px] transition"
+            />
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {(["todos", "em_andamento", "pausado", "finalizado", "cancelado"] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                className={`h-9 px-3 rounded-xl text-[12.5px] font-semibold transition cursor-pointer ${
+                  statusFilter === s
+                    ? "bg-[#8B47FF] text-white shadow-sm"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                }`}
+              >
+                {s === "todos" ? "Todos" : STATUS_LABEL[s].label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ============================================================ */}
+        {/* MODO CARDS / LISTA */}
+        {/* ============================================================ */}
+        {viewMode === "cards" && (
+          <div>
+            {loading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {[...Array(6)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-48 rounded-2xl bg-white border border-slate-200 animate-pulse"
+                  />
+                ))}
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="text-center py-20 bg-white rounded-2xl border border-slate-200/80 shadow-sm">
+                <Activity size={44} className="mx-auto text-slate-300" strokeWidth={1.5} />
+                <div className="mt-3 text-[16px] font-bold text-slate-800">
+                  Nenhum acompanhamento encontrado
+                </div>
+                <div className="text-[13px] text-slate-500 mt-1">
+                  Ajuste seus filtros de busca ou crie um novo acompanhamento.
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4.5">
+                {filtered.map((t, i) => {
+                  const st = STATUS_LABEL[t.status];
+                  const prog = computeProgress(t);
+                  return (
+                    <motion.div
+                      key={t.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: Math.min(i * 0.03, 0.3) }}
+                    >
+                      <Link
+                        to="/acompanhamentos/$id"
+                        params={{ id: t.id }}
+                        className="block bg-white rounded-2xl border border-slate-200/80 p-5 hover:shadow-xl hover:border-purple-300 hover:-translate-y-0.5 transition-all group relative overflow-hidden"
+                      >
+                        {/* Indicador de progresso no topo do card */}
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-slate-100">
+                          <div
+                            className="h-full transition-all duration-700"
+                            style={{
+                              width: `${prog}%`,
+                              background: t.color || "#8B47FF",
+                            }}
+                          />
+                        </div>
+
+                        <div className="flex items-start justify-between gap-3 mt-1">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div
+                              className="h-11 w-11 shrink-0 rounded-2xl flex items-center justify-center shadow-xs"
+                              style={{ background: (t.color || "#8B47FF") + "18", color: t.color || "#8B47FF" }}
+                            >
+                              <Activity size={20} />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-[15px] font-bold text-[#0F172A] truncate group-hover:text-purple-700 transition-colors">
+                                {t.title}
+                              </div>
+                              <div className="text-[12.5px] text-slate-600 truncate flex items-center gap-1.5 mt-0.5">
+                                <UserIcon size={13} className="text-slate-400" />
+                                <span className="font-semibold">{t.patients?.name ?? "—"}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <span
+                            className="text-[11px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap"
+                            style={{ background: st.bg, color: st.fg }}
+                          >
+                            {st.label}
+                          </span>
+                        </div>
+
+                        {/* Barra de Progresso com label */}
+                        <div className="mt-4 pt-1">
+                          <div className="flex items-center justify-between text-[11.5px] font-semibold text-slate-600 mb-1.5">
+                            <span>Progresso do protocolo</span>
+                            <span className="font-bold text-slate-900">{prog}%</span>
+                          </div>
+                          <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all duration-700"
+                              style={{ width: `${prog}%`, background: t.color || "#8B47FF" }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Dados adicionais */}
+                        <div className="mt-4 grid grid-cols-2 gap-3 text-[12.5px] bg-slate-50/80 p-3 rounded-xl">
+                          <div>
+                            <div className="text-slate-400 text-[11px] font-semibold uppercase">Início</div>
+                            <div className="text-slate-800 font-semibold mt-0.5 flex items-center gap-1">
+                              <CalIcon size={12} className="text-purple-600" />
+                              {new Date(t.start_date).toLocaleDateString("pt-BR")}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-slate-400 text-[11px] font-semibold uppercase">Valor</div>
+                            <div className="text-slate-900 font-bold mt-0.5">
+                              {brl(Number(t.total_value))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Footer do Card com Ações Rápidas */}
+                        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            {t.patients?.phone && (
+                              <button
+                                type="button"
+                                onClick={(e) => openWhatsAppPatient(e, t)}
+                                className="h-7.5 px-2.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-[11.5px] font-bold inline-flex items-center gap-1 transition cursor-pointer"
+                                title="Enviar mensagem no WhatsApp"
+                              >
+                                <MessageCircle size={13} />
+                                <span>WhatsApp</span>
+                              </button>
+                            )}
+                            <span className="text-[11.5px] text-slate-500 truncate max-w-[130px]">
+                              {t.doctors?.name ? `Dr(a). ${t.doctors.name}` : ""}
+                            </span>
+                          </div>
+
+                          <div
+                            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl bg-purple-50 group-hover:bg-purple-600 text-purple-700 group-hover:text-white text-[12.5px] font-bold transition-all shadow-2xs"
+                          >
+                            <span>Gerenciar</span>
+                            <ChevronRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+                          </div>
+                        </div>
+                      </Link>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* MODO KANBAN / FASES CLÍNICAS */}
+        {/* ============================================================ */}
+        {viewMode === "kanban" && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
+            {kanbanColumns.map((col) => (
+              <div
+                key={col.id}
+                className="bg-slate-50/90 rounded-2xl border border-slate-200/80 p-3.5 flex flex-col min-h-[480px]"
+              >
+                {/* Header da Coluna */}
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200/80 px-1">
+                  <div>
+                    <div className="text-[13.5px] font-bold text-slate-900 flex items-center gap-2">
+                      <span
+                        className="h-2.5 w-2.5 rounded-full inline-block"
+                        style={{ background: col.color }}
+                      />
+                      {col.title}
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">{col.subtitle}</div>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-700 text-[11px] font-bold shadow-2xs">
+                    {col.badge}
+                  </span>
+                </div>
+
+                {/* Lista de cards da coluna */}
+                <div className="space-y-3 mt-3 flex-1 overflow-y-auto max-h-[620px] pr-0.5">
+                  {col.items.length === 0 ? (
+                    <div className="text-center py-10 text-[12px] text-slate-400 font-medium">
+                      Nenhum tratamento nesta fase.
+                    </div>
+                  ) : (
+                    col.items.map((t) => {
+                      const prog = computeProgress(t);
+                      return (
+                        <Link
+                          key={t.id}
+                          to="/acompanhamentos/$id"
+                          params={{ id: t.id }}
+                          className="block bg-white rounded-xl border border-slate-200/90 p-3.5 shadow-2xs hover:shadow-md hover:border-purple-400 transition group"
+                        >
+                          <div className="text-[13.5px] font-bold text-slate-900 truncate group-hover:text-purple-700">
+                            {t.title}
+                          </div>
+                          <div className="text-[12px] text-slate-600 mt-1 flex items-center gap-1 truncate font-medium">
+                            <UserIcon size={12} className="text-slate-400" />
+                            {t.patients?.name ?? "—"}
+                          </div>
+
+                          <div className="mt-3">
+                            <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 mb-1">
+                              <span>Progresso</span>
+                              <span>{prog}%</span>
+                            </div>
+                            <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                              <div
+                                className="h-full rounded-full"
+                                style={{ width: `${prog}%`, background: col.color }}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11.5px]">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-800">
+                                {brl(Number(t.total_value))}
+                              </span>
+                              {t.patients?.phone && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => openWhatsAppPatient(e, t)}
+                                  className="text-emerald-600 hover:text-emerald-800 flex items-center gap-1 font-semibold cursor-pointer"
+                                  title="WhatsApp"
+                                >
+                                  <MessageCircle size={12} />
+                                  <span>WhatsApp</span>
+                                </button>
+                              )}
+                            </div>
+                            <span className="text-[11px] font-bold text-purple-600 group-hover:underline flex items-center">
+                              Gerenciar <ChevronRight size={12} />
+                            </span>
+                          </div>
+                        </Link>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {openNew && <NewTreatmentModal onClose={() => setOpenNew(false)} onCreated={load} />}
+    </AppShell>
+  );
+}
+
+// ============== MODAL NOVO ACOMPANHAMENTO ==============
+function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [patients, setPatients] = useState<{ id: string; name: string }[]>([]);
+  const [doctors, setDoctors] = useState<{ id: string; name: string }[]>([]);
+  const [form, setForm] = useState({
+    patient_id: "",
+    doctor_id: "",
+    title: "",
+    objective: "",
+    start_date: new Date().toISOString().slice(0, 10),
+    protocol_days: "90",
+    total_value: "",
+    down_payment: "",
+    discount: "",
+    installments_count: "1",
+    payment_method: "pix",
+    return_days: "30",
+    color: COLORS[0],
+    notes: "",
+  });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const [p, d] = await Promise.all([
+        supabase.from("patients").select("id,name").order("name").limit(500),
+        supabase.from("doctors").select("id,name").order("name").limit(200),
+      ]);
+      setPatients((p.data as unknown as { id: string; name: string }[]) ?? []);
+      setDoctors((d.data as unknown as { id: string; name: string }[]) ?? []);
+    })();
+  }, []);
+
+  const submit = async () => {
+    if (!form.patient_id || !form.title) {
+      toast.error("Paciente e título são obrigatórios");
+      return;
+    }
+    setSaving(true);
+    const startDateObj = new Date(form.start_date);
+    const protocolDaysNum = Number(form.protocol_days) || 90;
+    const endDateObj = new Date(startDateObj.getTime() + protocolDaysNum * 86400000);
+    const endDateStr = endDateObj.toISOString().slice(0, 10);
+
+    const payload = {
+      patient_id: form.patient_id,
+      doctor_id: form.doctor_id || null,
+      title: form.title,
+      objective: form.objective || null,
+      start_date: form.start_date,
+      end_date: endDateStr,
+      total_value: parseBRL(form.total_value),
+      down_payment: parseBRL(form.down_payment),
+      discount: parseBRL(form.discount),
+      installments_count: Math.max(1, Number(form.installments_count) || 1),
+      payment_method: form.payment_method,
+      return_days: form.return_days ? Number(form.return_days) : null,
+      color: form.color,
+      notes: form.notes || null,
+    };
+    const { data, error } = await supabase.from("treatments").insert(payload).select("id").single();
+    if (error || !data) {
+      setSaving(false);
+      toast.error("Erro ao criar acompanhamento");
+      return;
+    }
+    // Gerar parcelas
+    if (payload.installments_count > 0 && payload.total_value > 0) {
+      await supabase.rpc("generate_treatment_installments", { p_treatment_id: data.id });
+    }
+    setSaving(false);
+    toast.success("Acompanhamento criado com sucesso!");
+    onCreated();
+    onClose();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto border border-slate-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-6 py-4.5 border-b border-slate-100 sticky top-0 bg-white z-10">
+          <div>
+            <div className="text-[16px] font-bold text-slate-900">Novo Acompanhamento Clínico</div>
+            <div className="text-[12px] text-slate-500 mt-0.5">
+              Defina o paciente, protocolo, cronograma e parâmetros iniciais.
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="h-8 w-8 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center transition"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Field label="Paciente *">
+            <select
+              className={inputCls}
+              value={form.patient_id}
+              onChange={(e) => setForm({ ...form, patient_id: e.target.value })}
+            >
+              <option value="">Selecione…</option>
+              {patients.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Médico responsável">
+            <select
+              className={inputCls}
+              value={form.doctor_id}
+              onChange={(e) => setForm({ ...form, doctor_id: e.target.value })}
+            >
+              <option value="">—</option>
+              {doctors.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Título do Acompanhamento *" className="md:col-span-2">
+            <input
+              className={inputCls}
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              placeholder="Ex.: Emagrecimento Metabólico 90 dias / Reabilitação / Pós-Operatório"
+            />
+          </Field>
+          <Field label="Objetivo Clínico" className="md:col-span-2">
+            <textarea
+              rows={2}
+              className={inputCls}
+              value={form.objective}
+              onChange={(e) => setForm({ ...form, objective: e.target.value })}
+              placeholder="Meta clínica, parâmetros a atingir, redução de peso, cicatrização..."
+            />
+          </Field>
+          <Field label="Data de início">
+            <input
+              type="date"
+              className={inputCls}
+              value={form.start_date}
+              onChange={(e) => setForm({ ...form, start_date: e.target.value })}
+            />
+          </Field>
+          <Field label="Duração do Protocolo">
+            <select
+              className={inputCls}
+              value={form.protocol_days}
+              onChange={(e) => setForm({ ...form, protocol_days: e.target.value })}
+            >
+              <option value="30">30 dias (1 mês)</option>
+              <option value="60">60 dias (2 meses)</option>
+              <option value="90">90 dias (3 meses)</option>
+              <option value="120">120 dias (4 meses)</option>
+              <option value="180">180 dias (6 meses)</option>
+              <option value="365">365 dias (1 ano)</option>
+            </select>
+          </Field>
+          <Field label="Retorno automático (dias)">
+            <select
+              className={inputCls}
+              value={form.return_days}
+              onChange={(e) => setForm({ ...form, return_days: e.target.value })}
+            >
+              {[15, 30, 45, 60, 90, 120, 180, 365].map((n) => (
+                <option key={n} value={n}>
+                  {n} dias
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Valor total (R$)">
+            <input
+              inputMode="decimal"
+              className={inputCls}
+              value={form.total_value}
+              onChange={(e) => setForm({ ...form, total_value: onlyDecimal(e.target.value) })}
+              placeholder="0,00"
+            />
+          </Field>
+          <Field label="Entrada (R$)">
+            <input
+              inputMode="decimal"
+              className={inputCls}
+              value={form.down_payment}
+              onChange={(e) => setForm({ ...form, down_payment: onlyDecimal(e.target.value) })}
+              placeholder="0,00"
+            />
+          </Field>
+          <Field label="Desconto (R$)">
+            <input
+              inputMode="decimal"
+              className={inputCls}
+              value={form.discount}
+              onChange={(e) => setForm({ ...form, discount: onlyDecimal(e.target.value) })}
+              placeholder="0,00"
+            />
+          </Field>
+          <Field label="Nº de parcelas">
+            <input
+              type="number"
+              min={1}
+              inputMode="numeric"
+              className={inputCls}
+              value={form.installments_count}
+              onChange={(e) =>
+                setForm({ ...form, installments_count: e.target.value.replace(/\D/g, "") })
+              }
+              onBlur={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  installments_count:
+                    e.target.value === "" ? "1" : String(Math.max(1, Number(e.target.value))),
+                }))
+              }
+              placeholder="1"
+            />
+          </Field>
+          <Field label="Forma de pagamento">
+            <select
+              className={inputCls}
+              value={form.payment_method}
+              onChange={(e) => setForm({ ...form, payment_method: e.target.value })}
+            >
+              <option value="pix">Pix</option>
+              <option value="dinheiro">Dinheiro</option>
+              <option value="cartao_credito">Cartão de crédito</option>
+              <option value="cartao_debito">Cartão de débito</option>
+              <option value="boleto">Boleto</option>
+              <option value="transferencia">Transferência</option>
+            </select>
+          </Field>
+          <Field label="Cor de identificação">
+            <div className="flex flex-wrap gap-2 pt-2">
+              {COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setForm({ ...form, color: c })}
+                  className="h-7 w-7 rounded-full border-2 transition cursor-pointer"
+                  style={{
+                    background: c,
+                    borderColor: form.color === c ? "#111827" : "transparent",
+                  }}
+                />
+              ))}
+            </div>
+          </Field>
+          <Field label="Observações iniciais" className="md:col-span-2">
+            <textarea
+              rows={2}
+              className={inputCls}
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              placeholder="Anotações internas..."
+            />
+          </Field>
+        </div>
+
+        <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-2.5 sticky bottom-0 bg-white">
+          <button
+            onClick={onClose}
+            className="h-10 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[13px] font-semibold transition cursor-pointer"
+          >
+            Cancelar
+          </button>
+          <button
+            disabled={saving}
+            onClick={submit}
+            className="h-10 px-5 rounded-xl bg-[#8B47FF] hover:bg-[#7A3AE6] text-white text-[13px] font-bold shadow-sm transition active:scale-98 disabled:opacity-50 cursor-pointer"
+          >
+            {saving ? "Salvando…" : "Criar acompanhamento"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const inputCls =
+  "w-full h-10 px-3 rounded-xl bg-slate-50 border border-slate-200 focus:border-[#8B47FF] focus:bg-white outline-none text-[13px] text-slate-800 transition";
+
+function onlyDecimal(v: string) {
+  const s = v.replace(/[^\d.,]/g, "").replace(/\./g, ",");
+  const parts = s.split(",");
+  return parts.length <= 2 ? s : parts[0] + "," + parts.slice(1).join("");
+}
+function parseBRL(v: string) {
+  if (!v) return 0;
+  const n = Number(v.replace(/\./g, "").replace(",", "."));
+  return isFinite(n) ? n : 0;
+}
+
+function Field({
+  label,
+  className,
+  children,
+}: {
+  label: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={className}>
+      <label className="text-[12px] font-bold text-slate-700 block mb-1.5">{label}</label>
+      {children}
+    </div>
+  );
+}

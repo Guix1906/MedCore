@@ -1,0 +1,835 @@
+import React, { useState, useMemo } from "react";
+import {
+  User,
+  Calendar as CalIcon,
+  Mail,
+  Phone,
+  Bell,
+  MapPin,
+  FileText,
+  Clock,
+  Sparkles,
+  Pencil,
+  MoreVertical,
+  Camera,
+  AlertTriangle,
+  Send,
+  CheckCircle2,
+  ChevronRight,
+  FolderOpen,
+  ClipboardList,
+  ArrowLeft,
+  Save,
+  Check,
+  Stethoscope,
+  Pill,
+  ShieldAlert,
+  Activity,
+  UserCheck,
+  Layers,
+  ChevronDown,
+} from "lucide-react";
+import { toast } from "sonner";
+import {
+  AiRecordAssistantModal,
+  type AiSectionContext,
+} from "@/components/prontuario/AiRecordAssistantModal";
+import type { StructuredConsultationResult } from "@/lib/gemini";
+
+export type PatientProfileData = {
+  id?: string;
+  name: string;
+  birth_date?: string | null;
+  age?: string | null;
+  gender?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  insurance?: string | null;
+  notifications?: string | null;
+  address?: string | null;
+  neighborhood?: string | null;
+  city?: string | null;
+  state?: string | null;
+  cep?: string | null;
+  country?: string | null;
+  cpf?: string | null;
+  notes?: string | null;
+  created_at?: string | null;
+  active?: boolean;
+  photoUrl?: string | null;
+};
+
+const DEFAULT_PATIENT: PatientProfileData = {
+  name: "Clara Ribeiro (Paciente de exemplo)",
+  birth_date: "26/01/1992 (34 anos)",
+  gender: "Feminino",
+  email: "clara.ribeiro@exemplo.com",
+  phone: "+55 (11) 99999-9999",
+  notifications: "Não recebe notificações",
+  address: "Av. Pedro Álvares Cabral, SN",
+  neighborhood: "Vila Mariana",
+  city: "São Paulo",
+  state: "SP",
+  cep: "04094-050",
+  country: "Brasil",
+  cpf: "315.772.070-84",
+  notes: "Esse paciente é um paciente de exemplo.",
+  created_at: "15/08/2026 09:49:12",
+  active: true,
+  photoUrl: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&auto=format&fit=crop&q=80",
+};
+
+const TABS = [
+  { id: "informacoes", label: "Informações" },
+  { id: "timeline", label: "Linha do tempo" },
+  { id: "carteira", label: "Carteira" },
+  { id: "pacotes", label: "Pacotes" },
+  { id: "financeiro", label: "Financeiro" },
+  { id: "orcamentos", label: "Orçamentos" },
+  { id: "prontuario", label: "Prontuário" },
+  { id: "documentos", label: "Documentos" },
+];
+
+const CONDICOES_LIST = [
+  "Hipertensão",
+  "Diabetes",
+  "Doenças cardíacas",
+  "Asma ou problemas respiratórios",
+  "Problemas de tireoide",
+  "Câncer",
+  "Outras condições crônicas",
+];
+
+export function PatientFullProfileView({
+  patient,
+  onBack,
+  onEdit,
+}: {
+  patient?: Partial<PatientProfileData> | null;
+  onBack: () => void;
+  onEdit?: () => void;
+}) {
+  const [activeTab, setActiveTab] = useState<string>("informacoes");
+
+  // Estado do Prontuário Clínico
+  const [queixa, setQueixa] = useState("");
+  const [historicoFamiliar, setHistoricoFamiliar] = useState("");
+  const [tratamentos, setTratamentos] = useState("");
+  const [alergias, setAlergias] = useState("");
+  const [historicoPessoal, setHistoricoPessoal] = useState("");
+  const [medicacoes, setMedicacoes] = useState("");
+  const [condicoes, setConditions] = useState<Record<string, boolean>>({});
+
+  // Estado do Assistente IA
+  const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [aiSection, setAiSection] = useState<AiSectionContext | null>(null);
+
+  const isExample = !patient || !patient.id || Boolean(patient.name?.toLowerCase().includes("exemplo"));
+
+  const data = useMemo(() => {
+    if (isExample && (!patient || !patient.id)) {
+      return DEFAULT_PATIENT;
+    }
+    return {
+      id: patient?.id,
+      name: patient?.name || "Paciente sem nome",
+      birth_date: patient?.birth_date || null,
+      age: patient?.age || null,
+      gender: patient?.gender || null,
+      email: patient?.email || null,
+      phone: patient?.phone || null,
+      insurance: patient?.insurance || null,
+      notifications: patient?.notifications || null,
+      address: patient?.address || null,
+      neighborhood: patient?.neighborhood || null,
+      city: patient?.city || null,
+      state: patient?.state || null,
+      cep: patient?.cep || null,
+      country: patient?.country || "Brasil",
+      cpf: patient?.cpf || null,
+      notes: patient?.notes || null,
+      created_at: patient?.created_at || null,
+      active: patient?.active !== false,
+      photoUrl: patient?.photoUrl || null,
+    };
+  }, [patient, isExample]);
+
+  const openAiForSection = (sec: { key: string; title: string; placeholder?: string }) => {
+    setAiSection(sec);
+    setAiModalOpen(true);
+  };
+
+  const handleAiInsert = (
+    content: string | StructuredConsultationResult,
+    sectionKey?: string
+  ) => {
+    if (typeof content === "string") {
+      if (sectionKey === "queixa") setQueixa(content);
+      else if (sectionKey === "historico_familiar") setHistoricoFamiliar(content);
+      else if (sectionKey === "tratamentos") setTratamentos(content);
+      else if (sectionKey === "alergias") setAlergias(content);
+      else if (sectionKey === "medicacoes") setMedicacoes(content);
+      else if (sectionKey === "historico_pessoal") setHistoricoPessoal(content);
+    } else {
+      const isValid = (t?: string) =>
+        Boolean(t && t.trim().length > 0 && t !== "Não informado na consulta.");
+
+      if (isValid(content.queixaPrincipal)) {
+        setQueixa(content.queixaPrincipal);
+      }
+      if (isValid(content.historicoFamiliar)) {
+        setHistoricoFamiliar(content.historicoFamiliar);
+      }
+      if (isValid(content.tratamentosAnteriores) || isValid(content.condutaPlano)) {
+        const full = [
+          content.tratamentosAnteriores,
+          content.condutaPlano ? `Conduta e Orientações:\n${content.condutaPlano}` : "",
+        ]
+          .filter(isValid)
+          .join("\n\n");
+        setTratamentos(full);
+      }
+      if (isValid(content.alergias)) {
+        setAlergias(content.alergias);
+      }
+      if (isValid(content.medicacoesEmUso)) {
+        setMedicacoes(content.medicacoesEmUso);
+      }
+      if (isValid(content.historicoPessoal)) {
+        setHistoricoPessoal((prev) => (prev ? `${prev}\n${content.historicoPessoal}` : content.historicoPessoal));
+      }
+      if (content.condicoesDetectadas && content.condicoesDetectadas.length > 0) {
+        setConditions((prev) => {
+          const next = { ...prev };
+          content.condicoesDetectadas.forEach((cond) => {
+            next[cond] = true;
+          });
+          return next;
+        });
+      }
+    }
+  };
+
+  const activeTabLabel = TABS.find((t) => t.id === activeTab)?.label || "Informações";
+
+  return (
+    <div className="flex flex-col min-h-screen bg-white text-slate-800">
+      {/* ============================================================ */}
+      {/* 1. TOP BREADCRUMB BAR (Exato como no print) */}
+      {/* ============================================================ */}
+      <div className="flex items-center justify-between px-6 py-3 border-b border-[#EFEFEF] bg-white text-[13px] text-slate-500 font-medium">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <button
+            type="button"
+            onClick={onBack}
+            className="text-purple-600 hover:text-purple-800 font-medium cursor-pointer hover:underline"
+          >
+            Contatos
+          </button>
+          <span>/</span>
+          <button
+            type="button"
+            onClick={onBack}
+            className="text-purple-600 hover:text-purple-800 font-medium cursor-pointer hover:underline"
+          >
+            Listagem
+          </button>
+          <span>/</span>
+          <span className="text-purple-600 font-semibold">Paciente</span>
+          <span>/</span>
+          <span className="text-slate-400 font-medium">{activeTabLabel}</span>
+        </div>
+
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-slate-600 hover:text-purple-700 transition-colors cursor-pointer"
+        >
+          <ArrowLeft size={14} />
+          <span>Voltar para lista</span>
+        </button>
+      </div>
+
+      {/* ============================================================ */}
+      {/* 2. CORPO PRINCIPAL COM SIDEBAR ESQUERDA + CONTEÚDO DIREITA */}
+      {/* ============================================================ */}
+      <div className="flex-1 flex flex-col md:flex-row min-h-0">
+        {/* SIDEBAR ESQUERDA (PERFIL DO PACIENTE) */}
+        <aside className="w-full md:w-[260px] lg:w-[280px] shrink-0 border-b md:border-b-0 md:border-r border-[#EFEFEF] bg-white p-6 flex flex-col items-center">
+          {/* Avatar com overlays */}
+          <div className="relative mb-3.5">
+            <div className="relative h-24 w-24 rounded-full overflow-hidden border-2 border-white shadow-md bg-purple-100 flex items-center justify-center">
+              {data.photoUrl ? (
+                <img
+                  src={data.photoUrl}
+                  alt={data.name}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="h-full w-full bg-[#7B3AF5] text-white font-bold text-2xl flex items-center justify-center">
+                  {data.name
+                    .split(" ")
+                    .slice(0, 2)
+                    .map((n) => n[0])
+                    .join("")}
+                </div>
+              )}
+
+              {/* Faixa diagonal EXEMPLO apenas se for paciente de demonstração */}
+              {isExample && (
+                <div className="absolute bottom-1.5 left-0 right-0 bg-[#7B3AF5] text-white text-[8px] font-extrabold uppercase tracking-widest text-center py-0.5 transform -rotate-12 shadow-sm">
+                  EXEMPLO
+                </div>
+              )}
+            </div>
+
+            {/* Ícone de câmera */}
+            <button
+              type="button"
+              className="absolute -top-1 -right-1 h-6 w-6 rounded-full bg-[#7B3AF5] text-white flex items-center justify-center shadow hover:scale-105 transition-transform cursor-pointer"
+              title="Alterar foto"
+              onClick={() => toast.info("Upload de foto")}
+            >
+              <Camera className="h-3 w-3" />
+            </button>
+
+            {/* Ícone de aviso */}
+            <div
+              className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full bg-amber-50 border-2 border-white text-amber-500 flex items-center justify-center shadow"
+              title="Atenção"
+            >
+              <AlertTriangle className="h-3 w-3" />
+            </div>
+          </div>
+
+          {/* Nome do Paciente */}
+          <h1 className="text-[17px] font-bold text-[#0F172A] text-center leading-tight">
+            {data.name}
+          </h1>
+
+          {/* Sub-informações */}
+          <div className="mt-2 text-center space-y-0.5">
+            <p className="text-[12px] font-medium text-[#64748B]">
+              {data.gender || "Feminino"} • {data.age || "34 anos"}
+            </p>
+            <p className="text-[12px] font-medium text-[#64748B]">{data.phone}</p>
+            <p className="text-[12px] font-medium text-[#64748B]">{data.cpf}</p>
+          </div>
+
+          {/* Tag Paciente */}
+          <div className="mt-2.5">
+            <span className="px-3 py-0.5 rounded-full bg-[#F3E8FF] text-[#7B3AF5] text-[11px] font-semibold tracking-wide">
+              Paciente
+            </span>
+          </div>
+
+          {/* Botão Enviar Mensagem (WhatsApp) */}
+          <div className="mt-4 w-full flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const num = (data.phone || "").replace(/\D/g, "");
+                if (num) {
+                  window.open(`https://wa.me/${num}`, "_blank");
+                } else {
+                  toast.success("Mensagem aberta no WhatsApp");
+                }
+              }}
+              className="flex-1 h-10 px-3 rounded-xl bg-[#E8F8F0] hover:bg-[#D8F3E5] text-[#10B981] font-semibold text-[12.5px] flex items-center justify-center gap-2 transition-colors cursor-pointer"
+            >
+              <Send className="h-3.5 w-3.5" />
+              <span>Enviar mensagem</span>
+            </button>
+
+            <button
+              type="button"
+              className="h-10 w-10 rounded-xl border border-[#E2E8F0] hover:bg-[#F1F5F9] text-[#64748B] flex items-center justify-center transition-colors cursor-pointer shrink-0"
+              title="Mais opções"
+              onClick={() => toast.message("Opções do paciente")}
+            >
+              <MoreVertical className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Botão Atender com IA */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("prontuario");
+              setAiSection({ key: "queixa", title: "Consulta do Paciente" });
+              setAiModalOpen(true);
+            }}
+            className="w-full mt-2.5 h-10 px-3 rounded-xl text-white font-bold text-[12.5px] flex items-center justify-center gap-2 shadow-sm hover:brightness-105 active:scale-[0.98] transition-all cursor-pointer"
+            style={{
+              background: "linear-gradient(135deg, #FF7A59 0%, #D946EF 50%, #6366F1 100%)",
+            }}
+          >
+            <Sparkles className="h-4 w-4 shrink-0" />
+            <span>Atendimento com IA</span>
+          </button>
+
+          {/* Lista de Navegação das Abas */}
+          <nav className="mt-5 w-full space-y-1">
+            {TABS.map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`w-full h-9.5 px-4 rounded-xl text-[13px] font-medium transition-all text-left flex items-center justify-between cursor-pointer ${
+                    isActive
+                      ? "bg-[#7B3AF5] text-white font-semibold shadow-sm"
+                      : "text-[#475569] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  {tab.id === "prontuario" && (
+                    <Sparkles className={`h-3.5 w-3.5 ${isActive ? "text-white" : "text-[#7B3AF5]"}`} />
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </aside>
+
+        {/* CONTEÚDO PRINCIPAL DIREITO */}
+        <main className="flex-1 p-6 md:p-8 overflow-y-auto bg-white">
+          {/* ============================================================ */}
+          {/* ABA: INFORMAÇÕES (Fiel ao design do screenshot) */}
+          {/* ============================================================ */}
+          {activeTab === "informacoes" && (
+            <div className="space-y-6 max-w-4xl">
+              <h2 className="text-[18px] font-bold text-[#0F172A]">Informações</h2>
+
+              <div className="space-y-4.5">
+                {/* 1. Nome completo */}
+                <div className="flex items-start gap-3.5">
+                  <div className="h-8.5 w-8.5 rounded-full bg-[#F3E8FF] text-[#7B3AF5] flex items-center justify-center shrink-0">
+                    <User className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-[12.5px] font-bold text-[#1E293B]">Nome completo</p>
+                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">{data.name}</p>
+                  </div>
+                </div>
+
+                {/* 2. Data de nascimento */}
+                <div className="flex items-start gap-3.5">
+                  <div className="h-8.5 w-8.5 rounded-full bg-[#F3E8FF] text-[#7B3AF5] flex items-center justify-center shrink-0">
+                    <CalIcon className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-[12.5px] font-bold text-[#1E293B]">Data de nascimento</p>
+                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">
+                      {data.birth_date ? `${data.birth_date}${data.age ? ` (${data.age})` : ""}` : "Não informada"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* 3. Sexo */}
+                <div className="flex items-start gap-3.5">
+                  <div className="h-8.5 w-8.5 rounded-full bg-[#F3E8FF] text-[#7B3AF5] flex items-center justify-center shrink-0">
+                    <User className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-[12.5px] font-bold text-[#1E293B]">Sexo</p>
+                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">
+                      {data.gender === "F" ? "Feminino" : data.gender === "M" ? "Masculino" : data.gender === "O" ? "Outro" : (data.gender || "Não informado")}
+                    </p>
+                  </div>
+                </div>
+
+                {/* 4. Email */}
+                <div className="flex items-start gap-3.5">
+                  <div className="h-8.5 w-8.5 rounded-full bg-[#F3E8FF] text-[#7B3AF5] flex items-center justify-center shrink-0">
+                    <Mail className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-[12.5px] font-bold text-[#1E293B]">Email</p>
+                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">{data.email || "Não informado"}</p>
+                  </div>
+                </div>
+
+                {/* 5. Telefone */}
+                <div className="flex items-start gap-3.5">
+                  <div className="h-8.5 w-8.5 rounded-full bg-[#F3E8FF] text-[#7B3AF5] flex items-center justify-center shrink-0">
+                    <Phone className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-[12.5px] font-bold text-[#1E293B]">Telefone</p>
+                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5 flex items-center gap-1.5">
+                      <span>{data.phone || "Não informado"}</span>
+                      {data.phone && <span className="inline-block text-[#10B981]">💬</span>}
+                    </p>
+                  </div>
+                </div>
+
+                {/* 6. Notificações */}
+                <div className="flex items-start gap-3.5">
+                  <div className="h-8.5 w-8.5 rounded-full bg-[#F3E8FF] text-[#7B3AF5] flex items-center justify-center shrink-0">
+                    <Bell className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-[12.5px] font-bold text-[#1E293B]">Notificações</p>
+                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">
+                      {data.notifications || (data.phone ? "WhatsApp / SMS ativo" : "Não recebe notificações")}
+                    </p>
+                  </div>
+                </div>
+
+                {/* 7. Endereço */}
+                <div className="flex items-start gap-3.5">
+                  <div className="h-8.5 w-8.5 rounded-full bg-[#F3E8FF] text-[#7B3AF5] flex items-center justify-center shrink-0">
+                    <MapPin className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-[12.5px] font-bold text-[#1E293B]">Endereço</p>
+                    {data.address || data.neighborhood || data.city || data.state || data.cep ? (
+                      <div className="text-[13.5px] text-[#7B3AF5] font-medium mt-0.5 leading-snug">
+                        {data.address && <p>{data.address}</p>}
+                        {(data.neighborhood || data.city || data.state) && (
+                          <p>
+                            {[data.neighborhood, [data.city, data.state].filter(Boolean).join(" - ")].filter(Boolean).join(", ")}
+                          </p>
+                        )}
+                        {data.cep && <p>CEP: {data.cep}</p>}
+                        <p>{data.country || "Brasil"}</p>
+                      </div>
+                    ) : (
+                      <p className="text-[13.5px] text-slate-400 font-medium mt-0.5">Endereço não informado</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* 8. CPF */}
+                <div className="flex items-start gap-3.5">
+                  <div className="h-8.5 w-8.5 rounded-full bg-[#F3E8FF] text-[#7B3AF5] flex items-center justify-center shrink-0">
+                    <FileText className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-[12.5px] font-bold text-[#1E293B]">CPF</p>
+                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">{data.cpf || "Não informado"}</p>
+                  </div>
+                </div>
+
+                {/* 9. Observações */}
+                <div className="flex items-start gap-3.5">
+                  <div className="h-8.5 w-8.5 rounded-full bg-[#F3E8FF] text-[#7B3AF5] flex items-center justify-center shrink-0">
+                    <ClipboardList className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-[12.5px] font-bold text-[#1E293B]">Observações</p>
+                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">{data.notes || "Nenhuma observação registrada."}</p>
+                  </div>
+                </div>
+
+                {/* 10. Cadastrado em */}
+                <div className="flex items-start gap-3.5">
+                  <div className="h-8.5 w-8.5 rounded-full bg-[#F3E8FF] text-[#7B3AF5] flex items-center justify-center shrink-0">
+                    <Clock className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-[12.5px] font-bold text-[#1E293B]">Cadastrado em</p>
+                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">
+                      {data.created_at || "—"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* 11. Status */}
+                <div className="flex items-start gap-3.5">
+                  <div className="h-8.5 w-8.5 rounded-full bg-[#F3E8FF] text-[#7B3AF5] flex items-center justify-center shrink-0">
+                    <CheckCircle2 className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-[12.5px] font-bold text-[#1E293B]">Status</p>
+                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">
+                      {data.active ? "Ativo" : "Inativo"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Link Editar informações */}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onEdit) onEdit();
+                    else toast.info("Editar informações do paciente");
+                  }}
+                  className="inline-flex items-center gap-1.5 text-[13.5px] font-bold text-[#7B3AF5] hover:underline cursor-pointer transition-colors"
+                >
+                  <Pencil className="h-4 w-4" />
+                  <span>Editar informações</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ============================================================ */}
+          {/* ABA: PRONTUÁRIO & ANAMNESE COMPLETA COM IA */}
+          {/* ============================================================ */}
+          {activeTab === "prontuario" && (
+            <div className="space-y-6 max-w-4xl">
+              <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-slate-100">
+                <div>
+                  <h2 className="text-[18px] font-bold text-[#0F172A] flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-purple-600" />
+                    Prontuário Clínico & Anamnese
+                  </h2>
+                  <p className="text-[12.5px] text-slate-500 mt-0.5">
+                    Registre os dados clínicos da consulta com o auxílio do Copiloto de IA.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAiSection({ key: "queixa", title: "Consulta Médica" });
+                      setAiModalOpen(true);
+                    }}
+                    className="inline-flex items-center gap-2 h-10 px-4.5 rounded-xl text-white text-[13px] font-bold shadow-sm hover:brightness-105 active:scale-95 transition-all cursor-pointer"
+                    style={{
+                      background: "linear-gradient(135deg, #FF7A59 0%, #D946EF 50%, #6366F1 100%)",
+                    }}
+                  >
+                    <Sparkles size={15} />
+                    <span>Iniciar Consulta com IA</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      toast.success("Prontuário salvo!", {
+                        description: `Dados de ${data.name} gravados.`,
+                      });
+                    }}
+                    className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl bg-purple-600 text-white hover:bg-purple-700 text-[13px] font-bold shadow-sm transition-all cursor-pointer"
+                  >
+                    <Save size={15} />
+                    <span>Salvar</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Seções Clínicas com acionador de IA */}
+              <div className="space-y-4">
+                {/* 1. Queixa Principal */}
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="h-6 w-6 rounded-md bg-purple-100 text-purple-700 flex items-center justify-center">
+                        <ClipboardList size={14} />
+                      </div>
+                      <label className="text-[14px] font-bold text-slate-800">
+                        Queixa Principal
+                      </label>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openAiForSection({ key: "queixa", title: "Queixa Principal" })}
+                      className="text-[12px] font-semibold text-purple-600 hover:text-purple-800 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Sparkles size={13} /> Preencher com IA
+                    </button>
+                  </div>
+                  <textarea
+                    rows={3}
+                    value={queixa}
+                    onChange={(e) => setQueixa(e.target.value)}
+                    placeholder="Descreva o motivo da consulta, queixas, sintomas, início e evolução..."
+                    className="w-full rounded-lg border border-slate-200 p-3 text-[13.5px] text-slate-800 placeholder:text-slate-400 focus:border-purple-600 focus:ring-1 focus:ring-purple-600/20 outline-none transition-all resize-y"
+                  />
+                </div>
+
+                {/* 2. Histórico Familiar */}
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="h-6 w-6 rounded-md bg-blue-100 text-blue-700 flex items-center justify-center">
+                        <UserCheck size={14} />
+                      </div>
+                      <label className="text-[14px] font-bold text-slate-800">
+                        Histórico Familiar
+                      </label>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openAiForSection({ key: "historico_familiar", title: "Histórico Familiar" })}
+                      className="text-[12px] font-semibold text-purple-600 hover:text-purple-800 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Sparkles size={13} /> Preencher com IA
+                    </button>
+                  </div>
+                  <textarea
+                    rows={2}
+                    value={historicoFamiliar}
+                    onChange={(e) => setHistoricoFamiliar(e.target.value)}
+                    placeholder="Antecedentes e doenças em familiares diretos (pais, avós, irmãos)..."
+                    className="w-full rounded-lg border border-slate-200 p-3 text-[13.5px] text-slate-800 placeholder:text-slate-400 focus:border-purple-600 focus:ring-1 focus:ring-purple-600/20 outline-none transition-all resize-y"
+                  />
+                </div>
+
+                {/* 3. Tratamentos Anteriores */}
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="h-6 w-6 rounded-md bg-teal-100 text-teal-700 flex items-center justify-center">
+                        <Activity size={14} />
+                      </div>
+                      <label className="text-[14px] font-bold text-slate-800">
+                        Tratamentos Anteriores & Conduta
+                      </label>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openAiForSection({ key: "tratamentos", title: "Tratamentos Anteriores" })}
+                      className="text-[12px] font-semibold text-purple-600 hover:text-purple-800 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Sparkles size={13} /> Preencher com IA
+                    </button>
+                  </div>
+                  <textarea
+                    rows={3}
+                    value={tratamentos}
+                    onChange={(e) => setTratamentos(e.target.value)}
+                    placeholder="Tratamentos prévios realizados, cirurgias e condutas discutidas..."
+                    className="w-full rounded-lg border border-slate-200 p-3 text-[13.5px] text-slate-800 placeholder:text-slate-400 focus:border-purple-600 focus:ring-1 focus:ring-purple-600/20 outline-none transition-all resize-y"
+                  />
+                </div>
+
+                {/* 4. Alergias */}
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="h-6 w-6 rounded-md bg-rose-100 text-rose-700 flex items-center justify-center">
+                        <ShieldAlert size={14} />
+                      </div>
+                      <label className="text-[14px] font-bold text-slate-800">
+                        Alergias
+                      </label>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openAiForSection({ key: "alergias", title: "Alergias" })}
+                      className="text-[12px] font-semibold text-purple-600 hover:text-purple-800 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Sparkles size={13} /> Preencher com IA
+                    </button>
+                  </div>
+                  <textarea
+                    rows={2}
+                    value={alergias}
+                    onChange={(e) => setAlergias(e.target.value)}
+                    placeholder="Alergias medicamentosas, alimentares ou ambientais..."
+                    className="w-full rounded-lg border border-slate-200 p-3 text-[13.5px] text-slate-800 placeholder:text-slate-400 focus:border-purple-600 focus:ring-1 focus:ring-purple-600/20 outline-none transition-all resize-y"
+                  />
+                </div>
+
+                {/* 5. Histórico Médico Pessoal */}
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="h-6 w-6 rounded-md bg-indigo-100 text-indigo-700 flex items-center justify-center">
+                        <Stethoscope size={14} />
+                      </div>
+                      <label className="text-[14px] font-bold text-slate-800">
+                        Histórico Médico Pessoal & Condições
+                      </label>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openAiForSection({ key: "historico_pessoal", title: "Histórico Médico Pessoal" })}
+                      className="text-[12px] font-semibold text-purple-600 hover:text-purple-800 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Sparkles size={13} /> Preencher com IA
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
+                    {CONDICOES_LIST.map((c) => (
+                      <label key={c} className="flex items-center gap-2 text-[12.5px] text-slate-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!!condicoes[c]}
+                          onChange={(e) => setConditions((prev) => ({ ...prev, [c]: e.target.checked }))}
+                          className="rounded text-purple-600 focus:ring-purple-500 h-4 w-4"
+                        />
+                        <span>{c}</span>
+                      </label>
+                    ))}
+                  </div>
+
+                  <div className="space-y-1 pt-1.5">
+                    <label className="text-[12px] font-semibold text-slate-700">
+                      Outras condições / Especifique:
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={historicoPessoal}
+                      onChange={(e) => setHistoricoPessoal(e.target.value)}
+                      placeholder="Patologias prévias ou detalhes adicionais..."
+                      className="w-full rounded-lg border border-slate-200 p-3 text-[13px] text-slate-800 placeholder:text-slate-400 focus:border-purple-600 focus:ring-1 focus:ring-purple-600/20 outline-none transition-all resize-y"
+                    />
+                  </div>
+                </div>
+
+                {/* 6. Medicações em Uso */}
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="h-6 w-6 rounded-md bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                        <Pill size={14} />
+                      </div>
+                      <label className="text-[14px] font-bold text-slate-800">
+                        Medicações em Uso Atualmente
+                      </label>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openAiForSection({ key: "medicacoes", title: "Medicações" })}
+                      className="text-[12px] font-semibold text-purple-600 hover:text-purple-800 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Sparkles size={13} /> Preencher com IA
+                    </button>
+                  </div>
+                  <textarea
+                    rows={2}
+                    value={medicacoes}
+                    onChange={(e) => setMedicacoes(e.target.value)}
+                    placeholder="Ex.: Losartana 50mg — 1 comprimido pela manhã..."
+                    className="w-full rounded-lg border border-slate-200 p-3 text-[13.5px] text-slate-800 placeholder:text-slate-400 focus:border-purple-600 focus:ring-1 focus:ring-purple-600/20 outline-none transition-all resize-y"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* OUTRAS ABAS */}
+          {activeTab !== "informacoes" && activeTab !== "prontuario" && (
+            <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
+              <div className="h-14 w-14 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center">
+                <FolderOpen className="h-7 w-7" />
+              </div>
+              <h3 className="text-[16px] font-bold text-[#0F172A]">{activeTabLabel}</h3>
+              <p className="text-[13px] text-[#64748B]">
+                Nenhum registro encontrado para este paciente nesta seção no momento.
+              </p>
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* Modal do Assistente de Consulta IA */}
+      <AiRecordAssistantModal
+        isOpen={aiModalOpen}
+        onClose={() => setAiModalOpen(false)}
+        section={aiSection}
+        onInsert={handleAiInsert}
+      />
+    </div>
+  );
+}
