@@ -26,7 +26,7 @@ const IGNORED_PATHS = [
 let syncTimeout = null;
 let isSyncing = false;
 let pendingChanges = false;
-const DEBOUNCE_MS = 3000; // Wait 3 seconds of inactivity before committing/pushing
+const DEBOUNCE_MS = 3000; // Aguarda 3 segundos após a última edição
 
 function isIgnored(filePath) {
   const relative = path.relative(rootDir, filePath).replace(/\\/g, '/');
@@ -35,7 +35,7 @@ function isIgnored(filePath) {
 
 function runGit(args) {
   return new Promise((resolve, reject) => {
-    const proc = spawn('git', args, { cwd: rootDir, shell: true, stdio: 'pipe' });
+    const proc = spawn('git', args, { cwd: rootDir, stdio: 'pipe' });
     let stdout = '';
     let stderr = '';
 
@@ -66,18 +66,18 @@ async function doSync() {
     }
 
     const timestamp = new Date().toLocaleTimeString('pt-BR');
-    console.log(`[Auto-Sync ${timestamp}] Detectadas mudancas no codigo. Sincronizando com o GitHub...`);
+    console.log(`\n[Auto-Sync ${timestamp}] 📝 Alterações detectadas no código. Sincronizando com o GitHub...`);
 
     await runGit(['add', '.']);
     const commitMsg = `auto-sync: ${new Date().toISOString().replace('T', ' ').substring(0, 19)}`;
-    await runGit(['commit', '-m', `"${commitMsg}"`]);
-    console.log(`[Auto-Sync ${timestamp}] Commit realizado: ${commitMsg}`);
+    await runGit(['commit', '-m', commitMsg]);
+    console.log(`[Auto-Sync ${timestamp}] 💾 Commit realizado: ${commitMsg}`);
 
     // Push to remote
     await runGit(['push', 'origin', 'main']);
-    console.log(`[Auto-Sync ${timestamp}] Alteracoes enviadas para o GitHub com sucesso!`);
+    console.log(`[Auto-Sync ${timestamp}] 🚀 Enviado com sucesso para o GitHub (main)!`);
   } catch (err) {
-    console.error(`[Auto-Sync] Erro na sincronizacao:`, err.message || err);
+    console.error(`[Auto-Sync] Erro na sincronização:`, err.message || err);
   } finally {
     isSyncing = false;
     if (pendingChanges) {
@@ -95,11 +95,12 @@ function scheduleSync(delay = DEBOUNCE_MS) {
 }
 
 console.log('====================================================');
-console.log(' 🔄 MedCore Auto-Sync Ativado (Tempo Real -> GitHub)');
+console.log(' 🔄 MedCore Auto-Sync Ativo (Tempo Real -> GitHub)');
 console.log(` 📂 Monitorando: ${rootDir}`);
+console.log(` 🌐 Repositório: https://github.com/Guix1906/MedCore`);
 console.log('====================================================');
 
-// Initial sync check
+// Initial sync
 doSync();
 
 // Watch directory recursively
