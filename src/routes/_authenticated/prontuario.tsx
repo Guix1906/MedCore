@@ -9,6 +9,10 @@ export const Route = createFileRoute("/_authenticated/prontuario")({
       { name: "description", content: "Prontuário eletrônico ClinicMed." },
     ],
   }),
+  validateSearch: (search: Record<string, unknown>) => ({
+    patientId: (search.patientId as string) || (search.id as string) || undefined,
+    patientName: (search.patientName as string) || (search.name as string) || undefined,
+  }),
   component: () => (
     <AppShell>
       <ProntuarioPage />
