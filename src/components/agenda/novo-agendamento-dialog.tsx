@@ -417,15 +417,18 @@ export function NovoAgendamentoDialog({
     setCity(availableCities[0] ?? "");
     setConsultationType("nova_consulta");
   }, [open, defaultDate, user?.id, availableCities]);
-  // ------ Queries ------
+  // ------ Queries com Cache Imediato e Prioridade PHP ------
   const { data: clients = [] } = useQuery({
     queryKey: ["patients-picker"],
-    enabled: open,
-    staleTime: 10_000,
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    placeholderData: (prev) => prev,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       try {
         const list = await patientsService.getPatients({ limit: 1500 });
-        if (list && Array.isArray(list) && list.length > 0) {
+        if (list && Array.isArray(list)) {
           return list.map((p) => ({
             id: p.id,
             name: p.name,
@@ -452,8 +455,11 @@ export function NovoAgendamentoDialog({
 
   const { data: procedures = [] } = useQuery({
     queryKey: ["service_types-picker"],
-    enabled: open,
-    staleTime: 5 * 60_000,
+    staleTime: 15 * 60_000,
+    gcTime: 30 * 60_000,
+    placeholderData: (prev) => prev,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const { data } = await supabase.from("service_types").select("id, name, price").order("name");
       return (data ?? []) as { id: string; name: string; price: number | null }[];
@@ -466,6 +472,8 @@ export function NovoAgendamentoDialog({
     enabled: open && !!clientId && !!companyId,
     staleTime: 10 * 60_000,
     gcTime: 30 * 60_000,
+    placeholderData: (prev) => prev,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
     queryFn: async () => {
       if (!clientId) return [];
@@ -550,8 +558,24 @@ export function NovoAgendamentoDialog({
 
   const { data: members = [] } = useQuery({
     queryKey: qk.membersMini(companyId),
-    enabled: !!companyId && open,
+    enabled: !!companyId,
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    placeholderData: (prev) => prev,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
+      try {
+        const phpMembers = await companyService.getMembers();
+        if (phpMembers && Array.isArray(phpMembers)) {
+          return phpMembers.map((m: any) => ({
+            id: m.id || m.user_id,
+            full_name: m.full_name || m.name,
+            avatar_url: m.avatar_url || null,
+          }));
+        }
+      } catch {}
+
       const { data: m } = await supabase
         .from("company_members")
         .select("user_id")
@@ -568,7 +592,12 @@ export function NovoAgendamentoDialog({
 
   const { data: cases = [] } = useQuery({
     queryKey: qk.casesMini(companyId),
-    enabled: !!companyId && open,
+    enabled: !!companyId,
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    placeholderData: (prev) => prev,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const { data } = await supabase
         .from("cases")
