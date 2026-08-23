@@ -110,11 +110,19 @@ export default function ProntuarioPage() {
     queryKey: ["prontuario-db-patient", paramPatientId, paramPatientName],
     queryFn: async () => {
       if (paramPatientId) {
+        try {
+          const phpPat = await patientsService.getPatientById(paramPatientId);
+          if (phpPat) return phpPat;
+        } catch {}
         const { data } = await supabase.from("patients").select("*").eq("id", paramPatientId).maybeSingle();
         if (data) return data;
       }
       if (paramPatientName) {
         const clean = paramPatientName.replace(/\(.*?\)/g, "").trim();
+        try {
+          const phpList = await patientsService.getPatients({ q: clean, limit: 1 });
+          if (phpList && phpList[0]) return phpList[0];
+        } catch {}
         const { data } = await supabase.from("patients").select("*").ilike("name", `%${clean}%`).limit(1).maybeSingle();
         if (data) return data;
       }
