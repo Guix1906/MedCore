@@ -260,20 +260,44 @@ export function PatientModal({
               </label>
               <input
                 value={f.phone}
-                onChange={set("phone")}
+                onChange={handlePhoneChange}
+                maxLength={15}
                 className={inp}
                 placeholder="(00) 00000-0000"
               />
             </div>
 
             <div>
-              <label className="text-[12px] text-[#6B7280] font-semibold block mb-1">CPF</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[12px] text-[#6B7280] font-semibold block">CPF</label>
+                {f.cpf && f.cpf.replace(/\D/g, "").length === 11 && (
+                  isValidCPF(f.cpf) ? (
+                    <span className="text-[11px] text-emerald-600 font-medium flex items-center gap-1">
+                      <CheckCircle2 size={12} className="text-emerald-500" /> Válido
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-rose-500 font-medium flex items-center gap-1">
+                      <AlertCircle size={12} className="text-rose-500" /> Inválido
+                    </span>
+                  )
+                )}
+              </div>
               <input
                 value={f.cpf}
-                onChange={set("cpf")}
-                className={inp}
+                onChange={handleCpfChange}
+                onBlur={handleCpfBlur}
+                maxLength={14}
+                className={cn(
+                  inp,
+                  cpfError && "border-rose-400 focus:border-rose-500 focus:ring-rose-500/10 bg-rose-50/20"
+                )}
                 placeholder="000.000.000-00"
               />
+              {cpfError && (
+                <p className="text-[11.5px] text-rose-500 font-medium mt-1 flex items-center gap-1">
+                  <AlertCircle size={12} /> {cpfError}
+                </p>
+              )}
             </div>
 
             <div className="col-span-2">
