@@ -1634,7 +1634,16 @@ export function NovoAgendamentoDialog({
                     <select
                       className="w-full h-11 px-3.5 rounded-xl bg-violet-50/80 border-2 border-primary focus:border-primary focus:ring-4 focus:ring-primary/20 text-sm font-semibold text-foreground cursor-pointer transition-all outline-none"
                       value={selectedProcedure}
-                      onChange={(e) => setSelectedProcedure(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSelectedProcedure(val);
+                        if (val) {
+                          const found = procedures.find((p) => p.id === val);
+                          if (found && found.price) {
+                            setProcedurePrice(found.price);
+                          }
+                        }
+                      }}
                     >
                       <option value="">✨ Clique para selecionar o procedimento (Consultas, Implantes, Protocolos)...</option>
                       {Object.entries(groupedProceduresList).map(([category, items]) => (
