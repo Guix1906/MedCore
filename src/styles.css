@@ -138,6 +138,9 @@
   input[type="button"],
   input[type="reset"],
   input[type="file"],
+  input.cursor-pointer,
+  input[type="search"].cursor-pointer,
+  input[readonly],
   label[for],
   label:has(input),
   [onclick],
@@ -149,7 +152,8 @@
   [data-slot="dialog-close"],
   [data-slot="sheet-close"],
   [data-slot="popover-trigger"],
-  .cursor-pointer {
+  .cursor-pointer,
+  .cursor-pointer * {
     cursor: pointer !important;
   }
 
