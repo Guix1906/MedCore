@@ -50,6 +50,7 @@ type InputMode = "voice" | "text";
 type RecordingState = "idle" | "recording" | "paused" | "finished";
 
 const SECTION_ICONS: Record<string, React.ReactNode> = {
+  anamnese_geral: <ClipboardCheck size={16} className="text-purple-600" />,
   queixa: <ClipboardCheck size={16} className="text-purple-600" />,
   historico_familiar: <UserCheck size={16} className="text-blue-600" />,
   tratamentos: <Activity size={16} className="text-teal-600" />,
