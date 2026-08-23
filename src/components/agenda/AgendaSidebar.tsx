@@ -323,33 +323,6 @@ export default function AgendaSidebar({
           options={opt("sala")}
           onChange={setFilter("sala")}
         />
-
-        <button
-          onClick={() => setAdvancedOpen(!advancedOpen)}
-          className="w-full flex items-center justify-between pt-2.5 text-[14.5px] font-extrabold text-[#6C4CF7] hover:opacity-90 transition cursor-pointer select-none"
-        >
-          <span>Opções avançadas</span>
-          <ChevronDown
-            className={`h-4.5 w-4.5 transition-transform duration-200 ${advancedOpen ? "rotate-180" : ""}`}
-          />
-        </button>
-
-        {advancedOpen && (
-          <div className="space-y-4.5 pt-1">
-            <FilterSelect
-              label="Convênio"
-              value={filters.convenio}
-              options={opt("convenio")}
-              onChange={setFilter("convenio")}
-            />
-            <FilterSelect
-              label="Tipo de consulta"
-              value={filters.tipoConsulta}
-              options={opt("tipoConsulta")}
-              onChange={setFilter("tipoConsulta")}
-            />
-          </div>
-        )}
       </div>
     </aside>
   );
