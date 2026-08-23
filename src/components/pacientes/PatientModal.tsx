@@ -368,7 +368,7 @@ export function PatientModal({
                 <option value="">— Selecione —</option>
                 <option value="F">Feminino</option>
                 <option value="M">Masculino</option>
-                <option value="O">Outro</option>
+                <option value="outro">Outro</option>
               </select>
             </div>
 
