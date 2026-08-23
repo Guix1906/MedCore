@@ -30,6 +30,7 @@ import { TableVirtuoso } from "react-virtuoso";
 import AppShell from "@/components/AppShell";
 import { confirmDialog } from "@/components/app/confirm-dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { patientsService } from "@/services/api";
 import { useAutoAnimate } from "@/hooks/use-auto-animate";
 import { PatientFullProfileView } from "@/components/pacientes/PatientFullProfileView";
 
