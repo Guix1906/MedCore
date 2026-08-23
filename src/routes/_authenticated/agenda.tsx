@@ -24,6 +24,7 @@ import { useActiveCompany } from "@/hooks/use-active-company";
 import { useCompanyMembers } from "@/hooks/use-company-members";
 import { useClinicCities } from "@/hooks/use-clinic-cities";
 import { supabase } from "@/integrations/supabase/client";
+import { patientsService } from "@/services/api";
 import { qk } from "@/lib/query-keys";
 
 import { useAgendaData } from "@/features/agenda/hooks/use-agenda-data";
