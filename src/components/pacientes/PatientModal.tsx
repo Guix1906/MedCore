@@ -177,7 +177,6 @@ export function PatientModal({
                 onChange={set("name")}
                 className={inp}
                 placeholder="Ex: Clara Ribeiro"
-                autoFocus
                 required
               />
             </div>
