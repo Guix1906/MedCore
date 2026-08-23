@@ -214,6 +214,10 @@ function AcompanhamentosPage() {
     window.open(`https://wa.me/55${phone}?text=${msg}`, "_blank");
   };
 
+  if (isChildRoute) {
+    return <Outlet />;
+  }
+
   return (
     <AppShell>
       <div className="p-6 md:p-8 max-w-[1400px] mx-auto space-y-6">
