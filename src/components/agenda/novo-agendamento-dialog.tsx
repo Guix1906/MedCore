@@ -23,6 +23,7 @@ import {
   User,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import type { Activity } from "@/components/agenda/agenda-types";
 
 type MemberOpt = {
   id: string;
