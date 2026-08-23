@@ -483,189 +483,27 @@ export default function ProntuarioPage() {
               >
                 {tab === "anamnese" && (
                   <motion.div
-                    className="[&>*+*]:-ml-6 [&>*+*]:mt-11 [&>*+*]:border-t [&>*+*]:border-border-soft [&>*+*]:pl-6 [&>*+*]:pt-2"
+                    className="space-y-6"
                     variants={staggerContainer(0.07, 0.05)}
                     initial="hidden"
                     animate="show"
                   >
                     <motion.div variants={fadeUp}>
                       <Section
-                        title="Queixa Principal"
+                        title="Anamnese Geral"
                         onAiFill={() =>
                           openAiModal({
-                            key: "queixa",
-                            title: "Queixa Principal",
-                            placeholder: "Descreva a queixa principal do paciente...",
+                            key: "anamnese_geral",
+                            title: "Anamnese Geral",
+                            placeholder: "Descreva a anamnese geral do paciente...",
                           })
                         }
                       >
                         <RichEditor
                           ref={queixaRef}
-                          placeholder="Descreva a queixa principal do paciente..."
-                          minHeight={200}
+                          placeholder="Descreva a anamnese geral do paciente (queixa principal, histórico de saúde, observações clínicas e conduta)..."
+                          minHeight={380}
                         />
-                      </Section>
-                    </motion.div>
-
-                    <motion.div variants={fadeUp}>
-                      <Section
-                        title="Histórico Familiar"
-                        onAiFill={() =>
-                          openAiModal({
-                            key: "historico_familiar",
-                            title: "Histórico Familiar",
-                            placeholder: "Antecedentes familiares relevantes...",
-                          })
-                        }
-                      >
-                        <RichEditor
-                          ref={historicoRef}
-                          placeholder="Antecedentes familiares relevantes..."
-                          minHeight={200}
-                        />
-                      </Section>
-                    </motion.div>
-
-                    <motion.div variants={fadeUp}>
-                      <Section
-                        title="Tratamentos Anteriores"
-                        onAiFill={() =>
-                          openAiModal({
-                            key: "tratamentos",
-                            title: "Tratamentos Anteriores",
-                            placeholder: "Tratamentos e procedimentos anteriores...",
-                          })
-                        }
-                      >
-                        <RichEditor
-                          ref={tratamentosRef}
-                          placeholder="Tratamentos e procedimentos anteriores..."
-                          minHeight={200}
-                        />
-                      </Section>
-                    </motion.div>
-
-                    <motion.div variants={fadeUp}>
-                      <Section
-                        title="Alergias"
-                        onAiFill={() =>
-                          openAiModal({
-                            key: "alergias",
-                            title: "Alergias",
-                            placeholder: "Alergias medicamentosas, alimentares ou ambientais...",
-                          })
-                        }
-                      >
-                        <RichEditor
-                          ref={alergiasRef}
-                          placeholder="Alergias medicamentosas, alimentares ou ambientais..."
-                          minHeight={200}
-                        />
-                      </Section>
-                    </motion.div>
-
-                    <motion.div variants={fadeUp}>
-                      <Section
-                        title="Histórico Médico Pessoal"
-                        onAiFill={() =>
-                          openAiModal({
-                            key: "historico_pessoal",
-                            title: "Histórico Médico Pessoal",
-                            placeholder: "Condições crônicas e medicações...",
-                          })
-                        }
-                      >
-                        <div className="space-y-6">
-                          <div>
-                            <div className="text-[14.5px] font-semibold text-foreground">
-                              Você tem ou já teve alguma das seguintes condições?
-                            </div>
-                            <div className="mt-1 text-[13px] text-muted-foreground">
-                              (Marque todos que se aplicam)
-                            </div>
-
-                            <motion.ul
-                              className="mt-4 space-y-2.5"
-                              variants={staggerContainer(0.04, 0.02)}
-                              initial="hidden"
-                              animate="show"
-                            >
-                              {CONDICOES.map((c) => {
-                                const checked = !!conditions[c];
-                                return (
-                                  <motion.li key={c} variants={fadeUp}>
-                                    <label className="flex cursor-pointer items-center gap-3 text-[14.5px] text-foreground">
-                                      <motion.button
-                                        type="button"
-                                        role="checkbox"
-                                        aria-checked={checked}
-                                        whileTap={{ scale: 0.88 }}
-                                        onClick={() =>
-                                          setConditions((prev) => ({ ...prev, [c]: !prev[c] }))
-                                        }
-                                        className={`flex h-[18px] w-[18px] items-center justify-center rounded-md border transition-colors focus-ring ${
-                                          checked
-                                            ? "border-primary bg-primary text-primary-foreground"
-                                            : "border-[#d5d7e0] bg-white hover:border-primary/60"
-                                        }`}
-                                      >
-                                        <AnimatePresence>
-                                          {checked && (
-                                            <motion.svg
-                                              key="check"
-                                              viewBox="0 0 12 12"
-                                              className="h-3 w-3"
-                                              fill="none"
-                                              initial={{ scale: 0, opacity: 0 }}
-                                              animate={{ scale: 1, opacity: 1 }}
-                                              exit={{ scale: 0, opacity: 0 }}
-                                              transition={{ duration: 0.15, ease: EASE_OUT }}
-                                            >
-                                              <path
-                                                d="M2.5 6.2 5 8.7 9.5 3.5"
-                                                stroke="currentColor"
-                                                strokeWidth="1.8"
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                              />
-                                            </motion.svg>
-                                          )}
-                                        </AnimatePresence>
-                                      </motion.button>
-                                      {c}
-                                    </label>
-                                  </motion.li>
-                                );
-                              })}
-                            </motion.ul>
-                          </div>
-
-                          <div>
-                            <label className="text-[14.5px] font-semibold text-foreground">
-                              Especifique (se "Outras condições"):
-                            </label>
-                            <textarea
-                              value={especifique}
-                              onChange={(e) => setEspecifique(e.target.value)}
-                              placeholder="Digite"
-                              rows={4}
-                              className="mt-2 w-full resize-y rounded-[4px] border-[1.5px] border-[#c9cdd6] bg-white px-4 py-3 text-[14.5px] text-foreground placeholder:text-muted-foreground/70 focus-ring"
-                            />
-                          </div>
-
-                          <div>
-                            <div className="text-[14.5px] font-semibold text-foreground">
-                              Liste todas as medicações que você está tomando atualmente, incluindo doses:
-                            </div>
-                            <div className="mt-2">
-                              <RichEditor
-                                ref={medicacoesRef}
-                                placeholder="Ex.: Losartana 50mg — 1x ao dia..."
-                                minHeight={160}
-                              />
-                            </div>
-                          </div>
-                        </div>
                       </Section>
                     </motion.div>
                   </motion.div>
