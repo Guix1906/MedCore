@@ -107,10 +107,11 @@ ${cleanedInput}
 Extraia e organize os dados nos campos do prontuário:`;
 
   const models = [
+    "gemini-3.6-flash",
     "gemini-2.5-flash",
     "gemini-2.0-flash",
+    "gemini-1.5-flash-latest",
     "gemini-1.5-flash",
-    "gemini-1.5-pro",
   ];
 
   for (const model of models) {
