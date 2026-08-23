@@ -2435,9 +2435,9 @@ export function NovoAgendamentoDialog({
       </DialogContent>
     </Dialog>
 
-    {quickPatientOpen && (
-      <PatientModal
-        onClose={() => setQuickPatientOpen(false)}
+    <PatientModal
+      open={quickPatientOpen}
+      onClose={() => setQuickPatientOpen(false)}
         onSaved={(newPatient) => {
           if (newPatient?.id) {
             const item = {
