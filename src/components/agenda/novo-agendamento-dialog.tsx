@@ -31,9 +31,9 @@ type MemberOpt = {
   role?: string | null;
 };
 type IdOpt = { id: string };
-import { type Activity } from "@/components/agenda/agenda-types";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { patientsService } from "@/services/api";
 import { useAuth } from "@/hooks/use-auth";
 import { useActiveCompany } from "@/hooks/use-active-company";
 import { useClinicCities } from "@/hooks/use-clinic-cities";
