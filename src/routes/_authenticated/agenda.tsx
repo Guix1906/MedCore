@@ -17,7 +17,7 @@ import {
   applyAgendaSidebarFilters,
   buildAgendaFilterOptions,
 } from "@/features/agenda/lib/sidebar-filters";
-import type { CreateKind } from "@/components/agenda/agenda-modals";
+import { CreateModalRouter, type CreateKind } from "@/components/agenda/agenda-modals";
 import { type Activity, isSameDay } from "@/components/agenda/agenda-types";
 import { useAuth } from "@/hooks/use-auth";
 import { useActiveCompany } from "@/hooks/use-active-company";
@@ -43,14 +43,7 @@ import { DailyGrid } from "@/features/agenda/components/DailyGrid";
 import { WeeklyGrid } from "@/features/agenda/components/WeeklyGrid";
 import { MonthGrid } from "@/features/agenda/components/MonthGrid";
 import { ListView } from "@/features/agenda/components/ListView";
-
-// Lazy-loaded heavy modal routers to keep Agenda route instantaneous (0ms lag)
-const CreateModalRouter = lazy(() =>
-  import("@/components/agenda/agenda-modals").then((m) => ({ default: m.CreateModalRouter })),
-);
-const ActivityDrawer = lazy(() =>
-  import("@/features/agenda/components/ActivityDrawer").then((m) => ({ default: m.ActivityDrawer })),
-);
+import { ActivityDrawer } from "@/features/agenda/components/ActivityDrawer";
 
 function formatWeekRange(date: Date) {
   const start = new Date(date);
