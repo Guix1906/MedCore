@@ -102,11 +102,6 @@ function AcompanhamentosPage() {
   const [openNew, setOpenNew] = useState(false);
   const [selectedTreatment, setSelectedTreatment] = useState<Treatment | null>(null);
 
-  // If a child subroute like /acompanhamentos/$id is active, delegate rendering to Outlet
-  if (isChildRoute) {
-    return <Outlet />;
-  }
-
   const { data: rows = [], isLoading: loading } = useQuery({
     queryKey: ["treatments-list"],
     staleTime: 5 * 60_000,
