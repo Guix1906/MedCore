@@ -2595,14 +2595,23 @@ const ClientPicker = memo(function ClientPicker({
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-primary pointer-events-none" />
           <input
             ref={inputRef}
-            type="text"
+            type="search"
+            name="search_patient_custom_input_no_autofill"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-form-type="other"
+            data-lpignore="true"
+            data-1p-ignore="true"
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
               setOpen(true);
             }}
             onFocus={() => setOpen(true)}
-            placeholder="Digite para buscar paciente por Nome, CPF ou Telefone..."
+            onClick={() => setOpen(true)}
+            placeholder="Clique para ver a lista de pacientes ou digite para buscar..."
             className="w-full h-12 pl-10 pr-10 rounded-2xl border-2 border-border/80 bg-background text-sm font-medium focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-muted-foreground"
           />
           {query ? (
@@ -2626,7 +2635,12 @@ const ClientPicker = memo(function ClientPicker({
 
       {/* Autocomplete Results Dropdown */}
       {open && !current && (
-        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-[200] max-h-[260px] overflow-y-auto rounded-2xl border-2 border-primary/30 bg-background p-1.5 shadow-2xl space-y-1 animate-in fade-in-0 zoom-in-95 duration-100">
+        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-[200] max-h-[300px] overflow-y-auto rounded-2xl border-2 border-primary/30 bg-background p-1.5 shadow-2xl space-y-1 animate-in fade-in-0 zoom-in-95 duration-100">
+          <div className="px-3 py-1.5 text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center justify-between border-b border-border/40 mb-1">
+            <span>Pacientes cadastrados</span>
+            <span className="text-primary font-bold">{filteredClients.length}</span>
+          </div>
+
           {filteredClients.length === 0 ? (
             <div className="p-4 text-center text-xs text-muted-foreground font-medium">
               Nenhum paciente encontrado com "{query}".
