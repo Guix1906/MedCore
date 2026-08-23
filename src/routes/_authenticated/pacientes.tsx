@@ -799,16 +799,30 @@ function PatientModal({
       zip_code: f.zip_code || null,
       notes: f.notes || null,
     };
-    const { data: savedData, error } = patient
-      ? await supabase.from("patients").update(payload).eq("id", patient.id).select().maybeSingle()
-      : await supabase.from("patients").insert({ ...payload, active: true }).select().maybeSingle();
+    let savedData: any = null;
+    let saveError: any = null;
+
+    try {
+      if (patient) {
+        savedData = await patientsService.updatePatient(patient.id, payload);
+      } else {
+        savedData = await patientsService.createPatient({ ...payload, active: true });
+      }
+    } catch (e: any) {
+      const res = patient
+        ? await supabase.from("patients").update(payload).eq("id", patient.id).select().maybeSingle()
+        : await supabase.from("patients").insert({ ...payload, active: true }).select().maybeSingle();
+      savedData = res.data;
+      saveError = res.error;
+    }
+
     setSaving(false);
-    if (!error) {
+    if (!saveError) {
       toast.success(patient ? "Paciente atualizado" : "Paciente cadastrado");
       onSaved((savedData as Patient) || ({ ...patient, ...payload, id: patient?.id ?? "" } as Patient));
       onClose();
     } else {
-      toast.error("Erro: " + error.message);
+      toast.error("Erro: " + saveError.message);
     }
   };
 
