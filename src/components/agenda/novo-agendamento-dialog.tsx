@@ -517,19 +517,9 @@ export function NovoAgendamentoDialog({
       // Consultas
       { id: "proc-c1", name: "Consulta Médica Inicial", category: "🩺 Consultas" },
       { id: "proc-c2", name: "Consulta de Retorno", category: "🩺 Consultas" },
-      { id: "proc-c3", name: "Avaliação Nutricional / Esportiva", category: "🩺 Consultas" },
 
       // Procedimentos & Implantes
-      { id: "proc-i1", name: "Implante Hormonal - Gestrinona", category: "💉 Procedimentos & Implantes" },
-      { id: "proc-i2", name: "Implante de Testosterona", category: "💉 Procedimentos & Implantes" },
-      { id: "proc-i3", name: "Aplicação Terapêutica / Soroterapia", category: "💉 Procedimentos & Implantes" },
-      { id: "proc-i4", name: "Procedimento Estético / Botox", category: "💉 Procedimentos & Implantes" },
-      { id: "proc-i5", name: "Bioestimulador de Colágeno", category: "💉 Procedimentos & Implantes" },
-
-      // Planos & Protocolos
-      { id: "proc-p1", name: "Protocolo Emagrecimento Metabólico", category: "📋 Planos & Protocolos" },
-      { id: "proc-p2", name: "Protocolo Ganho de Massa & Performance", category: "📋 Planos & Protocolos" },
-      { id: "proc-p3", name: "Plano de Acompanhamento Anual", category: "📋 Planos & Protocolos" },
+      { id: "proc-i1", name: "Implantes Hormonais", category: "💉 Procedimentos & Implantes" },
     ],
     [],
   );
