@@ -80,12 +80,6 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "injetaveis", label: "Injetáveis" },
 ];
 
-const defaultPatient = {
-  initials: "CR",
-  name: "Clara Ribeiro",
-  age: "34 anos, 6 meses, 24 dias",
-};
-
 export default function ProntuarioPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -97,9 +91,12 @@ export default function ProntuarioPage() {
   const paramPatientName =
     searchParams.get("patientName") || searchParams.get("name") || searchParams.get("patient");
 
+  const hasActivePatient = Boolean(paramPatientId || paramPatientName);
+
   // Busca dados reais do paciente no banco se fornecido
   const { data: dbPatient } = useQuery({
     queryKey: ["prontuario-db-patient", paramPatientId, paramPatientName],
+    enabled: hasActivePatient,
     queryFn: async () => {
       if (paramPatientId) {
         try {
@@ -124,7 +121,9 @@ export default function ProntuarioPage() {
 
   const patient = useMemo(() => {
     const rawName = dbPatient?.name || paramPatientName;
-    if (!rawName) return defaultPatient;
+    if (!rawName) {
+      return { id: undefined, initials: "--", name: "", age: "" };
+    }
     const cleanName = rawName.replace(/\(.*?\)/g, "").trim();
     const initials = cleanName
       .split(" ")
@@ -139,7 +138,7 @@ export default function ProntuarioPage() {
       name: cleanName,
       age: dbPatient?.birth_date
         ? `Nasc: ${new Date(dbPatient.birth_date).toLocaleDateString("pt-BR")}`
-        : "Em atendimento",
+        : dbPatient?.insurance || "Em atendimento",
     };
   }, [dbPatient, paramPatientName, paramPatientId]);
 
