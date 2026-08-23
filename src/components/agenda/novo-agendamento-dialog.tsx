@@ -2477,10 +2477,8 @@ const ClientPicker = memo(function ClientPicker({
                   key={c.id}
                   type="button"
                   onClick={() => {
+                    onChange(c.id);
                     setOpen(false);
-                    setTimeout(() => {
-                      onChange(c.id);
-                    }, 0);
                   }}
                   className={cn(
                     "w-full text-left p-2.5 rounded-xl flex items-center gap-3 transition-colors cursor-pointer",
