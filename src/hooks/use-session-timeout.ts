@@ -6,12 +6,14 @@ const DEFAULT_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutos de inatividade
 
 /**
  * Hook para encerramento de sessão automático por inatividade (Hardening LGPD/HIPAA)
+ * Otimizado com throttling para não sobrecarregar a thread principal no mousemove
  */
 export function useSessionTimeout(timeoutMs: number = DEFAULT_TIMEOUT_MS) {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastActivityRef = useRef<number>(Date.now());
 
   useEffect(() => {
-    const resetTimer = () => {
+    const scheduleLogout = () => {
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(async () => {
         toast.warning("Sessão encerrada por inatividade para proteção dos dados dos pacientes.");
@@ -24,15 +26,23 @@ export function useSessionTimeout(timeoutMs: number = DEFAULT_TIMEOUT_MS) {
       }, timeoutMs);
     };
 
-    // Eventos que indicam atividade do usuário
-    const events = ["mousemove", "keydown", "click", "touchstart", "scroll"];
-    events.forEach((ev) => window.addEventListener(ev, resetTimer, { passive: true }));
+    const handleActivity = () => {
+      const now = Date.now();
+      // Throttle: só reinicia o timer se passaram mais de 15 segundos da última atividade
+      if (now - lastActivityRef.current > 15_000) {
+        lastActivityRef.current = now;
+        scheduleLogout();
+      }
+    };
 
-    resetTimer();
+    const events = ["mousemove", "keydown", "click", "touchstart", "scroll"];
+    events.forEach((ev) => window.addEventListener(ev, handleActivity, { passive: true }));
+
+    scheduleLogout();
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
-      events.forEach((ev) => window.removeEventListener(ev, resetTimer));
+      events.forEach((ev) => window.removeEventListener(ev, handleActivity));
     };
   }, [timeoutMs]);
 }
