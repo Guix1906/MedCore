@@ -60,6 +60,16 @@ export default function GlobalSearch({ open, onClose }: { open: boolean; onClose
     let cancel = false;
     setLoading(true);
     const t = setTimeout(async () => {
+      try {
+        const phpResults = await searchService.search(q);
+        if (!cancel && phpResults && Array.isArray(phpResults) && phpResults.length > 0) {
+          setRows(phpResults as Row[]);
+          setActive(0);
+          setLoading(false);
+          return;
+        }
+      } catch {}
+
       const { data } = await supabase
         .from("global_search_view")
         .select("kind,id,label,extra,created_at")
@@ -70,7 +80,7 @@ export default function GlobalSearch({ open, onClose }: { open: boolean; onClose
         setActive(0);
         setLoading(false);
       }
-    }, 180);
+    }, 120);
     return () => {
       cancel = true;
       clearTimeout(t);
