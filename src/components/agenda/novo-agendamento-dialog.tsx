@@ -2401,17 +2401,24 @@ const ClientPicker = memo(function ClientPicker({
 
           <div className="flex items-center gap-1 shrink-0 ml-2">
             {current && (
-              <button
-                type="button"
+              <span
+                role="button"
+                tabIndex={0}
                 onClick={(e) => {
                   e.stopPropagation();
                   onChange("");
                 }}
-                className="h-6 w-6 rounded-full hover:bg-rose-100 hover:text-rose-600 grid place-items-center transition"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.stopPropagation();
+                    onChange("");
+                  }
+                }}
+                className="h-6 w-6 rounded-full hover:bg-rose-100 hover:text-rose-600 grid place-items-center transition cursor-pointer"
                 title="Limpar seleção"
               >
                 <X className="h-3.5 w-3.5" />
-              </button>
+              </span>
             )}
             <span className="text-xs text-muted-foreground">▼</span>
           </div>
