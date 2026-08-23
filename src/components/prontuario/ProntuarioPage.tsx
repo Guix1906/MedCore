@@ -12,6 +12,7 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { prontuarioService, patientsService } from "@/services/api";
 import { toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
 import {
