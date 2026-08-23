@@ -321,7 +321,7 @@ export function NovoAgendamentoDialog({
   const [procedurePrice, setProcedurePrice] = useState<number | "">("");
   const [downPayment, setDownPayment] = useState<number | "">("");
   const [downPaymentMethod, setDownPaymentMethod] = useState("pix");
-  const [city, setCity] = useState(availableCities[0] ?? "São Paulo");
+  const [city, setCity] = useState(availableCities[0] ?? "");
   const [consultationType, setConsultationType] = useState("nova_consulta");
 
   useEffect(() => {
@@ -361,7 +361,7 @@ export function NovoAgendamentoDialog({
     setProcedurePrice("");
     setDownPayment("");
     setDownPaymentMethod("pix");
-    setCity(availableCities[0] ?? "São Paulo");
+    setCity(availableCities[0] ?? "");
     setConsultationType("nova_consulta");
   }, [open, defaultDate, user?.id, availableCities]);
   // ------ Queries ------
