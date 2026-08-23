@@ -287,6 +287,14 @@ function FinanceiroPage() {
   }, [rows]);
 
   const setStatus = async (id: string, status: string) => {
+    try {
+      await financeService.updateTransaction(id, { status: status as any });
+      toast.success("Status atualizado");
+      load();
+      qc.invalidateQueries({ queryKey: ["dashboard", "transactions"] });
+      return;
+    } catch {}
+
     const { error } = await supabase.from("transactions").update({ status }).eq("id", id);
     if (error) toast.error("Erro: " + error.message);
     else {
@@ -297,6 +305,14 @@ function FinanceiroPage() {
   };
 
   const doDelete = async (t: Tx) => {
+    try {
+      await financeService.deleteTransaction(t.id);
+      toast.success("Lançamento excluído");
+      load();
+      qc.invalidateQueries({ queryKey: ["dashboard", "transactions"] });
+      return;
+    } catch {}
+
     const { error } = await supabase.from("transactions").delete().eq("id", t.id);
     if (error) toast.error("Erro ao excluir: " + error.message);
     else {
