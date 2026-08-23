@@ -160,7 +160,7 @@ export function ProntuarioHub({
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.28, ease: EASE_OUT }}
+          transition={{ duration: 0.28 }}
           className="rounded-2xl border border-[#E5E7EB] bg-white p-6 md:p-8 shadow-sm"
         >
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -188,6 +188,7 @@ export function ProntuarioHub({
               </Link>
               <Link
                 to="/agenda"
+                search={{ taskId: undefined, deadlineId: undefined, eventId: undefined }}
                 className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-[#8B47FF] text-white text-[13px] font-semibold hover:bg-[#7A3CE3] transition-colors shadow-sm"
               >
                 <Calendar size={16} /> Ver agenda completa
