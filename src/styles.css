@@ -119,8 +119,16 @@
     font-family: inherit;
   }
 
+  /* Cursor pointer (mãozinha) em todos os elementos clicáveis do sistema */
   button,
   [role="button"],
+  [role="tab"],
+  [role="menuitem"],
+  [role="option"],
+  [role="checkbox"],
+  [role="switch"],
+  [role="radio"],
+  [role="combobox"],
   a,
   select,
   summary,
@@ -129,10 +137,30 @@
   input[type="submit"],
   input[type="button"],
   input[type="reset"],
+  input[type="file"],
   label[for],
+  label:has(input),
   [onclick],
+  [data-radix-collection-item],
+  [data-slot="dropdown-menu-item"],
+  [data-slot="select-item"],
+  [data-slot="accordion-trigger"],
+  [data-slot="tabs-trigger"],
+  [data-slot="dialog-close"],
+  [data-slot="sheet-close"],
+  [data-slot="popover-trigger"],
   .cursor-pointer {
-    cursor: pointer;
+    cursor: pointer !important;
+  }
+
+  button:disabled,
+  button[disabled],
+  [aria-disabled="true"],
+  input:disabled,
+  select:disabled,
+  textarea:disabled,
+  .disabled {
+    cursor: not-allowed !important;
   }
 
   h1,
