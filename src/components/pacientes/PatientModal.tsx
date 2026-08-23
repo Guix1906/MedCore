@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { X, UserPlus, UserCheck } from "lucide-react";
 import { toast } from "sonner";
@@ -44,7 +44,7 @@ export function PatientModal({
   if (!open) return null;
 
   const queryClient = useQueryClient();
-  const [f, setF] = useState({
+  const [f, setF] = useState(() => ({
     name: patient?.name ?? "",
     phone: patient?.phone ?? "",
     email: patient?.email ?? "",
@@ -57,7 +57,7 @@ export function PatientModal({
     state: patient?.state ?? "",
     zip_code: patient?.zip_code ?? "",
     notes: patient?.notes ?? "",
-  });
+  }));
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -77,7 +77,7 @@ export function PatientModal({
         notes: patient?.notes ?? "",
       });
     }
-  }, [patient, open]);
+  }, [patient?.id, open]);
 
   const set =
     (k: keyof typeof f) =>
