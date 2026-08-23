@@ -158,7 +158,7 @@ export function PatientModal({
     "w-full h-10 px-3 rounded-lg border border-[#E5E7EB] bg-white text-[13px] text-[#111827] focus:outline-none focus:border-[#8B47FF] focus:ring-2 focus:ring-[#8B47FF]/10 transition-all";
 
   return (
-    <Dialog open onOpenChange={(openState) => !openState && onClose()}>
+    <Dialog open={open} onOpenChange={(openState) => !openState && onClose()}>
       <DialogContent className="max-w-[580px] w-[calc(100vw-32px)] bg-white rounded-2xl p-6 shadow-2xl z-[9999] border border-border/80 [&>button.absolute]:hidden">
         <DialogHeader className="flex flex-row items-center justify-between pb-3 border-b border-slate-100 space-y-0 text-left">
           <div className="flex items-center gap-2.5">
