@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { X, UserPlus, UserCheck } from "lucide-react";
+import { X, UserPlus, UserCheck, CheckCircle2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { patientsService } from "@/services/api";
+import { cn } from "@/lib/utils";
+import { isValidCPF, formatCPF, formatPhone } from "@/lib/masking";
 import {
   Dialog,
   DialogContent,
@@ -46,9 +48,9 @@ export function PatientModal({
   const queryClient = useQueryClient();
   const [f, setF] = useState(() => ({
     name: patient?.name ?? "",
-    phone: patient?.phone ?? "",
+    phone: formatPhone(patient?.phone ?? ""),
     email: patient?.email ?? "",
-    cpf: patient?.cpf ?? "",
+    cpf: formatCPF(patient?.cpf ?? ""),
     birth_date: patient?.birth_date ?? "",
     gender: patient?.gender ?? "",
     insurance: patient?.insurance ?? "",
@@ -58,12 +60,70 @@ export function PatientModal({
     zip_code: patient?.zip_code ?? "",
     notes: patient?.notes ?? "",
   }));
+  const [cpfError, setCpfError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (patient) {
+      setF({
+        name: patient.name ?? "",
+        phone: formatPhone(patient.phone ?? ""),
+        email: patient.email ?? "",
+        cpf: formatCPF(patient.cpf ?? ""),
+        birth_date: patient.birth_date ?? "",
+        gender: patient.gender ?? "",
+        insurance: patient.insurance ?? "",
+        address: patient.address ?? "",
+        city: patient.city ?? "",
+        state: patient.state ?? "",
+        zip_code: patient.zip_code ?? "",
+        notes: patient.notes ?? "",
+      });
+      setCpfError(null);
+    }
+  }, [patient]);
 
   const set =
     (k: keyof typeof f) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       setF((p) => ({ ...p, [k]: e.target.value }));
+
+  const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatCPF(e.target.value);
+    setF((p) => ({ ...p, cpf: formatted }));
+    const clean = formatted.replace(/\D/g, "");
+    if (clean.length === 11) {
+      if (!isValidCPF(clean)) {
+        setCpfError("CPF inválido");
+      } else {
+        setCpfError(null);
+      }
+    } else if (clean.length === 0) {
+      setCpfError(null);
+    } else if (cpfError) {
+      setCpfError(null);
+    }
+  };
+
+  const handleCpfBlur = () => {
+    const clean = f.cpf.replace(/\D/g, "");
+    if (clean.length > 0) {
+      if (clean.length < 11) {
+        setCpfError("CPF incompleto (deve conter 11 dígitos)");
+      } else if (!isValidCPF(clean)) {
+        setCpfError("CPF inválido");
+      } else {
+        setCpfError(null);
+      }
+    } else {
+      setCpfError(null);
+    }
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatPhone(e.target.value);
+    setF((p) => ({ ...p, phone: formatted }));
+  };
 
   const save = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -71,7 +131,20 @@ export function PatientModal({
       toast.error("O nome do paciente é obrigatório");
       return;
     }
-    setSaving(true);
+
+    const cleanCpf = f.cpf ? f.cpf.replace(/\D/g, "") : "";
+    if (cleanCpf.length > 0) {
+      if (cleanCpf.length < 11) {
+        setCpfError("CPF incompleto (deve conter 11 dígitos)");
+        toast.error("O CPF informado está incompleto.");
+        return;
+      }
+      if (!isValidCPF(cleanCpf)) {
+        setCpfError("CPF inválido");
+        toast.error("O CPF informado é inválido. Por favor, digite um CPF válido.");
+        return;
+      }
+    }
     const payload = {
       name: f.name.trim(),
       phone: f.phone || null,
