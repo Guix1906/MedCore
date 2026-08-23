@@ -238,7 +238,7 @@ export default function ProntuarioPage() {
   };
 
   const markDirty = useCallback(() => {
-    setSaveState("unsaved");
+    setSaveState("dirty");
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
       setSaveState("saved");
@@ -257,6 +257,7 @@ export default function ProntuarioPage() {
 
   // Estado do modal de confirmação de cancelamento
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const handleCancel = () => setCancelModalOpen(true);
 
   const secondsRef = useRef(0);
 
@@ -347,7 +348,7 @@ export default function ProntuarioPage() {
           <aside className="-mt-6 w-[240px] shrink-0 border-r border-[#E5E7EB] pr-0 pt-6 min-h-[calc(100vh-80px)]">
             <button
               type="button"
-              onClick={() => navigate({ to: "/prontuario", search: {} })}
+              onClick={() => navigate({ to: "/prontuario", search: { patientId: undefined, patientName: undefined } })}
               className="mb-3.5 flex items-center gap-1.5 text-[12px] font-semibold text-[#8B47FF] hover:text-[#7A3CE3] transition-colors cursor-pointer"
             >
               <ArrowLeft size={14} /> Voltar à central de hoje
