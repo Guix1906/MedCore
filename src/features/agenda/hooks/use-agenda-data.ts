@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { agendaService } from "@/services/api";
 import { qk } from "@/lib/query-keys";
 import { toActivities, type RawDeadline, type RawEvent, type RawTask } from "../lib/normalize";
 
