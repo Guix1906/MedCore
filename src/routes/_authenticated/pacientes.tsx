@@ -33,6 +33,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { patientsService } from "@/services/api";
 import { useAutoAnimate } from "@/hooks/use-auto-animate";
 import { PatientFullProfileView } from "@/components/pacientes/PatientFullProfileView";
+import { PatientModal } from "@/components/pacientes/PatientModal";
 
 export const Route = createFileRoute("/_authenticated/pacientes")({
   head: () => ({
