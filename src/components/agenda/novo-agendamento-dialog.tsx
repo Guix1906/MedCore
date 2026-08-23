@@ -1750,7 +1750,19 @@ export function NovoAgendamentoDialog({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-1.5">
                         <FieldLabel>Procedimento / Serviço</FieldLabel>
-                        <Select value={selectedProcedure || "__none"} onValueChange={(v) => setSelectedProcedure(v === "__none" ? "" : v)}>
+                        <Select
+                          value={selectedProcedure || "__none"}
+                          onValueChange={(v) => {
+                            const val = v === "__none" ? "" : v;
+                            setSelectedProcedure(val);
+                            if (val) {
+                              const found = procedures.find((p) => p.id === val);
+                              if (found && found.price) {
+                                setProcedurePrice(found.price);
+                              }
+                            }
+                          }}
+                        >
                           <SelectTrigger className="h-11 rounded-xl bg-background font-medium border-primary/40">
                             <SelectValue placeholder="Selecionar procedimento na lista..." />
                           </SelectTrigger>
@@ -1774,13 +1786,11 @@ export function NovoAgendamentoDialog({
 
                       <div className="space-y-1.5">
                         <FieldLabel>Valor Total (R$)</FieldLabel>
-                        <DebouncedInput
-                          type="number"
-                          step="0.01"
+                        <FinancialNumberInput
                           placeholder="0,00"
-                          value={String(procedurePrice ?? "")}
-                          onChange={(v) => setProcedurePrice(v === "" ? "" : Number(v))}
-                          className="h-11 rounded-xl bg-background"
+                          value={procedurePrice}
+                          onChange={setProcedurePrice}
+                          className="h-11 rounded-xl bg-background font-semibold"
                         />
                       </div>
                     </div>
@@ -1788,12 +1798,10 @@ export function NovoAgendamentoDialog({
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
                       <div className="space-y-1.5">
                         <FieldLabel>Sinal Pago (R$)</FieldLabel>
-                        <DebouncedInput
-                          type="number"
-                          step="0.01"
+                        <FinancialNumberInput
                           placeholder="0,00"
-                          value={String(downPayment ?? "")}
-                          onChange={(v) => setDownPayment(v === "" ? "" : Number(v))}
+                          value={downPayment}
+                          onChange={setDownPayment}
                           className="h-11 rounded-xl bg-background border-emerald-500/50 text-emerald-700 font-semibold"
                         />
                       </div>
@@ -1817,9 +1825,15 @@ export function NovoAgendamentoDialog({
                       <div className="space-y-1.5">
                         <FieldLabel>Restante A Cobrar (R$)</FieldLabel>
                         <Input
-                          type="number"
+                          type="text"
                           readOnly
-                          value={Math.max(0, (Number(procedurePrice) || 0) - (Number(downPayment) || 0))}
+                          value={
+                            (Number(procedurePrice) || 0) > 0 || (Number(downPayment) || 0) > 0
+                              ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
+                                  Math.max(0, (Number(procedurePrice) || 0) - (Number(downPayment) || 0))
+                                )
+                              : "R$ 0,00"
+                          }
                           className="h-11 rounded-xl bg-amber-500/10 border-amber-500/50 text-amber-900 font-bold cursor-not-allowed"
                         />
                       </div>
