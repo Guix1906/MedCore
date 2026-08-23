@@ -2591,7 +2591,7 @@ const ClientPicker = memo(function ClientPicker({
           </div>
         </div>
       ) : (
-        <div className="relative flex items-center">
+        <div className="relative flex items-center cursor-pointer">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-primary pointer-events-none" />
           <input
             ref={inputRef}
@@ -2612,7 +2612,7 @@ const ClientPicker = memo(function ClientPicker({
             onFocus={() => setOpen(true)}
             onClick={() => setOpen(true)}
             placeholder="Clique para ver a lista de pacientes ou digite para buscar..."
-            className="w-full h-12 pl-10 pr-10 rounded-2xl border-2 border-border/80 bg-background text-sm font-medium focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-muted-foreground"
+            className="w-full h-12 pl-10 pr-10 rounded-2xl border-2 border-border/80 bg-background text-sm font-medium focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-muted-foreground cursor-pointer !cursor-pointer"
           />
           {query ? (
             <button
