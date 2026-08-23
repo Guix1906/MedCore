@@ -206,7 +206,58 @@ const FieldLabel = memo(function FieldLabel({ children, required }: { children: 
   );
 });
 
-// Inputs ultra-rápidos e responsivos com sincronização imediata
+// Inputs ultra-rápidos e responsivos com digitação instantânea sem lag
+const FinancialNumberInput = memo(function FinancialNumberInput({
+  value,
+  onChange,
+  placeholder = "0,00",
+  className,
+}: {
+  value: number | string | "";
+  onChange: (v: number | "") => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [localText, setLocalText] = useState<string>(() =>
+    value === "" || value === undefined || value === null ? "" : String(value)
+  );
+
+  useEffect(() => {
+    const formatted = value === "" || value === undefined || value === null ? "" : String(value);
+    setLocalText((prev) => {
+      // Only sync if actual numerical value differs to avoid cursor jump while typing
+      const prevNum = parseFloat(prev.replace(",", "."));
+      const nextNum = parseFloat(formatted.replace(",", "."));
+      if (prev === "" && formatted === "") return "";
+      if (!isNaN(prevNum) && !isNaN(nextNum) && prevNum === nextNum) return prev;
+      return formatted;
+    });
+  }, [value]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/[^0-9.,]/g, "");
+    setLocalText(raw);
+    if (raw === "") {
+      onChange("");
+      return;
+    }
+    const clean = raw.replace(",", ".");
+    const num = parseFloat(clean);
+    onChange(isNaN(num) ? "" : num);
+  };
+
+  return (
+    <Input
+      type="text"
+      inputMode="decimal"
+      placeholder={placeholder}
+      value={localText}
+      onChange={handleChange}
+      className={className}
+    />
+  );
+});
+
 const DebouncedInput = memo(function DebouncedInput({
   value,
   onChange,
