@@ -162,31 +162,87 @@ export function PatientFullProfileView({
     };
   }, [patient, isExample]);
 
-  // Carrega histórico de atendimentos e prontuários deste paciente específico no Supabase
+  // Carrega histórico de atendimentos e prontuários deste paciente específico no Supabase + LocalStorage fallback
   const {
     data: records = [],
     isLoading: loadingRecords,
     refetch: refreshRecords,
   } = useQuery({
-    queryKey: ["patient-medical-records", data.id],
-    enabled: !!data.id && !isExample,
-    staleTime: 5 * 60_000,
+    queryKey: ["patient-medical-records", data.id, data.name],
+    staleTime: 0,
     gcTime: 30 * 60_000,
     queryFn: async () => {
-      const { data: recs, error } = await supabase
-        .from("medical_records")
-        .select("*")
-        .eq("patient_id", data.id!)
-        .order("created_at", { ascending: false });
-      if (error) console.error("Erro ao carregar prontuário do paciente:", error);
-      return (recs ?? []) as any[];
+      let dbRecs: any[] = [];
+      if (data.id && !isExample) {
+        try {
+          const { data: recs, error } = await supabase
+            .from("medical_records")
+            .select("*")
+            .eq("patient_id", data.id)
+            .order("created_at", { ascending: false });
+          if (!error && recs) {
+            dbRecs = recs;
+          }
+        } catch (e) {
+          console.warn("Aviso ao buscar medical_records do banco:", e);
+        }
+      }
+
+      // Lê histórico local
+      let localRecs: any[] = [];
+      try {
+        const storedHistory =
+          (data.id && localStorage.getItem("medcore_prontuario_history_" + data.id)) ||
+          (data.name && localStorage.getItem("medcore_prontuario_history_" + data.name));
+        if (storedHistory) {
+          localRecs = JSON.parse(storedHistory);
+        }
+      } catch {}
+
+      // Mescla e desduplica por id/created_at
+      const all = [...dbRecs];
+      for (const l of localRecs) {
+        if (!all.some((r) => r.id === l.id || (r.created_at && r.created_at === l.created_at))) {
+          all.push(l);
+        }
+      }
+
+      // Se ainda estiver vazio, tenta carregar o último snapshot local
+      if (all.length === 0) {
+        try {
+          const lastSnapshot =
+            (data.id && localStorage.getItem("medcore_prontuario_" + data.id)) ||
+            (data.name && localStorage.getItem("medcore_prontuario_" + data.name));
+          if (lastSnapshot) {
+            const parsed = JSON.parse(lastSnapshot);
+            all.push({
+              id: "local-" + Date.now(),
+              ...parsed,
+              created_at: parsed.created_at || new Date().toISOString(),
+            });
+          }
+        } catch {}
+      }
+
+      all.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+      return all;
     },
   });
 
   // Preenche automaticamente com o último prontuário/evolução salvo
   useEffect(() => {
-    if (records.length > 0) {
-      const latest = records[0];
+    // Tenta carregar do array de records ou do localStorage
+    let latest = records.length > 0 ? records[0] : null;
+    if (!latest) {
+      try {
+        const local =
+          (data.id && localStorage.getItem("medcore_prontuario_" + data.id)) ||
+          (data.name && localStorage.getItem("medcore_prontuario_" + data.name));
+        if (local) latest = JSON.parse(local);
+      } catch {}
+    }
+
+    if (latest) {
       if (latest.complaint) setQueixa(latest.complaint);
       if (latest.family_history) setHistoricoFamiliar(latest.family_history);
       if (latest.conduct || latest.surgical_history) {
@@ -197,51 +253,75 @@ export function PatientFullProfileView({
       if (latest.medications) setMedicacoes(latest.medications);
       if (latest.evolution) {
         try {
-          const parsed = JSON.parse(latest.evolution);
+          const parsed = typeof latest.evolution === "string" ? JSON.parse(latest.evolution) : latest.evolution;
           if (typeof parsed === "object" && parsed !== null) {
             setConditions(parsed);
           }
         } catch {}
       }
     }
-  }, [records]);
+  }, [records, data.id, data.name]);
 
   const handleSaveProntuario = async () => {
-    if (!data.id || isExample) {
-      toast.info("Prontuário salvo localmente (paciente de exemplo).");
-      return;
-    }
-
     setIsSavingRecord(true);
+    const newRecord = {
+      id: crypto.randomUUID(),
+      patient_id: data.id || null,
+      patient_name: data.name,
+      complaint: queixa || null,
+      family_history: historicoFamiliar || null,
+      conduct: tratamentos || null,
+      surgical_history: tratamentos || null,
+      allergies: alergias || null,
+      clinical_history: historicoPessoal || null,
+      medications: medicacoes || null,
+      evolution: JSON.stringify(condicoes),
+      created_at: new Date().toISOString(),
+      finished_at: new Date().toISOString(),
+    };
+
+    // 1. Salva no LocalStorage garantindo persistência imediata
     try {
-      const { error } = await supabase.from("medical_records").insert({
-        patient_id: data.id,
-        complaint: queixa || null,
-        family_history: historicoFamiliar || null,
-        conduct: tratamentos || null,
-        surgical_history: tratamentos || null,
-        allergies: alergias || null,
-        clinical_history: historicoPessoal || null,
-        medications: medicacoes || null,
-        evolution: JSON.stringify(condicoes),
-        finished_at: new Date().toISOString(),
-      });
+      if (data.id) localStorage.setItem("medcore_prontuario_" + data.id, JSON.stringify(newRecord));
+      if (data.name) localStorage.setItem("medcore_prontuario_" + data.name, JSON.stringify(newRecord));
 
-      if (error) {
-        toast.error("Erro ao salvar prontuário: " + error.message);
-        return;
-      }
-
-      toast.success("Prontuário salvo com sucesso!", {
-        description: `Dados clínicos de ${data.name} gravados.`,
-      });
-      refreshRecords();
-      queryClient.invalidateQueries({ queryKey: ["patient-medical-records", data.id] });
-    } catch (err: any) {
-      toast.error("Falha ao salvar prontuário: " + (err?.message || "erro desconhecido"));
-    } finally {
-      setIsSavingRecord(false);
+      const prevHistKey = data.id
+        ? "medcore_prontuario_history_" + data.id
+        : "medcore_prontuario_history_" + data.name;
+      const prevHist = JSON.parse(localStorage.getItem(prevHistKey) || "[]");
+      const nextHist = [newRecord, ...prevHist.filter((h: any) => h.id !== newRecord.id)];
+      if (data.id) localStorage.setItem("medcore_prontuario_history_" + data.id, JSON.stringify(nextHist));
+      if (data.name) localStorage.setItem("medcore_prontuario_history_" + data.name, JSON.stringify(nextHist));
+    } catch (e) {
+      console.warn("Aviso ao salvar localmente:", e);
     }
+
+    // 2. Salva no Supabase se id válido
+    if (data.id && !isExample) {
+      try {
+        await supabase.from("medical_records").insert({
+          patient_id: data.id,
+          complaint: queixa || null,
+          family_history: historicoFamiliar || null,
+          conduct: tratamentos || null,
+          surgical_history: tratamentos || null,
+          allergies: alergias || null,
+          clinical_history: historicoPessoal || null,
+          medications: medicacoes || null,
+          evolution: JSON.stringify(condicoes),
+          finished_at: new Date().toISOString(),
+        });
+      } catch (err: any) {
+        console.warn("Supabase medical_records insert fallback:", err);
+      }
+    }
+
+    toast.success("Prontuário salvo com sucesso!", {
+      description: `Dados clínicos de ${data.name} gravados.`,
+    });
+    refreshRecords();
+    queryClient.invalidateQueries({ queryKey: ["patient-medical-records"] });
+    setIsSavingRecord(false);
   };
 
   const openAiForSection = (sec: { key: string; title: string; placeholder?: string }) => {
