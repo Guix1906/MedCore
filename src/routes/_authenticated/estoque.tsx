@@ -90,10 +90,6 @@ function EstoquePage() {
     load();
   };
 
-  useEffect(() => {
-    load();
-  }, []);
-
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) return rows;
