@@ -609,12 +609,7 @@ export default function ProntuarioPage() {
             <div className="flex flex-1 items-center justify-between pl-10">
               {/* Esquerda: Contador de tempo + Botão Privado ao lado */}
               <div className="flex items-center gap-6">
-                <div className="flex items-center gap-2 text-primary font-medium">
-                  <Timer className="h-5 w-5" />
-                  <span className="font-mono text-[15px] font-semibold tabular-nums text-foreground">
-                    {time}
-                  </span>
-                </div>
+                <ConsultationTimer onTick={(s) => { secondsRef.current = s; }} />
 
                 <div className="relative">
                   <button
