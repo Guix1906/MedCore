@@ -41,6 +41,8 @@ export function PatientModal({
   onClose: () => void;
   onSaved: (updated?: any) => void;
 }) {
+  if (!open) return null;
+
   const queryClient = useQueryClient();
   const [f, setF] = useState({
     name: patient?.name ?? "",
