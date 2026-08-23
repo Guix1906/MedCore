@@ -391,11 +391,12 @@ export function NovoAgendamentoDialog({
   });
 
   // Query patient consultation history when clientId changes (Optimized)
-  const { data: patientHistory = [] } = useQuery({
+  const { data: patientHistory = [], isFetching: isHistoryLoading } = useQuery({
     queryKey: ["patient-consultation-history", clientId],
     enabled: open && !!clientId && !!companyId,
-    staleTime: 5 * 60_000,
-    gcTime: 10 * 60_000,
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       if (!clientId) return [];
       const { data } = await supabase
@@ -403,7 +404,7 @@ export function NovoAgendamentoDialog({
         .select("id, title, starts_at, description")
         .eq("company_id", companyId!)
         .order("starts_at", { ascending: false })
-        .limit(30);
+        .limit(20);
 
       const targetTag = `"clientId":"${clientId}"`;
       const filtered = (data ?? []).filter((e) => e.description && e.description.includes(targetTag));
@@ -416,9 +417,9 @@ export function NovoAgendamentoDialog({
     },
   });
 
-  // Auto-detect patient classification
+  // Auto-detect patient classification only after fetch completes
   useEffect(() => {
-    if (!clientId) return;
+    if (!clientId || isHistoryLoading) return;
     if (patientHistory.length === 0) {
       setIsNewPatient(true);
       setConsultationType("nova_consulta");
@@ -430,7 +431,7 @@ export function NovoAgendamentoDialog({
         setConsultationType("retorno_recorrente");
       }
     }
-  }, [clientId, patientHistory]);
+  }, [clientId, isHistoryLoading, patientHistory]);
 
   // Set default procedure list options grouped by category
   const DEFAULT_AGENDA_PROCEDURES = useMemo(
