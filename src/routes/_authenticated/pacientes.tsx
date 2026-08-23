@@ -90,6 +90,12 @@ function PacientesPage() {
     gcTime: 30 * 60_000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
+      try {
+        const phpData = await patientsService.getPatients({ limit: 2000 });
+        if (phpData && Array.isArray(phpData)) {
+          return phpData as Patient[];
+        }
+      } catch {}
       const { data } = await supabase
         .from("patients")
         .select("id,name,email,phone,cpf,birth_date,gender,insurance,city,state,address,zip_code,notes,active,created_at")
@@ -111,6 +117,12 @@ function PacientesPage() {
       destructive: true,
     });
     if (!ok) return;
+    try {
+      await patientsService.deletePatient(p.id);
+      toast.success("Paciente excluído");
+      refreshPatients();
+      return;
+    } catch {}
     const { error } = await supabase.from("patients").delete().eq("id", p.id);
     if (error) toast.error("Erro: " + error.message);
     else {
