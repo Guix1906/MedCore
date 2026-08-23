@@ -1,6 +1,6 @@
 import type { DbRow } from "@/lib/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -21,9 +21,18 @@ import {
   TrendingUp,
   Sparkles,
   ChevronRight,
+  Edit3,
+  Trash2,
+  ExternalLink,
+  Save,
+  PauseCircle,
+  PlayCircle,
+  DollarSign,
+  Pill,
 } from "lucide-react";
 import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
+import { confirmDialog } from "@/components/app/confirm-dialog";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/acompanhamentos")({
@@ -83,11 +92,20 @@ function computeProgress(t: Treatment) {
 }
 
 function AcompanhamentosPage() {
+  const routerState = useRouterState();
+  const isChildRoute = routerState.location.pathname !== "/acompanhamentos";
+
   const queryClient = useQueryClient();
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<"todos" | Treatment["status"]>("todos");
   const [viewMode, setViewMode] = useState<"cards" | "kanban">("cards");
   const [openNew, setOpenNew] = useState(false);
+  const [selectedTreatment, setSelectedTreatment] = useState<Treatment | null>(null);
+
+  // If a child subroute like /acompanhamentos/$id is active, delegate rendering to Outlet
+  if (isChildRoute) {
+    return <Outlet />;
+  }
 
   const { data: rows = [], isLoading: loading } = useQuery({
     queryKey: ["treatments-list"],
@@ -225,7 +243,7 @@ function AcompanhamentosPage() {
             <div className="flex items-center bg-[#F3F4F6] p-1 rounded-xl border border-black/[0.04]">
               <button
                 onClick={() => setViewMode("cards")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px] font-semibold transition ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px] font-semibold transition cursor-pointer ${
                   viewMode === "cards"
                     ? "bg-white text-[#111827] shadow-sm"
                     : "text-[#6B7280] hover:text-[#111827]"
@@ -237,7 +255,7 @@ function AcompanhamentosPage() {
               </button>
               <button
                 onClick={() => setViewMode("kanban")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px] font-semibold transition ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px] font-semibold transition cursor-pointer ${
                   viewMode === "kanban"
                     ? "bg-white text-[#111827] shadow-sm"
                     : "text-[#6B7280] hover:text-[#111827]"
@@ -251,7 +269,7 @@ function AcompanhamentosPage() {
 
             <button
               onClick={() => setOpenNew(true)}
-              className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-[#8B47FF] hover:bg-[#7A3AE6] text-white text-[13.5px] font-bold shadow-md shadow-purple-500/20 active:scale-98 transition"
+              className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-[#8B47FF] hover:bg-[#7A3AE6] text-white text-[13.5px] font-bold shadow-md shadow-purple-500/20 active:scale-98 transition cursor-pointer"
             >
               <Plus size={16} />
               <span>Novo acompanhamento</span>
@@ -354,7 +372,7 @@ function AcompanhamentosPage() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4.5">
                 {filtered.map((t, i) => {
-                  const st = STATUS_LABEL[t.status];
+                  const st = STATUS_LABEL[t.status] || STATUS_LABEL.em_andamento;
                   const prog = computeProgress(t);
                   return (
                     <motion.div
@@ -363,10 +381,9 @@ function AcompanhamentosPage() {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: Math.min(i * 0.03, 0.3) }}
                     >
-                      <Link
-                        to="/acompanhamentos/$id"
-                        params={{ id: t.id }}
-                        className="block bg-white rounded-2xl border border-slate-200/80 p-5 hover:shadow-xl hover:border-purple-300 hover:-translate-y-0.5 transition-all group relative overflow-hidden"
+                      <div
+                        onClick={() => setSelectedTreatment(t)}
+                        className="block bg-white rounded-2xl border border-slate-200/80 p-5 hover:shadow-xl hover:border-purple-300 hover:-translate-y-0.5 transition-all group relative overflow-hidden cursor-pointer"
                       >
                         {/* Indicador de progresso no topo do card */}
                         <div className="absolute top-0 left-0 right-0 h-1 bg-slate-100">
@@ -456,13 +473,17 @@ function AcompanhamentosPage() {
                           </div>
 
                           <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedTreatment(t);
+                            }}
                             className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl bg-purple-50 group-hover:bg-purple-600 text-purple-700 group-hover:text-white text-[12.5px] font-bold transition-all shadow-2xs"
                           >
                             <span>Gerenciar</span>
                             <ChevronRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
                           </div>
                         </div>
-                      </Link>
+                      </div>
                     </motion.div>
                   );
                 })}
@@ -508,11 +529,10 @@ function AcompanhamentosPage() {
                     col.items.map((t) => {
                       const prog = computeProgress(t);
                       return (
-                        <Link
+                        <div
                           key={t.id}
-                          to="/acompanhamentos/$id"
-                          params={{ id: t.id }}
-                          className="block bg-white rounded-xl border border-slate-200/90 p-3.5 shadow-2xs hover:shadow-md hover:border-purple-400 transition group"
+                          onClick={() => setSelectedTreatment(t)}
+                          className="block bg-white rounded-xl border border-slate-200/90 p-3.5 shadow-2xs hover:shadow-md hover:border-purple-400 transition group cursor-pointer"
                         >
                           <div className="text-[13.5px] font-bold text-slate-900 truncate group-hover:text-purple-700">
                             {t.title}
@@ -556,7 +576,7 @@ function AcompanhamentosPage() {
                               Gerenciar <ChevronRight size={12} />
                             </span>
                           </div>
-                        </Link>
+                        </div>
                       );
                     })
                   )}
@@ -568,7 +588,588 @@ function AcompanhamentosPage() {
       </div>
 
       {openNew && <NewTreatmentModal onClose={() => setOpenNew(false)} onCreated={load} />}
+
+      {selectedTreatment && (
+        <TreatmentManageModal
+          treatment={selectedTreatment}
+          onClose={() => setSelectedTreatment(null)}
+          onUpdated={load}
+        />
+      )}
     </AppShell>
+  );
+}
+
+// ============== MODAL DE GERENCIAMENTO & EDIÇÃO DE ACOMPANHAMENTO ==============
+function TreatmentManageModal({
+  treatment,
+  onClose,
+  onUpdated,
+}: {
+  treatment: Treatment;
+  onClose: () => void;
+  onUpdated: () => void;
+}) {
+  const navigate = useNavigate();
+  const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [doctors, setDoctors] = useState<{ id: string; name: string }[]>([]);
+
+  const totalDays = treatment.end_date
+    ? daysBetween(treatment.start_date, treatment.end_date)
+    : (treatment.return_days ?? 90);
+  const passedDays = Math.max(0, daysBetween(treatment.start_date, new Date()));
+  const remainingDays = Math.max(0, totalDays - passedDays);
+  const prog = computeProgress(treatment);
+  const st = STATUS_LABEL[treatment.status] || STATUS_LABEL.em_andamento;
+
+  const [form, setForm] = useState({
+    title: treatment.title || "",
+    objective: treatment.objective || "",
+    doctor_id: treatment.doctor_id || "",
+    status: treatment.status,
+    start_date: treatment.start_date || new Date().toISOString().slice(0, 10),
+    protocol_days: String(totalDays > 0 ? totalDays : 90),
+    return_days: String(treatment.return_days || 30),
+    total_value: String(treatment.total_value || "").replace(".", ","),
+    down_payment: String(treatment.down_payment || "").replace(".", ","),
+    discount: String(treatment.discount || "").replace(".", ","),
+    installments_count: String(treatment.installments_count || 1),
+    payment_method: treatment.payment_method || "pix",
+    color: treatment.color || COLORS[0],
+    notes: treatment.notes || "",
+  });
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("doctors").select("id,name").order("name");
+      setDoctors((data as unknown as { id: string; name: string }[]) ?? []);
+    })();
+  }, []);
+
+  const handleQuickStatusChange = async (newStatus: Treatment["status"]) => {
+    const { error } = await supabase
+      .from("treatments")
+      .update({ status: newStatus })
+      .eq("id", treatment.id);
+    if (error) {
+      toast.error("Erro ao alterar status");
+      return;
+    }
+    toast.success(`Status alterado para "${STATUS_LABEL[newStatus].label}"`);
+    onUpdated();
+    onClose();
+  };
+
+  const handleDelete = async () => {
+    const ok = await confirmDialog({
+      title: "Excluir Acompanhamento",
+      description: `Deseja realmente excluir permanentemente o acompanhamento "${treatment.title}" de ${treatment.patients?.name || "este paciente"}? Esta ação não pode ser desfeita.`,
+      confirmText: "Excluir permanentemente",
+      destructive: true,
+    });
+    if (!ok) return;
+
+    const { error } = await supabase.from("treatments").delete().eq("id", treatment.id);
+    if (error) {
+      toast.error("Erro ao excluir acompanhamento");
+      return;
+    }
+    toast.success("Acompanhamento excluído com sucesso!");
+    onUpdated();
+    onClose();
+  };
+
+  const handleSaveEdit = async () => {
+    if (!form.title.trim()) {
+      toast.error("O título é obrigatório");
+      return;
+    }
+    setSaving(true);
+    const startDateObj = new Date(form.start_date);
+    const protocolDaysNum = Number(form.protocol_days) || 90;
+    const endDateObj = new Date(startDateObj.getTime() + protocolDaysNum * 86400000);
+    const endDateStr = endDateObj.toISOString().slice(0, 10);
+
+    const payload = {
+      title: form.title.trim(),
+      objective: form.objective.trim() || null,
+      doctor_id: form.doctor_id || null,
+      status: form.status,
+      start_date: form.start_date,
+      end_date: endDateStr,
+      total_value: parseBRL(form.total_value),
+      down_payment: parseBRL(form.down_payment),
+      discount: parseBRL(form.discount),
+      installments_count: Math.max(1, Number(form.installments_count) || 1),
+      payment_method: form.payment_method,
+      return_days: form.return_days ? Number(form.return_days) : null,
+      color: form.color,
+      notes: form.notes.trim() || null,
+    };
+
+    const { error } = await supabase
+      .from("treatments")
+      .update(payload)
+      .eq("id", treatment.id);
+
+    setSaving(false);
+    if (error) {
+      toast.error("Erro ao salvar alterações");
+      return;
+    }
+    toast.success("Acompanhamento atualizado com sucesso!");
+    setIsEditing(false);
+    onUpdated();
+    onClose();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto border border-slate-200 flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Top Header */}
+        <div className="flex items-center justify-between px-6 py-4.5 border-b border-slate-100 sticky top-0 bg-white z-10">
+          <div className="flex items-center gap-3 min-w-0">
+            <div
+              className="h-10 w-10 shrink-0 rounded-2xl flex items-center justify-center"
+              style={{ background: (treatment.color || "#8B47FF") + "18", color: treatment.color || "#8B47FF" }}
+            >
+              <Activity size={20} />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[16px] font-bold text-slate-900 truncate">
+                {treatment.title}
+              </div>
+              <div className="text-[12px] text-slate-500 flex items-center gap-1.5 mt-0.5">
+                <UserIcon size={12} className="text-slate-400" />
+                <span className="font-semibold">{treatment.patients?.name || "Paciente"}</span>
+                <span>•</span>
+                <span
+                  className="px-2 py-0.5 rounded-full text-[10px] font-bold"
+                  style={{ background: st.bg, color: st.fg }}
+                >
+                  {st.label}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsEditing(!isEditing)}
+              className={`h-8.5 px-3 rounded-xl text-[12.5px] font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                isEditing
+                  ? "bg-purple-100 text-purple-700"
+                  : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+              }`}
+              title={isEditing ? "Cancelar Edição" : "Editar Acompanhamento"}
+            >
+              <Edit3 size={14} />
+              <span>{isEditing ? "Visualizar" : "Editar"}</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="h-8.5 w-8.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center transition cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+
+        {/* Modal Body */}
+        <div className="p-6 space-y-6 flex-1">
+          {isEditing ? (
+            /* ================= MODO EDIÇÃO ================= */
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field label="Título do Acompanhamento *" className="md:col-span-2">
+                <input
+                  className={inputCls}
+                  value={form.title}
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
+                  placeholder="Ex.: Emagrecimento Metabólico 90 dias / Reabilitação"
+                />
+              </Field>
+
+              <Field label="Médico Responsável">
+                <select
+                  className={inputCls}
+                  value={form.doctor_id}
+                  onChange={(e) => setForm({ ...form, doctor_id: e.target.value })}
+                >
+                  <option value="">— Nenhum —</option>
+                  {doctors.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Status Atual">
+                <select
+                  className={inputCls}
+                  value={form.status}
+                  onChange={(e) => setForm({ ...form, status: e.target.value as Treatment["status"] })}
+                >
+                  <option value="em_andamento">Em andamento</option>
+                  <option value="pausado">Pausado</option>
+                  <option value="finalizado">Finalizado</option>
+                  <option value="cancelado">Cancelado</option>
+                </select>
+              </Field>
+
+              <Field label="Objetivo Clínico" className="md:col-span-2">
+                <textarea
+                  rows={2}
+                  className={inputCls}
+                  value={form.objective}
+                  onChange={(e) => setForm({ ...form, objective: e.target.value })}
+                  placeholder="Meta clínica, parâmetros a atingir, redução de peso, cicatrização..."
+                />
+              </Field>
+
+              <Field label="Data de Início">
+                <input
+                  type="date"
+                  className={inputCls}
+                  value={form.start_date}
+                  onChange={(e) => setForm({ ...form, start_date: e.target.value })}
+                />
+              </Field>
+
+              <Field label="Duração do Protocolo">
+                <select
+                  className={inputCls}
+                  value={form.protocol_days}
+                  onChange={(e) => setForm({ ...form, protocol_days: e.target.value })}
+                >
+                  <option value="30">30 dias (1 mês)</option>
+                  <option value="60">60 dias (2 meses)</option>
+                  <option value="90">90 dias (3 meses)</option>
+                  <option value="120">120 dias (4 meses)</option>
+                  <option value="180">180 dias (6 meses)</option>
+                  <option value="365">365 dias (1 ano)</option>
+                </select>
+              </Field>
+
+              <Field label="Intervalo de Retorno (dias)">
+                <select
+                  className={inputCls}
+                  value={form.return_days}
+                  onChange={(e) => setForm({ ...form, return_days: e.target.value })}
+                >
+                  {[15, 30, 45, 60, 90, 120, 180, 365].map((n) => (
+                    <option key={n} value={n}>
+                      {n} dias
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Valor Total (R$)">
+                <input
+                  inputMode="decimal"
+                  className={inputCls}
+                  value={form.total_value}
+                  onChange={(e) => setForm({ ...form, total_value: onlyDecimal(e.target.value) })}
+                  placeholder="0,00"
+                />
+              </Field>
+
+              <Field label="Entrada (R$)">
+                <input
+                  inputMode="decimal"
+                  className={inputCls}
+                  value={form.down_payment}
+                  onChange={(e) => setForm({ ...form, down_payment: onlyDecimal(e.target.value) })}
+                  placeholder="0,00"
+                />
+              </Field>
+
+              <Field label="Desconto (R$)">
+                <input
+                  inputMode="decimal"
+                  className={inputCls}
+                  value={form.discount}
+                  onChange={(e) => setForm({ ...form, discount: onlyDecimal(e.target.value) })}
+                  placeholder="0,00"
+                />
+              </Field>
+
+              <Field label="Nº de Parcelas">
+                <input
+                  type="number"
+                  min={1}
+                  inputMode="numeric"
+                  className={inputCls}
+                  value={form.installments_count}
+                  onChange={(e) =>
+                    setForm({ ...form, installments_count: e.target.value.replace(/\D/g, "") })
+                  }
+                  placeholder="1"
+                />
+              </Field>
+
+              <Field label="Forma de Pagamento">
+                <select
+                  className={inputCls}
+                  value={form.payment_method}
+                  onChange={(e) => setForm({ ...form, payment_method: e.target.value })}
+                >
+                  <option value="pix">Pix</option>
+                  <option value="dinheiro">Dinheiro</option>
+                  <option value="cartao_credito">Cartão de crédito</option>
+                  <option value="cartao_debito">Cartão de débito</option>
+                  <option value="boleto">Boleto</option>
+                  <option value="transferencia">Transferência</option>
+                </select>
+              </Field>
+
+              <Field label="Cor de Identificação">
+                <div className="flex flex-wrap gap-2 pt-2">
+                  {COLORS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setForm({ ...form, color: c })}
+                      className="h-7 w-7 rounded-full border-2 transition cursor-pointer"
+                      style={{
+                        background: c,
+                        borderColor: form.color === c ? "#111827" : "transparent",
+                      }}
+                    />
+                  ))}
+                </div>
+              </Field>
+
+              <Field label="Observações Clínicas" className="md:col-span-2">
+                <textarea
+                  rows={2}
+                  className={inputCls}
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  placeholder="Anotações internas sobre o tratamento..."
+                />
+              </Field>
+            </div>
+          ) : (
+            /* ================= MODO VISUALIZAÇÃO ================= */
+            <div className="space-y-5">
+              {/* Paciente & Médico Banner */}
+              <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    Paciente
+                  </div>
+                  <div className="text-[16px] font-bold text-slate-900 mt-0.5">
+                    {treatment.patients?.name || "Paciente não identificado"}
+                  </div>
+                  <div className="text-[12.5px] text-slate-500 mt-0.5">
+                    {treatment.doctors?.name ? `Médico responsável: Dr(a). ${treatment.doctors.name}` : "Sem médico atribuído"}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {treatment.patients?.phone && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        const phone = treatment.patients?.phone?.replace(/\D/g, "");
+                        if (!phone) return;
+                        const msg = encodeURIComponent(
+                          `Olá ${treatment.patients?.name}! Entramos em contato da clínica sobre o seu acompanhamento "${treatment.title}".`
+                        );
+                        window.open(`https://wa.me/55${phone}?text=${msg}`, "_blank");
+                      }}
+                      className="h-9 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-[12px] font-bold inline-flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                    >
+                      <MessageCircle size={15} />
+                      <span>WhatsApp</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Barra de Progresso e Prazos */}
+              <div className="bg-white border border-slate-200/80 rounded-2xl p-4.5 space-y-3">
+                <div className="flex items-center justify-between text-[13px] font-semibold text-slate-700">
+                  <span className="flex items-center gap-1.5">
+                    <TrendingUp size={16} className="text-purple-600" />
+                    Progresso do Tratamento
+                  </span>
+                  <span className="font-bold text-purple-700">{prog}%</span>
+                </div>
+
+                <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{ width: `${prog}%`, background: treatment.color || "#8B47FF" }}
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center pt-2 border-t border-slate-100 text-[12px]">
+                  <div>
+                    <div className="text-slate-400 text-[10.5px] font-bold uppercase">Início</div>
+                    <div className="font-bold text-slate-800 mt-0.5">
+                      {new Date(treatment.start_date).toLocaleDateString("pt-BR")}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-slate-400 text-[10.5px] font-bold uppercase">Dias Corridos</div>
+                    <div className="font-bold text-purple-700 mt-0.5">{passedDays} dias</div>
+                  </div>
+                  <div>
+                    <div className="text-slate-400 text-[10.5px] font-bold uppercase">Restantes</div>
+                    <div className="font-bold text-slate-800 mt-0.5">{remainingDays} dias</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Informações Financeiras */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5">
+                  <div className="text-[11px] font-bold text-slate-400 uppercase">Valor Total</div>
+                  <div className="text-[16px] font-extrabold text-slate-900 mt-1">
+                    {brl(Number(treatment.total_value))}
+                  </div>
+                </div>
+                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5">
+                  <div className="text-[11px] font-bold text-slate-400 uppercase">Entrada</div>
+                  <div className="text-[16px] font-extrabold text-emerald-600 mt-1">
+                    {brl(Number(treatment.down_payment))}
+                  </div>
+                </div>
+                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5">
+                  <div className="text-[11px] font-bold text-slate-400 uppercase">Parcelas</div>
+                  <div className="text-[16px] font-extrabold text-slate-900 mt-1">
+                    {treatment.installments_count || 1}x
+                  </div>
+                </div>
+                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5">
+                  <div className="text-[11px] font-bold text-slate-400 uppercase">Pagamento</div>
+                  <div className="text-[14px] font-bold text-purple-700 mt-1 capitalize">
+                    {treatment.payment_method?.replace("_", " ") || "Pix"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Objetivo e Notas */}
+              {treatment.objective && (
+                <div className="bg-purple-50/50 border border-purple-100 rounded-2xl p-4">
+                  <div className="text-[11px] font-bold text-purple-700 uppercase tracking-wider">
+                    Objetivo Clínico
+                  </div>
+                  <p className="text-[13px] text-slate-700 mt-1 leading-relaxed">
+                    {treatment.objective}
+                  </p>
+                </div>
+              )}
+
+              {treatment.notes && (
+                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4">
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    Observações Internas
+                  </div>
+                  <p className="text-[13px] text-slate-700 mt-1 leading-relaxed">
+                    {treatment.notes}
+                  </p>
+                </div>
+              )}
+
+              {/* Alteração Rápida de Status */}
+              <div className="pt-2 border-t border-slate-100">
+                <div className="text-[11.5px] font-bold text-slate-500 uppercase tracking-wider mb-2.5">
+                  Alterar Status do Acompanhamento
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(["em_andamento", "pausado", "finalizado", "cancelado"] as const).map((statusKey) => (
+                    <button
+                      key={statusKey}
+                      type="button"
+                      onClick={() => handleQuickStatusChange(statusKey)}
+                      className={`h-8.5 px-3 rounded-xl text-[12px] font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                        treatment.status === statusKey
+                          ? "ring-2 ring-purple-600 ring-offset-1 font-extrabold"
+                          : "hover:opacity-80 opacity-60"
+                      }`}
+                      style={{
+                        background: STATUS_LABEL[statusKey].bg,
+                        color: STATUS_LABEL[statusKey].fg,
+                      }}
+                    >
+                      {statusKey === "em_andamento" && <PlayCircle size={14} />}
+                      {statusKey === "pausado" && <PauseCircle size={14} />}
+                      {statusKey === "finalizado" && <CheckCircle2 size={14} />}
+                      {statusKey === "cancelado" && <AlertCircle size={14} />}
+                      <span>{STATUS_LABEL[statusKey].label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Modal Footer */}
+        <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between gap-3 sticky bottom-0 bg-white">
+          <div>
+            {!isEditing ? (
+              <button
+                type="button"
+                onClick={handleDelete}
+                className="h-10 px-3 rounded-xl text-rose-600 hover:bg-rose-50 text-[13px] font-bold inline-flex items-center gap-1.5 transition cursor-pointer"
+                title="Excluir Acompanhamento"
+              >
+                <Trash2 size={16} />
+                <span>Excluir</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsEditing(false)}
+                className="h-10 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[13px] font-semibold transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            {!isEditing ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  navigate({ to: "/acompanhamentos/$id", params: { id: treatment.id } });
+                }}
+                className="h-10 px-4 rounded-xl bg-[#8B47FF] hover:bg-[#7A3AE6] text-white text-[13px] font-bold shadow-md shadow-purple-500/20 inline-flex items-center gap-1.5 transition cursor-pointer"
+              >
+                <Pill size={15} />
+                <span>Abrir página completa</span>
+                <ExternalLink size={14} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={saving}
+                onClick={handleSaveEdit}
+                className="h-10 px-5 rounded-xl bg-[#8B47FF] hover:bg-[#7A3AE6] text-white text-[13px] font-bold shadow-sm inline-flex items-center gap-1.5 transition active:scale-98 disabled:opacity-50 cursor-pointer"
+              >
+                <Save size={15} />
+                <span>{saving ? "Salvando…" : "Salvar Alterações"}</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -666,7 +1267,7 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
           </div>
           <button
             onClick={onClose}
-            className="h-8 w-8 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center transition"
+            className="h-8 w-8 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center transition cursor-pointer"
           >
             <X size={18} />
           </button>
