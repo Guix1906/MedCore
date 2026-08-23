@@ -323,12 +323,36 @@ export default function ProntuarioPage() {
   };
 
 
+  if (!hasActivePatient) {
+    return (
+      <ProntuarioHub
+        onSelectPatient={(p) => {
+          navigate({
+            to: "/prontuario",
+            search: {
+              patientId: p.id || undefined,
+              patientName: p.name || undefined,
+            },
+          });
+        }}
+      />
+    );
+  }
+
   return (
     <DirtyCtx.Provider value={markDirty}>
       <div className="min-h-screen bg-background text-foreground">
         <div className="flex w-full min-h-[calc(100vh-60px)] items-stretch gap-6 px-6 pb-32 pt-6">
           {/* Sidebar */}
           <aside className="-mt-6 w-[240px] shrink-0 border-r border-[#E5E7EB] pr-0 pt-6 min-h-[calc(100vh-80px)]">
+            <button
+              type="button"
+              onClick={() => navigate({ to: "/prontuario", search: {} })}
+              className="mb-3.5 flex items-center gap-1.5 text-[12px] font-semibold text-[#8B47FF] hover:text-[#7A3CE3] transition-colors cursor-pointer"
+            >
+              <ArrowLeft size={14} /> Voltar à central de hoje
+            </button>
+
             <div className="mb-4 flex items-center gap-3 pr-6">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[13px] font-semibold text-primary">
                 {patient.initials}
@@ -337,7 +361,7 @@ export default function ProntuarioPage() {
                 <div className="truncate text-[13.5px] font-semibold tracking-tight text-foreground">
                   {patient.name}
                 </div>
-                <div className="text-[15px] leading-tight text-muted-foreground">{patient.age}</div>
+                <div className="text-[12.5px] leading-tight text-muted-foreground">{patient.age}</div>
               </div>
               <button
                 onClick={copyPatient}
