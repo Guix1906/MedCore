@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
@@ -17,7 +17,7 @@ import {
   applyAgendaSidebarFilters,
   buildAgendaFilterOptions,
 } from "@/features/agenda/lib/sidebar-filters";
-import { CreateModalRouter, type CreateKind } from "@/components/agenda/agenda-modals";
+import type { CreateKind } from "@/components/agenda/agenda-modals";
 import { type Activity, isSameDay } from "@/components/agenda/agenda-types";
 import { useAuth } from "@/hooks/use-auth";
 import { useActiveCompany } from "@/hooks/use-active-company";
@@ -43,7 +43,14 @@ import { DailyGrid } from "@/features/agenda/components/DailyGrid";
 import { WeeklyGrid } from "@/features/agenda/components/WeeklyGrid";
 import { MonthGrid } from "@/features/agenda/components/MonthGrid";
 import { ListView } from "@/features/agenda/components/ListView";
-import { ActivityDrawer } from "@/features/agenda/components/ActivityDrawer";
+
+// Lazy-loaded heavy modal routers to keep Agenda route instantaneous (0ms lag)
+const CreateModalRouter = lazy(() =>
+  import("@/components/agenda/agenda-modals").then((m) => ({ default: m.CreateModalRouter })),
+);
+const ActivityDrawer = lazy(() =>
+  import("@/features/agenda/components/ActivityDrawer").then((m) => ({ default: m.ActivityDrawer })),
+);
 
 function formatWeekRange(date: Date) {
   const start = new Date(date);
