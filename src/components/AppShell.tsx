@@ -315,22 +315,11 @@ export default function AppShell({ children, title }: { children: ReactNode; tit
                   className="group relative flex items-center h-10 mx-1.5 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-[#6C4CF7]/40"
                 >
                   {active && (
-                    <>
-                      <motion.span
-                        layoutId="nav-active-bar"
-                        className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full bg-[#6C4CF7]"
-                        transition={{ type: "spring", stiffness: 400, damping: 32 }}
-                      />
-                      <motion.span
-                        layoutId="nav-active-bg"
-                        className="absolute inset-0 rounded-xl bg-[#F5F3FF]"
-                        transition={{ type: "spring", stiffness: 400, damping: 32 }}
-                      />
-                    </>
+                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full bg-[#6C4CF7]" />
                   )}
                   <span
-                    className={`relative flex items-center justify-center h-10 w-11 shrink-0 rounded-xl transition-transform duration-[220ms] ${
-                      !active ? "group-hover:bg-[#F3F0FF] group-hover:scale-105" : ""
+                    className={`relative flex items-center justify-center h-10 w-11 shrink-0 rounded-xl transition-all duration-150 ${
+                      active ? "bg-[#F5F3FF]" : "group-hover:bg-[#F3F0FF]"
                     }`}
                   >
                     <Icon
@@ -341,7 +330,7 @@ export default function AppShell({ children, title }: { children: ReactNode; tit
                     />
                   </span>
                   <span
-                    className="relative ml-1 whitespace-nowrap text-[14px] font-normal transition-all duration-200 flex-1"
+                    className="relative ml-1 whitespace-nowrap text-[14px] font-medium transition-all duration-200 flex-1"
                     style={{
                       opacity: expanded ? 1 : 0,
                       transform: expanded ? "translateX(0)" : "translateX(-8px)",
