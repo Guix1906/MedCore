@@ -25,13 +25,14 @@ const MONTHS_PT = [
 ];
 
 const WEEKDAYS_PT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+const CURRENT_YEAR = new Date().getFullYear();
 
 export function BeautifulDatePicker({
   value,
   onChange,
   placeholder = "Selecione a data de nascimento...",
   minYear = 1920,
-  maxYear = new Date().getFullYear(),
+  maxYear = CURRENT_YEAR,
   className,
 }: {
   value?: string | null; // Format: YYYY-MM-DD
