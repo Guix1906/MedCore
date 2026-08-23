@@ -159,7 +159,6 @@ export default function AgendaSidebar({
   const [viewMonth, setViewMonth] = useState((selectedDate ?? today).getMonth());
   const [internalSelected, setInternalSelected] = useState(new Date(selectedDate ?? today));
   const selected = selectedDate ?? internalSelected;
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [internalFilters, setInternalFilters] = useState<AgendaFilterValues>(EMPTY_AGENDA_FILTERS);
   const filters = filtersProp ?? internalFilters;
   const opt = (k: FilterKey) => options?.[k] ?? [];
