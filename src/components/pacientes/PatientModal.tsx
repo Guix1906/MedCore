@@ -193,11 +193,10 @@ export function PatientModal({
               <label className="text-[12px] text-[#6B7280] font-semibold block mb-1">
                 Data de nascimento
               </label>
-              <input
-                type="date"
+              <BeautifulDatePicker
                 value={f.birth_date}
-                onChange={set("birth_date")}
-                className={inp}
+                onChange={(val) => setF((p) => ({ ...p, birth_date: val }))}
+                placeholder="Clique para escolher a data..."
               />
             </div>
 
