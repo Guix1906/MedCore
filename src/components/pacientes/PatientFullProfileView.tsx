@@ -114,6 +114,8 @@ export function PatientFullProfileView({
   onBack: () => void;
   onEdit?: () => void;
 }) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<string>("informacoes");
 
   // Estado do Prontuário Clínico
@@ -124,6 +126,7 @@ export function PatientFullProfileView({
   const [historicoPessoal, setHistoricoPessoal] = useState("");
   const [medicacoes, setMedicacoes] = useState("");
   const [condicoes, setConditions] = useState<Record<string, boolean>>({});
+  const [isSavingRecord, setIsSavingRecord] = useState(false);
 
   // Estado do Assistente IA
   const [aiModalOpen, setAiModalOpen] = useState(false);
@@ -158,6 +161,88 @@ export function PatientFullProfileView({
       photoUrl: patient?.photoUrl || null,
     };
   }, [patient, isExample]);
+
+  // Carrega histórico de atendimentos e prontuários deste paciente específico no Supabase
+  const {
+    data: records = [],
+    isLoading: loadingRecords,
+    refetch: refreshRecords,
+  } = useQuery({
+    queryKey: ["patient-medical-records", data.id],
+    enabled: !!data.id && !isExample,
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+    queryFn: async () => {
+      const { data: recs, error } = await supabase
+        .from("medical_records")
+        .select("*")
+        .eq("patient_id", data.id!)
+        .order("created_at", { ascending: false });
+      if (error) console.error("Erro ao carregar prontuário do paciente:", error);
+      return (recs ?? []) as any[];
+    },
+  });
+
+  // Preenche automaticamente com o último prontuário/evolução salvo
+  useEffect(() => {
+    if (records.length > 0) {
+      const latest = records[0];
+      if (latest.complaint) setQueixa(latest.complaint);
+      if (latest.family_history) setHistoricoFamiliar(latest.family_history);
+      if (latest.conduct || latest.surgical_history) {
+        setTratamentos(latest.conduct || latest.surgical_history || "");
+      }
+      if (latest.allergies) setAlergias(latest.allergies);
+      if (latest.clinical_history) setHistoricoPessoal(latest.clinical_history);
+      if (latest.medications) setMedicacoes(latest.medications);
+      if (latest.evolution) {
+        try {
+          const parsed = JSON.parse(latest.evolution);
+          if (typeof parsed === "object" && parsed !== null) {
+            setConditions(parsed);
+          }
+        } catch {}
+      }
+    }
+  }, [records]);
+
+  const handleSaveProntuario = async () => {
+    if (!data.id || isExample) {
+      toast.info("Prontuário salvo localmente (paciente de exemplo).");
+      return;
+    }
+
+    setIsSavingRecord(true);
+    try {
+      const { error } = await supabase.from("medical_records").insert({
+        patient_id: data.id,
+        complaint: queixa || null,
+        family_history: historicoFamiliar || null,
+        conduct: tratamentos || null,
+        surgical_history: tratamentos || null,
+        allergies: alergias || null,
+        clinical_history: historicoPessoal || null,
+        medications: medicacoes || null,
+        evolution: JSON.stringify(condicoes),
+        finished_at: new Date().toISOString(),
+      });
+
+      if (error) {
+        toast.error("Erro ao salvar prontuário: " + error.message);
+        return;
+      }
+
+      toast.success("Prontuário salvo com sucesso!", {
+        description: `Dados clínicos de ${data.name} gravados.`,
+      });
+      refreshRecords();
+      queryClient.invalidateQueries({ queryKey: ["patient-medical-records", data.id] });
+    } catch (err: any) {
+      toast.error("Falha ao salvar prontuário: " + (err?.message || "erro desconhecido"));
+    } finally {
+      setIsSavingRecord(false);
+    }
+  };
 
   const openAiForSection = (sec: { key: string; title: string; placeholder?: string }) => {
     setAiSection(sec);
