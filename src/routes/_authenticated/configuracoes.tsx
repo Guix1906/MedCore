@@ -1,12 +1,14 @@
 import type { DbRow, Json, IconType } from "@/lib/types";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, X, Trash2, Pencil, Save, MapPin } from "lucide-react";
 import { useClinicCities } from "@/hooks/use-clinic-cities";
 import { confirmDialog } from "@/components/app/confirm-dialog";
 import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
 import { supabase } from "@/integrations/supabase/client";
+import { companyService, financeService } from "@/services/api";
 
 export const Route = createFileRoute("/_authenticated/configuracoes")({
   head: () => ({
@@ -57,41 +59,57 @@ function ConfiguracoesPage() {
 }
 
 function ClinicSettings() {
-  const [f, setF] = useState({
-    id: null as string | null,
-    clinic_name: "",
-    cnpj: "",
-    phone: "",
-    email: "",
-    address: "",
-    opening_hours: "",
-    primary_color: "#8B47FF",
-  });
+  const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
-  const inp =
-    "w-full h-10 px-3 rounded-lg border border-[#E5E7EB] text-[13px] focus:outline-none focus:border-[#8B47FF]";
 
-  useEffect(() => {
-    (async () => {
+  const { data: initialSettings } = useQuery({
+    queryKey: ["clinic-settings"],
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    placeholderData: (prev) => prev,
+    queryFn: async () => {
+      try {
+        const phpData = await companyService.getClinicSettings();
+        if (phpData) return phpData;
+      } catch {}
       const { data } = await (supabase as DbRow)
         .from("clinic_settings")
         .select("*")
         .limit(1)
         .maybeSingle();
-      if (data)
-        setF({
-          id: data.id,
-          clinic_name: data.clinic_name ?? "",
-          cnpj: data.cnpj ?? "",
-          phone: data.phone ?? "",
-          email: data.email ?? "",
-          address: data.address ?? "",
-          opening_hours: data.opening_hours ?? "",
-          primary_color: data.primary_color ?? "#8B47FF",
-        });
-    })();
-  }, []);
+      return data;
+    },
+  });
+
+  const [f, setF] = useState({
+    id: null as string | null,
+    clinic_name: "ClinicMed Health Hub",
+    cnpj: "",
+    phone: "",
+    email: "",
+    address: "",
+    opening_hours: "Seg-Sex 08:00-18:00",
+    primary_color: "#8B47FF",
+  });
+
+  useEffect(() => {
+    if (initialSettings) {
+      setF({
+        id: initialSettings.id ?? null,
+        clinic_name: initialSettings.clinic_name ?? "",
+        cnpj: initialSettings.cnpj ?? "",
+        phone: initialSettings.phone ?? "",
+        email: initialSettings.email ?? "",
+        address: initialSettings.address ?? "",
+        opening_hours: (initialSettings as any).opening_hours ?? "Seg-Sex 08:00-18:00",
+        primary_color: (initialSettings as any).primary_color ?? "#8B47FF",
+      });
+    }
+  }, [initialSettings]);
+
+  const inp =
+    "w-full h-10 px-3 rounded-lg border border-[#E5E7EB] text-[13px] focus:outline-none focus:border-[#8B47FF]";
 
   const save = async () => {
     setSaving(true);
@@ -104,20 +122,28 @@ function ClinicSettings() {
       opening_hours: f.opening_hours || null,
       primary_color: f.primary_color || null,
     };
-    const { error, data } = f.id
-      ? await (supabase as DbRow)
-          .from("clinic_settings")
-          .update(payload)
-          .eq("id", f.id)
-          .select()
-          .maybeSingle()
-      : await (supabase as DbRow).from("clinic_settings").insert(payload).select().maybeSingle();
-    setSaving(false);
-    if (error) {
-      toast.error("Erro: " + error.message);
-      return;
+
+    try {
+      await companyService.updateClinicSettings(payload as any);
+      queryClient.invalidateQueries({ queryKey: ["clinic-settings"] });
+    } catch {
+      const { error, data } = f.id
+        ? await (supabase as DbRow)
+            .from("clinic_settings")
+            .update(payload)
+            .eq("id", f.id)
+            .select()
+            .maybeSingle()
+        : await (supabase as DbRow).from("clinic_settings").insert(payload).select().maybeSingle();
+      if (error) {
+        toast.error("Erro: " + error.message);
+        setSaving(false);
+        return;
+      }
+      if (data) setF((p) => ({ ...p, id: data.id }));
     }
-    if (data) setF((p) => ({ ...p, id: data.id }));
+
+    setSaving(false);
     toast.success("Configurações salvas");
     setMsg("Salvo com sucesso");
     setTimeout(() => setMsg(""), 2000);
@@ -205,22 +231,35 @@ type Service = {
   name: string;
   price: number | null;
   duration_minutes: number | null;
-  commission_percent: number | null;
+  commission_percent?: number | null;
   active: boolean;
 };
 
 function ServiceTypes() {
-  const [rows, setRows] = useState<Service[]>([]);
+  const queryClient = useQueryClient();
   const [editing, setEditing] = useState<Service | null>(null);
   const [openNew, setOpenNew] = useState(false);
 
-  const load = async () => {
-    const { data } = await (supabase as DbRow).from("service_types").select("*").order("name");
-    setRows((data ?? []) as Service[]);
+  const { data: rows = [] } = useQuery({
+    queryKey: ["service-types-list"],
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    placeholderData: (prev) => prev,
+    queryFn: async () => {
+      try {
+        const phpData = await companyService.getServiceTypes();
+        if (phpData && Array.isArray(phpData) && phpData.length > 0) {
+          return phpData as Service[];
+        }
+      } catch {}
+      const { data } = await (supabase as DbRow).from("service_types").select("*").order("name");
+      return (data ?? []) as Service[];
+    },
+  });
+
+  const load = () => {
+    queryClient.invalidateQueries({ queryKey: ["service-types-list"] });
   };
-  useEffect(() => {
-    load();
-  }, []);
 
   const deleteService = async (s: Service) => {
     const ok = await confirmDialog({
@@ -429,24 +468,37 @@ function ServiceModal({
   );
 }
 
-type Cat = { id: string; name: string; type: "income" | "expense"; color: string | null };
+type Cat = { id: string; name: string; type: "income" | "expense"; color?: string | null };
 
 function FinanceCategories() {
-  const [rows, setRows] = useState<Cat[]>([]);
+  const queryClient = useQueryClient();
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState<"income" | "expense">("income");
 
-  const load = async () => {
-    const { data } = await (supabase as DbRow)
-      .from("finance_categories")
-      .select("*")
-      .order("type")
-      .order("name");
-    setRows((data ?? []) as Cat[]);
+  const { data: rows = [] } = useQuery({
+    queryKey: ["finance-categories-list"],
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    placeholderData: (prev) => prev,
+    queryFn: async () => {
+      try {
+        const phpData = await financeService.getCategories();
+        if (phpData && Array.isArray(phpData) && phpData.length > 0) {
+          return phpData as Cat[];
+        }
+      } catch {}
+      const { data } = await (supabase as DbRow)
+        .from("finance_categories")
+        .select("*")
+        .order("type")
+        .order("name");
+      return (data ?? []) as Cat[];
+    },
+  });
+
+  const load = () => {
+    queryClient.invalidateQueries({ queryKey: ["finance-categories-list"] });
   };
-  useEffect(() => {
-    load();
-  }, []);
 
   const add = async () => {
     if (!newName.trim()) return;
