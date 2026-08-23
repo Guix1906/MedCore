@@ -93,7 +93,6 @@ const defaultPatient = {
 export default function ProntuarioPage() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<TabKey>("anamnese");
-  const [seconds, setSeconds] = useState(0);
 
   // Lê parâmetros da URL caso o atendimento tenha sido iniciado a partir da agenda
   const searchParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
