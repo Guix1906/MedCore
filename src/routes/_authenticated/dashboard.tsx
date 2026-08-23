@@ -180,7 +180,34 @@ function DashboardPage() {
 
   const apptsQ = useQuery({
     queryKey: ["dashboard", "events-appointments"],
+    placeholderData: (prev) => prev,
     queryFn: async () => {
+      try {
+        const phpEvents = await agendaService.getEvents();
+        if (phpEvents && Array.isArray(phpEvents)) {
+          return phpEvents.map((e) => {
+            const startsAt = new Date(e.start_time);
+            const endsAt = e.end_time ? new Date(e.end_time) : new Date(startsAt.getTime() + 30 * 60_000);
+            const y = startsAt.getFullYear();
+            const m = String(startsAt.getMonth() + 1).padStart(2, "0");
+            const d = String(startsAt.getDate()).padStart(2, "0");
+            return {
+              id: e.id,
+              patient_id: (e as any).patient_id || null,
+              doctor_id: (e as any).doctor_id || null,
+              date: `${y}-${m}-${d}`,
+              start_time: startsAt.toTimeString().slice(0, 5),
+              end_time: endsAt.toTimeString().slice(0, 5),
+              status: e.status || "agendado",
+              type: e.event_type || "atendimento",
+              color: (e as any).color || "#7C5CFC",
+              title: e.title,
+              when: startsAt,
+            };
+          }) as Appt[];
+        }
+      } catch {}
+
       const { data } = await supabase
         .from("events")
         .select("id, title, description, starts_at, ends_at, assigned_to, case_id")
@@ -191,13 +218,11 @@ function DashboardPage() {
         const startsAt = new Date(e.starts_at);
         const endsAt = e.ends_at ? new Date(e.ends_at) : new Date(startsAt.getTime() + 30 * 60_000);
         
-        // Format date as local YYYY-MM-DD to avoid UTC date shift issues
         const y = startsAt.getFullYear();
         const m = String(startsAt.getMonth() + 1).padStart(2, "0");
         const d = String(startsAt.getDate()).padStart(2, "0");
         const dateStr = `${y}-${m}-${d}`;
         
-        // Format time as HH:MM
         const startStr = startsAt.toTimeString().slice(0, 5);
         const endStr = endsAt.toTimeString().slice(0, 5);
         
@@ -222,9 +247,22 @@ function DashboardPage() {
     gcTime: 30 * 60_000,
     refetchOnWindowFocus: false,
   });
+
   const patientsQ = useQuery({
     queryKey: ["dashboard", "patients"],
+    placeholderData: (prev) => prev,
     queryFn: async () => {
+      try {
+        const phpPat = await patientsService.getPatients({ limit: 500 });
+        if (phpPat && Array.isArray(phpPat)) {
+          return phpPat.map((p) => ({
+            id: p.id,
+            name: p.name,
+            gender: p.gender || null,
+            birth_date: p.birth_date || null,
+          })) as Patient[];
+        }
+      } catch {}
       const { data } = await supabase.from("patients").select("id,name,gender,birth_date");
       return (data ?? []) as Patient[];
     },
@@ -232,9 +270,24 @@ function DashboardPage() {
     gcTime: 30 * 60_000,
     refetchOnWindowFocus: false,
   });
+
   const txQ = useQuery({
     queryKey: ["dashboard", "transactions"],
+    placeholderData: (prev) => prev,
     queryFn: async () => {
+      try {
+        const phpTx = await financeService.getTransactions({ limit: 500 });
+        if (phpTx && Array.isArray(phpTx)) {
+          return phpTx.map((r: any) => ({
+            id: r.id,
+            type: r.type === "receita" ? "income" : r.type === "despesa" ? "expense" : r.type,
+            amount: Number(r.amount || 0),
+            date: String(r.date || ""),
+            status: r.status,
+            due_date: r.due_date ?? null,
+          })) as DashboardTx[];
+        }
+      } catch {}
       const { data } = await supabase
         .from("transactions")
         .select("id,type,amount,date,status,due_date");
@@ -251,14 +304,23 @@ function DashboardPage() {
     gcTime: 30 * 60_000,
     refetchOnWindowFocus: false,
   });
+
   const doctorsQ = useQuery({
     queryKey: ["dashboard", "doctors"],
+    placeholderData: (prev) => prev,
     queryFn: async () => {
+      try {
+        const phpDocs = await companyService.getDoctors();
+        if (phpDocs && Array.isArray(phpDocs) && phpDocs.length > 0) {
+          return phpDocs as Doctor[];
+        }
+      } catch {}
       const { data } = await supabase.from("doctors").select("id,name");
       return (data ?? []) as Doctor[];
     },
-    staleTime: 600000,
-    gcTime: 1800000,
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: false,
   });
   const appts = apptsQ.data ?? [];
   const patients = patientsQ.data ?? [];
