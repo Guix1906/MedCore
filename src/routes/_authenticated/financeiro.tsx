@@ -750,16 +750,28 @@ function NewTxModal({
       payment_method: f.payment_method || null,
       patient_id: f.patient_id || null,
     };
-    const { error } = initial
-      ? await supabase.from("transactions").update(payload).eq("id", initial.id)
-      : await supabase.from("transactions").insert(payload);
+    let saveSuccess = false;
+    try {
+      if (initial) {
+        await financeService.updateTransaction(initial.id, payload as any);
+      } else {
+        await financeService.createTransaction(payload as any);
+      }
+      saveSuccess = true;
+    } catch {
+      const { error } = initial
+        ? await supabase.from("transactions").update(payload).eq("id", initial.id)
+        : await supabase.from("transactions").insert(payload);
+      if (!error) saveSuccess = true;
+    }
+
     setSaving(false);
-    if (!error) {
+    if (saveSuccess) {
       toast.success(initial ? "Lançamento atualizado" : "Lançamento criado");
       onCreated();
       onClose();
     } else {
-      toast.error("Erro ao salvar: " + error.message);
+      toast.error("Erro ao salvar lançamento");
     }
   };
 
