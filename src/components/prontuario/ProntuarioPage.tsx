@@ -757,16 +757,19 @@ export default function ProntuarioPage() {
               {/* Canto direito inferior: Cancelar + Finalizar Atendimento */}
               <div className="flex items-center gap-3">
                 <button
+                  type="button"
                   onClick={handleCancel}
-                  className="text-[14.5px] font-medium text-muted-foreground hover:text-foreground focus-ring rounded-md px-2 py-1.5"
+                  className="text-[14.5px] font-medium text-muted-foreground hover:text-foreground focus-ring rounded-md px-2 py-1.5 cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
+                  type="button"
                   onClick={handleFinalize}
-                  className="rounded-xl bg-primary px-5 py-2.5 text-[14.5px] font-semibold text-primary-foreground shadow-[0_8px_20px_-8px_rgba(139,71,255,0.55)] transition-all hover:bg-primary-hover focus-ring"
+                  disabled={isFinalizing}
+                  className="rounded-xl bg-primary px-5 py-2.5 text-[14.5px] font-semibold text-primary-foreground shadow-[0_8px_20px_-8px_rgba(139,71,255,0.55)] transition-all hover:bg-primary-hover focus-ring disabled:opacity-50 cursor-pointer"
                 >
-                  Finalizar atendimento
+                  {isFinalizing ? "Finalizando e gravando..." : "Finalizar atendimento"}
                 </button>
               </div>
             </div>
