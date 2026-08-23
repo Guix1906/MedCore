@@ -374,6 +374,7 @@ export function NovoAgendamentoDialog({
   const [downPaymentMethod, setDownPaymentMethod] = useState("pix");
   const [city, setCity] = useState(availableCities[0] ?? "");
   const [consultationType, setConsultationType] = useState("nova_consulta");
+  const [quickPatientOpen, setQuickPatientOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
