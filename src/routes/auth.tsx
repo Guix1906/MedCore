@@ -139,6 +139,11 @@ function AuthPage() {
   const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
   useEffect(() => {
+    const token = getStoredToken();
+    if (token) {
+      navigate({ to: "/dashboard" });
+      return;
+    }
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) navigate({ to: "/dashboard" });
     });
@@ -149,23 +154,33 @@ function AuthPage() {
     setBusy(true);
     try {
       if (mode === "signin") {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+        try {
+          await authService.signIn(email, password, rememberMe);
+        } catch (phpErr) {
+          // Fallback para supabase caso backend php não esteja rodando
+          const { error } = await supabase.auth.signInWithPassword({ email, password });
+          if (error) throw error;
+        }
         toast.success("Bem-vindo de volta ao MedCore!");
         router.invalidate();
         navigate({ to: "/dashboard" });
       } else if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: window.location.origin,
-            data: { full_name: fullName },
-          },
-        });
-        if (error) throw error;
-        toast.success("Conta criada com sucesso! Verifique seu email para confirmar.");
-        setMode("signin");
+        try {
+          await authService.signUp(email, password, fullName);
+        } catch (phpErr) {
+          const { error } = await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+              emailRedirectTo: window.location.origin,
+              data: { full_name: fullName },
+            },
+          });
+          if (error) throw error;
+        }
+        toast.success("Conta criada com sucesso!");
+        router.invalidate();
+        navigate({ to: "/dashboard" });
       } else {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
           redirectTo: `${window.location.origin}/auth`,
