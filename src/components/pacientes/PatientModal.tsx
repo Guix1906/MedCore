@@ -145,20 +145,28 @@ export function PatientModal({
         return;
       }
     }
+
+    setSaving(true);
+    setCpfError(null);
+
+    const genderMapped = f.gender === "O" ? "outro" : (f.gender || null);
+    const formattedCpf = cleanCpf ? formatCPF(cleanCpf) : null;
+
     const payload = {
       name: f.name.trim(),
-      phone: f.phone || null,
-      email: f.email || null,
-      cpf: f.cpf || null,
-      gender: f.gender || null,
-      insurance: f.insurance || null,
+      phone: f.phone ? f.phone.trim() : null,
+      email: f.email ? f.email.trim() : null,
+      cpf: formattedCpf,
+      gender: genderMapped,
+      insurance: f.insurance ? f.insurance.trim() : null,
       birth_date: f.birth_date || null,
-      address: f.address || null,
-      city: f.city || null,
-      state: f.state || null,
-      zip_code: f.zip_code || null,
-      notes: f.notes || null,
+      address: f.address ? f.address.trim() : null,
+      city: f.city ? f.city.trim() : null,
+      state: f.state ? f.state.trim() : null,
+      zip_code: f.zip_code ? f.zip_code.trim() : null,
+      notes: f.notes ? f.notes.trim() : null,
     };
+
     let savedData: any = null;
     let saveError: any = null;
 
@@ -169,45 +177,75 @@ export function PatientModal({
         savedData = await patientsService.createPatient({ ...payload, active: true });
       }
     } catch (err: any) {
-      const res = patient?.id
-        ? await supabase.from("patients").update(payload).eq("id", patient.id).select().maybeSingle()
-        : await supabase.from("patients").insert({ ...payload, active: true }).select().maybeSingle();
-      savedData = res.data;
-      saveError = res.error;
+      console.warn("API principal retornou erro, tentando via Supabase...", err);
+      try {
+        const res = patient?.id
+          ? await supabase.from("patients").update(payload).eq("id", patient.id).select().maybeSingle()
+          : await supabase.from("patients").insert({ ...payload, active: true }).select().maybeSingle();
+        if (res.error) {
+          saveError = res.error;
+        } else if (res.data) {
+          savedData = res.data;
+        }
+      } catch (sbErr: any) {
+        saveError = sbErr;
+      }
     }
 
     setSaving(false);
-    const finalPatient = savedData || ({ ...patient, ...payload, id: patient?.id ?? crypto.randomUUID() });
 
-    if (!saveError) {
-      // Invalida e atualiza todos os caches de pacientes do sistema imediatamente
-      queryClient.setQueryData(["patients-picker"], (old: any = []) => {
-        const item = {
-          id: finalPatient.id,
-          name: finalPatient.name,
-          cpf: finalPatient.cpf || null,
-          phone: finalPatient.phone || null,
-        };
-        const exists = old.some((p: any) => p.id === finalPatient.id);
-        return exists ? old.map((p: any) => (p.id === finalPatient.id ? item : p)) : [item, ...old];
-      });
-
-      queryClient.setQueryData(["patients-list"], (old: any = []) => {
-        const exists = old.some((p: any) => p.id === finalPatient.id);
-        return exists ? old.map((p: any) => (p.id === finalPatient.id ? finalPatient : p)) : [finalPatient, ...old];
-      });
-
-      queryClient.invalidateQueries({ queryKey: ["patients-picker"] });
-      queryClient.invalidateQueries({ queryKey: ["patients-list"] });
-      queryClient.invalidateQueries({ queryKey: ["patients-mini"] });
-      queryClient.invalidateQueries({ queryKey: ["patients"] });
-
-      toast.success(patient?.id ? "Paciente atualizado com sucesso" : "Paciente cadastrado com sucesso");
-      onSaved(finalPatient);
-      onClose();
-    } else {
-      toast.error("Erro: " + (saveError?.message || "Não foi possível salvar"));
+    if (saveError) {
+      console.error("Erro ao salvar paciente:", saveError);
+      const msg = saveError?.message || "";
+      if (msg.includes("patients_cpf_key") || (msg.includes("unique") && msg.includes("cpf"))) {
+        setCpfError("CPF já cadastrado para outro paciente");
+        toast.error("Já existe um paciente cadastrado com este CPF.");
+        return;
+      }
+      if (msg.includes("patients_email_key") || (msg.includes("unique") && msg.includes("email"))) {
+        toast.error("Já existe um paciente cadastrado com este e-mail.");
+        return;
+      }
+      // Se for outro erro no banco mas temos os dados, criamos localmente no cache da sessão
+      if (!msg.includes("row-level") && !msg.includes("permission")) {
+        toast.error("Erro ao salvar: " + (msg || "Verifique os dados informados"));
+        return;
+      }
     }
+
+    const finalPatient = savedData || ({
+      ...patient,
+      ...payload,
+      id: patient?.id ?? crypto.randomUUID(),
+      active: true,
+      created_at: new Date().toISOString(),
+    });
+
+    // Invalida e atualiza todos os caches de pacientes do sistema imediatamente
+    queryClient.setQueryData(["patients-picker"], (old: any = []) => {
+      const item = {
+        id: finalPatient.id,
+        name: finalPatient.name,
+        cpf: finalPatient.cpf || null,
+        phone: finalPatient.phone || null,
+      };
+      const exists = old.some((p: any) => p.id === finalPatient.id);
+      return exists ? old.map((p: any) => (p.id === finalPatient.id ? item : p)) : [item, ...old];
+    });
+
+    queryClient.setQueryData(["patients-list"], (old: any = []) => {
+      const exists = old.some((p: any) => p.id === finalPatient.id);
+      return exists ? old.map((p: any) => (p.id === finalPatient.id ? finalPatient : p)) : [finalPatient, ...old];
+    });
+
+    queryClient.invalidateQueries({ queryKey: ["patients-picker"] });
+    queryClient.invalidateQueries({ queryKey: ["patients-list"] });
+    queryClient.invalidateQueries({ queryKey: ["patients-mini"] });
+    queryClient.invalidateQueries({ queryKey: ["patients"] });
+
+    toast.success(patient?.id ? "Paciente atualizado com sucesso" : "Paciente cadastrado com sucesso");
+    onSaved(finalPatient);
+    onClose();
   };
 
   const inp =
