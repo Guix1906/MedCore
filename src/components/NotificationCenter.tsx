@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { notificationsService } from "@/services/api";
 import { Link } from "@tanstack/react-router";
 import { Archive, Check, Clock, Bell as BellIcon } from "lucide-react";
 import { toast } from "sonner";
