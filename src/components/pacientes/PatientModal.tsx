@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { X, UserPlus, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -38,6 +39,7 @@ export function PatientModal({
   onClose: () => void;
   onSaved: (updated?: any) => void;
 }) {
+  const queryClient = useQueryClient();
   const [f, setF] = useState({
     name: patient?.name ?? "",
     phone: patient?.phone ?? "",
@@ -98,13 +100,33 @@ export function PatientModal({
     }
 
     setSaving(false);
-    if (!saveError && savedData) {
+    const finalPatient = savedData || ({ ...patient, ...payload, id: patient?.id ?? crypto.randomUUID() });
+
+    if (!saveError) {
+      // Invalida e atualiza todos os caches de pacientes do sistema imediatamente
+      queryClient.setQueryData(["patients-picker"], (old: any = []) => {
+        const item = {
+          id: finalPatient.id,
+          name: finalPatient.name,
+          cpf: finalPatient.cpf || null,
+          phone: finalPatient.phone || null,
+        };
+        const exists = old.some((p: any) => p.id === finalPatient.id);
+        return exists ? old.map((p: any) => (p.id === finalPatient.id ? item : p)) : [item, ...old];
+      });
+
+      queryClient.setQueryData(["patients-list"], (old: any = []) => {
+        const exists = old.some((p: any) => p.id === finalPatient.id);
+        return exists ? old.map((p: any) => (p.id === finalPatient.id ? finalPatient : p)) : [finalPatient, ...old];
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["patients-picker"] });
+      queryClient.invalidateQueries({ queryKey: ["patients-list"] });
+      queryClient.invalidateQueries({ queryKey: ["patients-mini"] });
+      queryClient.invalidateQueries({ queryKey: ["patients"] });
+
       toast.success(patient?.id ? "Paciente atualizado com sucesso" : "Paciente cadastrado com sucesso");
-      onSaved(savedData);
-      onClose();
-    } else if (!saveError) {
-      toast.success(patient?.id ? "Paciente atualizado" : "Paciente cadastrado");
-      onSaved({ ...patient, ...payload, id: patient?.id ?? "" });
+      onSaved(finalPatient);
       onClose();
     } else {
       toast.error("Erro: " + (saveError?.message || "Não foi possível salvar"));
