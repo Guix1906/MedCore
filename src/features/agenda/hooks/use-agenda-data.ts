@@ -29,6 +29,22 @@ export function useAgendaData(
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     queryFn: async () => {
+      try {
+        const phpTasks = await agendaService.getTasks();
+        if (phpTasks && Array.isArray(phpTasks) && phpTasks.length > 0) {
+          return phpTasks.map((t) => ({
+            id: t.id,
+            title: t.title,
+            description: t.description || null,
+            due_date: t.due_date || null,
+            priority: t.priority,
+            status: t.status,
+            assigned_to: t.assigned_to || null,
+            case_id: null,
+          })) as RawTask[];
+        }
+      } catch {}
+
       const { data, error } = await supabase
         .from("tasks")
         .select(
@@ -49,6 +65,23 @@ export function useAgendaData(
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     queryFn: async () => {
+      try {
+        const phpEvents = await agendaService.getEvents();
+        if (phpEvents && Array.isArray(phpEvents) && phpEvents.length > 0) {
+          return phpEvents.map((e) => ({
+            id: e.id,
+            title: e.title,
+            description: e.description || null,
+            event_type: e.event_type || "appointment",
+            starts_at: e.start_time,
+            ends_at: e.end_time || null,
+            location: e.location || null,
+            assigned_to: (e as any).assigned_to || null,
+            case_id: null,
+          })) as RawEvent[];
+        }
+      } catch {}
+
       const { data, error } = await supabase
         .from("events")
         .select(
@@ -69,6 +102,22 @@ export function useAgendaData(
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     queryFn: async () => {
+      try {
+        const phpDeads = await agendaService.getDeadlines();
+        if (phpDeads && Array.isArray(phpDeads) && phpDeads.length > 0) {
+          return phpDeads.map((d) => ({
+            id: d.id,
+            title: d.title,
+            description: d.description || null,
+            due_date: d.due_date,
+            status: d.status,
+            assigned_to: (d as any).assigned_to || null,
+            case_id: null,
+            is_double_term: false,
+          })) as RawDeadline[];
+        }
+      } catch {}
+
       const { data, error } = await supabase
         .from("deadlines")
         .select("id, title, description, due_date, status, assigned_to, case_id, is_double_term")
