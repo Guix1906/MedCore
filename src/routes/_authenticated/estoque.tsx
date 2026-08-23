@@ -59,6 +59,26 @@ function EstoquePage() {
     gcTime: 30 * 60_000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
+      try {
+        const phpItems = await inventoryService.getItems();
+        if (phpItems && Array.isArray(phpItems) && phpItems.length > 0) {
+          return phpItems.map((it) => ({
+            id: it.id,
+            name: it.name,
+            code: (it as any).code || null,
+            category: it.category || null,
+            quantity: it.quantity || 0,
+            unit: it.unit || "un",
+            min_quantity: it.min_quantity || 5,
+            expiry_date: it.expiration_date || null,
+            supplier: it.supplier || null,
+            unit_cost: it.unit_cost || null,
+            location: (it as any).location || null,
+            active: it.active ?? true,
+          })) as Item[];
+        }
+      } catch {}
+
       const { data } = await supabase
         .from("inventory_items")
         .select(
@@ -82,6 +102,13 @@ function EstoquePage() {
       destructive: true,
     });
     if (!ok) return;
+    try {
+      await inventoryService.deleteItem(item.id);
+      toast.success("Item excluído com sucesso");
+      load();
+      return;
+    } catch {}
+
     const { error } = await supabase.from("inventory_items").delete().eq("id", item.id);
     if (error) {
       toast.error("Erro: " + error.message);
