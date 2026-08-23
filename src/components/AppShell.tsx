@@ -411,24 +411,10 @@ export default function AppShell({ children, title }: { children: ReactNode; tit
             <motion.button
               type="button"
               aria-label="WhatsApp"
+              whileHover={{ scale: 1.06 }}
+              whileTap={{ scale: 0.95 }}
               onClick={() => window.open(WHATSAPP_URL, "_blank", "noopener,noreferrer")}
-              className="h-10 w-10 rounded-[10px] flex items-center justify-center border cursor-pointer"
-              style={{ transformOrigin: "center", willChange: "transform" }}
-              animate={{
-                scale: [1, 1.06, 1],
-                boxShadow: [
-                  "0 8px 24px rgba(255,80,100,0.08)",
-                  "0 18px 40px rgba(255,80,100,0.16)",
-                  "0 8px 24px rgba(255,80,100,0.08)",
-                ],
-                backgroundColor: ["#FFF5F5", "#FFF0F0", "#FFF5F5"],
-                borderColor: [
-                  "rgba(225,29,72,0.25)",
-                  "rgba(225,29,72,0.40)",
-                  "rgba(225,29,72,0.25)",
-                ],
-              }}
-              transition={{ duration: 4, ease: "easeInOut", repeat: Infinity }}
+              className="h-10 w-10 rounded-[10px] flex items-center justify-center border border-rose-200 bg-rose-50/70 hover:bg-rose-100/80 cursor-pointer shadow-sm transition-colors"
             >
               <svg viewBox="0 0 32 32" width="20" height="20" fill="#E11D48" aria-hidden="true">
                 <path d="M19.11 17.205c-.372 0-1.088 1.39-1.518 1.39a.63.63 0 0 1-.315-.1c-.802-.402-1.504-.817-2.163-1.447-.545-.516-1.146-1.29-1.46-1.963a.426.426 0 0 1-.073-.215c0-.33.99-.945.99-1.49 0-.143-.73-2.09-.832-2.335-.143-.372-.214-.487-.6-.487-.187 0-.36-.043-.53-.043-.302 0-.53.115-.746.315-.688.645-1.032 1.318-1.045 2.264v.114c-.014.99.396 1.977.87 2.834 1.135 2.06 2.786 3.71 4.848 4.848.858.473 1.845.887 2.834.87h.114c.946-.013 1.62-.358 2.264-1.046.2-.216.315-.444.315-.746 0-.17-.043-.344-.043-.53 0-.386-.114-.458-.487-.6-.244-.103-2.19-.832-2.335-.832zM16.12 4.667c-6.257 0-11.333 5.075-11.333 11.333 0 2.13.59 4.204 1.707 6.007L4.7 27.334l5.44-1.766a11.28 11.28 0 0 0 5.98 1.723h.005c6.252 0 11.333-5.077 11.333-11.334 0-3.03-1.18-5.878-3.323-8.021a11.28 11.28 0 0 0-8.015-3.269zm0 20.813h-.004a9.472 9.472 0 0 1-5.24-1.582l-.375-.223-3.887 1.26 1.28-3.783-.245-.39a9.454 9.454 0 0 1-1.44-5.031c0-5.234 4.265-9.498 9.514-9.498a9.436 9.436 0 0 1 6.712 2.784 9.436 9.436 0 0 1 2.78 6.72c0 5.235-4.264 9.5-9.514 9.5z" />
