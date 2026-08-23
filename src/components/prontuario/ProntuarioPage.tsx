@@ -6,6 +6,7 @@ import {
   useState,
   forwardRef,
   useImperativeHandle,
+  memo,
   type ReactNode,
 } from "react";
 import { useNavigate } from "@tanstack/react-router";
