@@ -33,7 +33,7 @@ type MemberOpt = {
 type IdOpt = { id: string };
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { patientsService } from "@/services/api";
+import { patientsService, companyService } from "@/services/api";
 import { PatientModal } from "@/components/pacientes/PatientModal";
 import { useAuth } from "@/hooks/use-auth";
 import { useActiveCompany } from "@/hooks/use-active-company";
