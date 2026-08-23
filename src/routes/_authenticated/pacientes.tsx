@@ -447,7 +447,11 @@ function PatientDrawer({
   const [loadingTab, setLoadingTab] = useState(false);
 
   const toggleActive = async () => {
-    await supabase.from("patients").update({ active: !patient.active }).eq("id", patient.id);
+    try {
+      await patientsService.updatePatient(patient.id, { active: !patient.active });
+    } catch {
+      await supabase.from("patients").update({ active: !patient.active }).eq("id", patient.id);
+    }
     onChanged();
     onClose();
   };
