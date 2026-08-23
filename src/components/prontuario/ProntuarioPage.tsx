@@ -95,16 +95,36 @@ const defaultPatient = {
 
 export default function ProntuarioPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState<TabKey>("anamnese");
 
-  // Lê parâmetros da URL caso o atendimento tenha sido iniciado a partir da agenda
+  // Lê parâmetros da URL caso o atendimento tenha sido iniciado a partir da agenda ou paciente
   const searchParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+  const paramPatientId = searchParams.get("patientId") || searchParams.get("id");
   const paramPatientName =
     searchParams.get("patientName") || searchParams.get("name") || searchParams.get("patient");
 
+  // Busca dados reais do paciente no banco se fornecido
+  const { data: dbPatient } = useQuery({
+    queryKey: ["prontuario-db-patient", paramPatientId, paramPatientName],
+    queryFn: async () => {
+      if (paramPatientId) {
+        const { data } = await supabase.from("patients").select("*").eq("id", paramPatientId).maybeSingle();
+        if (data) return data;
+      }
+      if (paramPatientName) {
+        const clean = paramPatientName.replace(/\(.*?\)/g, "").trim();
+        const { data } = await supabase.from("patients").select("*").ilike("name", `%${clean}%`).limit(1).maybeSingle();
+        if (data) return data;
+      }
+      return null;
+    },
+  });
+
   const patient = useMemo(() => {
-    if (!paramPatientName) return defaultPatient;
-    const cleanName = paramPatientName.replace(/\(.*?\)/g, "").trim();
+    const rawName = dbPatient?.name || paramPatientName;
+    if (!rawName) return defaultPatient;
+    const cleanName = rawName.replace(/\(.*?\)/g, "").trim();
     const initials = cleanName
       .split(" ")
       .filter(Boolean)
@@ -113,25 +133,66 @@ export default function ProntuarioPage() {
       .join("")
       .toUpperCase();
     return {
+      id: dbPatient?.id || paramPatientId,
       initials: initials || "PA",
       name: cleanName,
-      age: "Em atendimento",
+      age: dbPatient?.birth_date
+        ? `Nasc: ${new Date(dbPatient.birth_date).toLocaleDateString("pt-BR")}`
+        : "Em atendimento",
     };
-  }, [paramPatientName]);
+  }, [dbPatient, paramPatientName, paramPatientId]);
 
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [privacy, setPrivacy] = useState<"Privado" | "Compartilhado">("Privado");
   const [conditions, setConditions] = useState<Record<string, boolean>>({});
   const [especifique, setEspecifique] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("saved");
+  const [isFinalizing, setIsFinalizing] = useState(false);
   const saveTimer = useRef<number | null>(null);
 
-  // Refs de controle imperativo dos editores para injeção via IA
+  // Refs de controle imperativo dos editores para injeção via IA e preenchimento
   const queixaRef = useRef<RichEditorHandle>(null);
   const historicoRef = useRef<RichEditorHandle>(null);
   const tratamentosRef = useRef<RichEditorHandle>(null);
   const alergiasRef = useRef<RichEditorHandle>(null);
   const medicacoesRef = useRef<RichEditorHandle>(null);
+
+  // Busca o último prontuário gravado desse paciente para preencher o formulário
+  const { data: previousRecord } = useQuery({
+    queryKey: ["prontuario-previous-record", patient.id],
+    enabled: !!patient.id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("medical_records")
+        .select("*")
+        .eq("patient_id", patient.id!)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data ?? null;
+    },
+  });
+
+  const prefilledRef = useRef(false);
+  useEffect(() => {
+    if (previousRecord && !prefilledRef.current) {
+      prefilledRef.current = true;
+      if (previousRecord.complaint) queixaRef.current?.setText(previousRecord.complaint);
+      if (previousRecord.family_history) historicoRef.current?.setText(previousRecord.family_history);
+      if (previousRecord.conduct || previousRecord.surgical_history) {
+        tratamentosRef.current?.setText(previousRecord.conduct || previousRecord.surgical_history || "");
+      }
+      if (previousRecord.allergies) alergiasRef.current?.setText(previousRecord.allergies);
+      if (previousRecord.medications) medicacoesRef.current?.setText(previousRecord.medications);
+      if (previousRecord.clinical_history) setEspecifique(previousRecord.clinical_history);
+      if (previousRecord.evolution) {
+        try {
+          const parsed = JSON.parse(previousRecord.evolution);
+          if (typeof parsed === "object" && parsed !== null) setConditions(parsed);
+        } catch {}
+      }
+    }
+  }, [previousRecord]);
 
   // Estado do modal de Assistente IA
   const [aiModalOpen, setAiModalOpen] = useState(false);
@@ -242,11 +303,50 @@ export default function ProntuarioPage() {
 
   const secondsRef = useRef(0);
 
-  const handleFinalize = () => {
-    toast.success("Atendimento finalizado", {
-      description: `Duração: ${formatTime(secondsRef.current)}. Prontuário salvo com sucesso.`,
-    });
-    setTimeout(() => navigate({ to: "/pacientes" }), 800);
+  const handleFinalize = async () => {
+    const targetPatientId = patient?.id || dbPatient?.id || paramPatientId;
+    const queixaText = queixaRef.current?.getText() || "";
+    const historicoText = historicoRef.current?.getText() || "";
+    const tratamentosText = tratamentosRef.current?.getText() || "";
+    const alergiasText = alergiasRef.current?.getText() || "";
+    const medicacoesText = medicacoesRef.current?.getText() || "";
+
+    setIsFinalizing(true);
+    try {
+      if (targetPatientId) {
+        const { error } = await supabase.from("medical_records").insert({
+          patient_id: targetPatientId,
+          complaint: queixaText || null,
+          family_history: historicoText || null,
+          conduct: tratamentosText || null,
+          surgical_history: tratamentosText || null,
+          allergies: alergiasText || null,
+          clinical_history: especifique || null,
+          medications: medicacoesText || null,
+          evolution: JSON.stringify(conditions),
+          duration_seconds: secondsRef.current,
+          finished_at: new Date().toISOString(),
+        });
+
+        if (error) {
+          toast.error("Erro ao gravar prontuário no banco: " + error.message);
+          setIsFinalizing(false);
+          return;
+        }
+
+        queryClient.invalidateQueries({ queryKey: ["patient-medical-records", targetPatientId] });
+        queryClient.invalidateQueries({ queryKey: ["patient-medical-records"] });
+      }
+
+      toast.success("Atendimento finalizado com sucesso!", {
+        description: `Duração: ${formatTime(secondsRef.current)}. Prontuário clínico gravado para ${patient.name}.`,
+      });
+
+      setTimeout(() => navigate({ to: "/pacientes" }), 600);
+    } catch (err: any) {
+      toast.error("Erro inesperado: " + (err?.message || "falha ao finalizar"));
+      setIsFinalizing(false);
+    }
   };
 
 
