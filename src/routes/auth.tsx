@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router"
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { authService, getStoredToken } from "@/services/api";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShieldCheck,
