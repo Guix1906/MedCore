@@ -60,25 +60,6 @@ export function PatientModal({
   }));
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (open) {
-      setF({
-        name: patient?.name ?? "",
-        phone: patient?.phone ?? "",
-        email: patient?.email ?? "",
-        cpf: patient?.cpf ?? "",
-        birth_date: patient?.birth_date ?? "",
-        gender: patient?.gender ?? "",
-        insurance: patient?.insurance ?? "",
-        address: patient?.address ?? "",
-        city: patient?.city ?? "",
-        state: patient?.state ?? "",
-        zip_code: patient?.zip_code ?? "",
-        notes: patient?.notes ?? "",
-      });
-    }
-  }, [patient?.id, open]);
-
   const set =
     (k: keyof typeof f) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
