@@ -2411,10 +2411,21 @@ export function NovoAgendamentoDialog({
       <PatientModal
         onClose={() => setQuickPatientOpen(false)}
         onSaved={(newPatient) => {
-          queryClient.invalidateQueries({ queryKey: ["patients-picker"] });
-          queryClient.invalidateQueries({ queryKey: ["patients"] });
-          queryClient.invalidateQueries({ queryKey: ["patients-mini"] });
           if (newPatient?.id) {
+            const item = {
+              id: newPatient.id,
+              name: newPatient.name,
+              cpf: newPatient.cpf || null,
+              phone: newPatient.phone || null,
+            };
+            queryClient.setQueryData(["patients-picker"], (old: any = []) => {
+              const exists = old.some((p: any) => p.id === newPatient.id);
+              return exists ? old.map((p: any) => (p.id === newPatient.id ? item : p)) : [item, ...old];
+            });
+            queryClient.invalidateQueries({ queryKey: ["patients-picker"] });
+            queryClient.invalidateQueries({ queryKey: ["patients-list"] });
+            queryClient.invalidateQueries({ queryKey: ["patients-mini"] });
+            queryClient.invalidateQueries({ queryKey: ["patients"] });
             setClientId(newPatient.id);
             setIsNewPatient(true);
           }
@@ -2490,16 +2501,26 @@ const ClientPicker = memo(function ClientPicker({
   const current = useMemo(() => clients.find((c) => c.id === value), [clients, value]);
 
   const filteredClients = useMemo(() => {
-    const s = query.trim().toLowerCase();
-    if (!s) return clients.slice(0, 35);
+    const normalize = (t: string) =>
+      t
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+
+    const s = normalize(query.trim());
+    if (!s) return clients.slice(0, 60);
+
+    const sDigits = query.replace(/\D/g, "");
+
     return clients
-      .filter(
-        (c) =>
-          c.name.toLowerCase().includes(s) ||
-          (c.cpf && c.cpf.includes(s)) ||
-          (c.phone && c.phone.includes(s)),
-      )
-      .slice(0, 40);
+      .filter((c) => {
+        const nameNorm = normalize(c.name || "");
+        if (nameNorm.includes(s)) return true;
+        if (c.cpf && sDigits.length > 2 && c.cpf.replace(/\D/g, "").includes(sDigits)) return true;
+        if (c.phone && sDigits.length > 2 && c.phone.replace(/\D/g, "").includes(sDigits)) return true;
+        return false;
+      })
+      .slice(0, 60);
   }, [clients, query]);
 
   return (
