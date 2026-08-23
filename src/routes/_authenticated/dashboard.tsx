@@ -25,6 +25,7 @@ import AppShell from "@/components/AppShell";
 import { RevealGroup, RevealItem } from "@/components/motion/Reveal";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { financeService, patientsService, companyService, agendaService } from "@/services/api";
 import { StatNumber } from "@/components/ds";
 import { Chart, CHART_COLORS } from "@/components/ds/Chart";
 import type { ApexOptions } from "apexcharts";
