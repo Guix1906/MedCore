@@ -825,6 +825,7 @@ export function NovoAgendamentoDialog({
   }, [locName, locAddress, locCity, locState]);
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl p-0 gap-0 overflow-hidden max-h-[92vh] flex flex-col rounded-2xl border-border/70 [&>button.absolute]:hidden">
         {/* Header */}
