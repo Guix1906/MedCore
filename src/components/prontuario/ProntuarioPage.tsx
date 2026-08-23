@@ -371,10 +371,10 @@ export default function ProntuarioPage() {
       console.warn("Aviso ao salvar localmente:", e);
     }
 
-    // 2. Salva no banco de dados Supabase se ID presente
+    // 2. Salva no banco de dados PHP / Supabase se ID presente
     if (targetPatientId) {
       try {
-        await supabase.from("medical_records").insert({
+        await prontuarioService.createRecord({
           patient_id: targetPatientId,
           complaint: queixaText || null,
           family_history: historicoText || null,
@@ -382,13 +382,28 @@ export default function ProntuarioPage() {
           surgical_history: tratamentosText || null,
           allergies: alergiasText || null,
           clinical_history: especifique || null,
-          medications: medicacoesText || null,
           evolution: JSON.stringify(conditions),
           duration_seconds: secondsRef.current,
           finished_at: new Date().toISOString(),
         });
-      } catch (e) {
-        console.warn("Supabase medical_records insert fallback to local:", e);
+      } catch (phpErr) {
+        try {
+          await supabase.from("medical_records").insert({
+            patient_id: targetPatientId,
+            complaint: queixaText || null,
+            family_history: historicoText || null,
+            conduct: tratamentosText || null,
+            surgical_history: tratamentosText || null,
+            allergies: alergiasText || null,
+            clinical_history: especifique || null,
+            medications: medicacoesText || null,
+            evolution: JSON.stringify(conditions),
+            duration_seconds: secondsRef.current,
+            finished_at: new Date().toISOString(),
+          });
+        } catch (e) {
+          console.warn("Medical records insert fallback to local:", e);
+        }
       }
     }
 
