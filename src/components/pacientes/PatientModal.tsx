@@ -31,10 +31,12 @@ export type PatientData = {
 };
 
 export function PatientModal({
+  open = true,
   patient,
   onClose,
   onSaved,
 }: {
+  open?: boolean;
   patient?: PatientData | null;
   onClose: () => void;
   onSaved: (updated?: any) => void;
@@ -55,6 +57,25 @@ export function PatientModal({
     notes: patient?.notes ?? "",
   });
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setF({
+        name: patient?.name ?? "",
+        phone: patient?.phone ?? "",
+        email: patient?.email ?? "",
+        cpf: patient?.cpf ?? "",
+        birth_date: patient?.birth_date ?? "",
+        gender: patient?.gender ?? "",
+        insurance: patient?.insurance ?? "",
+        address: patient?.address ?? "",
+        city: patient?.city ?? "",
+        state: patient?.state ?? "",
+        zip_code: patient?.zip_code ?? "",
+        notes: patient?.notes ?? "",
+      });
+    }
+  }, [patient, open]);
 
   const set =
     (k: keyof typeof f) =>
