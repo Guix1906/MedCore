@@ -2487,17 +2487,30 @@ const ClientPicker = memo(function ClientPicker({
   value,
   onChange,
   clients,
-  onAddNew,
 }: {
   value: string;
   onChange: (v: string) => void;
   clients: { id: string; name: string; cpf?: string | null; phone?: string | null }[];
-  onAddNew?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const current = useMemo(() => clients.find((c) => c.id === value), [clients, value]);
+
+  // Click outside listener
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [open]);
 
   const filteredClients = useMemo(() => {
     const normalize = (t: string) =>
@@ -2523,119 +2536,110 @@ const ClientPicker = memo(function ClientPicker({
   }, [clients, query]);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "w-full h-12 px-3.5 rounded-2xl border-2 transition-all flex items-center justify-between text-left cursor-pointer",
-            current
-              ? "bg-violet-50/80 border-primary/60 text-foreground"
-              : "bg-background border-border/80 hover:border-primary/40 text-muted-foreground",
-          )}
-        >
-          {current ? (
-            <div className="flex items-center gap-3 min-w-0 flex-1">
-              <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground font-bold text-xs flex items-center justify-center shrink-0">
-                {current.name
-                  .split(" ")
-                  .map((n) => n[0])
-                  .slice(0, 2)
-                  .join("")
-                  .toUpperCase()}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-bold text-foreground truncate leading-tight">
-                  {current.name}
+    <div ref={dropdownRef} className="relative w-full">
+      {current ? (
+        <div className="w-full h-12 px-3.5 rounded-2xl border-2 border-primary/60 bg-violet-50/80 flex items-center justify-between transition-all">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground font-bold text-xs flex items-center justify-center shrink-0">
+              {current.name
+                .split(" ")
+                .map((n) => n[0])
+                .slice(0, 2)
+                .join("")
+                .toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-foreground truncate leading-tight">
+                {current.name}
+              </p>
+              {(current.cpf || current.phone) && (
+                <p className="text-[11px] text-muted-foreground truncate">
+                  {[current.cpf && `CPF: ${current.cpf}`, current.phone && `Tel: ${current.phone}`]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </p>
-                {(current.cpf || current.phone) && (
-                  <p className="text-[11px] text-muted-foreground truncate">
-                    {[current.cpf && `CPF: ${current.cpf}`, current.phone && `Tel: ${current.phone}`].filter(Boolean).join(" · ")}
-                  </p>
-                )}
-              </div>
+              )}
             </div>
-          ) : (
-            <div className="flex items-center gap-2.5 text-muted-foreground text-sm">
-              <Search className="h-4 w-4 text-primary shrink-0" />
-              <span>Digite para buscar paciente por Nome, CPF ou Telefone...</span>
-            </div>
-          )}
-
-          <div className="flex items-center gap-1 shrink-0 ml-2">
-            {current && (
-              <span
-                role="button"
-                tabIndex={0}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onChange("");
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.stopPropagation();
-                    onChange("");
-                  }
-                }}
-                className="h-6 w-6 rounded-full hover:bg-rose-100 hover:text-rose-600 grid place-items-center transition cursor-pointer"
-                title="Limpar seleção"
-              >
-                <X className="h-3.5 w-3.5" />
-              </span>
-            )}
-            <span className="text-xs text-muted-foreground">▼</span>
           </div>
-        </button>
-      </PopoverTrigger>
 
-      <PopoverContent
-        className="w-[calc(100vw-32px)] sm:w-[480px] max-h-[380px] p-0 rounded-2xl border-2 border-primary/30 shadow-2xl bg-background overflow-hidden z-[300]"
-        align="start"
-        sideOffset={6}
-      >
-        <div className="p-3 border-b border-border/60 bg-muted/20">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
-            <input
-              type="text"
-              autoFocus
-              placeholder="Digite o nome, CPF ou telefone do paciente..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="w-full h-10 pl-9 pr-3 rounded-xl border border-border bg-background text-sm font-medium focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-            />
+          <div className="flex items-center gap-2 shrink-0 ml-2">
+            <button
+              type="button"
+              onClick={() => {
+                onChange("");
+                setQuery("");
+                setTimeout(() => {
+                  setOpen(true);
+                  inputRef.current?.focus();
+                }, 50);
+              }}
+              className="text-xs font-semibold text-primary hover:underline px-2 py-1 rounded-md hover:bg-primary/10 cursor-pointer"
+            >
+              Trocar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onChange("");
+                setQuery("");
+              }}
+              className="h-7 w-7 rounded-full hover:bg-rose-100 hover:text-rose-600 grid place-items-center text-muted-foreground transition cursor-pointer"
+              title="Remover paciente"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
         </div>
+      ) : (
+        <div className="relative flex items-center">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-primary pointer-events-none" />
+          <input
+            ref={inputRef}
+            type="text"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setOpen(true);
+            }}
+            onFocus={() => setOpen(true)}
+            placeholder="Digite para buscar paciente por Nome, CPF ou Telefone..."
+            className="w-full h-12 pl-10 pr-10 rounded-2xl border-2 border-border/80 bg-background text-sm font-medium focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-muted-foreground"
+          />
+          {query ? (
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("");
+                inputRef.current?.focus();
+              }}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 h-6 w-6 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground grid place-items-center cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          ) : (
+            <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
+              ▼
+            </span>
+          )}
+        </div>
+      )}
 
-        <div className="max-h-[250px] overflow-y-auto p-1.5 space-y-1">
+      {/* Autocomplete Results Dropdown */}
+      {open && !current && (
+        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-[200] max-h-[260px] overflow-y-auto rounded-2xl border-2 border-primary/30 bg-background p-1.5 shadow-2xl space-y-1 animate-in fade-in-0 zoom-in-95 duration-100">
           {filteredClients.length === 0 ? (
-            <div className="p-5 text-center space-y-2.5">
-              <p className="text-xs text-muted-foreground font-medium">
-                Nenhum paciente encontrado com "{query}".
-              </p>
-              {onAddNew && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpen(false);
-                    onAddNew();
-                  }}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition shadow-sm cursor-pointer"
-                >
-                  <UserPlus className="h-4 w-4" />
-                  Cadastrar novo paciente {query ? `"${query}"` : ""}
-                </button>
-              )}
+            <div className="p-4 text-center text-xs text-muted-foreground font-medium">
+              Nenhum paciente encontrado com "{query}".
             </div>
           ) : (
             filteredClients.map((c) => {
-              const isSelected = c.id === value;
               const initials = c.name
                 .split(" ")
                 .map((n) => n[0])
                 .slice(0, 2)
                 .join("")
                 .toUpperCase();
+
               return (
                 <button
                   key={c.id}
@@ -2643,22 +2647,11 @@ const ClientPicker = memo(function ClientPicker({
                   onClick={() => {
                     onChange(c.id);
                     setOpen(false);
+                    setQuery("");
                   }}
-                  className={cn(
-                    "w-full text-left p-2.5 rounded-xl flex items-center gap-3 transition-colors cursor-pointer",
-                    isSelected
-                      ? "bg-primary/15 border border-primary/40"
-                      : "hover:bg-violet-50/70 border border-transparent",
-                  )}
+                  className="w-full text-left p-2.5 rounded-xl flex items-center gap-3 hover:bg-violet-50/70 border border-transparent transition-colors cursor-pointer"
                 >
-                  <div
-                    className={cn(
-                      "h-9 w-9 rounded-full font-bold text-xs flex items-center justify-center shrink-0",
-                      isSelected
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground",
-                    )}
-                  >
+                  <div className="h-9 w-9 rounded-full bg-primary/15 text-primary font-bold text-xs flex items-center justify-center shrink-0">
                     {initials}
                   </div>
 
@@ -2666,39 +2659,19 @@ const ClientPicker = memo(function ClientPicker({
                     <p className="text-sm font-semibold text-foreground truncate">{c.name}</p>
                     {(c.cpf || c.phone) && (
                       <p className="text-[11px] text-muted-foreground truncate">
-                        {[c.cpf && `CPF: ${c.cpf}`, c.phone && `Tel: ${c.phone}`].filter(Boolean).join(" · ")}
+                        {[c.cpf && `CPF: ${c.cpf}`, c.phone && `Tel: ${c.phone}`]
+                          .filter(Boolean)
+                          .join(" · ")}
                       </p>
                     )}
                   </div>
-
-                  {isSelected && (
-                    <span className="text-xs font-bold text-primary px-2 py-0.5 rounded-md bg-primary/10 shrink-0">
-                      Selecionado
-                    </span>
-                  )}
                 </button>
               );
             })
           )}
         </div>
-
-        {onAddNew && (
-          <div className="p-2 border-t border-border/60 bg-muted/10">
-            <button
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                onAddNew();
-              }}
-              className="w-full h-9 rounded-xl text-xs font-bold text-primary hover:bg-primary/10 flex items-center justify-center gap-1.5 transition cursor-pointer"
-            >
-              <UserPlus className="h-4 w-4" />
-              Cadastrar novo paciente
-            </button>
-          </div>
-        )}
-      </PopoverContent>
-    </Popover>
+      )}
+    </div>
   );
 });
 
