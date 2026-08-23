@@ -214,7 +214,7 @@ export default function AgendaSidebar({
   const yearHolidays = useMemo(() => getBrazilianHolidays(viewYear), [viewYear]);
 
   return (
-    <aside className="agenda-sidebar-scroll w-[310px] shrink-0 h-full overflow-y-auto bg-white">
+    <aside className="agenda-sidebar-scroll w-[310px] shrink-0 h-full overflow-y-auto bg-white border-r border-slate-200 shadow-xs">
       {/* Mini calendar */}
       <div className="px-4 pt-4 pb-4 border-b border-neutral-200">
         <div className="flex items-center justify-between mb-3">
