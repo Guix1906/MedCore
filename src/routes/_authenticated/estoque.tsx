@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
 import { confirmDialog } from "@/components/app/confirm-dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { inventoryService } from "@/services/api";
 
 export const Route = createFileRoute("/_authenticated/estoque")({
   head: () => ({
