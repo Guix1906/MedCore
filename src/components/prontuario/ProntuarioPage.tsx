@@ -235,81 +235,44 @@ export default function ProntuarioPage() {
     sectionKey?: string
   ) => {
     if (typeof content === "string") {
-      if (sectionKey === "queixa") queixaRef.current?.setText(content);
-      else if (sectionKey === "historico_familiar") historicoRef.current?.setText(content);
-      else if (sectionKey === "tratamentos") tratamentosRef.current?.setText(content);
-      else if (sectionKey === "alergias") alergiasRef.current?.setText(content);
-      else if (sectionKey === "medicacoes") medicacoesRef.current?.setText(content);
-      else if (sectionKey === "historico_pessoal") setEspecifique(content);
+      queixaRef.current?.setText(content);
     } else {
-      // Inserção multi-campo mapeada 1-para-1 com o prontuário
-      const isValid = (t?: string) =>
-        Boolean(t && t.trim().length > 0 && t !== "Não informado na consulta.");
-
-      // 1. Campo: Queixa Principal
-      if (isValid(content.queixaPrincipal)) {
-        queixaRef.current?.setText(content.queixaPrincipal);
+      const parts: string[] = [];
+      if (content.queixaPrincipal) {
+        parts.push(`Queixa Principal:\n${content.queixaPrincipal}`);
+      }
+      if (content.historicoFamiliar) {
+        parts.push(`Histórico Familiar:\n${content.historicoFamiliar}`);
+      }
+      if (content.tratamentosAnteriores) {
+        parts.push(`Tratamentos Anteriores:\n${content.tratamentosAnteriores}`);
+      }
+      if (content.alergias) {
+        parts.push(`Alergias:\n${content.alergias}`);
+      }
+      if (content.medicacoesEmUso) {
+        parts.push(`Medicações em uso:\n${content.medicacoesEmUso}`);
+      }
+      if (content.historicoPessoal) {
+        parts.push(`Histórico Pessoal:\n${content.historicoPessoal}`);
+      }
+      if (content.condutaPlano) {
+        parts.push(`Conduta e Orientações:\n${content.condutaPlano}`);
       }
 
-      // 2. Campo: Histórico Familiar
-      if (isValid(content.historicoFamiliar)) {
-        historicoRef.current?.setText(content.historicoFamiliar);
-      }
-
-      // 3. Campo: Tratamentos Anteriores (+ Conduta se presente)
-      let tratamentosText = "";
-      if (isValid(content.tratamentosAnteriores)) {
-        tratamentosText += content.tratamentosAnteriores;
-      }
-      if (isValid(content.condutaPlano)) {
-        tratamentosText += `${tratamentosText ? "\n\n" : ""}Conduta e Orientações:\n${content.condutaPlano}`;
-      }
-      if (tratamentosText) {
-        tratamentosRef.current?.setText(tratamentosText);
-      }
-
-      // 4. Campo: Alergias
-      if (isValid(content.alergias)) {
-        alergiasRef.current?.setText(content.alergias);
-      }
-
-      // 5. Campo: Medicações em uso atualmente
-      if (isValid(content.medicacoesEmUso)) {
-        medicacoesRef.current?.setText(content.medicacoesEmUso);
-      }
-
-      // 6. Campo: Histórico Médico Pessoal (Especifique)
-      if (isValid(content.historicoPessoal)) {
-        setEspecifique((prev) => (prev ? `${prev}\n${content.historicoPessoal}` : content.historicoPessoal));
-      }
-
-      // 7. Checkboxes de Condições detectadas automaticamente
-      if (content.condicoesDetectadas && content.condicoesDetectadas.length > 0) {
-        setConditions((prev) => {
-          const next = { ...prev };
-          content.condicoesDetectadas.forEach((cond) => {
-            next[cond] = true;
-          });
-          return next;
-        });
-      }
+      const fullText = parts.length > 0 ? parts.join("\n\n") : (content.queixaPrincipal || "");
+      queixaRef.current?.setText(fullText);
     }
     markDirty();
   };
 
   const markDirty = useCallback(() => {
-    setSaveState("dirty");
+    setSaveState("unsaved");
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
-      setSaveState("saving");
-      window.setTimeout(() => setSaveState("saved"), 550);
-    }, 700);
+      setSaveState("saved");
+    }, 1200);
   }, []);
-
-  useEffect(() => {
-    if (Object.keys(conditions).length || especifique) markDirty();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conditions, especifique]);
 
   const copyPatient = async () => {
     const text = `${patient.name} — ${patient.age}`;
@@ -324,34 +287,19 @@ export default function ProntuarioPage() {
   // Estado do modal de confirmação de cancelamento
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
 
-  const handleCancel = () => {
-    setCancelModalOpen(true);
-  };
-
   const secondsRef = useRef(0);
 
   const handleFinalize = async () => {
     const targetPatientId = patient?.id || dbPatient?.id || paramPatientId;
     const patientName = patient?.name || dbPatient?.name || paramPatientName || "Paciente";
-    const queixaText = queixaRef.current?.getText() || "";
-    const historicoText = historicoRef.current?.getText() || "";
-    const tratamentosText = tratamentosRef.current?.getText() || "";
-    const alergiasText = alergiasRef.current?.getText() || "";
-    const medicacoesText = medicacoesRef.current?.getText() || "";
+    const anamneseText = queixaRef.current?.getText() || "";
 
     setIsFinalizing(true);
     const newRecord = {
       id: crypto.randomUUID(),
       patient_id: targetPatientId || null,
       patient_name: patientName,
-      complaint: queixaText || null,
-      family_history: historicoText || null,
-      conduct: tratamentosText || null,
-      surgical_history: tratamentosText || null,
-      allergies: alergiasText || null,
-      clinical_history: especifique || null,
-      medications: medicacoesText || null,
-      evolution: JSON.stringify(conditions),
+      complaint: anamneseText || null,
       duration_seconds: secondsRef.current,
       created_at: new Date().toISOString(),
       finished_at: new Date().toISOString(),
@@ -376,13 +324,7 @@ export default function ProntuarioPage() {
       try {
         await prontuarioService.createRecord({
           patient_id: targetPatientId,
-          complaint: queixaText || null,
-          family_history: historicoText || null,
-          conduct: tratamentosText || null,
-          surgical_history: tratamentosText || null,
-          allergies: alergiasText || null,
-          clinical_history: especifique || null,
-          evolution: JSON.stringify(conditions),
+          complaint: anamneseText || null,
           duration_seconds: secondsRef.current,
           finished_at: new Date().toISOString(),
         });
@@ -390,14 +332,7 @@ export default function ProntuarioPage() {
         try {
           await supabase.from("medical_records").insert({
             patient_id: targetPatientId,
-            complaint: queixaText || null,
-            family_history: historicoText || null,
-            conduct: tratamentosText || null,
-            surgical_history: tratamentosText || null,
-            allergies: alergiasText || null,
-            clinical_history: especifique || null,
-            medications: medicacoesText || null,
-            evolution: JSON.stringify(conditions),
+            complaint: anamneseText || null,
             duration_seconds: secondsRef.current,
             finished_at: new Date().toISOString(),
           });
