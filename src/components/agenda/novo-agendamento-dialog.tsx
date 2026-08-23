@@ -2457,6 +2457,7 @@ export function NovoAgendamentoDialog({
             setClientId(newPatient.id);
             setIsNewPatient(true);
           }
+        }}
       />
     </>
   );
