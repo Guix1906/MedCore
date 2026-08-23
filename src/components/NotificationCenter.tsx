@@ -47,6 +47,27 @@ export default function NotificationCenter({ onClose }: { onClose: () => void })
 
   const load = async () => {
     setLoading(true);
+    try {
+      const phpNotifs = await notificationsService.getNotifications();
+      if (phpNotifs && Array.isArray(phpNotifs) && phpNotifs.length > 0) {
+        const formatted = phpNotifs.map((n) => ({
+          id: n.id,
+          title: n.title,
+          body: n.message,
+          type: n.type,
+          category: "sistema",
+          priority: "normal",
+          action_url: null,
+          read: n.read,
+          archived: false,
+          created_at: n.created_at,
+        }));
+        setItems(formatted as Notif[]);
+        setLoading(false);
+        return;
+      }
+    } catch {}
+
     const { data, error } = await supabase
       .from("notifications")
       .select("id,title,body,type,category,priority,action_url,read,archived,created_at")
@@ -80,23 +101,39 @@ export default function NotificationCenter({ onClose }: { onClose: () => void })
   const markAllRead = async () => {
     const ids = items.filter((n) => !n.read && !n.archived).map((n) => n.id);
     if (!ids.length) return;
-    await supabase.from("notifications").update({ read: true }).in("id", ids);
+    try {
+      await notificationsService.markAsRead(ids);
+    } catch {
+      await supabase.from("notifications").update({ read: true }).in("id", ids);
+    }
+    setItems((prev) => prev.map((it) => ({ ...it, read: true })));
     toast.success("Todas marcadas como lidas");
   };
 
   const markRead = async (id: string) => {
-    await supabase.from("notifications").update({ read: true }).eq("id", id);
+    try {
+      await notificationsService.markAsRead(id);
+    } catch {
+      await supabase.from("notifications").update({ read: true }).eq("id", id);
+    }
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, read: true } : it)));
   };
   const archive = async (id: string) => {
     await supabase
       .from("notifications")
       .update({ archived: true, archived_at: new Date().toISOString() })
       .eq("id", id);
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, archived: true } : it)));
     toast.success("Notificação arquivada");
   };
   const snooze = async (id: string) => {
     const when = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-    await supabase.from("notifications").update({ snoozed_until: when, read: true }).eq("id", id);
+    try {
+      await notificationsService.snooze(id, when);
+    } catch {
+      await supabase.from("notifications").update({ snoozed_until: when, read: true }).eq("id", id);
+    }
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, read: true } : it)));
     toast.success("Adiada por 1h");
   };
 
