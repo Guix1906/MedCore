@@ -414,16 +414,15 @@ function PacientesPage() {
         </div>
       </div>
 
-      {(openNew || editing) && (
-        <PatientModal
-          patient={editing}
-          onClose={() => {
-            setOpenNew(false);
-            setEditing(null);
-          }}
-          onSaved={refreshPatients}
-        />
-      )}
+      <PatientModal
+        open={openNew || !!editing}
+        patient={editing}
+        onClose={() => {
+          setOpenNew(false);
+          setEditing(null);
+        }}
+        onSaved={refreshPatients}
+      />
     </AppShell>
   );
 }
