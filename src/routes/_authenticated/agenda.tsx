@@ -127,7 +127,7 @@ function AgendaPage() {
     queryFn: async () => {
       try {
         const phpPat = await patientsService.getPatients({ limit: 500 });
-        if (phpPat && Array.isArray(phpPat) && phpPat.length > 0) {
+        if (phpPat && Array.isArray(phpPat)) {
           return phpPat.map((p) => ({
             id: p.id,
             name: p.name,
