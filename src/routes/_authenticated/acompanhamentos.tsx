@@ -104,6 +104,7 @@ function AcompanhamentosPage() {
 
   const { data: rows = [], isLoading: loading } = useQuery({
     queryKey: ["treatments-list"],
+    placeholderData: (prev) => prev,
     staleTime: 5 * 60_000,
     gcTime: 30 * 60_000,
     refetchOnWindowFocus: false,
