@@ -2390,166 +2390,21 @@ export function NovoAgendamentoDialog({
       </DialogContent>
     </Dialog>
 
-    <QuickPatientDialog
-      open={quickPatientOpen}
-      onClose={() => setQuickPatientOpen(false)}
-      onCreated={(newPatient) => {
-        queryClient.invalidateQueries({ queryKey: ["patients-picker"] });
-        queryClient.invalidateQueries({ queryKey: ["patients"] });
-        queryClient.invalidateQueries({ queryKey: ["patients-mini"] });
-        setClientId(newPatient.id);
-        setIsNewPatient(true);
-      }}
-    />
+    {quickPatientOpen && (
+      <PatientModal
+        onClose={() => setQuickPatientOpen(false)}
+        onSaved={(newPatient) => {
+          queryClient.invalidateQueries({ queryKey: ["patients-picker"] });
+          queryClient.invalidateQueries({ queryKey: ["patients"] });
+          queryClient.invalidateQueries({ queryKey: ["patients-mini"] });
+          if (newPatient?.id) {
+            setClientId(newPatient.id);
+            setIsNewPatient(true);
+          }
+        }}
+      />
+    )}
     </>
-  );
-}
-
-// ============================================================
-// Modal de Cadastro Rápido de Paciente no Agendamento
-// ============================================================
-function QuickPatientDialog({
-  open,
-  onClose,
-  onCreated,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onCreated: (newPatient: { id: string; name: string }) => void;
-}) {
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [cpf, setCpf] = useState("");
-  const [insurance, setInsurance] = useState("Particular");
-  const [saving, setSaving] = useState(false);
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) {
-      toast.error("Informe o nome do paciente");
-      return;
-    }
-    setSaving(true);
-    const payload = {
-      name: name.trim(),
-      phone: phone.trim() || null,
-      cpf: cpf.trim() || null,
-      insurance: insurance || "Particular",
-      active: true,
-    };
-
-    try {
-      const created = await patientsService.createPatient(payload);
-      if (created) {
-        toast.success(`Paciente "${created.name}" cadastrado com sucesso!`);
-        onCreated({ id: created.id, name: created.name });
-        setName("");
-        setPhone("");
-        setCpf("");
-        onClose();
-        return;
-      }
-    } catch {
-      // Fallback Supabase
-      const { data, error } = await supabase
-        .from("patients")
-        .insert(payload)
-        .select()
-        .maybeSingle();
-
-      if (!error && data) {
-        toast.success(`Paciente "${data.name}" cadastrado com sucesso!`);
-        onCreated({ id: data.id, name: data.name });
-        setName("");
-        setPhone("");
-        setCpf("");
-        onClose();
-        return;
-      } else {
-        toast.error("Erro ao cadastrar: " + (error?.message || "Erro desconhecido"));
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-[440px] rounded-2xl p-6 border border-border/80 shadow-2xl z-[500] bg-background">
-        <DialogTitle className="text-base font-bold text-foreground flex items-center gap-2">
-          <UserPlus className="h-5 w-5 text-primary" />
-          Cadastrar Novo Paciente
-        </DialogTitle>
-        <DialogDescription className="text-xs text-muted-foreground">
-          Cadastre os dados básicos para vincular o paciente imediatamente ao agendamento.
-        </DialogDescription>
-
-        <form onSubmit={handleSave} className="space-y-3.5 mt-3">
-          <div className="space-y-1">
-            <Label className="text-xs font-semibold text-foreground">
-              Nome Completo <span className="text-rose-500">*</span>
-            </Label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ex: João da Silva"
-              className="h-10 rounded-xl"
-              autoFocus
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs font-semibold text-foreground">Celular / WhatsApp</Label>
-              <Input
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="(11) 99999-9999"
-                className="h-10 rounded-xl"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs font-semibold text-foreground">CPF</Label>
-              <Input
-                value={cpf}
-                onChange={(e) => setCpf(e.target.value)}
-                placeholder="000.000.000-00"
-                className="h-10 rounded-xl"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs font-semibold text-foreground">Convênio / Plano</Label>
-            <Input
-              value={insurance}
-              onChange={(e) => setInsurance(e.target.value)}
-              placeholder="Particular, Unimed, Bradesco..."
-              className="h-10 rounded-xl"
-            />
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-border/60">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              className="h-10 px-4 rounded-xl text-xs font-semibold cursor-pointer"
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="submit"
-              disabled={saving || !name.trim()}
-              className="h-10 px-4 rounded-xl bg-primary text-primary-foreground text-xs font-bold shadow-sm cursor-pointer"
-            >
-              {saving ? "Salvando..." : "Salvar e Selecionar"}
-            </Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }
 
