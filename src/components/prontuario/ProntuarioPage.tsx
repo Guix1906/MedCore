@@ -157,19 +157,34 @@ export default function ProntuarioPage() {
   const alergiasRef = useRef<RichEditorHandle>(null);
   const medicacoesRef = useRef<RichEditorHandle>(null);
 
-  // Busca o último prontuário gravado desse paciente para preencher o formulário
+  // Busca o último prontuário gravado desse paciente (banco de dados ou localStorage)
   const { data: previousRecord } = useQuery({
-    queryKey: ["prontuario-previous-record", patient.id],
-    enabled: !!patient.id,
+    queryKey: ["prontuario-previous-record", patient.id, patient.name],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("medical_records")
-        .select("*")
-        .eq("patient_id", patient.id!)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      return data ?? null;
+      if (patient.id) {
+        try {
+          const { data, error } = await supabase
+            .from("medical_records")
+            .select("*")
+            .eq("patient_id", patient.id)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (!error && data) return data;
+        } catch (e) {
+          console.warn("Aviso ao buscar medical_records:", e);
+        }
+      }
+
+      // Fallback para LocalStorage
+      try {
+        const local =
+          (patient.id && localStorage.getItem("medcore_prontuario_" + patient.id)) ||
+          (patient.name && localStorage.getItem("medcore_prontuario_" + patient.name));
+        if (local) return JSON.parse(local);
+      } catch {}
+
+      return null;
     },
   });
 
@@ -187,7 +202,10 @@ export default function ProntuarioPage() {
       if (previousRecord.clinical_history) setEspecifique(previousRecord.clinical_history);
       if (previousRecord.evolution) {
         try {
-          const parsed = JSON.parse(previousRecord.evolution);
+          const parsed =
+            typeof previousRecord.evolution === "string"
+              ? JSON.parse(previousRecord.evolution)
+              : previousRecord.evolution;
           if (typeof parsed === "object" && parsed !== null) setConditions(parsed);
         } catch {}
       }
