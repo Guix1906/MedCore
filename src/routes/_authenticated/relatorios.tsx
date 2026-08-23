@@ -71,6 +71,7 @@ function RelatoriosPage() {
 
   const { data: reportData, isLoading: loading } = useQuery({
     queryKey: ["reports-data", periodDays],
+    placeholderData: (prev) => prev,
     staleTime: 5 * 60_000,
     gcTime: 30 * 60_000,
     refetchOnWindowFocus: false,
