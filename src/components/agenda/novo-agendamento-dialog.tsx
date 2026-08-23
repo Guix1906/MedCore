@@ -1370,16 +1370,17 @@ export function NovoAgendamentoDialog({
                           </div>
                           <div className="flex items-center gap-2 ml-2 shrink-0">
                             {selectedProfs.length > 0 && (
-                              <button
-                                type="button"
+                              <span
+                                role="button"
+                                tabIndex={0}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setSelectedProfs([]);
                                 }}
-                                className="text-muted-foreground hover:text-foreground"
+                                className="text-muted-foreground hover:text-foreground cursor-pointer"
                               >
                                 <X className="h-4 w-4" />
-                              </button>
+                              </span>
                             )}
                             <span className="text-muted-foreground text-[10px]">▼</span>
                           </div>
