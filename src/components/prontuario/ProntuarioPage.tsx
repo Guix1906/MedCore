@@ -78,16 +78,6 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "injetaveis", label: "Injetáveis" },
 ];
 
-const CONDICOES = [
-  "Hipertensão",
-  "Diabetes",
-  "Doenças cardíacas",
-  "Asma ou problemas respiratórios",
-  "Problemas de tireoide",
-  "Câncer",
-  "Outras condições crônicas",
-];
-
 const defaultPatient = {
   initials: "CR",
   name: "Clara Ribeiro",
