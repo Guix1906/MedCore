@@ -4,7 +4,7 @@
  */
 
 const API_BASE_URL =
-  (import.meta.env?.VITE_API_URL as string) || "http://localhost:8000/api";
+  (import.meta.env?.VITE_API_URL as string) || "http://127.0.0.1:8000/api";
 
 const TOKEN_STORAGE_KEY = "medcore_php_token";
 const USER_STORAGE_KEY = "medcore_php_user";
@@ -102,10 +102,15 @@ async function request<T = any>(
 
   const fetchPromise = (async () => {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+
       const response = await fetch(url, {
         ...options,
         headers,
+        signal: options.signal || controller.signal,
       });
+      clearTimeout(timeoutId);
 
       const json: ApiResponse<T> = await response.json().catch(() => ({
         success: response.ok,
