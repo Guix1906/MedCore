@@ -1535,14 +1535,21 @@ export function NovoAgendamentoDialog({
                       <FieldLabel required>Cidade de Atendimento</FieldLabel>
                       <Select value={city} onValueChange={setCity}>
                         <SelectTrigger className="h-11 rounded-xl">
-                          <SelectValue placeholder="Selecione a cidade" />
+                          <SelectValue placeholder={availableCities.length === 0 ? "Nenhuma cidade cadastrada" : "Selecione a cidade"} />
                         </SelectTrigger>
                         <SelectContent>
-                          {availableCities.map((c) => (
-                            <SelectItem key={c} value={c}>
-                              {c}
-                            </SelectItem>
-                          ))}
+                          {availableCities.length === 0 ? (
+                            <div className="p-3 text-xs text-muted-foreground text-center">
+                              Nenhuma cidade cadastrada.<br />
+                              <span className="text-primary font-medium">Cadastre em Configurações.</span>
+                            </div>
+                          ) : (
+                            availableCities.map((c) => (
+                              <SelectItem key={c} value={c}>
+                                {c}
+                              </SelectItem>
+                            ))
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
