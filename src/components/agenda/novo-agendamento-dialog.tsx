@@ -421,9 +421,26 @@ export function NovoAgendamentoDialog({
   const { data: clients = [] } = useQuery({
     queryKey: ["patients-picker"],
     enabled: open,
-    staleTime: 5 * 60_000,
+    staleTime: 10_000,
     queryFn: async () => {
-      const { data } = await supabase.from("patients").select("id, name, cpf, phone").order("name");
+      try {
+        const list = await patientsService.getPatients({ limit: 1500 });
+        if (list && Array.isArray(list) && list.length > 0) {
+          return list.map((p) => ({
+            id: p.id,
+            name: p.name,
+            cpf: p.cpf || null,
+            phone: p.phone || null,
+          }));
+        }
+      } catch {}
+
+      const { data } = await supabase
+        .from("patients")
+        .select("id, name, cpf, phone")
+        .order("name")
+        .limit(1500);
+
       return (data ?? []) as {
         id: string;
         name: string;
