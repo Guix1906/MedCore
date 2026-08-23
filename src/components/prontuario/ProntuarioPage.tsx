@@ -50,9 +50,11 @@ import {
   AlertCircle,
   AlertTriangle,
   FileDigit,
+  ArrowLeft,
 } from "lucide-react";
 import { DUR, EASE_OUT, fadeUp, staggerContainer, dropdownVariants } from "@/lib/motion";
 import { createContext, useContext } from "react";
+import { ProntuarioHub } from "./ProntuarioHub";
 import {
   AiRecordAssistantModal,
   type AiSectionContext,
