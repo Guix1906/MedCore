@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
 import { confirmDialog } from "@/components/app/confirm-dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { financeService, patientsService } from "@/services/api";
 import FinanceTabs from "@/components/finance/FinanceTabs";
 import { CountUp, BRL as BRLFmt } from "@/components/finance/CountUp";
 import { useAutoAnimate } from "@/hooks/use-auto-animate";
