@@ -117,8 +117,19 @@ function AgendaPage() {
     placeholderData: (prev) => prev,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
-    queryFn: async () =>
-      (await supabase.from("patients").select("id, name, insurance").order("name")).data ?? [],
+    queryFn: async () => {
+      try {
+        const phpPat = await patientsService.getPatients({ limit: 500 });
+        if (phpPat && Array.isArray(phpPat) && phpPat.length > 0) {
+          return phpPat.map((p) => ({
+            id: p.id,
+            name: p.name,
+            insurance: p.insurance || null,
+          }));
+        }
+      } catch {}
+      return (await supabase.from("patients").select("id, name, insurance").order("name")).data ?? [];
+    },
   });
 
   const isMobile = useIsMobile();
