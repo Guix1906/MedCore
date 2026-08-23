@@ -87,6 +87,11 @@ class PatientController
             Response::error('Nome do paciente é obrigatório', 422);
         }
 
+        $cpf = $request->input('cpf');
+        if (!empty($cpf) && !$this->isValidCpf($cpf)) {
+            Response::error('O CPF informado é inválido.', 422);
+        }
+
         $id = $request->input('id') ?: 'pat_' . substr(bin2hex(random_bytes(8)), 0, 16);
         $companyId = $request->getCompanyId();
 
@@ -139,6 +144,11 @@ class PatientController
             Response::notFound('Paciente não encontrado');
         }
 
+        $cpf = $request->input('cpf');
+        if ($cpf !== null && trim($cpf) !== '' && !$this->isValidCpf($cpf)) {
+            Response::error('O CPF informado é inválido.', 422);
+        }
+
         $fields = [
             'name', 'email', 'phone', 'cpf', 'birth_date', 'gender', 'blood_type',
             'insurance', 'insurance_number', 'address', 'city', 'state', 'zip_code',
@@ -180,5 +190,39 @@ class PatientController
         Database::delete('patients', 'id = :id', ['id' => $id]);
 
         Response::success(null, 'Paciente excluído com sucesso');
+    }
+
+    /**
+     * Valida um número de CPF pelo algoritmo oficial dos dígitos verificadores (módulo 11).
+     */
+    private function isValidCpf(?string $cpf): bool
+    {
+        if ($cpf === null || trim($cpf) === '') {
+            return true;
+        }
+
+        $clean = preg_replace('/\D/', '', $cpf);
+        if (strlen($clean) !== 11) {
+            return false;
+        }
+
+        // Rejeita sequências conhecidas de dígitos iguais
+        if (preg_match('/^(\d)\1{10}$/', $clean)) {
+            return false;
+        }
+
+        // Validação dos dois dígitos verificadores
+        for ($t = 9; $t < 11; $t++) {
+            $d = 0;
+            for ($c = 0; $c < $t; $c++) {
+                $d += (int)$clean[$c] * (($t + 1) - $c);
+            }
+            $d = ((10 * $d) % 11) % 10;
+            if ((int)$clean[$t] !== $d) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
