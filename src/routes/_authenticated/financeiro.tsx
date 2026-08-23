@@ -134,6 +134,25 @@ function FinanceiroPage() {
     gcTime: 30 * 60_000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
+      try {
+        const [phpTx, phpPat] = await Promise.all([
+          financeService.getTransactions({ limit: 500 }),
+          patientsService.getPatients({ limit: 500 }),
+        ]);
+
+        if (phpTx && Array.isArray(phpTx)) {
+          const rows = phpTx.map((r: any) => ({
+            ...r,
+            type: r.type === "receita" ? "income" : r.type === "despesa" ? "expense" : r.type,
+          })) as Tx[];
+
+          return {
+            rows,
+            patients: (phpPat ?? []) as PatientRef[],
+          };
+        }
+      } catch {}
+
       const [{ data: tx }, { data: pat }] = await Promise.all([
         supabase
           .from("transactions")
