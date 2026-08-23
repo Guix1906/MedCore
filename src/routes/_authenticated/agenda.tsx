@@ -403,48 +403,54 @@ function AgendaPage() {
 
 
             </div>
-          </div>
+          {drawer && (
+            <Suspense fallback={null}>
+              <ActivityDrawer
+                activity={drawer}
+                initialMode={drawerMode}
+                onClose={() => setDrawer(null)}
+                ownerName={drawer?.assignedTo ? (byId.get(drawer.assignedTo) ?? null) : null}
+                onComplete={(a) => complete.mutate(a)}
+                onDelete={(a) => {
+                  confirmDialog({
+                    title: "Excluir atividade",
+                    description: "Deseja realmente excluir esta atividade da agenda?",
+                    confirmText: "Excluir",
+                  }).then((ok) => {
+                    if (ok) remove.mutate(a);
+                  });
+                }}
+                onSaved={() => {
+                  refreshData();
+                  setDrawer(null);
+                }}
+              />
+            </Suspense>
+          )}
 
-          <ActivityDrawer
-            activity={drawer}
-            initialMode={drawerMode}
-            onClose={() => setDrawer(null)}
-            ownerName={drawer?.assignedTo ? (byId.get(drawer.assignedTo) ?? null) : null}
-            onComplete={(a) => complete.mutate(a)}
-            onDelete={(a) => {
-              confirmDialog({
-                title: "Excluir atividade",
-                description: "Deseja realmente excluir esta atividade da agenda?",
-                confirmText: "Excluir",
-              }).then((ok) => {
-                if (ok) remove.mutate(a);
-              });
-            }}
-            onSaved={() => {
-              refreshData();
-              setDrawer(null);
-            }}
-          />
-
-          <CreateModalRouter
-            kind={createKind}
-            defaultDate={createDefault}
-            ctx={{
-              companyId,
-              userId: user?.id ?? null,
-              cases,
-              members,
-              onSaved: (createdActivity) => {
-                setCreateKind(null);
-                refresh();
-                if (createdActivity) {
-                  setDrawer(createdActivity);
-                  setDrawerMode("details");
-                }
-              },
-              onClose: () => setCreateKind(null),
-            }}
-          />
+          {createKind && (
+            <Suspense fallback={null}>
+              <CreateModalRouter
+                kind={createKind}
+                defaultDate={createDefault}
+                ctx={{
+                  companyId,
+                  userId: user?.id ?? null,
+                  cases,
+                  members,
+                  onSaved: (createdActivity) => {
+                    setCreateKind(null);
+                    refresh();
+                    if (createdActivity) {
+                      setDrawer(createdActivity);
+                      setDrawerMode("details");
+                    }
+                  },
+                  onClose: () => setCreateKind(null),
+                }}
+              />
+            </Suspense>
+          )}
         </div>
       </TooltipProvider>
     </AppShell>
