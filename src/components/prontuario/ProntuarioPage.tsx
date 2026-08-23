@@ -153,18 +153,12 @@ export default function ProntuarioPage() {
 
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [privacy, setPrivacy] = useState<"Privado" | "Compartilhado">("Privado");
-  const [conditions, setConditions] = useState<Record<string, boolean>>({});
-  const [especifique, setEspecifique] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [isFinalizing, setIsFinalizing] = useState(false);
   const saveTimer = useRef<number | null>(null);
 
-  // Refs de controle imperativo dos editores para injeção via IA e preenchimento
+  // Ref de controle do editor Anamnese Geral
   const queixaRef = useRef<RichEditorHandle>(null);
-  const historicoRef = useRef<RichEditorHandle>(null);
-  const tratamentosRef = useRef<RichEditorHandle>(null);
-  const alergiasRef = useRef<RichEditorHandle>(null);
-  const medicacoesRef = useRef<RichEditorHandle>(null);
 
   // Busca o último prontuário gravado desse paciente (banco de dados ou localStorage)
   const { data: previousRecord } = useQuery({
@@ -201,22 +195,8 @@ export default function ProntuarioPage() {
   useEffect(() => {
     if (previousRecord && !prefilledRef.current) {
       prefilledRef.current = true;
-      if (previousRecord.complaint) queixaRef.current?.setText(previousRecord.complaint);
-      if (previousRecord.family_history) historicoRef.current?.setText(previousRecord.family_history);
-      if (previousRecord.conduct || previousRecord.surgical_history) {
-        tratamentosRef.current?.setText(previousRecord.conduct || previousRecord.surgical_history || "");
-      }
-      if (previousRecord.allergies) alergiasRef.current?.setText(previousRecord.allergies);
-      if (previousRecord.medications) medicacoesRef.current?.setText(previousRecord.medications);
-      if (previousRecord.clinical_history) setEspecifique(previousRecord.clinical_history);
-      if (previousRecord.evolution) {
-        try {
-          const parsed =
-            typeof previousRecord.evolution === "string"
-              ? JSON.parse(previousRecord.evolution)
-              : previousRecord.evolution;
-          if (typeof parsed === "object" && parsed !== null) setConditions(parsed);
-        } catch {}
+      if (previousRecord.complaint) {
+        queixaRef.current?.setText(previousRecord.complaint);
       }
     }
   }, [previousRecord]);
