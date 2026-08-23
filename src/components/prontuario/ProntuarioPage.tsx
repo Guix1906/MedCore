@@ -238,19 +238,15 @@ export default function ProntuarioPage() {
     setCancelModalOpen(true);
   };
 
+  const secondsRef = useRef(0);
+
   const handleFinalize = () => {
     toast.success("Atendimento finalizado", {
-      description: `Duração: ${formatTime(seconds)}. Prontuário salvo com sucesso.`,
+      description: `Duração: ${formatTime(secondsRef.current)}. Prontuário salvo com sucesso.`,
     });
     setTimeout(() => navigate({ to: "/pacientes" }), 800);
   };
 
-  useEffect(() => {
-    const id = setInterval(() => setSeconds((s) => s + 1), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  const time = formatTime(seconds);
 
   return (
     <DirtyCtx.Provider value={markDirty}>
