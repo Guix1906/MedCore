@@ -1352,16 +1352,17 @@ export function NovoAgendamentoDialog({
                                     className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-semibold uppercase tracking-wider bg-[#F4EBFF] text-[#7F56D9] border border-[#D6BBFB]"
                                   >
                                     {member.full_name}
-                                    <button
-                                      type="button"
+                                    <span
+                                      role="button"
+                                      tabIndex={0}
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         setSelectedProfs((prev) => prev.filter((x) => x !== id));
                                       }}
-                                      className="hover:text-red-500 transition-colors ml-1"
+                                      className="hover:text-red-500 transition-colors ml-1 cursor-pointer"
                                     >
                                       <X className="h-3 w-3" />
-                                    </button>
+                                    </span>
                                   </span>
                                 );
                               })
