@@ -1532,26 +1532,43 @@ export function NovoAgendamentoDialog({
                     <div className="flex items-center justify-between">
                       <FieldLabel required>Paciente</FieldLabel>
                       
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2.5">
                         <button
                           type="button"
-                          onClick={() => setIsNewPatient(!isNewPatient)}
-                          className={cn(
-                            "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                            isNewPatient ? "bg-[#7C3AED]" : "bg-[#EAECF0]"
-                          )}
+                          onClick={() => setQuickPatientOpen(true)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#F5F3FF] border border-[#DDD6FE] text-[#7C3AED] hover:bg-[#EDE9FE] text-xs font-semibold transition-colors cursor-pointer"
+                          title="Cadastrar novo paciente"
                         >
-                          <span
-                            className={cn(
-                              "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                              isNewPatient ? "translate-x-4" : "translate-x-0"
-                            )}
-                          />
+                          <UserPlus className="h-3.5 w-3.5" />
+                          <span>+ Novo paciente</span>
                         </button>
-                        <span className="text-xs font-medium text-[#344054]">Paciente novo</span>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setIsNewPatient(!isNewPatient)}
+                            className={cn(
+                              "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                              isNewPatient ? "bg-[#7C3AED]" : "bg-[#EAECF0]"
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                                isNewPatient ? "translate-x-4" : "translate-x-0"
+                              )}
+                            />
+                          </button>
+                          <span className="text-xs font-medium text-[#344054]">1ª Vez</span>
+                        </div>
                       </div>
                     </div>
-                    <ClientPicker value={clientId} onChange={setClientId} clients={clients} />
+                    <ClientPicker
+                      value={clientId}
+                      onChange={setClientId}
+                      clients={clients}
+                      onAddNew={() => setQuickPatientOpen(true)}
+                    />
 
                     {/* Resumo/Histórico do Paciente para a Secretaria */}
                     {clientId && (
