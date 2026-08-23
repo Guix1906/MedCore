@@ -1586,7 +1586,6 @@ export function NovoAgendamentoDialog({
                       value={clientId}
                       onChange={setClientId}
                       clients={clients}
-                      onAddNew={() => setQuickPatientOpen(true)}
                     />
 
                     {/* Resumo/Histórico do Paciente para a Secretaria */}
