@@ -670,40 +670,106 @@ export function PatientFullProfileView({
                     Prontuário Clínico & Anamnese
                   </h2>
                   <p className="text-[12.5px] text-slate-500 mt-0.5">
-                    Registre os dados clínicos da consulta com o auxílio do Copiloto de IA.
+                    Registre os dados clínicos da consulta deste paciente específico com o auxílio do Copiloto de IA.
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigate({
+                        to: "/prontuario",
+                        search: {
+                          patientId: data.id,
+                          patientName: data.name,
+                        } as any,
+                      });
+                    }}
+                    className="inline-flex items-center gap-1.5 h-10 px-3.5 rounded-xl border border-purple-200 bg-purple-50/70 text-purple-700 hover:bg-purple-100 text-[13px] font-bold transition-all cursor-pointer shadow-2xs"
+                    title="Abrir tela cheia de atendimento para este paciente"
+                  >
+                    <ExternalLink size={14} />
+                    <span>Abrir Prontuário Completo</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => {
                       setAiSection({ key: "queixa", title: "Consulta Médica" });
                       setAiModalOpen(true);
                     }}
-                    className="inline-flex items-center gap-2 h-10 px-4.5 rounded-xl text-white text-[13px] font-bold shadow-sm hover:brightness-105 active:scale-95 transition-all cursor-pointer"
+                    className="inline-flex items-center gap-2 h-10 px-4 rounded-xl text-white text-[13px] font-bold shadow-sm hover:brightness-105 active:scale-95 transition-all cursor-pointer"
                     style={{
                       background: "linear-gradient(135deg, #FF7A59 0%, #D946EF 50%, #6366F1 100%)",
                     }}
                   >
                     <Sparkles size={15} />
-                    <span>Iniciar Consulta com IA</span>
+                    <span>Iniciar com IA</span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => {
-                      toast.success("Prontuário salvo!", {
-                        description: `Dados de ${data.name} gravados.`,
-                      });
-                    }}
-                    className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl bg-purple-600 text-white hover:bg-purple-700 text-[13px] font-bold shadow-sm transition-all cursor-pointer"
+                    onClick={handleSaveProntuario}
+                    disabled={isSavingRecord}
+                    className="inline-flex items-center gap-1.5 h-10 px-4.5 rounded-xl bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 text-[13px] font-bold shadow-sm transition-all cursor-pointer"
                   >
                     <Save size={15} />
-                    <span>Salvar</span>
+                    <span>{isSavingRecord ? "Salvando..." : "Salvar"}</span>
                   </button>
                 </div>
               </div>
+
+              {/* Histórico de Atendimentos Salvos para este paciente */}
+              {records.length > 0 && (
+                <div className="rounded-2xl border border-purple-100 bg-purple-50/40 p-4 space-y-3 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-purple-900 font-bold text-sm">
+                      <History className="h-4 w-4 text-purple-600" />
+                      <span>Histórico de Atendimentos Finalizados ({records.length})</span>
+                    </div>
+                    <span className="text-xs text-purple-700 font-medium bg-purple-100/80 px-2.5 py-0.5 rounded-full">
+                      Último: {new Date(records[0].created_at).toLocaleString("pt-BR")}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-48 overflow-y-auto pr-1">
+                    {records.map((rec: any, idx: number) => (
+                      <div
+                        key={rec.id || idx}
+                        className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs text-xs space-y-1.5"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-slate-800">
+                            {new Date(rec.created_at).toLocaleDateString("pt-BR", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                          {rec.duration_seconds ? (
+                            <span className="text-[11px] text-slate-500 font-medium">
+                              ⏱️ {Math.round(rec.duration_seconds / 60)} min
+                            </span>
+                          ) : null}
+                        </div>
+                        {rec.complaint && (
+                          <p className="text-slate-600 line-clamp-2">
+                            <strong className="text-slate-700">Queixa:</strong> {rec.complaint}
+                          </p>
+                        )}
+                        {rec.conduct && (
+                          <p className="text-slate-600 line-clamp-1">
+                            <strong className="text-slate-700">Conduta:</strong> {rec.conduct}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Seções Clínicas com acionador de IA */}
               <div className="space-y-4">
