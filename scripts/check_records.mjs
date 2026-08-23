@@ -1,16 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
-import * as fs from "fs";
 
-const env = fs.readFileSync(".env", "utf8");
-let url = "";
-let key = "";
-env.split("\n").forEach((l) => {
-  const line = l.trim();
-  if (line.startsWith("VITE_SUPABASE_URL=")) url = line.split("=")[1].replace(/['"]/g, "").trim();
-  if (line.startsWith("VITE_SUPABASE_ANON_KEY=")) key = line.split("=")[1].replace(/['"]/g, "").trim();
-});
+const SUPABASE_URL = "https://yqgafvblxxyksximctzk.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlxZ2FmdmJseHh5a3N4aW1jdHprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyNjA5MTYsImV4cCI6MjA5MjgzNjkxNn0.KsHS2h6eqfm9-suJ_yxpgSQLYw44bvqG4S6xUD-ZSX8";
 
-const supabase = createClient(url, key);
+const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
 async function main() {
   const { data: recs, error: rErr } = await supabase.from("medical_records").select("*");
