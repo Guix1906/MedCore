@@ -10,6 +10,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { BeautifulDatePicker } from "@/components/ui/beautiful-date-picker";
 
 export type PatientData = {
   id?: string;
