@@ -1227,3 +1227,32 @@ function formatTime(total: number) {
   const s = (total % 60).toString().padStart(2, "0");
   return `${h}:${m}:${s}`;
 }
+
+const ConsultationTimer = memo(function ConsultationTimer({
+  onTick,
+}: {
+  onTick?: (sec: number) => void;
+}) {
+  const [seconds, setSeconds] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setSeconds((s) => {
+        const next = s + 1;
+        onTick?.(next);
+        return next;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [onTick]);
+
+  return (
+    <div className="flex items-center gap-2 text-primary font-medium">
+      <Timer className="h-5 w-5" />
+      <span className="font-mono text-[15px] font-semibold tabular-nums text-foreground">
+        {formatTime(seconds)}
+      </span>
+    </div>
+  );
+});
+
