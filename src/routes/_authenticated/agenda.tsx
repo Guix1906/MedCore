@@ -403,6 +403,8 @@ function AgendaPage() {
 
 
             </div>
+          </div>
+
           {drawer && (
             <Suspense fallback={null}>
               <ActivityDrawer
