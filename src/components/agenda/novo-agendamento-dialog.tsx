@@ -423,7 +423,7 @@ export function NovoAgendamentoDialog({
     setDownPaymentMethod("pix");
     setCity(availableCities[0] ?? "");
     setConsultationType("nova_consulta");
-  }, [open, defaultDate, user?.id, availableCities]);
+  }, [open]);
   // ------ Queries com Cache Imediato e Prioridade PHP ------
   const { data: clients = [] } = useQuery({
     queryKey: ["patients-picker"],
