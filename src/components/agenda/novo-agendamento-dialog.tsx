@@ -2512,17 +2512,22 @@ const ClientPicker = memo(function ClientPicker({
   value,
   onChange,
   clients,
+  selectedClient,
 }: {
   value: string;
-  onChange: (v: string) => void;
+  onChange: (v: string, clientObj?: { id: string; name: string; cpf?: string | null; phone?: string | null } | null) => void;
   clients: { id: string; name: string; cpf?: string | null; phone?: string | null }[];
+  selectedClient?: { id: string; name: string; cpf?: string | null; phone?: string | null } | null;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const current = useMemo(() => clients.find((c) => c.id === value), [clients, value]);
+  const current = useMemo(
+    () => clients.find((c) => c.id === value) || (selectedClient?.id === value ? selectedClient : null),
+    [clients, value, selectedClient]
+  );
 
   // Click outside listener
   useEffect(() => {
@@ -2591,7 +2596,7 @@ const ClientPicker = memo(function ClientPicker({
             <button
               type="button"
               onClick={() => {
-                onChange("");
+                onChange("", null);
                 setQuery("");
                 setTimeout(() => {
                   setOpen(true);
@@ -2605,7 +2610,7 @@ const ClientPicker = memo(function ClientPicker({
             <button
               type="button"
               onClick={() => {
-                onChange("");
+                onChange("", null);
                 setQuery("");
               }}
               className="h-7 w-7 rounded-full hover:bg-rose-100 hover:text-rose-600 grid place-items-center text-muted-foreground transition cursor-pointer"
