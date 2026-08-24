@@ -33,8 +33,10 @@ import {
   ChevronDown,
   ExternalLink,
   History,
+  Copy,
 } from "lucide-react";
 import { toast } from "sonner";
+import { prontuarioService } from "@/services/api";
 import {
   AiRecordAssistantModal,
   type AiSectionContext,
