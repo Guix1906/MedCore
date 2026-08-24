@@ -384,28 +384,68 @@ export function AddEventModal({
       const end = f.ends_at ? new Date(f.ends_at) : null;
       if (f.all_day) start.setHours(0, 0, 0, 0);
 
-      const { data: authData } = await supabase.auth.getUser();
-      const supabaseAuthId = authData?.user?.id;
-      const validCreatedBy = supabaseAuthId && isUuid(supabaseAuthId) ? supabaseAuthId : ensureValidUuid(ctx.userId);
+      const validCreatedBy = isUuid(ctx.userId) ? ctx.userId : ensureValidUuid(ctx.userId);
       const validCompanyId = isUuid(ctx.companyId) ? ctx.companyId : ensureValidUuid(ctx.companyId);
       const validAssignedTo = f.assigned_to && isUuid(f.assigned_to) ? f.assigned_to : toValidUuid(f.assigned_to);
       const validCaseId = f.case_id && isUuid(f.case_id) ? f.case_id : toValidUuid(f.case_id);
+      const location = f.location
+        ? `${f.location}${f.location_kind !== "presencial" ? ` (${f.location_kind})` : ""}`
+        : null;
 
-      const { error } = await supabase.from("events").insert({
-        company_id: validCompanyId,
-        created_by: validCreatedBy,
-        title: f.title.trim(),
-        description: f.description || null,
-        event_type: "meeting",
-        starts_at: start.toISOString(),
-        ends_at: end ? end.toISOString() : null,
-        location: f.location
-          ? `${f.location}${f.location_kind !== "presencial" ? ` (${f.location_kind})` : ""}`
-          : null,
-        case_id: validCaseId,
-        assigned_to: validAssignedTo,
-      });
-      if (error) throw error;
+      const insertedId = crypto.randomUUID();
+
+      // Salva na camada local imediatamente (0ms)
+      saveStoredLocalEvent(
+        {
+          id: insertedId,
+          title: f.title.trim(),
+          description: f.description || null,
+          event_type: "meeting",
+          starts_at: start.toISOString(),
+          ends_at: end ? end.toISOString() : null,
+          location,
+          case_id: f.case_id || null,
+          assigned_to: f.assigned_to || null,
+        },
+        validCompanyId,
+      );
+
+      // Sincronização remota em background
+      void (async () => {
+        try {
+          const { data: authData } = await supabase.auth.getUser();
+          const supabaseAuthId = authData?.user?.id;
+          const remoteCreatedBy = supabaseAuthId && isUuid(supabaseAuthId) ? supabaseAuthId : validCreatedBy;
+
+          const { error } = await supabase.from("events").insert({
+            id: insertedId,
+            company_id: validCompanyId,
+            created_by: remoteCreatedBy,
+            title: f.title.trim(),
+            description: f.description || null,
+            event_type: "meeting",
+            starts_at: start.toISOString(),
+            ends_at: end ? end.toISOString() : null,
+            location,
+            case_id: validCaseId,
+            assigned_to: validAssignedTo,
+          });
+
+          if (error) {
+            await supabase.from("events").insert({
+              id: insertedId,
+              company_id: validCompanyId,
+              created_by: remoteCreatedBy,
+              title: f.title.trim(),
+              description: f.description || null,
+              event_type: "meeting",
+              starts_at: start.toISOString(),
+              ends_at: end ? end.toISOString() : null,
+              location,
+            });
+          }
+        } catch {}
+      })();
     },
     onSuccess: () => {
       toast.success("Evento criado com sucesso");
