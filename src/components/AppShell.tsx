@@ -456,7 +456,7 @@ export default function AppShell({ children, title }: { children: ReactNode; tit
                   </Link>
                   <Link
                     to="/agenda"
-                    search={{ taskId: undefined, deadlineId: undefined, eventId: undefined }}
+                    search={{ novo: "true" } as any}
                     onClick={() => setOpenMenu(null)}
                     className="flex items-center gap-2.5 px-3.5 py-2.5 text-[13.5px] text-[#111827] hover:bg-[#F5F3FF] transition-colors"
                   >
