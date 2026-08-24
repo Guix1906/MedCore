@@ -29,11 +29,17 @@ import {
   PlayCircle,
   DollarSign,
   Pill,
+  UserPlus,
+  ChevronDown,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
 import { confirmDialog } from "@/components/app/confirm-dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { patientsService, companyService } from "@/services/api";
+import { getStoredLocalPatients, mergeWithLocalPatients } from "@/lib/local-patients";
+import { PatientModal } from "@/components/pacientes/PatientModal";
 
 export const Route = createFileRoute("/_authenticated/acompanhamentos")({
   head: () => ({
