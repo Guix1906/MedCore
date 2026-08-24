@@ -1640,7 +1640,24 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
         </div>
       </div>
     </div>
-  );
+
+    {showNewPatientModal && (
+      <PatientModal
+        open={showNewPatientModal}
+        onClose={() => setShowNewPatientModal(false)}
+        onSaved={(newPat) => {
+          if (newPat && newPat.id) {
+            setPatients((prev) => [newPat, ...prev.filter((p) => p.id !== newPat.id)]);
+            setForm((f) => ({ ...f, patient_id: newPat.id }));
+          } else {
+            loadPatientsAndDoctors();
+          }
+          setShowNewPatientModal(false);
+        }}
+      />
+    )}
+  </>
+);
 }
 
 const inputCls =
