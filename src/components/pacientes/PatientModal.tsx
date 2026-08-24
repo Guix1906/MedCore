@@ -229,6 +229,9 @@ export function PatientModal({
       created_at: new Date().toISOString(),
     });
 
+    // Salva na camada persistente local
+    saveStoredLocalPatient(finalPatient);
+
     // Invalida e atualiza todos os caches de pacientes do sistema imediatamente
     queryClient.setQueryData(["patients-picker"], (old: any = []) => {
       const item = {
