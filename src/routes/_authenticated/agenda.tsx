@@ -237,6 +237,12 @@ function AgendaPage() {
     d.setSeconds(0, 0);
     setDate(d);
   }, []);
+  useEffect(() => {
+    if (novo || action === "novo") {
+      setCreateKind("tarefa");
+    }
+  }, [novo, action]);
+
   useAgendaKeyboard({
     onPrev: () => shiftDay(-1),
     onNext: () => shiftDay(1),
@@ -280,6 +286,7 @@ function AgendaPage() {
                 filters={sidebarFilters}
                 onFiltersChange={setSidebarFilters}
                 options={sidebarOptions}
+                onNewAppointment={() => setCreateKind("tarefa")}
                 onSelectDate={(d) => {
                   const n = new Date(d);
                   n.setHours(date.getHours(), date.getMinutes(), 0, 0);
@@ -319,6 +326,7 @@ function AgendaPage() {
                       cities={availableCities}
                       view={view as any}
                       onViewChange={setView as any}
+                      onNewAppointment={() => setCreateKind("tarefa")}
                       label={
                         view === "semana"
                           ? formatWeekRange(date)
