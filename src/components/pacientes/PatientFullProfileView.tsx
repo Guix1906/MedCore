@@ -217,7 +217,6 @@ export function PatientFullProfileView({
 
   // Preenche automaticamente com o último prontuário/evolução salvo
   useEffect(() => {
-    // Tenta carregar do array de records ou do localStorage
     let latest = records.length > 0 ? records[0] : null;
     if (!latest) {
       try {
@@ -228,23 +227,10 @@ export function PatientFullProfileView({
       } catch {}
     }
 
-    if (latest) {
-      if (latest.complaint) setQueixa(latest.complaint);
-      if (latest.family_history) setHistoricoFamiliar(latest.family_history);
-      if (latest.conduct || latest.surgical_history) {
-        setTratamentos(latest.conduct || latest.surgical_history || "");
-      }
-      if (latest.allergies) setAlergias(latest.allergies);
-      if (latest.clinical_history) setHistoricoPessoal(latest.clinical_history);
-      if (latest.medications) setMedicacoes(latest.medications);
-      if (latest.evolution) {
-        try {
-          const parsed = typeof latest.evolution === "string" ? JSON.parse(latest.evolution) : latest.evolution;
-          if (typeof parsed === "object" && parsed !== null) {
-            setConditions(parsed);
-          }
-        } catch {}
-      }
+    if (latest && latest.complaint) {
+      setAnamnese(latest.complaint);
+    } else {
+      setAnamnese("");
     }
   }, [records, data.id, data.name]);
 
@@ -254,14 +240,7 @@ export function PatientFullProfileView({
       id: crypto.randomUUID(),
       patient_id: data.id || null,
       patient_name: data.name,
-      complaint: queixa || null,
-      family_history: historicoFamiliar || null,
-      conduct: tratamentos || null,
-      surgical_history: tratamentos || null,
-      allergies: alergias || null,
-      clinical_history: historicoPessoal || null,
-      medications: medicacoes || null,
-      evolution: JSON.stringify(condicoes),
+      complaint: anamnese || null,
       created_at: new Date().toISOString(),
       finished_at: new Date().toISOString(),
     };
@@ -287,14 +266,7 @@ export function PatientFullProfileView({
       try {
         await supabase.from("medical_records").insert({
           patient_id: data.id,
-          complaint: queixa || null,
-          family_history: historicoFamiliar || null,
-          conduct: tratamentos || null,
-          surgical_history: tratamentos || null,
-          allergies: alergias || null,
-          clinical_history: historicoPessoal || null,
-          medications: medicacoes || null,
-          evolution: JSON.stringify(condicoes),
+          complaint: anamnese || null,
           finished_at: new Date().toISOString(),
         });
       } catch (err: any) {
@@ -302,8 +274,19 @@ export function PatientFullProfileView({
       }
     }
 
+    // 3. Sincronização em background com a API PHP
+    if (data.id) {
+      prontuarioService
+        .createRecord({
+          patient_id: data.id,
+          complaint: anamnese || null,
+          finished_at: new Date().toISOString(),
+        })
+        .catch(() => {});
+    }
+
     toast.success("Prontuário salvo com sucesso!", {
-      description: `Dados clínicos de ${data.name} gravados.`,
+      description: `Prontuário clínico de ${data.name} gravado.`,
     });
     refreshRecords();
     queryClient.invalidateQueries({ queryKey: ["patient-medical-records"] });
@@ -317,52 +300,41 @@ export function PatientFullProfileView({
 
   const handleAiInsert = (
     content: string | StructuredConsultationResult,
-    sectionKey?: string
   ) => {
     if (typeof content === "string") {
-      if (sectionKey === "queixa") setQueixa(content);
-      else if (sectionKey === "historico_familiar") setHistoricoFamiliar(content);
-      else if (sectionKey === "tratamentos") setTratamentos(content);
-      else if (sectionKey === "alergias") setAlergias(content);
-      else if (sectionKey === "medicacoes") setMedicacoes(content);
-      else if (sectionKey === "historico_pessoal") setHistoricoPessoal(content);
+      setAnamnese(content);
     } else {
       const isValid = (t?: string) =>
         Boolean(t && t.trim().length > 0 && t !== "Não informado na consulta.");
 
+      const parts: string[] = [];
       if (isValid(content.queixaPrincipal)) {
-        setQueixa(content.queixaPrincipal);
+        parts.push(`QUEIXA PRINCIPAL / MOTIVO:\n${content.queixaPrincipal}`);
       }
       if (isValid(content.historicoFamiliar)) {
-        setHistoricoFamiliar(content.historicoFamiliar);
-      }
-      if (isValid(content.tratamentosAnteriores) || isValid(content.condutaPlano)) {
-        const full = [
-          content.tratamentosAnteriores,
-          content.condutaPlano ? `Conduta e Orientações:\n${content.condutaPlano}` : "",
-        ]
-          .filter(isValid)
-          .join("\n\n");
-        setTratamentos(full);
-      }
-      if (isValid(content.alergias)) {
-        setAlergias(content.alergias);
-      }
-      if (isValid(content.medicacoesEmUso)) {
-        setMedicacoes(content.medicacoesEmUso);
+        parts.push(`HISTÓRICO FAMILIAR:\n${content.historicoFamiliar}`);
       }
       if (isValid(content.historicoPessoal)) {
-        setHistoricoPessoal((prev) => (prev ? `${prev}\n${content.historicoPessoal}` : content.historicoPessoal));
+        parts.push(`HISTÓRICO MÉDICO PESSOAL:\n${content.historicoPessoal}`);
       }
       if (content.condicoesDetectadas && content.condicoesDetectadas.length > 0) {
-        setConditions((prev) => {
-          const next = { ...prev };
-          content.condicoesDetectadas.forEach((cond) => {
-            next[cond] = true;
-          });
-          return next;
-        });
+        parts.push(`CONDIÇÕES IDENTIFICADAS:\n${content.condicoesDetectadas.join(", ")}`);
       }
+      if (isValid(content.medicacoesEmUso)) {
+        parts.push(`MEDICAÇÕES EM USO:\n${content.medicacoesEmUso}`);
+      }
+      if (isValid(content.alergias)) {
+        parts.push(`ALERGIAS:\n${content.alergias}`);
+      }
+      if (isValid(content.tratamentosAnteriores)) {
+        parts.push(`TRATAMENTOS ANTERIORES:\n${content.tratamentosAnteriores}`);
+      }
+      if (isValid(content.condutaPlano)) {
+        parts.push(`CONDUTA / PLANO TERAPÊUTICO:\n${content.condutaPlano}`);
+      }
+
+      const formatted = parts.join("\n\n");
+      setAnamnese((prev) => (prev ? `${prev}\n\n${formatted}` : formatted));
     }
   };
 
