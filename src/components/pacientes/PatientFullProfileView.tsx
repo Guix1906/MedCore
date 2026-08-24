@@ -699,9 +699,6 @@ export function PatientFullProfileView({
           {/* ============================================================ */}
           {/* ABA: PRONTUÁRIO & ANAMNESE COMPLETA COM IA */}
           {/* ============================================================ */}
-          {/* ============================================================ */}
-          {/* ABA: PRONTUÁRIO & ANAMNESE COMPLETA COM IA */}
-          {/* ============================================================ */}
           {activeTab === "prontuario" && (
             <div className="space-y-6 max-w-4xl">
               <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-slate-100">
