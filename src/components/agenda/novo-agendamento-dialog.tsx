@@ -337,6 +337,7 @@ export function NovoAgendamentoDialog({
   const [clientId, setClientId] = useState("");
   const [selectedClientObj, setSelectedClientObj] = useState<{ id: string; name: string; cpf?: string | null; phone?: string | null } | null>(null);
   const [assignedTo, setAssignedTo] = useState(user?.id ?? "");
+  const [selectedDoctorObj, setSelectedDoctorObj] = useState<MemberOpt | null>(null);
   const [status, setStatus] = useState<(typeof STATUS)[number]["id"]>("agendado");
   const [color, setColor] = useState(COLORS[0]);
   const [notes, setNotes] = useState("");
