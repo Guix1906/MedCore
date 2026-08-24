@@ -18,8 +18,7 @@ export function getStoredLocalEvents(companyId?: string | null): RawEvent[] {
     if (!raw) return [];
     const list: StoredLocalEvent[] = JSON.parse(raw);
     if (!Array.isArray(list)) return [];
-    if (!companyId) return list;
-    return list.filter((e) => !e.company_id || e.company_id === companyId);
+    return list;
   } catch {
     return [];
   }
