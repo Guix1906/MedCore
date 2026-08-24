@@ -874,7 +874,9 @@ export function NovoAgendamentoDialog({
           })
           .catch(() => {});
 
-        // Transações de sinal e restante
+        // ============================================================
+        // Sincronização Financeira Imediata e Robusta
+        // ============================================================
         if (totalAmt > 0 || sinalAmt > 0) {
           const proc = selectedProcedure && selectedProcedure !== "__none"
             ? (procedures.find(p => p.id === selectedProcedure) || allProceduresList.find(p => p.id === selectedProcedure))
@@ -887,43 +889,141 @@ export function NovoAgendamentoDialog({
               const { data: docData } = await supabase
                 .from("doctors")
                 .select("id")
-                .eq("auth_id", validAssignedTo)
+                .or(`id.eq.${validAssignedTo},auth_id.eq.${validAssignedTo}`)
                 .maybeSingle();
               if (docData && isUuid(docData.id)) dbDoctorId = docData.id;
             } catch {}
           }
 
+          // 1. Sinal Pago
           if (sinalAmt > 0) {
+            const sinalPayload = {
+              amount: sinalAmt,
+              type: "receita",
+              status: "concluido",
+              date: todayStr,
+              description: `Sinal Pago (${(downPaymentMethod || "pix").toUpperCase()}): ${procName}${patientNameStr}`,
+              patient_id: validPatientId,
+              doctor_id: dbDoctorId,
+              payment_method: downPaymentMethod || "pix",
+              category: "Procedimentos",
+              company_id: validCompanyId,
+            };
+
             try {
-              await supabase.from("transactions").insert({
-                amount: sinalAmt,
-                type: "receita",
-                status: "concluido",
-                date: todayStr,
-                description: `Sinal Pago (${downPaymentMethod.toUpperCase()}): ${procName}${patientNameStr}`,
-                patient_id: validPatientId,
-                doctor_id: dbDoctorId,
-                payment_method: downPaymentMethod,
-                category: "Procedimentos",
-              });
+              await financeService.createTransaction({
+                ...sinalPayload,
+                type: "income",
+                status: "completed",
+              } as any);
             } catch {}
+
+            try {
+              const { error } = await supabase.from("transactions").insert(sinalPayload);
+              if (error) {
+                await supabase.from("transactions").insert({
+                  amount: sinalAmt,
+                  type: "receita",
+                  status: "concluido",
+                  date: todayStr,
+                  description: sinalPayload.description,
+                  payment_method: sinalPayload.payment_method,
+                  category: "Procedimentos",
+                });
+              }
+            } catch (err) {
+              console.warn("Erro ao inserir transação de sinal:", err);
+            }
           }
 
-          if (restanteAmt > 0) {
+          // 2. Restante a Cobrar (quando há sinal)
+          if (sinalAmt > 0 && restanteAmt > 0) {
+            const restantePayload = {
+              amount: restanteAmt,
+              type: "receita",
+              status: "pendente",
+              date: day,
+              due_date: day,
+              description: `Restante A Cobrar: ${procName}${patientNameStr}`,
+              patient_id: validPatientId,
+              doctor_id: dbDoctorId,
+              category: "Procedimentos",
+              company_id: validCompanyId,
+            };
+
             try {
-              await supabase.from("transactions").insert({
-                amount: restanteAmt,
-                type: "receita",
-                status: "pendente",
-                date: day,
-                due_date: day,
-                description: `Restante A Cobrar: ${procName}${patientNameStr}`,
-                patient_id: validPatientId,
-                doctor_id: dbDoctorId,
-                category: "Procedimentos",
-              });
+              await financeService.createTransaction({
+                ...restantePayload,
+                type: "income",
+                status: "pending",
+              } as any);
             } catch {}
+
+            try {
+              const { error } = await supabase.from("transactions").insert(restantePayload);
+              if (error) {
+                await supabase.from("transactions").insert({
+                  amount: restanteAmt,
+                  type: "receita",
+                  status: "pendente",
+                  date: day,
+                  due_date: day,
+                  description: restantePayload.description,
+                  category: "Procedimentos",
+                });
+              }
+            } catch (err) {
+              console.warn("Erro ao inserir transação restante:", err);
+            }
           }
+
+          // 3. Valor Total sem Sinal (valor integral do agendamento)
+          if (sinalAmt === 0 && totalAmt > 0) {
+            const totalPayload = {
+              amount: totalAmt,
+              type: "receita",
+              status: status === "concluido" ? "concluido" : "pendente",
+              date: day,
+              due_date: day,
+              description: `Atendimento / ${procName}${patientNameStr}`,
+              patient_id: validPatientId,
+              doctor_id: dbDoctorId,
+              payment_method: downPaymentMethod || "pix",
+              category: "Consultas",
+              company_id: validCompanyId,
+            };
+
+            try {
+              await financeService.createTransaction({
+                ...totalPayload,
+                type: "income",
+                status: status === "concluido" ? "completed" : "pending",
+              } as any);
+            } catch {}
+
+            try {
+              const { error } = await supabase.from("transactions").insert(totalPayload);
+              if (error) {
+                await supabase.from("transactions").insert({
+                  amount: totalAmt,
+                  type: "receita",
+                  status: totalPayload.status,
+                  date: day,
+                  due_date: day,
+                  description: totalPayload.description,
+                  payment_method: totalPayload.payment_method,
+                  category: "Consultas",
+                });
+              }
+            } catch (err) {
+              console.warn("Erro ao inserir transação integral:", err);
+            }
+          }
+
+          // Invalida caches do React Query do financeiro e dashboard
+          qc.invalidateQueries({ queryKey: ["transactions"] });
+          qc.invalidateQueries({ queryKey: ["dashboard", "transactions"] });
+          qc.invalidateQueries({ queryKey: ["finance-dashboard", "transactions"] });
         }
       })();
 
