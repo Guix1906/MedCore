@@ -945,22 +945,13 @@ export function CreateModalRouter({
   defaultDate?: Date;
 }) {
   const open = !!kind;
-  if (kind === "tarefa")
+  if (kind === "tarefa" || kind === "evento")
     return (
       <NovoAgendamentoDialog
         open={open}
         onOpenChange={(v) => !v && ctx.onClose()}
         defaultDate={defaultDate}
         onSaved={ctx.onSaved}
-      />
-    );
-  if (kind === "evento")
-    return (
-      <AddEventModal
-        open={open}
-        onOpenChange={(v) => !v && ctx.onClose()}
-        ctx={ctx}
-        defaultDate={defaultDate}
       />
     );
   if (kind === "prazo")
