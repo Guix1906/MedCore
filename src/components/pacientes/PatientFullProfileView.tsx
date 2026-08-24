@@ -97,16 +97,6 @@ const TABS = [
   { id: "documentos", label: "Documentos" },
 ];
 
-const CONDICOES_LIST = [
-  "Hipertensão",
-  "Diabetes",
-  "Doenças cardíacas",
-  "Asma ou problemas respiratórios",
-  "Problemas de tireoide",
-  "Câncer",
-  "Outras condições crônicas",
-];
-
 export function PatientFullProfileView({
   patient,
   onBack,
@@ -120,14 +110,8 @@ export function PatientFullProfileView({
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<string>("informacoes");
 
-  // Estado do Prontuário Clínico
-  const [queixa, setQueixa] = useState("");
-  const [historicoFamiliar, setHistoricoFamiliar] = useState("");
-  const [tratamentos, setTratamentos] = useState("");
-  const [alergias, setAlergias] = useState("");
-  const [historicoPessoal, setHistoricoPessoal] = useState("");
-  const [medicacoes, setMedicacoes] = useState("");
-  const [condicoes, setConditions] = useState<Record<string, boolean>>({});
+  // Estado do Prontuário Clínico & Anamnese Unificada
+  const [anamnese, setAnamnese] = useState("");
   const [isSavingRecord, setIsSavingRecord] = useState(false);
 
   // Estado do Assistente IA
