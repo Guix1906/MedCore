@@ -713,21 +713,6 @@ export function PatientFullProfileView({
 
                   <button
                     type="button"
-                    onClick={() => {
-                      setAiSection({ key: "anamnese_geral", title: "Anamnese Geral & Consulta" });
-                      setAiModalOpen(true);
-                    }}
-                    className="inline-flex items-center gap-2 h-10 px-4 rounded-xl text-white text-[13px] font-bold shadow-sm hover:brightness-105 active:scale-95 transition-all cursor-pointer"
-                    style={{
-                      background: "linear-gradient(135deg, #FF7A59 0%, #D946EF 50%, #6366F1 100%)",
-                    }}
-                  >
-                    <Sparkles size={15} />
-                    <span>Atendimento com IA</span>
-                  </button>
-
-                  <button
-                    type="button"
                     onClick={handleSaveProntuario}
                     disabled={isSavingRecord}
                     className="inline-flex items-center gap-1.5 h-10 px-4.5 rounded-xl bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 text-[13px] font-bold shadow-sm transition-all cursor-pointer"
@@ -759,13 +744,6 @@ export function PatientFullProfileView({
                     <span className="text-[11px] text-slate-400 font-medium">
                       {anamnese.length} caracteres
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => openAiForSection({ key: "anamnese_geral", title: "Anamnese Geral" })}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-50 text-[12px] font-semibold text-purple-700 hover:bg-purple-100 transition-colors cursor-pointer"
-                    >
-                      <Sparkles size={13} /> Preencher com IA
-                    </button>
                   </div>
                 </div>
 
