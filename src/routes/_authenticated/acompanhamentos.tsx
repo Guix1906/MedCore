@@ -1253,7 +1253,7 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
     }
 
     // 3. Mescla com pacientes salvos localmente
-    const merged = mergeWithLocalPatients(pats as any);
+    const merged = mergeWithLocalPatients<{ id: string; name: string; phone?: string | null; cpf?: string | null }>(pats);
     merged.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
     setPatients(merged);
     setLoadingPatients(false);
