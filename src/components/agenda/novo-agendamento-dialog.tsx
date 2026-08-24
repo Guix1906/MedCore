@@ -1796,7 +1796,7 @@ export function NovoAgendamentoDialog({
                             const val = v === "__none" ? "" : v;
                             setSelectedProcedure(val);
                             if (val) {
-                              const found = procedures.find((p) => p.id === val);
+                              const found = procedures.find((p) => p.id === val) || (allProceduresList.find((p) => p.id === val) as any);
                               if (found && found.price) {
                                 setProcedurePrice(found.price);
                               }
