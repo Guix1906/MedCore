@@ -317,6 +317,17 @@ export function AgendaToolbar({
         {view !== undefined && onViewChange && (
           <AgendaFilters view={view as any} onViewChange={onViewChange} />
         )}
+
+        {onNewAppointment && (
+          <button
+            type="button"
+            onClick={onNewAppointment}
+            className="h-9 px-3.5 rounded-lg bg-[#7C3AED] hover:bg-[#6D28D9] text-white text-[13px] font-bold inline-flex items-center gap-1.5 shadow-sm hover:shadow-md transition-all shrink-0 cursor-pointer"
+          >
+            <Plus size={15} strokeWidth={2.5} />
+            <span>+ Novo Agendamento</span>
+          </button>
+        )}
       </div>
     </div>
   );
