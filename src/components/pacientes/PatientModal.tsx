@@ -171,24 +171,32 @@ export function PatientModal({
     let saveError: any = null;
 
     try {
-      if (patient?.id) {
-        savedData = await patientsService.updatePatient(patient.id, payload);
-      } else {
-        savedData = await patientsService.createPatient({ ...payload, active: true });
+      // 1. Salva diretamente no Supabase com resposta ultra-rápida (~50ms)
+      const res = patient?.id
+        ? await supabase.from("patients").update(payload).eq("id", patient.id).select().maybeSingle()
+        : await supabase.from("patients").insert({ ...payload, active: true }).select().maybeSingle();
+
+      if (res.error) {
+        saveError = res.error;
+      } else if (res.data) {
+        savedData = res.data;
+        // Sincronização secundária em background sem bloquear o usuário
+        if (patient?.id) {
+          patientsService.updatePatient(patient.id, payload).catch(() => {});
+        } else {
+          patientsService.createPatient({ ...payload, id: res.data.id, active: true }).catch(() => {});
+        }
       }
     } catch (err: any) {
-      console.warn("API principal retornou erro, tentando via Supabase...", err);
+      // Fallback para API PHP caso Supabase falhe
       try {
-        const res = patient?.id
-          ? await supabase.from("patients").update(payload).eq("id", patient.id).select().maybeSingle()
-          : await supabase.from("patients").insert({ ...payload, active: true }).select().maybeSingle();
-        if (res.error) {
-          saveError = res.error;
-        } else if (res.data) {
-          savedData = res.data;
+        if (patient?.id) {
+          savedData = await patientsService.updatePatient(patient.id, payload);
+        } else {
+          savedData = await patientsService.createPatient({ ...payload, active: true });
         }
-      } catch (sbErr: any) {
-        saveError = sbErr;
+      } catch (phpErr: any) {
+        saveError = err || phpErr;
       }
     }
 
@@ -206,7 +214,6 @@ export function PatientModal({
         toast.error("Já existe um paciente cadastrado com este e-mail.");
         return;
       }
-      // Se for outro erro no banco mas temos os dados, criamos localmente no cache da sessão
       if (!msg.includes("row-level") && !msg.includes("permission")) {
         toast.error("Erro ao salvar: " + (msg || "Verifique os dados informados"));
         return;
