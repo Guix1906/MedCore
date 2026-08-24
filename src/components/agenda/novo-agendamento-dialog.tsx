@@ -2689,7 +2689,7 @@ const ClientPicker = memo(function ClientPicker({
                   key={c.id}
                   type="button"
                   onClick={() => {
-                    onChange(c.id);
+                    onChange(c.id, c);
                     setOpen(false);
                     setQuery("");
                   }}
