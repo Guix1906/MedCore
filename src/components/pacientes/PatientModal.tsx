@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { patientsService } from "@/services/api";
 import { cn } from "@/lib/utils";
 import { isValidCPF, formatCPF, formatPhone } from "@/lib/masking";
+import { saveStoredLocalPatient } from "@/lib/local-patients";
 import {
   Dialog,
   DialogContent,
