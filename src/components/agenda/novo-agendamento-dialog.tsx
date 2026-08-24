@@ -907,7 +907,8 @@ export function NovoAgendamentoDialog({
               doctor_id: dbDoctorId,
               payment_method: downPaymentMethod || "pix",
               category: "Procedimentos",
-              company_id: validCompanyId,
+              appointment_id: insertedId,
+              created_by: remoteCreatedBy,
             };
 
             try {
@@ -948,7 +949,8 @@ export function NovoAgendamentoDialog({
               patient_id: validPatientId,
               doctor_id: dbDoctorId,
               category: "Procedimentos",
-              company_id: validCompanyId,
+              appointment_id: insertedId,
+              created_by: remoteCreatedBy,
             };
 
             try {
@@ -990,7 +992,8 @@ export function NovoAgendamentoDialog({
               doctor_id: dbDoctorId,
               payment_method: downPaymentMethod || "pix",
               category: "Consultas",
-              company_id: validCompanyId,
+              appointment_id: insertedId,
+              created_by: remoteCreatedBy,
             };
 
             try {
