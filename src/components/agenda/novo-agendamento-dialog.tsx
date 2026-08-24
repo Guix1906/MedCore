@@ -645,6 +645,23 @@ export function NovoAgendamentoDialog({
             }
           });
         }
+      // 3. Mescla com médicos locais (garante que médico recém-criado nunca suma)
+      try {
+        const localDocs = getStoredLocalDoctors();
+        if (localDocs.length > 0) {
+          const existingIds = new Set(list.map((m) => m.id));
+          localDocs.forEach((d) => {
+            if (!existingIds.has(d.id)) {
+              list.push({
+                id: d.id,
+                full_name: d.name,
+                avatar_url: d.avatar_url || null,
+                role: d.specialty || d.role || "Médico",
+              });
+              existingIds.add(d.id);
+            }
+          });
+        }
       } catch {}
 
       return list;
@@ -680,9 +697,17 @@ export function NovoAgendamentoDialog({
   );
   const selectedCase = useMemo(() => cases.find((c: IdOpt) => c.id === caseId), [cases, caseId]);
   const responsible = useMemo(
-    () => members.find((m: MemberOpt) => m.id === assignedTo),
-    [members, assignedTo],
+    () => members.find((m: MemberOpt) => m.id === assignedTo) || (selectedDoctorObj?.id === assignedTo ? selectedDoctorObj : null),
+    [members, assignedTo, selectedDoctorObj],
   );
+
+  const allMembersList = useMemo(() => {
+    let result = [...members];
+    if (selectedDoctorObj && !result.some((m: MemberOpt) => m.id === selectedDoctorObj.id)) {
+      result = [selectedDoctorObj, ...result];
+    }
+    return result;
+  }, [members, selectedDoctorObj]);
 
   const statusMeta = useMemo(
     () => STATUS.find((s) => s.id === status) ?? STATUS[0],
