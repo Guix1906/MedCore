@@ -2666,7 +2666,165 @@ export function NovoAgendamentoDialog({
           }
         }}
       />
+      <NewDoctorDialog
+        open={showNewDoctorModal}
+        onClose={() => setShowNewDoctorModal(false)}
+        companyId={companyId}
+        onCreated={(newDoc) => {
+          setAssignedTo(newDoc.id);
+          qc.setQueryData(qk.membersMini(companyId), (old: any = []) => {
+            const exists = old.some((m: any) => m.id === newDoc.id);
+            return exists ? old : [newDoc, ...old];
+          });
+          qc.invalidateQueries({ queryKey: qk.membersMini(companyId) });
+          qc.invalidateQueries({ queryKey: ["allowed-doctors"] });
+          qc.invalidateQueries({ queryKey: ["dashboard", "doctors"] });
+        }}
+      />
     </>
+  );
+}
+
+function NewDoctorDialog({
+  open,
+  onClose,
+  onCreated,
+  companyId,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: (doc: MemberOpt) => void;
+  companyId?: string | null;
+}) {
+  const [name, setName] = useState("");
+  const [specialty, setSpecialty] = useState("");
+  const [crm, setCrm] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  if (!open) return null;
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) {
+      toast.error("O nome do médico/profissional é obrigatório.");
+      return;
+    }
+    setSaving(true);
+    const newId = crypto.randomUUID();
+    const payload = {
+      id: newId,
+      name: name.trim(),
+      specialty: specialty.trim() || null,
+      crm: crm.trim() || null,
+      phone: phone.trim() || null,
+      email: email.trim() || null,
+      active: true,
+    };
+
+    try {
+      const { error } = await supabase.from("doctors").insert(payload);
+      if (error) {
+        await supabase.from("doctors").insert({
+          id: newId,
+          name: name.trim(),
+          specialty: specialty.trim() || null,
+          active: true,
+        });
+      }
+    } catch (err) {
+      console.warn("Erro ao salvar médico:", err);
+    }
+
+    setSaving(false);
+    toast.success(`Médico Dr(a). ${name.trim()} cadastrado com sucesso!`);
+    onCreated({
+      id: newId,
+      full_name: name.trim(),
+      role: specialty.trim() || "Médico",
+      avatar_url: null,
+    });
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md rounded-2xl p-6 bg-background">
+        <DialogTitle className="text-lg font-bold text-foreground">
+          Cadastrar Médico / Profissional
+        </DialogTitle>
+        <DialogDescription className="text-xs text-muted-foreground">
+          Adicione um novo profissional para vincular aos agendamentos e prontuários.
+        </DialogDescription>
+
+        <form onSubmit={handleSave} className="space-y-3.5 mt-3">
+          <div className="space-y-1">
+            <Label className="text-xs font-semibold">Nome Completo *</Label>
+            <Input
+              required
+              placeholder="Ex.: Dr. Roberto Silva"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="h-10 rounded-xl"
+              autoFocus
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">Especialidade</Label>
+              <Input
+                placeholder="Ex.: Dermatologia"
+                value={specialty}
+                onChange={(e) => setSpecialty(e.target.value)}
+                className="h-10 rounded-xl"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">CRM / Registro</Label>
+              <Input
+                placeholder="Ex.: CRM 123456"
+                value={crm}
+                onChange={(e) => setCrm(e.target.value)}
+                className="h-10 rounded-xl"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">Telefone</Label>
+              <Input
+                placeholder="(00) 00000-0000"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="h-10 rounded-xl"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">E-mail</Label>
+              <Input
+                type="email"
+                placeholder="medico@clinica.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="h-10 rounded-xl"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-border/40">
+            <Button type="button" variant="outline" onClick={onClose} className="rounded-xl h-10">
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={saving} className="rounded-xl h-10 bg-primary text-primary-foreground font-bold">
+              {saving ? "Salvando..." : "Salvar Médico"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
