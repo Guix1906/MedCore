@@ -411,6 +411,29 @@ export default function ProntuarioPage() {
                     initial="hidden"
                     animate="show"
                   >
+                    {previousRecord?.complaint && (
+                      <motion.div variants={fadeUp} className="rounded-xl border border-purple-100 bg-purple-50/50 p-3 flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-purple-900 flex items-center gap-1.5">
+                            <FileText className="h-3.5 w-3.5 text-purple-600" />
+                            Registro da consulta anterior ({new Date(previousRecord.created_at || previousRecord.finished_at || Date.now()).toLocaleDateString("pt-BR")})
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setShowPreviousHistory(!showPreviousHistory)}
+                            className="text-xs font-bold text-purple-700 hover:text-purple-900 hover:underline cursor-pointer"
+                          >
+                            {showPreviousHistory ? "Ocultar histórico" : "Ver anotações anteriores"}
+                          </button>
+                        </div>
+                        {showPreviousHistory && (
+                          <div className="mt-1 p-2.5 rounded-lg bg-white border border-purple-200 text-xs text-slate-700 whitespace-pre-wrap max-h-48 overflow-y-auto">
+                            {previousRecord.complaint}
+                          </div>
+                        )}
+                      </motion.div>
+                    )}
+
                     <motion.div variants={fadeUp}>
                       <Section
                         title="Anamnese Geral"
