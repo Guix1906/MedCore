@@ -430,10 +430,11 @@ export function NovoAgendamentoDialog({
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     queryFn: async () => {
+      let rawList: { id: string; name: string; cpf: string | null; phone: string | null }[] = [];
       try {
         const list = await patientsService.getPatients({ limit: 1500 });
         if (list && Array.isArray(list)) {
-          return list.map((p) => ({
+          rawList = list.map((p) => ({
             id: p.id,
             name: p.name,
             cpf: p.cpf || null,
@@ -442,18 +443,24 @@ export function NovoAgendamentoDialog({
         }
       } catch {}
 
-      const { data } = await supabase
-        .from("patients")
-        .select("id, name, cpf, phone")
-        .order("name")
-        .limit(1500);
+      if (rawList.length === 0) {
+        try {
+          const { data } = await supabase
+            .from("patients")
+            .select("id, name, cpf, phone")
+            .order("name")
+            .limit(1500);
 
-      return (data ?? []) as {
-        id: string;
-        name: string;
-        cpf: string | null;
-        phone: string | null;
-      }[];
+          rawList = (data ?? []) as {
+            id: string;
+            name: string;
+            cpf: string | null;
+            phone: string | null;
+          }[];
+        } catch {}
+      }
+
+      return mergeWithLocalPatients(rawList);
     },
   });
 
