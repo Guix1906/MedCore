@@ -1980,7 +1980,7 @@ export function NovoAgendamentoDialog({
                           </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                          {members.map((m: MemberOpt) => (
+                          {allMembersList.map((m: MemberOpt) => (
                             <SelectItem key={m.id} value={m.id}>
                               <span className="flex items-center gap-2">
                                 <Avatar name={m.full_name} url={m.avatar_url} />
