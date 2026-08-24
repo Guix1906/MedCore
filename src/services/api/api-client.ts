@@ -103,7 +103,7 @@ async function request<T = any>(
   const fetchPromise = (async () => {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const timeoutId = setTimeout(() => controller.abort(), 600);
 
       const response = await fetch(url, {
         ...options,
