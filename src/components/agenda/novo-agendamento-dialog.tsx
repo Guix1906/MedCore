@@ -41,6 +41,7 @@ import { useActiveCompany } from "@/hooks/use-active-company";
 import { isUuid, toValidUuid, ensureValidUuid } from "@/lib/uuid";
 import { mergeWithLocalPatients } from "@/lib/local-patients";
 import { saveStoredLocalEvent } from "@/lib/local-events";
+import { getStoredLocalDoctors, saveStoredLocalDoctor } from "@/lib/local-doctors";
 import { useClinicCities } from "@/hooks/use-clinic-cities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
