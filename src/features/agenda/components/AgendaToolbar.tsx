@@ -165,9 +165,9 @@ export function AgendaToolbar({
   onSearchChange,
   cityFilter,
   onCityChange,
-  cities,
   view,
   onViewChange,
+  onNewAppointment,
 }: {
   date: Date;
   onSetDate: (d: Date) => void;
@@ -184,6 +184,7 @@ export function AgendaToolbar({
   cities?: string[];
   view?: string;
   onViewChange?: (view: any) => void;
+  onNewAppointment?: () => void;
 }) {
   const handleDropShift = (deltaDays: number) => (e: React.DragEvent) => {
     e.preventDefault();
