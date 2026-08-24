@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { agendaService } from "@/services/api";
 import { qk } from "@/lib/query-keys";
+import { mergeWithLocalEvents } from "@/lib/local-events";
 import { toActivities, type RawDeadline, type RawEvent, type RawTask } from "../lib/normalize";
 
 const AGENDA_STALE_TIME = 10 * 60_000;
