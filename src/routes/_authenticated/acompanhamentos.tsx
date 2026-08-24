@@ -115,12 +115,33 @@ function AcompanhamentosPage() {
     gcTime: 30 * 60_000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("treatments")
-        .select("*, patients(name, phone), doctors(name)")
-        .order("created_at", { ascending: false });
-      if (error) toast.error("Erro ao carregar acompanhamentos");
-      return (data ?? []) as unknown as Treatment[];
+      let list: Treatment[] = [];
+      try {
+        const { data, error } = await supabase
+          .from("treatments")
+          .select("*, patients(name, phone), doctors(name)")
+          .order("created_at", { ascending: false });
+        if (data && !error) {
+          list = data as unknown as Treatment[];
+        }
+      } catch (err) {
+        console.warn("Erro ao carregar tratamentos:", err);
+      }
+
+      // Enriquecer com pacientes locais se patients vier null
+      const localPats = getStoredLocalPatients();
+      return list.map((t) => {
+        if (!t.patients && t.patient_id) {
+          const match = localPats.find((lp) => lp.id === t.patient_id);
+          if (match) {
+            return {
+              ...t,
+              patients: { name: match.name, phone: match.phone },
+            };
+          }
+        }
+        return t;
+      });
     },
   });
 
