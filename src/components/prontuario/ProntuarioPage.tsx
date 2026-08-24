@@ -148,10 +148,10 @@ export default function ProntuarioPage() {
   const [isFinalizing, setIsFinalizing] = useState(false);
   const saveTimer = useRef<number | null>(null);
 
-  // Ref de controle do editor Anamnese Geral
+  // Ref de controle do editor Anamnese Geral (sempre inicia limpo para novos atendimentos)
   const queixaRef = useRef<RichEditorHandle>(null);
 
-  // Busca o último prontuário gravado desse paciente (banco de dados ou localStorage)
+  // Busca o último prontuário gravado desse paciente apenas para consulta/histórico
   const { data: previousRecord } = useQuery({
     queryKey: ["prontuario-previous-record", patient.id, patient.name],
     queryFn: async () => {
@@ -182,15 +182,7 @@ export default function ProntuarioPage() {
     },
   });
 
-  const prefilledRef = useRef(false);
-  useEffect(() => {
-    if (previousRecord && !prefilledRef.current) {
-      prefilledRef.current = true;
-      if (previousRecord.complaint) {
-        queixaRef.current?.setText(previousRecord.complaint);
-      }
-    }
-  }, [previousRecord]);
+  const [showPreviousHistory, setShowPreviousHistory] = useState(false);
 
   // Estado do modal de Assistente IA
   const [aiModalOpen, setAiModalOpen] = useState(false);
