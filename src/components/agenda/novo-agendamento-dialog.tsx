@@ -1922,7 +1922,17 @@ export function NovoAgendamentoDialog({
                   {/* Responsável + Status + Cor */}
                   <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-4">
                     <div className="space-y-1.5">
-                      <FieldLabel>Responsável</FieldLabel>
+                      <div className="flex items-center justify-between">
+                        <FieldLabel>Responsável</FieldLabel>
+                        <button
+                          type="button"
+                          onClick={() => setShowNewDoctorModal(true)}
+                          className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          <UserPlus size={12} />
+                          + Novo Médico
+                        </button>
+                      </div>
                       <Select
                         value={assignedTo || "__none"}
                         onValueChange={(v) => setAssignedTo(v === "__none" ? "" : v)}
