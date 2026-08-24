@@ -328,10 +328,10 @@ export function NovoAgendamentoDialog({
   const { companyId } = useActiveCompany();
   const qc = useQueryClient();
 
-  // ------ Form state ------
   const [type, setType] = useState<(typeof TYPES)[number]["id"]>("atendimento");
   const [title, setTitle] = useState("");
   const [clientId, setClientId] = useState("");
+  const [selectedClientObj, setSelectedClientObj] = useState<{ id: string; name: string; cpf?: string | null; phone?: string | null } | null>(null);
   const [assignedTo, setAssignedTo] = useState(user?.id ?? "");
   const [status, setStatus] = useState<(typeof STATUS)[number]["id"]>("agendado");
   const [color, setColor] = useState(COLORS[0]);
@@ -385,6 +385,7 @@ export function NovoAgendamentoDialog({
     setType("atendimento");
     setTitle("");
     setClientId("");
+    setSelectedClientObj(null);
     setAssignedTo(user?.id ?? "");
     setStatus("agendado");
     setColor(COLORS[0]);
