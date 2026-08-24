@@ -606,8 +606,8 @@ export function NovoAgendamentoDialog({
   });
 
   const selectedClient = useMemo(
-    () => clients.find((c: IdOpt) => c.id === clientId),
-    [clients, clientId],
+    () => clients.find((c: IdOpt) => c.id === clientId) || (selectedClientObj?.id === clientId ? selectedClientObj : null),
+    [clients, clientId, selectedClientObj],
   );
   const selectedCase = useMemo(() => cases.find((c: IdOpt) => c.id === caseId), [cases, caseId]);
   const responsible = useMemo(
