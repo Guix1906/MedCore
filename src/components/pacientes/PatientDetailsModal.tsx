@@ -351,21 +351,6 @@ export function PatientDetailsModal({
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAiSection({ key: "queixa", title: "Consulta Médica" });
-                        setAiModalOpen(true);
-                      }}
-                      className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl text-white text-[12.5px] font-bold shadow-sm hover:brightness-105 active:scale-95 transition-all cursor-pointer"
-                      style={{
-                        background: "linear-gradient(135deg, #FF7A59 0%, #D946EF 50%, #6366F1 100%)",
-                      }}
-                    >
-                      <Sparkles size={14} />
-                      <span>Preencher com IA</span>
-                    </button>
-
                     <Link
                       to="/prontuario"
                       search={{ patientName: data.name, patientId: data.id } as any}
