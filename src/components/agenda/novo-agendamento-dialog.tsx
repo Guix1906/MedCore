@@ -482,7 +482,7 @@ export function NovoAgendamentoDialog({
 
   // Query patient consultation history when clientId changes (Optimized & Multi-layer)
   const { data: patientHistory = [], isFetching: isHistoryLoading } = useQuery({
-    queryKey: ["patient-consultation-history", clientId, selectedClient?.name],
+    queryKey: ["patient-consultation-history", clientId, selectedClientObj?.name],
     enabled: open && !!clientId,
     staleTime: 2 * 60_000,
     gcTime: 10 * 60_000,
@@ -537,7 +537,6 @@ export function NovoAgendamentoDialog({
       try {
         const phpAppts = await agendaService.getAppointments({
           patient_id: clientId,
-          limit: 50,
         });
         if (phpAppts && Array.isArray(phpAppts)) {
           phpAppts.forEach((a: any) => {
@@ -561,7 +560,7 @@ export function NovoAgendamentoDialog({
             e.patient_id === clientId ||
             e.case_id === clientId ||
             (e.description && e.description.includes(clientId)) ||
-            (selectedClient?.name && e.title && e.title.toLowerCase().includes(selectedClient.name.toLowerCase()));
+            (selectedClientObj?.name && e.title && e.title.toLowerCase().includes(selectedClientObj.name.toLowerCase()));
 
           if (isMatch && !historyMap.has(e.id)) {
             historyMap.set(e.id, {
