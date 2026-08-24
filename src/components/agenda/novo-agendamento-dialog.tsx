@@ -2716,13 +2716,15 @@ function NewDoctorDialog({
     }
     setSaving(true);
     const newId = crypto.randomUUID();
+    const cleanEmail = email.trim() || `medico.${newId.slice(0, 8)}@medcore.local`;
     const payload = {
       id: newId,
       name: name.trim(),
+      email: cleanEmail,
       specialty: specialty.trim() || null,
       crm: crm.trim() || null,
       phone: phone.trim() || null,
-      email: email.trim() || null,
+      role: "medico",
       active: true,
     };
 
@@ -2732,7 +2734,9 @@ function NewDoctorDialog({
         await supabase.from("doctors").insert({
           id: newId,
           name: name.trim(),
+          email: cleanEmail,
           specialty: specialty.trim() || null,
+          role: "medico",
           active: true,
         });
       }
