@@ -535,14 +535,22 @@ export function AddDeadlineModal({
       if (!f.assigned_to) throw new Error("Responsável é obrigatório");
       const meta =
         `[${f.kind.toUpperCase()} • limite ${f.hour_limit}]\n${f.description ?? ""}`.trim();
+
+      const { data: authData } = await supabase.auth.getUser();
+      const supabaseAuthId = authData?.user?.id;
+      const validCreatedBy = supabaseAuthId && isUuid(supabaseAuthId) ? supabaseAuthId : ensureValidUuid(ctx.userId);
+      const validCompanyId = isUuid(ctx.companyId) ? ctx.companyId : ensureValidUuid(ctx.companyId);
+      const validAssignedTo = f.assigned_to && isUuid(f.assigned_to) ? f.assigned_to : toValidUuid(f.assigned_to);
+      const validCaseId = f.case_id && isUuid(f.case_id) ? f.case_id : toValidUuid(f.case_id);
+
       const { error } = await supabase.from("deadlines").insert({
-        company_id: ctx.companyId,
-        created_by: ctx.userId,
+        company_id: validCompanyId,
+        created_by: validCreatedBy,
         title: f.title.trim(),
         description: meta || null,
         due_date: f.due_date,
-        case_id: f.case_id,
-        assigned_to: f.assigned_to,
+        case_id: validCaseId,
+        assigned_to: validAssignedTo,
         is_double_term: f.is_double_term,
         status: "pending",
       });
@@ -682,17 +690,25 @@ export function AddHearingModal({
       const locFinal = f.is_virtual
         ? `🔗 ${f.location || ""} (virtual)`
         : `${f.court} • ${f.location || ""}`.trim();
+
+      const { data: authData } = await supabase.auth.getUser();
+      const supabaseAuthId = authData?.user?.id;
+      const validCreatedBy = supabaseAuthId && isUuid(supabaseAuthId) ? supabaseAuthId : ensureValidUuid(ctx.userId);
+      const validCompanyId = isUuid(ctx.companyId) ? ctx.companyId : ensureValidUuid(ctx.companyId);
+      const validAssignedTo = f.assigned_to && isUuid(f.assigned_to) ? f.assigned_to : toValidUuid(f.assigned_to);
+      const validCaseId = f.case_id && isUuid(f.case_id) ? f.case_id : toValidUuid(f.case_id);
+
       const { error } = await supabase.from("events").insert({
-        company_id: ctx.companyId,
-        created_by: ctx.userId,
+        company_id: validCompanyId,
+        created_by: validCreatedBy,
         title: titleFinal,
         description: desc || null,
         event_type: "hearing",
         starts_at: start.toISOString(),
         ends_at: end.toISOString(),
         location: locFinal,
-        case_id: f.case_id,
-        assigned_to: f.assigned_to,
+        case_id: validCaseId,
+        assigned_to: validAssignedTo,
       });
       if (error) throw error;
     },
