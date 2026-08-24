@@ -38,9 +38,16 @@ export function useAgendaMutations(onDone: (a: Activity | null) => void) {
   const remove = useMutation({
     mutationFn: async (a: Activity) => {
       const tbl = a.source === "task" ? "tasks" : a.source === "event" ? "events" : "deadlines";
-      const id = a.id.split(":")[1];
-      const { error } = await supabase.from(tbl).delete().eq("id", id);
-      if (error) throw error;
+      const id = a.id && a.id.includes(":") ? a.id.split(":")[1] : a.id;
+      if (a.source === "event") {
+        deleteStoredLocalEvent(id);
+      }
+      try {
+        const { error } = await supabase.from(tbl).delete().eq("id", id);
+        if (error) console.warn("Supabase delete warning:", error);
+      } catch (err) {
+        console.warn("Delete error caught:", err);
+      }
     },
     onSuccess: (_v, a) => {
       toast.success("Atividade excluída");
