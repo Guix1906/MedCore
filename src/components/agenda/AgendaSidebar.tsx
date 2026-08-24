@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, ChevronDown, Check } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, Check, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { getBrazilianHolidays } from "@/lib/holidays";
 
@@ -98,27 +98,24 @@ function FilterSelect({
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="w-full flex items-center justify-between px-3 h-[38px] rounded-md border border-neutral-300 bg-white text-[14px] hover:border-neutral-400 transition-all shadow-2xs cursor-pointer select-none"
+          className="w-full h-9 px-3 rounded-lg bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 text-left text-[14px] text-neutral-800 flex items-center justify-between transition-colors font-normal"
         >
-          <span className={value ? "text-neutral-900 font-medium" : "text-neutral-500 font-normal"}>
-            {value ?? placeholder}
-          </span>
-          <ChevronDown
-            className={`h-4 w-4 text-neutral-500 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-          />
+          <span className="truncate">{value ?? placeholder}</span>
+          <ChevronDown className="h-4 w-4 text-neutral-400 shrink-0 ml-1" />
         </button>
+
         {open && (
-          <div className="absolute z-30 left-0 right-0 top-11 rounded-md border border-neutral-200 bg-white shadow-xl overflow-hidden max-h-60 overflow-y-auto py-1">
+          <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white rounded-lg border border-neutral-200 shadow-lg py-1 max-h-56 overflow-y-auto">
             <button
               type="button"
               onClick={() => {
                 onChange(null);
                 setOpen(false);
               }}
-              className="w-full flex items-center justify-between px-3.5 py-2.5 text-[15px] font-normal text-neutral-500 hover:bg-neutral-100 text-left"
+              className="w-full px-3 py-1.5 text-left text-[14px] text-neutral-700 hover:bg-neutral-100 flex items-center justify-between"
             >
-              {placeholder}
-              {!value && <Check className="h-4 w-4 text-[#6C4CF7]" />}
+              <span>{placeholder}</span>
+              {!value && <Check className="h-3.5 w-3.5 text-[#6C4CF7]" />}
             </button>
             {options.map((opt) => (
               <button
@@ -128,10 +125,10 @@ function FilterSelect({
                   onChange(opt);
                   setOpen(false);
                 }}
-                className="w-full flex items-center justify-between px-3.5 py-2.5 text-[15px] font-normal text-neutral-800 hover:bg-[#F5F3FF] hover:text-[#6C4CF7] text-left"
+                className="w-full px-3 py-1.5 text-left text-[14px] text-neutral-700 hover:bg-neutral-100 flex items-center justify-between"
               >
-                {opt}
-                {value === opt && <Check className="h-4 w-4 text-[#6C4CF7]" />}
+                <span className="truncate">{opt}</span>
+                {value === opt && <Check className="h-3.5 w-3.5 text-[#6C4CF7]" />}
               </button>
             ))}
           </div>
@@ -147,12 +144,14 @@ export default function AgendaSidebar({
   filters: filtersProp,
   onFiltersChange,
   options,
+  onNewAppointment,
 }: {
   selectedDate?: Date;
   onSelectDate?: (d: Date) => void;
   filters?: AgendaFilterValues;
   onFiltersChange?: (f: AgendaFilterValues) => void;
   options?: Partial<AgendaFilterOptions>;
+  onNewAppointment?: () => void;
 } = {}) {
   const today = new Date();
   const [viewYear, setViewYear] = useState((selectedDate ?? today).getFullYear());
@@ -214,6 +213,20 @@ export default function AgendaSidebar({
 
   return (
     <aside className="agenda-sidebar-scroll w-[310px] shrink-0 h-full overflow-y-auto bg-white border-r border-slate-200 shadow-xs">
+      {/* Botão Novo Agendamento */}
+      {onNewAppointment && (
+        <div className="p-3.5 border-b border-neutral-100 bg-gradient-to-b from-purple-50/40 to-transparent">
+          <button
+            type="button"
+            onClick={onNewAppointment}
+            className="w-full h-11 rounded-xl bg-[#7C3AED] hover:bg-[#6D28D9] text-white text-[14px] font-bold flex items-center justify-center gap-2 shadow-sm hover:shadow-md transition-all cursor-pointer select-none"
+          >
+            <Plus size={18} strokeWidth={2.5} />
+            <span>+ Novo Agendamento</span>
+          </button>
+        </div>
+      )}
+
       {/* Mini calendar */}
       <div className="px-4 pt-4 pb-4 border-b border-neutral-200">
         <div className="flex items-center justify-between mb-3">
