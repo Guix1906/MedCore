@@ -852,10 +852,11 @@ export function NovoAgendamentoDialog({
 
       // 2. Despacha sincronização remota assíncrona em background (sem bloquear o usuário)
       void (async () => {
+        let remoteCreatedBy = validCreatedBy;
         try {
           const { data: authData } = await supabase.auth.getUser();
           const supabaseAuthId = authData?.user?.id;
-          const remoteCreatedBy = supabaseAuthId && isUuid(supabaseAuthId) ? supabaseAuthId : validCreatedBy;
+          if (supabaseAuthId && isUuid(supabaseAuthId)) remoteCreatedBy = supabaseAuthId;
 
           const { error: eventError } = await supabase.from("events").insert({
             id: insertedId,
