@@ -479,23 +479,6 @@ export function PatientFullProfileView({
             </button>
           </div>
 
-          {/* Botão Atender com IA */}
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab("prontuario");
-              setAiSection({ key: "queixa", title: "Consulta do Paciente" });
-              setAiModalOpen(true);
-            }}
-            className="w-full mt-2.5 h-10 px-3 rounded-xl text-white font-bold text-[12.5px] flex items-center justify-center gap-2 shadow-sm hover:brightness-105 active:scale-[0.98] transition-all cursor-pointer"
-            style={{
-              background: "linear-gradient(135deg, #FF7A59 0%, #D946EF 50%, #6366F1 100%)",
-            }}
-          >
-            <Sparkles className="h-4 w-4 shrink-0" />
-            <span>Atendimento com IA</span>
-          </button>
-
           {/* Lista de Navegação das Abas */}
           <nav className="mt-5 w-full space-y-1">
             {TABS.map((tab) => {
@@ -512,9 +495,6 @@ export function PatientFullProfileView({
                   }`}
                 >
                   <span>{tab.label}</span>
-                  {tab.id === "prontuario" && (
-                    <Sparkles className={`h-3.5 w-3.5 ${isActive ? "text-white" : "text-[#7B3AF5]"}`} />
-                  )}
                 </button>
               );
             })}
