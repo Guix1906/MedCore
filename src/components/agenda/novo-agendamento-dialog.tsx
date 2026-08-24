@@ -1919,7 +1919,15 @@ export function NovoAgendamentoDialog({
                         <div className="flex items-center gap-1.5">
                           <button
                             type="button"
-                            onClick={() => setIsNewPatient(!isNewPatient)}
+                            onClick={() => {
+                              const next = !isNewPatient;
+                              setIsNewPatient(next);
+                              if (next) {
+                                setConsultationType("nova_consulta");
+                              } else {
+                                setConsultationType(patientHistory.length === 1 ? "1_retorno" : "retorno_recorrente");
+                              }
+                            }}
                             className={cn(
                               "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
                               isNewPatient ? "bg-[#7C3AED]" : "bg-[#EAECF0]"
@@ -1962,7 +1970,7 @@ export function NovoAgendamentoDialog({
                                   : "bg-emerald-100 text-emerald-800"
                               )}
                             >
-                              {isNewPatient ? "Novo Paciente" : "Paciente Recorrente"}
+                              {isNewPatient ? "Novo Paciente (1ª Consulta)" : "Paciente Recorrente"}
                             </span>
                             <span className="text-[10px] font-semibold bg-white border border-border px-2 py-0.5 rounded-full text-muted-foreground">
                               {patientHistory.length} consulta(s) anterior(es)
@@ -2008,7 +2016,17 @@ export function NovoAgendamentoDialog({
 
                     <div className="space-y-1.5">
                       <FieldLabel required>Tipo de Atendimento</FieldLabel>
-                      <Select value={consultationType} onValueChange={setConsultationType}>
+                      <Select
+                        value={consultationType}
+                        onValueChange={(v) => {
+                          setConsultationType(v);
+                          if (v === "nova_consulta") {
+                            setIsNewPatient(true);
+                          } else {
+                            setIsNewPatient(false);
+                          }
+                        }}
+                      >
                         <SelectTrigger className="h-11 rounded-xl">
                           <SelectValue placeholder="Selecione o tipo" />
                         </SelectTrigger>
