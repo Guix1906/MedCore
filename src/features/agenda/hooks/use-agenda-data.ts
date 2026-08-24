@@ -19,7 +19,7 @@ export function useAgendaData(
   userId: string | null | undefined,
 ) {
   const qc = useQueryClient();
-  const enabled = !!companyId && !!userId;
+  const enabled = true;
 
   const tasksQ = useQuery({
     queryKey: [...qk.agendaLists.tasks(companyId), "all"] as const,
@@ -46,14 +46,18 @@ export function useAgendaData(
         }
       } catch {}
 
-      const { data, error } = await supabase
-        .from("tasks")
-        .select(
-          "id, title, description, due_date, priority, status, assigned_to, case_id",
-        )
-        .eq("company_id", companyId!);
-      if (error) throw error;
-      return (data ?? []) as RawTask[];
+      if (companyId) {
+        try {
+          const { data } = await supabase
+            .from("tasks")
+            .select(
+              "id, title, description, due_date, priority, status, assigned_to, case_id",
+            )
+            .eq("company_id", companyId);
+          return (data ?? []) as RawTask[];
+        } catch {}
+      }
+      return [] as RawTask[];
     },
   });
 
@@ -84,17 +88,23 @@ export function useAgendaData(
         }
       } catch {}
 
-      if (rawList.length === 0) {
-        try {
-          const { data } = await supabase
-            .from("events")
-            .select(
-              "id, title, description, event_type, starts_at, ends_at, location, assigned_to, case_id",
-            )
-            .eq("company_id", companyId!);
-          rawList = (data ?? []) as RawEvent[];
-        } catch {}
-      }
+      try {
+        let q = supabase
+          .from("events")
+          .select(
+            "id, title, description, event_type, starts_at, ends_at, location, assigned_to, case_id",
+          );
+        if (companyId) {
+          q = q.eq("company_id", companyId);
+        }
+        const { data } = await q.order("starts_at", { ascending: true }).limit(1000);
+        if (data && data.length > 0) {
+          const map = new Map<string, RawEvent>();
+          rawList.forEach((e) => map.set(e.id, e));
+          data.forEach((e: any) => map.set(e.id, e as RawEvent));
+          rawList = Array.from(map.values());
+        }
+      } catch {}
 
       return mergeWithLocalEvents(rawList, companyId);
     },
