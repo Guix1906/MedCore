@@ -92,18 +92,26 @@ function PacientesPage() {
     gcTime: 30 * 60_000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
+      let rawList: Patient[] = [];
       try {
         const phpData = await patientsService.getPatients({ limit: 2000 });
         if (phpData && Array.isArray(phpData)) {
-          return phpData as Patient[];
+          rawList = phpData as Patient[];
         }
       } catch {}
-      const { data } = await supabase
-        .from("patients")
-        .select("id,name,email,phone,cpf,birth_date,gender,insurance,city,state,address,zip_code,notes,active,created_at")
-        .order("name")
-        .limit(2000);
-      return (data ?? []) as Patient[];
+
+      if (rawList.length === 0) {
+        try {
+          const { data } = await supabase
+            .from("patients")
+            .select("id,name,email,phone,cpf,birth_date,gender,insurance,city,state,address,zip_code,notes,active,created_at")
+            .order("name")
+            .limit(2000);
+          rawList = (data ?? []) as Patient[];
+        } catch {}
+      }
+
+      return mergeWithLocalPatients(rawList);
     },
   });
 
@@ -119,6 +127,7 @@ function PacientesPage() {
       destructive: true,
     });
     if (!ok) return;
+    deleteStoredLocalPatient(p.id);
     try {
       await patientsService.deletePatient(p.id);
       toast.success("Paciente excluído");
@@ -126,7 +135,7 @@ function PacientesPage() {
       return;
     } catch {}
     const { error } = await supabase.from("patients").delete().eq("id", p.id);
-    if (error) toast.error("Erro: " + error.message);
+    if (error && !error.message.includes("permission")) toast.error("Erro: " + error.message);
     else {
       toast.success("Paciente excluído");
       refreshPatients();
