@@ -1605,8 +1605,12 @@ export function NovoAgendamentoDialog({
                     </div>
                     <ClientPicker
                       value={clientId}
-                      onChange={setClientId}
+                      onChange={(v, obj) => {
+                        setClientId(v);
+                        setSelectedClientObj(obj ?? null);
+                      }}
                       clients={clients}
+                      selectedClient={selectedClientObj}
                     />
 
                     {/* Resumo/Histórico do Paciente para a Secretaria */}
