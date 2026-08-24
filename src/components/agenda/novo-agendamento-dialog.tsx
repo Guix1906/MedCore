@@ -558,6 +558,8 @@ export function NovoAgendamentoDialog({
     return map;
   }, [allProceduresList]);
 
+  const [showNewDoctorModal, setShowNewDoctorModal] = useState(false);
+
   const { data: members = [] } = useQuery({
     queryKey: qk.membersMini(companyId),
     enabled: !!companyId,
@@ -567,28 +569,83 @@ export function NovoAgendamentoDialog({
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     queryFn: async () => {
+      let list: MemberOpt[] = [];
       try {
-        const phpMembers = await companyService.getMembers();
-        if (phpMembers && Array.isArray(phpMembers)) {
-          return phpMembers.map((m: any) => ({
-            id: m.id || m.user_id,
-            full_name: m.full_name || m.name,
-            avatar_url: m.avatar_url || null,
+        const phpDoctors = await companyService.getDoctors();
+        if (phpDoctors && Array.isArray(phpDoctors) && phpDoctors.length > 0) {
+          list = phpDoctors.map((d: any) => ({
+            id: d.id,
+            full_name: d.name || d.full_name,
+            avatar_url: d.avatar_url || null,
+            role: d.specialty || "Médico",
           }));
         }
       } catch {}
 
-      const { data: m } = await supabase
-        .from("company_members")
-        .select("user_id")
-        .eq("company_id", companyId!);
-      const ids = (m ?? []).map((x) => x.user_id);
-      if (ids.length === 0) return [];
-      const { data: p } = await supabase
-        .from("profiles")
-        .select("id, full_name, avatar_url")
-        .in("id", ids);
-      return (p ?? []) as { id: string; full_name: string | null; avatar_url: string | null }[];
+      if (list.length === 0) {
+        try {
+          const phpMembers = await companyService.getMembers();
+          if (phpMembers && Array.isArray(phpMembers) && phpMembers.length > 0) {
+            list = phpMembers.map((m: any) => ({
+              id: m.id || m.user_id,
+              full_name: m.full_name || m.name,
+              avatar_url: m.avatar_url || null,
+              role: m.role || "Profissional",
+            }));
+          }
+        } catch {}
+      }
+
+      // Consulta médicos no Supabase
+      try {
+        const { data: docData } = await supabase
+          .from("doctors")
+          .select("id, name, specialty, role")
+          .order("name");
+        if (docData && docData.length > 0) {
+          const existingIds = new Set(list.map((m) => m.id));
+          docData.forEach((d: any) => {
+            if (!existingIds.has(d.id)) {
+              list.push({
+                id: d.id,
+                full_name: d.name,
+                avatar_url: null,
+                role: d.specialty || d.role || "Médico",
+              });
+              existingIds.add(d.id);
+            }
+          });
+        }
+      } catch {}
+
+      // Consulta company_members no Supabase
+      try {
+        const { data: m } = await supabase
+          .from("company_members")
+          .select("user_id")
+          .eq("company_id", companyId!);
+        const ids = (m ?? []).map((x) => x.user_id);
+        if (ids.length > 0) {
+          const { data: p } = await supabase
+            .from("profiles")
+            .select("id, full_name, avatar_url")
+            .in("id", ids);
+          const existingIds = new Set(list.map((m) => m.id));
+          (p ?? []).forEach((prof) => {
+            if (!existingIds.has(prof.id)) {
+              list.push({
+                id: prof.id,
+                full_name: prof.full_name,
+                avatar_url: prof.avatar_url || null,
+                role: "Profissional",
+              });
+              existingIds.add(prof.id);
+            }
+          });
+        }
+      } catch {}
+
+      return list;
     },
   });
 
