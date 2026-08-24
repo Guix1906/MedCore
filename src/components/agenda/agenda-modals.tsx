@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { CheckSquare, Users, AlertCircle, Gavel, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { isUuid, toValidUuid, ensureValidUuid } from "@/lib/uuid";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
