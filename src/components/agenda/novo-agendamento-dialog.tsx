@@ -738,119 +738,17 @@ export function NovoAgendamentoDialog({
         ? (selectedProfs[0] || user.id)
         : (assignedTo || null);
 
-      // Safe UUID extraction for Supabase PostgreSQL
-      const { data: authData } = await supabase.auth.getUser();
-      const supabaseAuthId = authData?.user?.id;
-
-      // 1. created_by: must be a valid UUID
-      let validCreatedBy: string;
-      if (supabaseAuthId && isUuid(supabaseAuthId)) {
-        validCreatedBy = supabaseAuthId;
-      } else if (user?.id && isUuid(user.id)) {
-        validCreatedBy = user.id;
-      } else {
-        validCreatedBy = ensureValidUuid(user?.id);
-      }
-
-      // 2. company_id: must be a valid UUID
-      let validCompanyId: string = companyId;
-      if (!isUuid(companyId)) {
-        const { data: cData } = await supabase.from("companies").select("id").limit(1).maybeSingle();
-        validCompanyId = cData?.id || ensureValidUuid(companyId);
-      }
-
-      // 3. assigned_to: must be a valid UUID or null
-      let validAssignedTo: string | null = null;
-      if (finalAssignedTo) {
-        if (isUuid(finalAssignedTo)) {
-          validAssignedTo = finalAssignedTo;
-        } else if (finalAssignedTo === user?.id) {
-          validAssignedTo = validCreatedBy;
-        } else {
-          validAssignedTo = toValidUuid(finalAssignedTo);
-        }
-      }
-
-      // 4. case_id: must be a valid UUID or null
+      const validCreatedBy = isUuid(user?.id) ? user.id : ensureValidUuid(user?.id);
+      const validCompanyId = isUuid(companyId) ? companyId : ensureValidUuid(companyId);
+      const validAssignedTo = finalAssignedTo
+        ? (isUuid(finalAssignedTo) ? finalAssignedTo : (finalAssignedTo === user?.id ? validCreatedBy : toValidUuid(finalAssignedTo)))
+        : null;
       const validCaseId = caseId && isUuid(caseId) ? caseId : toValidUuid(caseId);
-
-      // 5. patient_id: must be a valid UUID or null
       const validPatientId = clientId && isUuid(clientId) ? clientId : toValidUuid(clientId);
 
-      // Prevenção de choques de horários entre secretárias
-      if (validCompanyId && validAssignedTo) {
-        try {
-          const { data: existingEvents } = await supabase
-            .from("events")
-            .select("id, title, starts_at, ends_at")
-            .eq("company_id", validCompanyId)
-            .eq("assigned_to", validAssignedTo)
-            .gte("ends_at", startsAt.toISOString())
-            .lte("starts_at", endsAt.toISOString());
+      const insertedId = crypto.randomUUID();
 
-          if (existingEvents && existingEvents.length > 0) {
-            const confirmConflict = window.confirm(
-              `ALERTA DE CONFLITO DE AGENDA:\nJá existe um agendamento ("${existingEvents[0].title}") para este profissional neste mesmo horário.\n\nDeseja realizar a marcação assim mesmo?`
-            );
-            if (!confirmConflict) {
-              throw new Error("Agendamento cancelado devido a choque de horário");
-            }
-          }
-        } catch (e: any) {
-          if (e?.message?.includes("cancelado")) throw e;
-        }
-      }
-
-      let insertedId: string = crypto.randomUUID();
-
-      // 1. Tenta salvar no Supabase (com tentativa de campos completos e fallback resiliente)
-      try {
-        const { data: insertedEvent, error: eventError } = await supabase
-          .from("events")
-          .insert({
-            company_id: validCompanyId,
-            created_by: validCreatedBy,
-            title: finalTitle,
-            description,
-            event_type: "meeting",
-            starts_at: startsAt.toISOString(),
-            ends_at: endsAt.toISOString(),
-            location,
-            case_id: validCaseId,
-            assigned_to: validAssignedTo,
-            patient_id: validPatientId,
-          })
-          .select("id")
-          .maybeSingle();
-
-        if (eventError) {
-          console.warn("Aviso ao inserir evento completo no Supabase, tentando campos essenciais:", eventError);
-          const { data: retryEvent } = await supabase
-            .from("events")
-            .insert({
-              company_id: validCompanyId,
-              created_by: validCreatedBy,
-              title: finalTitle,
-              description,
-              event_type: "meeting",
-              starts_at: startsAt.toISOString(),
-              ends_at: endsAt.toISOString(),
-              location,
-            })
-            .select("id")
-            .maybeSingle();
-
-          if (retryEvent?.id) {
-            insertedId = retryEvent.id;
-          }
-        } else if (insertedEvent?.id) {
-          insertedId = insertedEvent.id;
-        }
-      } catch (e) {
-        console.warn("Falha de rede/Supabase ao salvar evento:", e);
-      }
-
-      // 2. Sempre persiste na camada local resiliente
+      // 1. Salva imediatamente na camada local ultra-rápida (0ms de latência)
       saveStoredLocalEvent(
         {
           id: insertedId,
@@ -866,76 +764,111 @@ export function NovoAgendamentoDialog({
         validCompanyId,
       );
 
-      // 3. Sincronização em background com a API PHP (sem bloquear a interface)
-      void agendaService
-        .createAppointment({
-          patient_id: clientId || undefined,
-          date: day,
-          start_time: start,
-          end_time: end,
-          type: type,
-          status: status,
-          notes: notes || undefined,
-        })
-        .catch(() => {});
+      // 2. Despacha sincronização remota assíncrona em background (sem bloquear o usuário)
+      void (async () => {
+        try {
+          const { data: authData } = await supabase.auth.getUser();
+          const supabaseAuthId = authData?.user?.id;
+          const remoteCreatedBy = supabaseAuthId && isUuid(supabaseAuthId) ? supabaseAuthId : validCreatedBy;
 
-      // Inserting financial transactions for Sinal (deposit) & Restante (remaining)
-      if (totalAmt > 0 || sinalAmt > 0) {
-        const proc = selectedProcedure && selectedProcedure !== "__none"
-          ? (procedures.find(p => p.id === selectedProcedure) || allProceduresList.find(p => p.id === selectedProcedure))
-          : null;
-        const procName = proc ? `Procedimento: ${proc.name}` : "Consulta / Atendimento";
-        
-        let dbDoctorId: string | null = null;
-        if (validAssignedTo) {
-          try {
-            const { data: docData } = await supabase
-              .from("doctors")
-              .select("id")
-              .eq("auth_id", validAssignedTo)
-              .maybeSingle();
-            if (docData && isUuid(docData.id)) {
-              dbDoctorId = docData.id;
-            }
-          } catch {}
-        }
+          const { error: eventError } = await supabase.from("events").insert({
+            id: insertedId,
+            company_id: validCompanyId,
+            created_by: remoteCreatedBy,
+            title: finalTitle,
+            description,
+            event_type: "meeting",
+            starts_at: startsAt.toISOString(),
+            ends_at: endsAt.toISOString(),
+            location,
+            case_id: validCaseId,
+            assigned_to: validAssignedTo,
+            patient_id: validPatientId,
+          });
 
-        // 1. Sinal Pago (Concluído) - Data do dia em que o sinal foi pago (Hoje)
-        if (sinalAmt > 0) {
-          try {
-            const { error: sinalErr } = await supabase.from("transactions").insert({
-              amount: sinalAmt,
-              type: "receita",
-              status: "concluido",
-              date: todayStr,
-              description: `Sinal Pago (${downPaymentMethod.toUpperCase()}): ${procName}${patientNameStr}`,
-              patient_id: validPatientId,
-              doctor_id: dbDoctorId,
-              payment_method: downPaymentMethod,
-              category: "Procedimentos",
+          if (eventError) {
+            await supabase.from("events").insert({
+              id: insertedId,
+              company_id: validCompanyId,
+              created_by: remoteCreatedBy,
+              title: finalTitle,
+              description,
+              event_type: "meeting",
+              starts_at: startsAt.toISOString(),
+              ends_at: endsAt.toISOString(),
+              location,
             });
-            if (sinalErr) console.error("Erro ao inserir sinal:", sinalErr);
-          } catch {}
+          }
+        } catch (e) {
+          console.warn("Supabase background event sync:", e);
         }
 
-        // 2. Valor Restante (Pendente) - Data do Agendamento (Cobrança futura)
-        if (restanteAmt > 0) {
-          try {
-            const { error: restErr } = await supabase.from("transactions").insert({
-              amount: restanteAmt,
-              type: "receita",
-              status: "pendente",
-              date: day,
-              due_date: day,
-              description: `Restante A Cobrar: ${procName}${patientNameStr}`,
-              patient_id: validPatientId,
-              doctor_id: dbDoctorId,
-              category: "Procedimentos",
-            });
-            if (restErr) console.error("Erro ao inserir restante:", restErr);
-          } catch {}
+        // Sincronização PHP em background
+        agendaService
+          .createAppointment({
+            id: insertedId,
+            patient_id: clientId || undefined,
+            date: day,
+            start_time: start,
+            end_time: end,
+            type: type,
+            status: status,
+            notes: notes || undefined,
+          })
+          .catch(() => {});
+
+        // Transações de sinal e restante
+        if (totalAmt > 0 || sinalAmt > 0) {
+          const proc = selectedProcedure && selectedProcedure !== "__none"
+            ? (procedures.find(p => p.id === selectedProcedure) || allProceduresList.find(p => p.id === selectedProcedure))
+            : null;
+          const procName = proc ? `Procedimento: ${proc.name}` : "Consulta / Atendimento";
+
+          let dbDoctorId: string | null = null;
+          if (validAssignedTo) {
+            try {
+              const { data: docData } = await supabase
+                .from("doctors")
+                .select("id")
+                .eq("auth_id", validAssignedTo)
+                .maybeSingle();
+              if (docData && isUuid(docData.id)) dbDoctorId = docData.id;
+            } catch {}
+          }
+
+          if (sinalAmt > 0) {
+            try {
+              await supabase.from("transactions").insert({
+                amount: sinalAmt,
+                type: "receita",
+                status: "concluido",
+                date: todayStr,
+                description: `Sinal Pago (${downPaymentMethod.toUpperCase()}): ${procName}${patientNameStr}`,
+                patient_id: validPatientId,
+                doctor_id: dbDoctorId,
+                payment_method: downPaymentMethod,
+                category: "Procedimentos",
+              });
+            } catch {}
+          }
+
+          if (restanteAmt > 0) {
+            try {
+              await supabase.from("transactions").insert({
+                amount: restanteAmt,
+                type: "receita",
+                status: "pendente",
+                date: day,
+                due_date: day,
+                description: `Restante A Cobrar: ${procName}${patientNameStr}`,
+                patient_id: validPatientId,
+                doctor_id: dbDoctorId,
+                category: "Procedimentos",
+              });
+            } catch {}
+          }
         }
-      }
+      })();
 
       const createdActivity = {
         id: insertedId,
