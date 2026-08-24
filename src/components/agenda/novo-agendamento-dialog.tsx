@@ -34,12 +34,13 @@ type MemberOpt = {
 type IdOpt = { id: string };
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { patientsService, companyService } from "@/services/api";
+import { patientsService, companyService, agendaService } from "@/services/api";
 import { PatientModal } from "@/components/pacientes/PatientModal";
 import { useAuth } from "@/hooks/use-auth";
 import { useActiveCompany } from "@/hooks/use-active-company";
 import { isUuid, toValidUuid, ensureValidUuid } from "@/lib/uuid";
 import { mergeWithLocalPatients } from "@/lib/local-patients";
+import { saveStoredLocalEvent } from "@/lib/local-events";
 import { useClinicCities } from "@/hooks/use-clinic-cities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
