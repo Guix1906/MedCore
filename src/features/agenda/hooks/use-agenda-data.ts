@@ -66,14 +66,15 @@ export function useAgendaData(
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     queryFn: async () => {
+      let rawList: RawEvent[] = [];
       try {
         const phpEvents = await agendaService.getEvents();
         if (phpEvents && Array.isArray(phpEvents)) {
-          return phpEvents.map((e) => ({
+          rawList = phpEvents.map((e) => ({
             id: e.id,
             title: e.title,
             description: e.description || null,
-            event_type: e.event_type || "appointment",
+            event_type: (e.event_type as any) || "meeting",
             starts_at: e.start_time,
             ends_at: e.end_time || null,
             location: e.location || null,
@@ -83,14 +84,19 @@ export function useAgendaData(
         }
       } catch {}
 
-      const { data, error } = await supabase
-        .from("events")
-        .select(
-          "id, title, description, event_type, starts_at, ends_at, location, assigned_to, case_id",
-        )
-        .eq("company_id", companyId!);
-      if (error) throw error;
-      return (data ?? []) as RawEvent[];
+      if (rawList.length === 0) {
+        try {
+          const { data } = await supabase
+            .from("events")
+            .select(
+              "id, title, description, event_type, starts_at, ends_at, location, assigned_to, case_id",
+            )
+            .eq("company_id", companyId!);
+          rawList = (data ?? []) as RawEvent[];
+        } catch {}
+      }
+
+      return mergeWithLocalEvents(rawList, companyId);
     },
   });
 
@@ -136,6 +142,9 @@ export function useAgendaData(
       qc.invalidateQueries({ queryKey: [...qk.agendaLists.events(companyId), "all"] });
     const invDeads = () =>
       qc.invalidateQueries({ queryKey: [...qk.agendaLists.deadlines(companyId), "all"] });
+
+    window.addEventListener("medcore_events_updated", invEvents);
+
     const ch = supabase
       .channel(`agenda-${companyId}`)
       .on(
@@ -155,6 +164,7 @@ export function useAgendaData(
       )
       .subscribe();
     return () => {
+      window.removeEventListener("medcore_events_updated", invEvents);
       supabase.removeChannel(ch);
     };
   }, [companyId, userId, qc]);
