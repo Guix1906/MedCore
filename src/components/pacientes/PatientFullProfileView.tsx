@@ -699,6 +699,9 @@ export function PatientFullProfileView({
           {/* ============================================================ */}
           {/* ABA: PRONTUÁRIO & ANAMNESE COMPLETA COM IA */}
           {/* ============================================================ */}
+          {/* ============================================================ */}
+          {/* ABA: PRONTUÁRIO & ANAMNESE COMPLETA COM IA */}
+          {/* ============================================================ */}
           {activeTab === "prontuario" && (
             <div className="space-y-6 max-w-4xl">
               <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-slate-100">
@@ -708,7 +711,7 @@ export function PatientFullProfileView({
                     Prontuário Clínico & Anamnese
                   </h2>
                   <p className="text-[12.5px] text-slate-500 mt-0.5">
-                    Registre os dados clínicos da consulta deste paciente específico com o auxílio do Copiloto de IA.
+                    Prontuário integrado de <strong className="text-slate-700">{data.name}</strong>. Os dados salvos aqui e na central de atendimento são 100% sincronizados.
                   </p>
                 </div>
 
@@ -734,7 +737,7 @@ export function PatientFullProfileView({
                   <button
                     type="button"
                     onClick={() => {
-                      setAiSection({ key: "queixa", title: "Consulta Médica" });
+                      setAiSection({ key: "anamnese_geral", title: "Anamnese Geral & Consulta" });
                       setAiModalOpen(true);
                     }}
                     className="inline-flex items-center gap-2 h-10 px-4 rounded-xl text-white text-[13px] font-bold shadow-sm hover:brightness-105 active:scale-95 transition-all cursor-pointer"
@@ -743,7 +746,7 @@ export function PatientFullProfileView({
                     }}
                   >
                     <Sparkles size={15} />
-                    <span>Iniciar com IA</span>
+                    <span>Atendimento com IA</span>
                   </button>
 
                   <button
@@ -753,251 +756,150 @@ export function PatientFullProfileView({
                     className="inline-flex items-center gap-1.5 h-10 px-4.5 rounded-xl bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 text-[13px] font-bold shadow-sm transition-all cursor-pointer"
                   >
                     <Save size={15} />
-                    <span>{isSavingRecord ? "Salvando..." : "Salvar"}</span>
+                    <span>{isSavingRecord ? "Salvando..." : "Salvar Prontuário"}</span>
                   </button>
                 </div>
               </div>
 
-              {/* Histórico de Atendimentos Salvos para este paciente */}
-              {records.length > 0 && (
-                <div className="rounded-2xl border border-purple-100 bg-purple-50/40 p-4 space-y-3 shadow-2xs">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-purple-900 font-bold text-sm">
-                      <History className="h-4 w-4 text-purple-600" />
-                      <span>Histórico de Atendimentos Finalizados ({records.length})</span>
+              {/* Editor de Anamnese e Prontuário Unificado */}
+              <div className="rounded-2xl border border-purple-100 bg-white p-5 shadow-xs space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-100">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-7 w-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center">
+                      <ClipboardList size={16} />
                     </div>
-                    <span className="text-xs text-purple-700 font-medium bg-purple-100/80 px-2.5 py-0.5 rounded-full">
-                      Último: {new Date(records[0].created_at).toLocaleString("pt-BR")}
-                    </span>
+                    <div>
+                      <h3 className="text-[14.5px] font-bold text-slate-800">
+                        Anamnese & Evolução Clínica
+                      </h3>
+                      <p className="text-[11.5px] text-slate-400">
+                        Motivo da consulta, sintomas, antecedentes, exame clínico e conduta terapêutica.
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-48 overflow-y-auto pr-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-slate-400 font-medium">
+                      {anamnese.length} caracteres
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => openAiForSection({ key: "anamnese_geral", title: "Anamnese Geral" })}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-50 text-[12px] font-semibold text-purple-700 hover:bg-purple-100 transition-colors cursor-pointer"
+                    >
+                      <Sparkles size={13} /> Preencher com IA
+                    </button>
+                  </div>
+                </div>
+
+                <textarea
+                  rows={8}
+                  value={anamnese}
+                  onChange={(e) => setAnamnese(e.target.value)}
+                  placeholder="Descreva a anamnese geral do paciente (queixa principal, histórico de saúde, observações clínicas, hipóteses e condutas)..."
+                  className="w-full rounded-xl border border-slate-200 p-4 text-[13.5px] text-slate-800 placeholder:text-slate-400 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/15 outline-none transition-all resize-y min-h-[220px] font-sans leading-relaxed"
+                />
+              </div>
+
+              {/* Histórico Completo de Atendimentos Salvos para este paciente */}
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-5 space-y-4 shadow-2xs">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
+                    <History className="h-4.5 w-4.5 text-purple-600" />
+                    <span>Histórico de Atendimentos e Evoluções ({records.length})</span>
+                  </div>
+                  {records.length > 0 && (
+                    <span className="text-xs text-purple-700 font-semibold bg-purple-100/80 px-3 py-1 rounded-full">
+                      Último registro: {new Date(records[0].created_at).toLocaleString("pt-BR")}
+                    </span>
+                  )}
+                </div>
+
+                {records.length > 0 ? (
+                  <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
                     {records.map((rec: any, idx: number) => (
                       <div
                         key={rec.id || idx}
-                        className="p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs text-xs space-y-1.5"
+                        className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-2.5 transition-all hover:border-purple-200"
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-slate-800">
-                            {new Date(rec.created_at).toLocaleDateString("pt-BR", {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </span>
-                          {rec.duration_seconds ? (
-                            <span className="text-[11px] text-slate-500 font-medium">
-                              ⏱️ {Math.round(rec.duration_seconds / 60)} min
+                        <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-100">
+                          <div className="flex items-center gap-2">
+                            <div className="h-2 w-2 rounded-full bg-purple-600" />
+                            <span className="font-bold text-slate-800 text-[13px]">
+                              {new Date(rec.created_at).toLocaleDateString("pt-BR", {
+                                weekday: "short",
+                                day: "2-digit",
+                                month: "long",
+                                year: "numeric",
+                              })}{" "}
+                              às{" "}
+                              {new Date(rec.created_at).toLocaleTimeString("pt-BR", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
                             </span>
-                          ) : null}
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {rec.duration_seconds ? (
+                              <span className="text-[11.5px] text-slate-600 font-medium bg-slate-100 px-2.5 py-0.5 rounded-md">
+                                ⏱️ {Math.round(rec.duration_seconds / 60)} min
+                              </span>
+                            ) : null}
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (rec.complaint) {
+                                  setAnamnese(rec.complaint);
+                                  toast.success("Conteúdo carregado no editor");
+                                }
+                              }}
+                              className="text-[11.5px] font-semibold text-purple-600 hover:text-purple-800 hover:underline cursor-pointer"
+                              title="Carregar este texto no editor acima"
+                            >
+                              Carregar no editor
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (rec.complaint) {
+                                  navigator.clipboard.writeText(rec.complaint);
+                                  toast.success("Texto do prontuário copiado");
+                                }
+                              }}
+                              className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-100 cursor-pointer"
+                              title="Copiar texto"
+                            >
+                              <Copy size={13} />
+                            </button>
+                          </div>
                         </div>
-                        {rec.complaint && (
-                          <p className="text-slate-600 line-clamp-2">
-                            <strong className="text-slate-700">Queixa:</strong> {rec.complaint}
-                          </p>
-                        )}
-                        {rec.conduct && (
-                          <p className="text-slate-600 line-clamp-1">
-                            <strong className="text-slate-700">Conduta:</strong> {rec.conduct}
+
+                        {rec.complaint ? (
+                          <div className="text-[13px] text-slate-700 whitespace-pre-wrap leading-relaxed bg-slate-50/70 p-3 rounded-lg border border-slate-100">
+                            {rec.complaint}
+                          </div>
+                        ) : (
+                          <p className="text-[12px] text-slate-400 italic">
+                            Nenhum texto registrado nesta consulta.
                           </p>
                         )}
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
-
-              {/* Seções Clínicas com acionador de IA */}
-              <div className="space-y-4">
-                {/* 1. Queixa Principal */}
-                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="h-6 w-6 rounded-md bg-purple-100 text-purple-700 flex items-center justify-center">
-                        <ClipboardList size={14} />
-                      </div>
-                      <label className="text-[14px] font-bold text-slate-800">
-                        Queixa Principal
-                      </label>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => openAiForSection({ key: "queixa", title: "Queixa Principal" })}
-                      className="text-[12px] font-semibold text-purple-600 hover:text-purple-800 flex items-center gap-1 cursor-pointer"
-                    >
-                      <Sparkles size={13} /> Preencher com IA
-                    </button>
+                ) : (
+                  <div className="py-8 text-center space-y-2">
+                    <FileText className="h-8 w-8 text-slate-300 mx-auto" />
+                    <p className="text-[13px] font-medium text-slate-600">
+                      Nenhum atendimento finalizado registrado ainda para {data.name}.
+                    </p>
+                    <p className="text-[12px] text-slate-400 max-w-sm mx-auto">
+                      Você pode escrever a anamnese no campo acima ou clicar em "Atendimento com IA" para gerar anotações clínicas automáticas.
+                    </p>
                   </div>
-                  <textarea
-                    rows={3}
-                    value={queixa}
-                    onChange={(e) => setQueixa(e.target.value)}
-                    placeholder="Descreva o motivo da consulta, queixas, sintomas, início e evolução..."
-                    className="w-full rounded-lg border border-slate-200 p-3 text-[13.5px] text-slate-800 placeholder:text-slate-400 focus:border-purple-600 focus:ring-1 focus:ring-purple-600/20 outline-none transition-all resize-y"
-                  />
-                </div>
-
-                {/* 2. Histórico Familiar */}
-                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="h-6 w-6 rounded-md bg-blue-100 text-blue-700 flex items-center justify-center">
-                        <UserCheck size={14} />
-                      </div>
-                      <label className="text-[14px] font-bold text-slate-800">
-                        Histórico Familiar
-                      </label>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => openAiForSection({ key: "historico_familiar", title: "Histórico Familiar" })}
-                      className="text-[12px] font-semibold text-purple-600 hover:text-purple-800 flex items-center gap-1 cursor-pointer"
-                    >
-                      <Sparkles size={13} /> Preencher com IA
-                    </button>
-                  </div>
-                  <textarea
-                    rows={2}
-                    value={historicoFamiliar}
-                    onChange={(e) => setHistoricoFamiliar(e.target.value)}
-                    placeholder="Antecedentes e doenças em familiares diretos (pais, avós, irmãos)..."
-                    className="w-full rounded-lg border border-slate-200 p-3 text-[13.5px] text-slate-800 placeholder:text-slate-400 focus:border-purple-600 focus:ring-1 focus:ring-purple-600/20 outline-none transition-all resize-y"
-                  />
-                </div>
-
-                {/* 3. Tratamentos Anteriores */}
-                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="h-6 w-6 rounded-md bg-teal-100 text-teal-700 flex items-center justify-center">
-                        <Activity size={14} />
-                      </div>
-                      <label className="text-[14px] font-bold text-slate-800">
-                        Tratamentos Anteriores & Conduta
-                      </label>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => openAiForSection({ key: "tratamentos", title: "Tratamentos Anteriores" })}
-                      className="text-[12px] font-semibold text-purple-600 hover:text-purple-800 flex items-center gap-1 cursor-pointer"
-                    >
-                      <Sparkles size={13} /> Preencher com IA
-                    </button>
-                  </div>
-                  <textarea
-                    rows={3}
-                    value={tratamentos}
-                    onChange={(e) => setTratamentos(e.target.value)}
-                    placeholder="Tratamentos prévios realizados, cirurgias e condutas discutidas..."
-                    className="w-full rounded-lg border border-slate-200 p-3 text-[13.5px] text-slate-800 placeholder:text-slate-400 focus:border-purple-600 focus:ring-1 focus:ring-purple-600/20 outline-none transition-all resize-y"
-                  />
-                </div>
-
-                {/* 4. Alergias */}
-                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="h-6 w-6 rounded-md bg-rose-100 text-rose-700 flex items-center justify-center">
-                        <ShieldAlert size={14} />
-                      </div>
-                      <label className="text-[14px] font-bold text-slate-800">
-                        Alergias
-                      </label>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => openAiForSection({ key: "alergias", title: "Alergias" })}
-                      className="text-[12px] font-semibold text-purple-600 hover:text-purple-800 flex items-center gap-1 cursor-pointer"
-                    >
-                      <Sparkles size={13} /> Preencher com IA
-                    </button>
-                  </div>
-                  <textarea
-                    rows={2}
-                    value={alergias}
-                    onChange={(e) => setAlergias(e.target.value)}
-                    placeholder="Alergias medicamentosas, alimentares ou ambientais..."
-                    className="w-full rounded-lg border border-slate-200 p-3 text-[13.5px] text-slate-800 placeholder:text-slate-400 focus:border-purple-600 focus:ring-1 focus:ring-purple-600/20 outline-none transition-all resize-y"
-                  />
-                </div>
-
-                {/* 5. Histórico Médico Pessoal */}
-                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="h-6 w-6 rounded-md bg-indigo-100 text-indigo-700 flex items-center justify-center">
-                        <Stethoscope size={14} />
-                      </div>
-                      <label className="text-[14px] font-bold text-slate-800">
-                        Histórico Médico Pessoal & Condições
-                      </label>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => openAiForSection({ key: "historico_pessoal", title: "Histórico Médico Pessoal" })}
-                      className="text-[12px] font-semibold text-purple-600 hover:text-purple-800 flex items-center gap-1 cursor-pointer"
-                    >
-                      <Sparkles size={13} /> Preencher com IA
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
-                    {CONDICOES_LIST.map((c) => (
-                      <label key={c} className="flex items-center gap-2 text-[12.5px] text-slate-700 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={!!condicoes[c]}
-                          onChange={(e) => setConditions((prev) => ({ ...prev, [c]: e.target.checked }))}
-                          className="rounded text-purple-600 focus:ring-purple-500 h-4 w-4"
-                        />
-                        <span>{c}</span>
-                      </label>
-                    ))}
-                  </div>
-
-                  <div className="space-y-1 pt-1.5">
-                    <label className="text-[12px] font-semibold text-slate-700">
-                      Outras condições / Especifique:
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={historicoPessoal}
-                      onChange={(e) => setHistoricoPessoal(e.target.value)}
-                      placeholder="Patologias prévias ou detalhes adicionais..."
-                      className="w-full rounded-lg border border-slate-200 p-3 text-[13px] text-slate-800 placeholder:text-slate-400 focus:border-purple-600 focus:ring-1 focus:ring-purple-600/20 outline-none transition-all resize-y"
-                    />
-                  </div>
-                </div>
-
-                {/* 6. Medicações em Uso */}
-                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="h-6 w-6 rounded-md bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                        <Pill size={14} />
-                      </div>
-                      <label className="text-[14px] font-bold text-slate-800">
-                        Medicações em Uso Atualmente
-                      </label>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => openAiForSection({ key: "medicacoes", title: "Medicações" })}
-                      className="text-[12px] font-semibold text-purple-600 hover:text-purple-800 flex items-center gap-1 cursor-pointer"
-                    >
-                      <Sparkles size={13} /> Preencher com IA
-                    </button>
-                  </div>
-                  <textarea
-                    rows={2}
-                    value={medicacoes}
-                    onChange={(e) => setMedicacoes(e.target.value)}
-                    placeholder="Ex.: Losartana 50mg — 1 comprimido pela manhã..."
-                    className="w-full rounded-lg border border-slate-200 p-3 text-[13.5px] text-slate-800 placeholder:text-slate-400 focus:border-purple-600 focus:ring-1 focus:ring-purple-600/20 outline-none transition-all resize-y"
-                  />
-                </div>
+                )}
               </div>
             </div>
           )}
