@@ -2701,10 +2701,11 @@ export function NovoAgendamentoDialog({
         onClose={() => setShowNewDoctorModal(false)}
         companyId={companyId}
         onCreated={(newDoc) => {
+          setSelectedDoctorObj(newDoc);
           setAssignedTo(newDoc.id);
-          qc.setQueryData(qk.membersMini(companyId), (old: any = []) => {
+          qc.setQueriesData({ queryKey: qk.membersMini(companyId) }, (old: any = []) => {
             const exists = old.some((m: any) => m.id === newDoc.id);
-            return exists ? old : [newDoc, ...old];
+            return exists ? old.map((m: any) => m.id === newDoc.id ? newDoc : m) : [newDoc, ...old];
           });
           qc.invalidateQueries({ queryKey: qk.membersMini(companyId) });
           qc.invalidateQueries({ queryKey: ["allowed-doctors"] });
@@ -2744,6 +2745,24 @@ function NewDoctorDialog({
     setSaving(true);
     const newId = crypto.randomUUID();
     const cleanEmail = email.trim() || `medico.${newId.slice(0, 8)}@medcore.local`;
+    const docObj: MemberOpt = {
+      id: newId,
+      full_name: name.trim(),
+      role: specialty.trim() || "Médico",
+      avatar_url: null,
+    };
+
+    saveStoredLocalDoctor({
+      id: newId,
+      name: name.trim(),
+      email: cleanEmail,
+      specialty: specialty.trim() || null,
+      crm: crm.trim() || null,
+      phone: phone.trim() || null,
+      role: "medico",
+      active: true,
+    });
+
     const payload = {
       id: newId,
       name: name.trim(),
@@ -2773,12 +2792,7 @@ function NewDoctorDialog({
 
     setSaving(false);
     toast.success(`Médico Dr(a). ${name.trim()} cadastrado com sucesso!`);
-    onCreated({
-      id: newId,
-      full_name: name.trim(),
-      role: specialty.trim() || "Médico",
-      avatar_url: null,
-    });
+    onCreated(docObj);
     onClose();
   };
 
