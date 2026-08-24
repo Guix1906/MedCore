@@ -770,7 +770,7 @@ export function NovoAgendamentoDialog({
       // Inserting financial transactions for Sinal (deposit) & Restante (remaining)
       if (totalAmt > 0 || sinalAmt > 0) {
         const proc = selectedProcedure && selectedProcedure !== "__none"
-          ? procedures.find(p => p.id === selectedProcedure)
+          ? (procedures.find(p => p.id === selectedProcedure) || allProceduresList.find(p => p.id === selectedProcedure))
           : null;
         const procName = proc ? `Procedimento: ${proc.name}` : "Consulta / Atendimento";
         
