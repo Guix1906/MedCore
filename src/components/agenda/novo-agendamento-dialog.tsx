@@ -1689,36 +1689,6 @@ export function NovoAgendamentoDialog({
                     </div>
                   </div>
 
-                  {/* Procedimento / Serviço em Destaque Absoluto no Topo */}
-                  <div className="space-y-1.5 pt-1">
-                    <FieldLabel required>Procedimento / Serviço (Clique para Selecionar)</FieldLabel>
-                    <select
-                      className="w-full h-11 px-3.5 rounded-xl bg-violet-50/80 border-2 border-primary focus:border-primary focus:ring-4 focus:ring-primary/20 text-sm font-semibold text-foreground cursor-pointer transition-all outline-none"
-                      value={selectedProcedure}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setSelectedProcedure(val);
-                        if (val) {
-                          const found = procedures.find((p) => p.id === val);
-                          if (found && found.price) {
-                            setProcedurePrice(found.price);
-                          }
-                        }
-                      }}
-                    >
-                      <option value="">✨ Clique para selecionar o procedimento (Consultas, Implantes, Protocolos)...</option>
-                      {Object.entries(groupedProceduresList).map(([category, items]) => (
-                        <optgroup key={category} label={category} className="font-bold text-primary bg-background">
-                          {items.map((proc) => (
-                            <option key={proc.id} value={proc.id} className="font-normal text-foreground py-1">
-                              {proc.name}
-                            </option>
-                          ))}
-                        </optgroup>
-                      ))}
-                    </select>
-                  </div>
-
                   {/* Responsável + Status + Cor */}
                   <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-4">
                     <div className="space-y-1.5">
