@@ -165,6 +165,7 @@ export function AgendaToolbar({
   onSearchChange,
   cityFilter,
   onCityChange,
+  cities,
   view,
   onViewChange,
   onNewAppointment,
