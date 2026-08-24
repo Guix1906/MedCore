@@ -13,7 +13,7 @@ const LogSchema = z.object({
 
 export const logActivity = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => LogSchema.parse(input))
+  .validator((input: unknown) => LogSchema.parse(input))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { data: profile } = await supabase
@@ -38,7 +38,7 @@ export const logActivity = createServerFn({ method: "POST" })
 
 export const listActivityLogs = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) =>
+  .validator((input: unknown) =>
     z
       .object({
         entity_type: z.string().optional(),
