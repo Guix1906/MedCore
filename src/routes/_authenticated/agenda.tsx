@@ -82,7 +82,13 @@ export const Route = createFileRoute("/_authenticated/agenda")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  validateSearch: (search: Record<string, unknown>) => ({
+  validateSearch: (search: Record<string, unknown>): {
+    taskId?: string;
+    deadlineId?: string;
+    eventId?: string;
+    novo?: string | boolean;
+    action?: string;
+  } => ({
     taskId: (search.taskId as string) || undefined,
     deadlineId: (search.deadlineId as string) || undefined,
     eventId: (search.eventId as string) || undefined,
