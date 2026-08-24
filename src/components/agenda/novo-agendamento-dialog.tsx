@@ -887,6 +887,27 @@ export function NovoAgendamentoDialog({
         raw: {},
       } as unknown as Activity;
 
+      // Optimistic cache update
+      qc.setQueriesData(
+        { queryKey: ["agenda-events"] },
+        (old: any) => {
+          const item = {
+            id: insertedId,
+            title: finalTitle,
+            description,
+            event_type: "meeting" as const,
+            starts_at: startsAt.toISOString(),
+            ends_at: endsAt.toISOString(),
+            location,
+            assigned_to: finalAssignedTo || null,
+            case_id: caseId || null,
+          };
+          if (!Array.isArray(old)) return [item];
+          const exists = old.some((e: any) => e.id === insertedId);
+          return exists ? old.map((e: any) => (e.id === insertedId ? item : e)) : [item, ...old];
+        }
+      );
+
       return { createdActivity, asDraft };
     },
     onSuccess: (data) => {
@@ -898,6 +919,7 @@ export function NovoAgendamentoDialog({
         entity_label: title.trim() || labelOfType(type),
       });
       qc.invalidateQueries({ queryKey: qk.agendaLists.events(companyId) });
+      qc.invalidateQueries({ queryKey: ["agenda-events"] });
       qc.invalidateQueries({ queryKey: qk.dashboard.all() });
       qc.invalidateQueries({ queryKey: ["dashboard", "transactions"] });
       qc.invalidateQueries({ queryKey: ["finance-dashboard", "transactions"] });
