@@ -1181,8 +1181,13 @@ function TreatmentManageModal({
 
 // ============== MODAL NOVO ACOMPANHAMENTO ==============
 function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [patients, setPatients] = useState<{ id: string; name: string }[]>([]);
+  const [patients, setPatients] = useState<{ id: string; name: string; phone?: string | null; cpf?: string | null }[]>([]);
   const [doctors, setDoctors] = useState<{ id: string; name: string }[]>([]);
+  const [loadingPatients, setLoadingPatients] = useState(true);
+  const [patientSearch, setPatientSearch] = useState("");
+  const [isPatientDropdownOpen, setIsPatientDropdownOpen] = useState(false);
+  const [showNewPatientModal, setShowNewPatientModal] = useState(false);
+
   const [form, setForm] = useState({
     patient_id: "",
     doctor_id: "",
@@ -1201,16 +1206,72 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
   });
   const [saving, setSaving] = useState(false);
 
+  const loadPatientsAndDoctors = async () => {
+    setLoadingPatients(true);
+    let pats: { id: string; name: string; phone?: string | null; cpf?: string | null }[] = [];
+    
+    // 1. Tenta API PHP / Central
+    try {
+      const phpPat = await patientsService.getPatients({ limit: 500 });
+      if (phpPat && Array.isArray(phpPat) && phpPat.length > 0) {
+        pats = phpPat.map((p) => ({
+          id: p.id,
+          name: p.name,
+          phone: p.phone || null,
+          cpf: p.cpf || null,
+        }));
+      }
+    } catch {}
+
+    // 2. Tenta Supabase
+    if (pats.length === 0) {
+      try {
+        const { data } = await supabase.from("patients").select("id,name,phone,cpf").order("name").limit(500);
+        if (data && data.length > 0) pats = data as any;
+      } catch {}
+    }
+
+    // 3. Mescla com pacientes salvos localmente
+    const merged = mergeWithLocalPatients(pats as any);
+    merged.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    setPatients(merged);
+    setLoadingPatients(false);
+
+    // Carrega médicos
+    let docs: { id: string; name: string }[] = [];
+    try {
+      const phpDocs = await companyService.getDoctors();
+      if (phpDocs && Array.isArray(phpDocs) && phpDocs.length > 0) {
+        docs = phpDocs;
+      }
+    } catch {}
+    if (docs.length === 0) {
+      try {
+        const { data: docData } = await supabase.from("doctors").select("id,name").order("name").limit(200);
+        if (docData && docData.length > 0) docs = docData as any;
+      } catch {}
+    }
+    setDoctors(docs);
+  };
+
   useEffect(() => {
-    (async () => {
-      const [p, d] = await Promise.all([
-        supabase.from("patients").select("id,name").order("name").limit(500),
-        supabase.from("doctors").select("id,name").order("name").limit(200),
-      ]);
-      setPatients((p.data as unknown as { id: string; name: string }[]) ?? []);
-      setDoctors((d.data as unknown as { id: string; name: string }[]) ?? []);
-    })();
+    loadPatientsAndDoctors();
   }, []);
+
+  const filteredPatients = useMemo(() => {
+    const s = patientSearch.trim().toLowerCase();
+    if (!s) return patients;
+    return patients.filter(
+      (p) =>
+        (p.name && p.name.toLowerCase().includes(s)) ||
+        (p.cpf && p.cpf.replace(/\D/g, "").includes(s)) ||
+        (p.phone && p.phone.replace(/\D/g, "").includes(s))
+    );
+  }, [patients, patientSearch]);
+
+  const selectedPatient = useMemo(() => {
+    return patients.find((p) => p.id === form.patient_id);
+  }, [patients, form.patient_id]);
 
   const submit = async () => {
     if (!form.patient_id || !form.title) {
@@ -1256,66 +1317,180 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
-      onClick={onClose}
-    >
+    <>
       <div
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto border border-slate-200"
-        onClick={(e) => e.stopPropagation()}
+        className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+        onClick={() => {
+          setIsPatientDropdownOpen(false);
+          onClose();
+        }}
       >
-        <div className="flex items-center justify-between px-6 py-4.5 border-b border-slate-100 sticky top-0 bg-white z-10">
-          <div>
-            <div className="text-[16px] font-bold text-slate-900">Novo Acompanhamento Clínico</div>
-            <div className="text-[12px] text-slate-500 mt-0.5">
-              Defina o paciente, protocolo, cronograma e parâmetros iniciais.
+        <div
+          className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto border border-slate-200"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between px-6 py-4.5 border-b border-slate-100 sticky top-0 bg-white z-10">
+            <div>
+              <div className="text-[16px] font-bold text-slate-900">Novo Acompanhamento Clínico</div>
+              <div className="text-[12px] text-slate-500 mt-0.5">
+                Defina o paciente, protocolo, cronograma e parâmetros iniciais.
+              </div>
             </div>
+            <button
+              onClick={onClose}
+              className="h-8 w-8 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center transition cursor-pointer"
+            >
+              <X size={18} />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="h-8 w-8 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center transition cursor-pointer"
-          >
-            <X size={18} />
-          </button>
-        </div>
 
-        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Field label="Paciente *">
-            <select
-              className={inputCls}
-              value={form.patient_id}
-              onChange={(e) => setForm({ ...form, patient_id: e.target.value })}
-            >
-              <option value="">Selecione…</option>
-              {patients.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Médico responsável">
-            <select
-              className={inputCls}
-              value={form.doctor_id}
-              onChange={(e) => setForm({ ...form, doctor_id: e.target.value })}
-            >
-              <option value="">—</option>
-              {doctors.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Título do Acompanhamento *" className="md:col-span-2">
-            <input
-              className={inputCls}
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              placeholder="Ex.: Emagrecimento Metabólico 90 dias / Reabilitação / Pós-Operatório"
-            />
-          </Field>
+          <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Seletor Inteligente de Paciente */}
+            <div className="relative md:col-span-1">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[12px] font-bold text-slate-700">Paciente *</label>
+                <button
+                  type="button"
+                  onClick={() => setShowNewPatientModal(true)}
+                  className="text-[11.5px] font-semibold text-[#8B47FF] hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <UserPlus size={13} />
+                  + Novo Paciente
+                </button>
+              </div>
+
+              {selectedPatient ? (
+                <div className="flex items-center justify-between h-10 px-3 rounded-xl bg-purple-50/70 border border-purple-200">
+                  <div className="flex items-center gap-2 truncate">
+                    <UserIcon size={15} className="text-[#8B47FF] shrink-0" />
+                    <span className="text-[13px] font-bold text-purple-900 truncate">
+                      {selectedPatient.name}
+                    </span>
+                    {selectedPatient.phone && (
+                      <span className="text-[11px] text-purple-600 truncate hidden sm:inline">
+                        • {selectedPatient.phone}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForm((f) => ({ ...f, patient_id: "" }));
+                      setIsPatientDropdownOpen(true);
+                    }}
+                    className="text-[11.5px] font-semibold text-purple-700 hover:text-purple-900 ml-2 shrink-0 cursor-pointer"
+                  >
+                    Trocar
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setIsPatientDropdownOpen((v) => !v)}
+                    className={`w-full h-10 px-3 rounded-xl border text-left flex items-center justify-between text-[13px] transition cursor-pointer ${
+                      isPatientDropdownOpen
+                        ? "border-[#8B47FF] bg-white ring-2 ring-[#8B47FF]/15"
+                        : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100/70"
+                    }`}
+                  >
+                    <span className="text-slate-400">
+                      {loadingPatients ? "Carregando pacientes..." : "Selecione ou busque um paciente…"}
+                    </span>
+                    <ChevronDown size={15} className="text-slate-400 shrink-0" />
+                  </button>
+
+                  {isPatientDropdownOpen && (
+                    <div className="absolute left-0 right-0 top-11 z-50 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 space-y-1.5 animate-in fade-in zoom-in-95">
+                      <div className="relative">
+                        <Search size={14} className="absolute left-2.5 top-2.5 text-slate-400" />
+                        <input
+                          autoFocus
+                          type="text"
+                          value={patientSearch}
+                          onChange={(e) => setPatientSearch(e.target.value)}
+                          placeholder="Buscar paciente por nome, CPF ou telefone..."
+                          className="w-full h-8.5 pl-8 pr-3 rounded-lg bg-slate-50 border border-slate-200 text-[12px] focus:outline-none focus:border-[#8B47FF] text-slate-800"
+                        />
+                      </div>
+
+                      <div className="max-h-48 overflow-y-auto space-y-0.5 pt-1">
+                        {loadingPatients ? (
+                          <div className="p-3 text-center text-[12px] text-slate-400">
+                            Carregando lista de pacientes...
+                          </div>
+                        ) : filteredPatients.length === 0 ? (
+                          <div className="p-3 text-center text-[12px] text-slate-500 space-y-2">
+                            <div>Nenhum paciente encontrado</div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsPatientDropdownOpen(false);
+                                setShowNewPatientModal(true);
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#8B47FF] text-white text-[11.5px] font-bold hover:bg-[#7A3AE6] transition cursor-pointer"
+                            >
+                              <UserPlus size={12} />
+                              Cadastrar "{patientSearch || "Novo Paciente"}"
+                            </button>
+                          </div>
+                        ) : (
+                          filteredPatients.map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => {
+                                setForm((f) => ({ ...f, patient_id: p.id }));
+                                setIsPatientDropdownOpen(false);
+                                setPatientSearch("");
+                              }}
+                              className="w-full p-2 rounded-xl text-left hover:bg-purple-50/70 transition flex items-center justify-between group cursor-pointer"
+                            >
+                              <div className="min-w-0">
+                                <div className="text-[13px] font-semibold text-slate-800 group-hover:text-[#8B47FF] truncate">
+                                  {p.name}
+                                </div>
+                                <div className="text-[11px] text-slate-400 flex items-center gap-2">
+                                  {p.cpf && <span>CPF: {p.cpf}</span>}
+                                  {p.phone && <span>Tel: {p.phone}</span>}
+                                </div>
+                              </div>
+                              {form.patient_id === p.id && (
+                                <Check size={14} className="text-[#8B47FF] shrink-0" />
+                              )}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <Field label="Médico responsável">
+              <select
+                className={inputCls}
+                value={form.doctor_id}
+                onChange={(e) => setForm({ ...form, doctor_id: e.target.value })}
+              >
+                <option value="">— Selecione o profissional —</option>
+                {doctors.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <Field label="Título do Acompanhamento *" className="md:col-span-2">
+              <input
+                className={inputCls}
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+                placeholder="Ex.: Emagrecimento Metabólico 90 dias / Reabilitação / Pós-Operatório"
+              />
+            </Field>
           <Field label="Objetivo Clínico" className="md:col-span-2">
             <textarea
               rows={2}
