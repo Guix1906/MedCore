@@ -86,12 +86,14 @@ export const Route = createFileRoute("/_authenticated/agenda")({
     taskId: (search.taskId as string) || undefined,
     deadlineId: (search.deadlineId as string) || undefined,
     eventId: (search.eventId as string) || undefined,
+    novo: (search.novo as string | boolean) || undefined,
+    action: (search.action as string) || undefined,
   }),
   component: AgendaPage,
 });
 
 function AgendaPage() {
-  const { taskId, deadlineId, eventId } = Route.useSearch();
+  const { taskId, deadlineId, eventId, novo, action } = Route.useSearch();
   const { user } = useAuth();
   const { companyId } = useActiveCompany();
   const { members, byId } = useCompanyMembers(companyId);
