@@ -53,6 +53,47 @@ export function deleteStoredLocalEvent(id: string): void {
   }
 }
 
+export function updateStoredLocalEventTimes(
+  id: string,
+  starts_at: string,
+  ends_at?: string | null,
+): void {
+  if (typeof window === "undefined" || !id) return;
+  try {
+    const cleanId = id.startsWith("event:") ? id.replace("event:", "") : id;
+    const current: StoredLocalEvent[] = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    const exists = current.some((e) => e.id === cleanId || e.id === id);
+    let next: StoredLocalEvent[];
+    if (exists) {
+      next = current.map((e) => {
+        if (e.id === cleanId || e.id === id) {
+          return { ...e, starts_at, ends_at: ends_at ?? e.ends_at };
+        }
+        return e;
+      });
+    } else {
+      next = [
+        {
+          id: cleanId,
+          title: "Agendamento",
+          starts_at,
+          ends_at: ends_at || null,
+          event_type: "meeting",
+          description: null,
+          location: null,
+          assigned_to: null,
+          case_id: null,
+        },
+        ...current,
+      ];
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    window.dispatchEvent(new CustomEvent("medcore_events_updated", { detail: next }));
+  } catch (e) {
+    console.error("Erro ao atualizar horário do evento localmente:", e);
+  }
+}
+
 export function mergeWithLocalEvents(remoteEvents: RawEvent[], companyId?: string | null): RawEvent[] {
   const local = getStoredLocalEvents(companyId);
   if (!local.length) return remoteEvents;
