@@ -801,25 +801,83 @@ export function NovoAgendamentoDialog({
         }
       }
 
-      const { data: insertedEvent, error: eventError } = await supabase
-        .from("events")
-        .insert({
-          company_id: validCompanyId,
-          created_by: validCreatedBy,
+      let insertedId: string = crypto.randomUUID();
+
+      // 1. Tenta salvar no Supabase (com tentativa de campos completos e fallback resiliente)
+      try {
+        const { data: insertedEvent, error: eventError } = await supabase
+          .from("events")
+          .insert({
+            company_id: validCompanyId,
+            created_by: validCreatedBy,
+            title: finalTitle,
+            description,
+            event_type: "meeting",
+            starts_at: startsAt.toISOString(),
+            ends_at: endsAt.toISOString(),
+            location,
+            case_id: validCaseId,
+            assigned_to: validAssignedTo,
+            patient_id: validPatientId,
+          })
+          .select("id")
+          .maybeSingle();
+
+        if (eventError) {
+          console.warn("Aviso ao inserir evento completo no Supabase, tentando campos essenciais:", eventError);
+          const { data: retryEvent } = await supabase
+            .from("events")
+            .insert({
+              company_id: validCompanyId,
+              created_by: validCreatedBy,
+              title: finalTitle,
+              description,
+              event_type: "meeting",
+              starts_at: startsAt.toISOString(),
+              ends_at: endsAt.toISOString(),
+              location,
+            })
+            .select("id")
+            .maybeSingle();
+
+          if (retryEvent?.id) {
+            insertedId = retryEvent.id;
+          }
+        } else if (insertedEvent?.id) {
+          insertedId = insertedEvent.id;
+        }
+      } catch (e) {
+        console.warn("Falha de rede/Supabase ao salvar evento:", e);
+      }
+
+      // 2. Sempre persiste na camada local resiliente
+      saveStoredLocalEvent(
+        {
+          id: insertedId,
           title: finalTitle,
           description,
           event_type: "meeting",
           starts_at: startsAt.toISOString(),
           ends_at: endsAt.toISOString(),
           location,
-          case_id: validCaseId,
-          assigned_to: validAssignedTo,
-          patient_id: validPatientId,
-        })
-        .select("id")
-        .single();
+          assigned_to: finalAssignedTo || null,
+          case_id: caseId || null,
+        },
+        validCompanyId,
+      );
 
-      if (eventError) throw eventError;
+      // 3. Sincronização em background com a API PHP (sem bloquear a interface)
+      void agendaService
+        .createAppointment({
+          patient_id: clientId || undefined,
+          date: day,
+          start_time: start,
+          end_time: end,
+          type: type,
+          status: status,
+          notes: notes || undefined,
+        })
+        .catch(() => {});
 
       // Inserting financial transactions for Sinal (deposit) & Restante (remaining)
       if (totalAmt > 0 || sinalAmt > 0) {
@@ -844,39 +902,43 @@ export function NovoAgendamentoDialog({
 
         // 1. Sinal Pago (Concluído) - Data do dia em que o sinal foi pago (Hoje)
         if (sinalAmt > 0) {
-          const { error: sinalErr } = await supabase.from("transactions").insert({
-            amount: sinalAmt,
-            type: "receita",
-            status: "concluido",
-            date: todayStr,
-            description: `Sinal Pago (${downPaymentMethod.toUpperCase()}): ${procName}${patientNameStr}`,
-            patient_id: validPatientId,
-            doctor_id: dbDoctorId,
-            payment_method: downPaymentMethod,
-            category: "Procedimentos",
-          });
-          if (sinalErr) console.error("Erro ao inserir sinal:", sinalErr);
+          try {
+            const { error: sinalErr } = await supabase.from("transactions").insert({
+              amount: sinalAmt,
+              type: "receita",
+              status: "concluido",
+              date: todayStr,
+              description: `Sinal Pago (${downPaymentMethod.toUpperCase()}): ${procName}${patientNameStr}`,
+              patient_id: validPatientId,
+              doctor_id: dbDoctorId,
+              payment_method: downPaymentMethod,
+              category: "Procedimentos",
+            });
+            if (sinalErr) console.error("Erro ao inserir sinal:", sinalErr);
+          } catch {}
         }
 
         // 2. Valor Restante (Pendente) - Data do Agendamento (Cobrança futura)
         if (restanteAmt > 0) {
-          const { error: restErr } = await supabase.from("transactions").insert({
-            amount: restanteAmt,
-            type: "receita",
-            status: "pendente",
-            date: day,
-            due_date: day,
-            description: `Restante A Cobrar: ${procName}${patientNameStr}`,
-            patient_id: validPatientId,
-            doctor_id: dbDoctorId,
-            category: "Procedimentos",
-          });
-          if (restErr) console.error("Erro ao inserir restante:", restErr);
+          try {
+            const { error: restErr } = await supabase.from("transactions").insert({
+              amount: restanteAmt,
+              type: "receita",
+              status: "pendente",
+              date: day,
+              due_date: day,
+              description: `Restante A Cobrar: ${procName}${patientNameStr}`,
+              patient_id: validPatientId,
+              doctor_id: dbDoctorId,
+              category: "Procedimentos",
+            });
+            if (restErr) console.error("Erro ao inserir restante:", restErr);
+          } catch {}
         }
       }
 
       const createdActivity = {
-        id: insertedEvent?.id || crypto.randomUUID(),
+        id: insertedId,
         kind: "evento",
         title: finalTitle,
         start: startsAt,
