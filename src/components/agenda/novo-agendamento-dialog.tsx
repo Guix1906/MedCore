@@ -2442,6 +2442,9 @@ export function NovoAgendamentoDialog({
               cpf: newPatient.cpf || null,
               phone: newPatient.phone || null,
             };
+            setSelectedClientObj(item);
+            setClientId(newPatient.id);
+            setIsNewPatient(true);
             qc.setQueryData(["patients-picker"], (old: any = []) => {
               const exists = old.some((p: any) => p.id === newPatient.id);
               return exists ? old.map((p: any) => (p.id === newPatient.id ? item : p)) : [item, ...old];
@@ -2450,8 +2453,6 @@ export function NovoAgendamentoDialog({
             qc.invalidateQueries({ queryKey: ["patients-list"] });
             qc.invalidateQueries({ queryKey: ["patients-mini"] });
             qc.invalidateQueries({ queryKey: ["patients"] });
-            setClientId(newPatient.id);
-            setIsNewPatient(true);
           }
         }}
       />
