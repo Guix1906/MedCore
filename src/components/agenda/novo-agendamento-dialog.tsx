@@ -729,39 +729,83 @@ export function NovoAgendamentoDialog({
         ? (selectedProfs[0] || user.id)
         : (assignedTo || null);
 
-      // Prevenção de choques de horários entre secretárias
-      if (companyId && finalAssignedTo) {
-        const { data: existingEvents } = await supabase
-          .from("events")
-          .select("id, title, starts_at, ends_at")
-          .eq("company_id", companyId)
-          .eq("assigned_to", finalAssignedTo)
-          .gte("ends_at", startsAt.toISOString())
-          .lte("starts_at", endsAt.toISOString());
+      // Safe UUID extraction for Supabase PostgreSQL
+      const { data: authData } = await supabase.auth.getUser();
+      const supabaseAuthId = authData?.user?.id;
 
-        if (existingEvents && existingEvents.length > 0) {
-          const confirmConflict = window.confirm(
-            `ALERTA DE CONFLITO DE AGENDA:\nJá existe um agendamento ("${existingEvents[0].title}") para este profissional neste mesmo horário.\n\nDeseja realizar a marcação assim mesmo?`
-          );
-          if (!confirmConflict) {
-            throw new Error("Agendamento cancelado devido a choque de horário");
+      // 1. created_by: must be a valid UUID
+      let validCreatedBy: string;
+      if (supabaseAuthId && isUuid(supabaseAuthId)) {
+        validCreatedBy = supabaseAuthId;
+      } else if (user?.id && isUuid(user.id)) {
+        validCreatedBy = user.id;
+      } else {
+        validCreatedBy = ensureValidUuid(user?.id);
+      }
+
+      // 2. company_id: must be a valid UUID
+      let validCompanyId: string = companyId;
+      if (!isUuid(companyId)) {
+        const { data: cData } = await supabase.from("companies").select("id").limit(1).maybeSingle();
+        validCompanyId = cData?.id || ensureValidUuid(companyId);
+      }
+
+      // 3. assigned_to: must be a valid UUID or null
+      let validAssignedTo: string | null = null;
+      if (finalAssignedTo) {
+        if (isUuid(finalAssignedTo)) {
+          validAssignedTo = finalAssignedTo;
+        } else if (finalAssignedTo === user?.id) {
+          validAssignedTo = validCreatedBy;
+        } else {
+          validAssignedTo = toValidUuid(finalAssignedTo);
+        }
+      }
+
+      // 4. case_id: must be a valid UUID or null
+      const validCaseId = caseId && isUuid(caseId) ? caseId : toValidUuid(caseId);
+
+      // 5. patient_id: must be a valid UUID or null
+      const validPatientId = clientId && isUuid(clientId) ? clientId : toValidUuid(clientId);
+
+      // Prevenção de choques de horários entre secretárias
+      if (validCompanyId && validAssignedTo) {
+        try {
+          const { data: existingEvents } = await supabase
+            .from("events")
+            .select("id, title, starts_at, ends_at")
+            .eq("company_id", validCompanyId)
+            .eq("assigned_to", validAssignedTo)
+            .gte("ends_at", startsAt.toISOString())
+            .lte("starts_at", endsAt.toISOString());
+
+          if (existingEvents && existingEvents.length > 0) {
+            const confirmConflict = window.confirm(
+              `ALERTA DE CONFLITO DE AGENDA:\nJá existe um agendamento ("${existingEvents[0].title}") para este profissional neste mesmo horário.\n\nDeseja realizar a marcação assim mesmo?`
+            );
+            if (!confirmConflict) {
+              throw new Error("Agendamento cancelado devido a choque de horário");
+            }
           }
+        } catch (e: any) {
+          if (e?.message?.includes("cancelado")) throw e;
         }
       }
 
       const { data: insertedEvent, error: eventError } = await supabase
         .from("events")
         .insert({
-          company_id: companyId,
-          created_by: user.id,
+          company_id: validCompanyId,
+          created_by: validCreatedBy,
           title: finalTitle,
           description,
           event_type: "meeting",
           starts_at: startsAt.toISOString(),
           ends_at: endsAt.toISOString(),
           location,
-          case_id: caseId || null,
-          assigned_to: finalAssignedTo,
+          case_id: validCaseId,
+          assigned_to: validAssignedTo,
+          patient_id: validPatientId,
         })
         .select("id")
         .single();
@@ -776,15 +820,17 @@ export function NovoAgendamentoDialog({
         const procName = proc ? `Procedimento: ${proc.name}` : "Consulta / Atendimento";
         
         let dbDoctorId: string | null = null;
-        if (finalAssignedTo) {
-          const { data: docData } = await supabase
-            .from("doctors")
-            .select("id")
-            .eq("auth_id", finalAssignedTo)
-            .maybeSingle();
-          if (docData) {
-            dbDoctorId = docData.id;
-          }
+        if (validAssignedTo) {
+          try {
+            const { data: docData } = await supabase
+              .from("doctors")
+              .select("id")
+              .eq("auth_id", validAssignedTo)
+              .maybeSingle();
+            if (docData && isUuid(docData.id)) {
+              dbDoctorId = docData.id;
+            }
+          } catch {}
         }
 
         // 1. Sinal Pago (Concluído) - Data do dia em que o sinal foi pago (Hoje)
@@ -795,7 +841,7 @@ export function NovoAgendamentoDialog({
             status: "concluido",
             date: todayStr,
             description: `Sinal Pago (${downPaymentMethod.toUpperCase()}): ${procName}${patientNameStr}`,
-            patient_id: clientId || null,
+            patient_id: validPatientId,
             doctor_id: dbDoctorId,
             payment_method: downPaymentMethod,
             category: "Procedimentos",
@@ -812,7 +858,7 @@ export function NovoAgendamentoDialog({
             date: day,
             due_date: day,
             description: `Restante A Cobrar: ${procName}${patientNameStr}`,
-            patient_id: clientId || null,
+            patient_id: validPatientId,
             doctor_id: dbDoctorId,
             category: "Procedimentos",
           });
