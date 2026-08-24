@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from "react";
 import { createPortal } from "react-dom";
-import { ChevronLeft, ChevronRight, Search, MapPin, Filter, UserCheck, ChevronDown } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, MapPin, Filter, UserCheck, ChevronDown, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
