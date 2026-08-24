@@ -273,16 +273,24 @@ export function AddTaskModal({
       if (!f.title.trim()) throw new Error("Descrição é obrigatória");
       if (!f.due_date) throw new Error("Data é obrigatória");
       if (!f.assigned_to) throw new Error("Responsável é obrigatório");
+
+      const { data: authData } = await supabase.auth.getUser();
+      const supabaseAuthId = authData?.user?.id;
+      const validCreatedBy = supabaseAuthId && isUuid(supabaseAuthId) ? supabaseAuthId : ensureValidUuid(ctx.userId);
+      const validCompanyId = isUuid(ctx.companyId) ? ctx.companyId : ensureValidUuid(ctx.companyId);
+      const validAssignedTo = isUuid(f.assigned_to) ? f.assigned_to : ensureValidUuid(f.assigned_to);
+      const validCaseId = f.case_id && isUuid(f.case_id) ? f.case_id : toValidUuid(f.case_id);
+
       const { error } = await supabase.from("tasks").insert({
-        company_id: ctx.companyId,
-        created_by: ctx.userId,
+        company_id: validCompanyId,
+        created_by: validCreatedBy,
         title: f.title.trim(),
         description: f.description || null,
         priority: "medium",
         status: "todo",
         due_date: new Date(f.due_date).toISOString(),
-        assigned_to: f.assigned_to,
-        case_id: f.case_id || null,
+        assigned_to: validAssignedTo,
+        case_id: validCaseId,
       });
       if (error) throw error;
     },
@@ -374,9 +382,17 @@ export function AddEventModal({
       const start = new Date(f.starts_at);
       const end = f.ends_at ? new Date(f.ends_at) : null;
       if (f.all_day) start.setHours(0, 0, 0, 0);
+
+      const { data: authData } = await supabase.auth.getUser();
+      const supabaseAuthId = authData?.user?.id;
+      const validCreatedBy = supabaseAuthId && isUuid(supabaseAuthId) ? supabaseAuthId : ensureValidUuid(ctx.userId);
+      const validCompanyId = isUuid(ctx.companyId) ? ctx.companyId : ensureValidUuid(ctx.companyId);
+      const validAssignedTo = f.assigned_to && isUuid(f.assigned_to) ? f.assigned_to : toValidUuid(f.assigned_to);
+      const validCaseId = f.case_id && isUuid(f.case_id) ? f.case_id : toValidUuid(f.case_id);
+
       const { error } = await supabase.from("events").insert({
-        company_id: ctx.companyId,
-        created_by: ctx.userId,
+        company_id: validCompanyId,
+        created_by: validCreatedBy,
         title: f.title.trim(),
         description: f.description || null,
         event_type: "meeting",
@@ -385,8 +401,8 @@ export function AddEventModal({
         location: f.location
           ? `${f.location}${f.location_kind !== "presencial" ? ` (${f.location_kind})` : ""}`
           : null,
-        case_id: f.case_id || null,
-        assigned_to: f.assigned_to || null,
+        case_id: validCaseId,
+        assigned_to: validAssignedTo,
       });
       if (error) throw error;
     },
