@@ -480,32 +480,102 @@ export function NovoAgendamentoDialog({
     },
   });
 
-  // Query patient consultation history when clientId changes (Optimized)
+  // Query patient consultation history when clientId changes (Optimized & Multi-layer)
   const { data: patientHistory = [], isFetching: isHistoryLoading } = useQuery({
-    queryKey: ["patient-consultation-history", clientId],
-    enabled: open && !!clientId && !!companyId,
-    staleTime: 10 * 60_000,
-    gcTime: 30 * 60_000,
+    queryKey: ["patient-consultation-history", clientId, selectedClient?.name],
+    enabled: open && !!clientId,
+    staleTime: 2 * 60_000,
+    gcTime: 10 * 60_000,
     placeholderData: (prev) => prev,
-    refetchOnMount: false,
+    refetchOnMount: true,
     refetchOnWindowFocus: false,
     queryFn: async () => {
       if (!clientId) return [];
-      const { data } = await supabase
-        .from("events")
-        .select("id, title, starts_at, description")
-        .eq("company_id", companyId!)
-        .order("starts_at", { ascending: false })
-        .limit(20);
+      const historyMap = new Map<string, { id: string; date: Date; title: string }>();
 
-      const targetTag = `"clientId":"${clientId}"`;
-      const filtered = (data ?? []).filter((e) => e.description && e.description.includes(targetTag));
+      // 1. Consulta agendamentos na tabela 'appointments' do Supabase
+      if (isUuid(clientId)) {
+        try {
+          const { data: apptData } = await supabase
+            .from("appointments")
+            .select("id, date, start_time, type, notes")
+            .eq("patient_id", clientId)
+            .order("date", { ascending: false })
+            .limit(50);
+          (apptData ?? []).forEach((a: any) => {
+            const dateObj = new Date(`${a.date}T${a.start_time || "00:00"}:00`);
+            historyMap.set(a.id, {
+              id: a.id,
+              date: isNaN(dateObj.getTime()) ? new Date(a.date) : dateObj,
+              title: a.type || "Consulta",
+            });
+          });
+        } catch {}
+      }
 
-      return filtered.map((e) => ({
-        id: e.id,
-        date: new Date(e.starts_at),
-        title: e.title,
-      }));
+      // 2. Consulta eventos na tabela 'events' do Supabase filtrando pelo paciente
+      try {
+        let query = supabase.from("events").select("id, title, starts_at, description, patient_id");
+        if (isUuid(clientId)) {
+          query = query.or(`patient_id.eq.${clientId},description.ilike.%"clientId":"${clientId}"%`);
+        } else {
+          query = query.ilike("description", `%"clientId":"${clientId}"%`);
+        }
+        const { data: eventData } = await query.order("starts_at", { ascending: false }).limit(50);
+        (eventData ?? []).forEach((e: any) => {
+          if (!historyMap.has(e.id)) {
+            historyMap.set(e.id, {
+              id: e.id,
+              date: new Date(e.starts_at),
+              title: e.title || "Agendamento",
+            });
+          }
+        });
+      } catch {}
+
+      // 3. Consulta agendamentos na API PHP
+      try {
+        const phpAppts = await agendaService.getAppointments({
+          patient_id: clientId,
+          limit: 50,
+        });
+        if (phpAppts && Array.isArray(phpAppts)) {
+          phpAppts.forEach((a: any) => {
+            if (!historyMap.has(a.id)) {
+              const dateObj = new Date(`${a.date}T${a.start_time || "00:00"}:00`);
+              historyMap.set(a.id, {
+                id: a.id,
+                date: isNaN(dateObj.getTime()) ? new Date(a.date || a.created_at) : dateObj,
+                title: a.type || a.title || "Consulta",
+              });
+            }
+          });
+        }
+      } catch {}
+
+      // 4. Consulta eventos locais armazenados (localStorage)
+      try {
+        const localEvents = getStoredLocalEvents(companyId);
+        localEvents.forEach((e: any) => {
+          const isMatch =
+            e.patient_id === clientId ||
+            e.case_id === clientId ||
+            (e.description && e.description.includes(clientId)) ||
+            (selectedClient?.name && e.title && e.title.toLowerCase().includes(selectedClient.name.toLowerCase()));
+
+          if (isMatch && !historyMap.has(e.id)) {
+            historyMap.set(e.id, {
+              id: e.id,
+              date: new Date(e.starts_at),
+              title: e.title || "Agendamento Local",
+            });
+          }
+        });
+      } catch {}
+
+      const list = Array.from(historyMap.values());
+      list.sort((a, b) => b.date.getTime() - a.date.getTime());
+      return list;
     },
   });
 
