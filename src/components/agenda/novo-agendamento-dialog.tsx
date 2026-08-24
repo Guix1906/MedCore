@@ -645,6 +645,8 @@ export function NovoAgendamentoDialog({
             }
           });
         }
+      } catch {}
+
       // 3. Mescla com médicos locais (garante que médico recém-criado nunca suma)
       try {
         const localDocs = getStoredLocalDoctors();
