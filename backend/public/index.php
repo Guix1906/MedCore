@@ -28,6 +28,7 @@ use App\Controllers\InventoryController;
 use App\Controllers\NotificationController;
 use App\Controllers\SearchController;
 use App\Controllers\CompanyController;
+use App\Controllers\AiController;
 
 // Registrar namespaces
 Autoloader::register();
@@ -146,6 +147,9 @@ $router->get('/api/clinic-settings', [CompanyController::class, 'settings'], $au
 $router->put('/api/clinic-settings', [CompanyController::class, 'updateSettings'], $auth);
 $router->get('/api/service-types', [CompanyController::class, 'serviceTypes'], $auth);
 $router->get('/api/cases', [CompanyController::class, 'cases'], $auth);
+
+// IA / Copiloto de Prontuário (Proxy Seguro Server-Side)
+$router->post('/api/ai/process-consultation', [AiController::class, 'processConsultation'], $auth);
 
 // Executar requisição
 $request = new Request();

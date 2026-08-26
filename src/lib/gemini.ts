@@ -12,8 +12,7 @@
  * REGRA ABSOLUTA: Fidelidade factual estrita, nunca inventa informações que não foram ditas.
  */
 
-const DEFAULT_GEMINI_API_KEY =
-  (import.meta.env?.VITE_GEMINI_API_KEY as string) || "";
+import { apiClient } from "@/services/api/api-client";
 
 export const PRONTUARIO_CONDITIONS_LIST = [
   "Hipertensão",
@@ -53,134 +52,52 @@ export interface GenerateConsultationOptions {
 }
 
 /**
- * Organiza a transcrição da consulta médica distribuindo exatamente nos campos do prontuário.
+ * Organiza a transcrição da consulta médica distribuindo exatamente nos campos do prontuário via Proxy Seguro do Backend.
  */
 export async function generateConsultationRecord({
   rawTranscript,
   patientName = "Paciente",
 }: GenerateConsultationOptions): Promise<StructuredConsultationResult> {
-  const apiKey = (DEFAULT_GEMINI_API_KEY || "").trim();
   const cleanedInput = rawTranscript.trim();
 
   if (!cleanedInput) {
     return buildEmptyConsultationResult();
   }
 
-  const systemInstruction = `Você é um copiloto de documentação médica clínica.
-Sua função é transformar a transcrição bruta da consulta em anotações clínicas formais distribuídas EXATAMENTE nos campos oficiais do prontuário eletrônico em Português do Brasil (pt-BR).
+  try {
+    const data = await apiClient.post<any>("/ai/process-consultation", {
+      rawTranscript: cleanedInput,
+      patientName,
+    });
 
-CAMPOS OFICIAIS DO PRONTUÁRIO:
-1. "queixaPrincipal": Motivo relatado da consulta, sintomas, início e evolução da queixa atual.
-2. "historicoFamiliar": Antecedentes mórbidos familiares (pais, avós, irmãos e parentes de 1º/2º grau).
-3. "tratamentosAnteriores": Cirurgias, procedimentos, tratamentos prévios realizados ou condutas anteriores discutidas.
-4. "alergias": Alergias medicamentosas, alimentares ou ambientais relatadas.
-5. "historicoPessoal": Histórico clínico individual do paciente, doenças crônicas ou patologias prévias relatadas.
-6. "condicoesDetectadas": Array contendo APENAS as condições mencionadas dentre esta lista exata: ["Hipertensão", "Diabetes", "Doenças cardíacas", "Asma ou problemas respiratórios", "Problemas de tireoide", "Câncer", "Outras condições crônicas"]. Se nenhuma foi mencionada, retorne [].
-7. "medicacoesEmUso": Fármacos, dosagens e posologias que o paciente toma atualmente.
-8. "condutaPlano": Orientações, condutas, prescrições, receitas e exames solicitados pelo médico durante o atendimento.
-
-REGRAS INEGOCIÁVEIS:
-1. FIDELIDADE FACTUAL ABSOLUTA: Utilize EXCLUSIVAMENTE informações que foram verbalizadas na conversa.
-2. NUNCA INVENTE NEM DEDUZA: Jamais adicione sintomas negativos não citados ("nega febre", "nega falta de ar"), hipóteses não ditas ou medicações fictícias.
-3. CAMPO NÃO MENCIONADO: Se determinado tópico não foi abordado na consulta, retorne o campo vazio ("") ou "Não informado na consulta.".
-4. IDENTIFICAÇÃO DE DÚVIDA: Se algum termo, dosagem ou palavra estiver com áudio duvidoso, marque com "(Revisar informação)".
-
-Responda APENAS o objeto JSON puro:
-{
-  "queixaPrincipal": "...",
-  "historicoFamiliar": "...",
-  "tratamentosAnteriores": "...",
-  "alergias": "...",
-  "historicoPessoal": "...",
-  "condicoesDetectadas": ["Hipertensão"],
-  "medicacoesEmUso": "...",
-  "condutaPlano": "..."
-}`;
-
-  const userPrompt = `Identificação do Paciente: ${patientName}
-
-Transcrição da Consulta Médica:
-"""
-${cleanedInput}
-"""
-
-Extraia e organize os dados nos campos do prontuário:`;
-
-  const models = [
-    "gemini-3.6-flash",
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash-latest",
-    "gemini-1.5-flash",
-  ];
-
-  for (const model of models) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
-
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          signal: controller.signal,
-          body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts: [{ text: `${systemInstruction}\n\n${userPrompt}` }],
-              },
-            ],
-            generationConfig: {
-              temperature: 0.1,
-              topP: 0.8,
-              maxOutputTokens: 2000,
-              responseMimeType: "application/json",
-            },
-          }),
-        }
-      );
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorDetails = await response.text();
-        console.warn(`Tentativa com ${model} retornou ${response.status}:`, errorDetails);
-        continue;
+    if (data && typeof data === "object") {
+      const parsed = parseConsultationObj(data);
+      if (parsed) {
+        return parsed;
       }
-
-      const data = await response.json();
-      const candidate = data?.candidates?.[0];
-      const textOutput = candidate?.content?.parts?.[0]?.text;
-
-      if (textOutput && typeof textOutput === "string") {
-        const parsed = parseConsultationJson(textOutput);
-        if (parsed) {
-          return parsed;
-        }
-      }
-    } catch (err) {
-      console.warn(`Falha na requisição para modelo ${model}:`, err);
     }
+  } catch (err) {
+    console.warn("Falha no serviço de IA server-side, utilizando sintetizador de segurança local:", err);
   }
 
   // Fallback factual
   return fallbackConsultationSynthesis(cleanedInput);
 }
 
-function parseConsultationJson(rawText: string): StructuredConsultationResult | null {
+function parseConsultationObj(rawInput: any): StructuredConsultationResult | null {
   try {
-    let cleanJson = rawText.trim();
-    if (cleanJson.startsWith("```json")) {
-      cleanJson = cleanJson.replace(/^```json/, "").replace(/```$/, "").trim();
-    } else if (cleanJson.startsWith("```")) {
-      cleanJson = cleanJson.replace(/^```/, "").replace(/```$/, "").trim();
+    let obj = rawInput;
+    if (typeof rawInput === "string") {
+      let cleanJson = rawInput.trim();
+      if (cleanJson.startsWith("```json")) {
+        cleanJson = cleanJson.replace(/^```json/, "").replace(/```$/, "").trim();
+      } else if (cleanJson.startsWith("```")) {
+        cleanJson = cleanJson.replace(/^```/, "").replace(/```$/, "").trim();
+      }
+      obj = JSON.parse(cleanJson);
     }
 
-    const obj = JSON.parse(cleanJson);
+    if (!obj || typeof obj !== "object") return null;
 
     const queixaPrincipal = sanitizeClinicalField(obj.queixaPrincipal);
     const historicoFamiliar = sanitizeClinicalField(obj.historicoFamiliar);
