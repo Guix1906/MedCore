@@ -1,35 +1,41 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { getStoredToken, getStoredUser } from "@/services/api";
+import { getStoredToken, removeStoredToken, authService } from "@/services/api";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
-    // 1. Fast path ultra-rápido: Token do backend PHP em memória/localStorage (0ms de latência)
+    // 1. Validação do Token do backend PHP contra o servidor
     const token = getStoredToken();
-    const phpUser = getStoredUser();
-
-    if (token && phpUser) {
-      return { user: phpUser };
+    if (token) {
+      try {
+        const me = await authService.getMe();
+        if (me && me.user) {
+          return { user: me.user };
+        }
+      } catch (err) {
+        console.warn("Sessão JWT inválida ou expirada:", err);
+        removeStoredToken();
+      }
     }
 
-    // 2. Fallback Supabase
+    // 2. Validação de sessão do Supabase
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      let user = sessionData.session?.user;
-
-      if (!user) {
-        const { data, error } = await supabase.auth.getUser();
-        if (error || !data.user) throw redirect({ to: "/auth" });
-        user = data.user;
+      const { data, error } = await supabase.auth.getUser();
+      if (!error && data?.user) {
+        return { user: data.user };
       }
-
-      return { user };
     } catch (e: any) {
       if (e?.isRedirect) throw e;
-      if (!token) throw redirect({ to: "/auth" });
-      return { user: { id: "usr_guest", email: "user@medcore.com" } };
     }
+
+    // 3. Bloqueio absoluto sem bypass: redirecionar para login
+    throw redirect({
+      to: "/auth",
+      search: {
+        redirect: window.location.pathname,
+      },
+    });
   },
   component: () => <Outlet />,
 });
