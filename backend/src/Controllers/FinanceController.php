@@ -15,7 +15,7 @@ class FinanceController extends BaseController
         $status = $request->query('status');
         $startDate = $request->query('start_date');
         $endDate = $request->query('end_date');
-        $limit = max(1, min(1000, (int) $request->query('limit', 1000)));
+        $limit = $this->sanitizeLimit($request->query('limit'), 50, 1, 100);
 
         $sql = "
             SELECT t.*, 
@@ -46,8 +46,7 @@ class FinanceController extends BaseController
             $params['end_date'] = $endDate;
         }
 
-        $sql .= " ORDER BY t.date DESC, t.created_at DESC LIMIT :limit";
-        $params['limit'] = $limit;
+        $sql .= " ORDER BY t.date DESC, t.created_at DESC LIMIT {$limit}";
 
         $transactions = Database::fetchAll($sql, $params);
 

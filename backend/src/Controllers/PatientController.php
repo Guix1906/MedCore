@@ -13,7 +13,7 @@ class PatientController extends BaseController
         $companyId = $this->getTenantCompanyId($request);
         $q = trim((string) $request->query('q', ''));
         $active = $request->query('active');
-        $limit = max(1, min(500, (int) $request->query('limit', 500)));
+        $limit = $this->sanitizeLimit($request->query('limit'), 50, 1, 100);
 
         $sql = "SELECT id, name, email, phone, cpf, birth_date, gender, insurance, insurance_number, address, city, state, zip_code, emergency_contact_name, emergency_contact_phone, notes, active, created_at, updated_at FROM patients WHERE company_id = :company_id";
         $params = ['company_id' => $companyId];
@@ -32,8 +32,7 @@ class PatientController extends BaseController
             $params['active'] = $active ? 1 : 0;
         }
 
-        $sql .= " ORDER BY name ASC LIMIT :limit";
-        $params['limit'] = $limit;
+        $sql .= " ORDER BY name ASC LIMIT {$limit}";
 
         $patients = Database::fetchAll($sql, $params);
 
