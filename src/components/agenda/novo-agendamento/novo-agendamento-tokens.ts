@@ -16,6 +16,6 @@ export const COLOR_OPTIONS = [
   { label: "Esmeralda", value: "#10b981", className: "bg-[#10b981]" },
   { label: "Ciano", value: "#06b6d4", className: "bg-[#06b6d4]" },
   { label: "Azul", value: "#3b82f6", className: "bg-[#3b82f6]" },
-  { label: "Âmbar", value: "#f59e0b", className: "bg-[#f59e0b]" },
+  { label: "Ã‚mbar", value: "#f59e0b", className: "bg-[#f59e0b]" },
   { label: "Rosa", value: "#ec4899", className: "bg-[#ec4899]" },
 ];

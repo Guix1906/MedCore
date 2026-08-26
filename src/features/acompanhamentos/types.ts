@@ -1,5 +1,5 @@
 /**
- * Tipos e Interfaces do Módulo de Acompanhamentos e Tratamentos
+ * Tipos e Interfaces do MÃ³dulo de Acompanhamentos e Tratamentos
  */
 
 export type TreatmentStatus = "em_andamento" | "pausado" | "finalizado" | "cancelado";

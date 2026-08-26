@@ -1,5 +1,5 @@
 /**
- * Utilitários e formatadores do Dashboard
+ * UtilitÃ¡rios e formatadores do Dashboard
  */
 
 export const BRL = (v: number) =>

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Vocabul�rio Can�nico do M�dulo Financeiro (MedCore)
+ * Vocabulário Canônico do Módulo Financeiro (MedCore)
  */
 export enum FinancialType {
   RECEITA = "receita",
@@ -18,9 +18,6 @@ export enum FinancialStatus {
 export const FinancialTypeSchema = z.enum(["receita", "despesa"]);
 export const FinancialStatusSchema = z.enum(["pago", "pendente", "vencido", "cancelado"]);
 
-/**
- * Adaptador bidirecional de compatibilidade para tipos legados.
- */
 export function normalizeFinancialType(type: string | null | undefined): FinancialType {
   const t = (type || "").toLowerCase().trim();
   if (t === "income" || t === "receita") return FinancialType.RECEITA;
@@ -28,9 +25,6 @@ export function normalizeFinancialType(type: string | null | undefined): Financi
   return FinancialType.RECEITA;
 }
 
-/**
- * Adaptador bidirecional de compatibilidade para status legados.
- */
 export function normalizeFinancialStatus(status: string | null | undefined): FinancialStatus {
   const s = (status || "").toLowerCase().trim();
   if (s === "completed" || s === "pago" || s === "concluido") return FinancialStatus.PAGO;
