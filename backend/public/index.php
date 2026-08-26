@@ -140,5 +140,9 @@ $router->get('/api/cases', [CompanyController::class, 'cases'], $auth);
 $router->post('/api/ai/process-consultation', [AiController::class, 'processConsultation'], $auth);
 
 // Executar requisição
-$request = new Request();
-$router->dispatch($request);
+try {
+    $request = new Request();
+    $router->dispatch($request);
+} catch (\Throwable $e) {
+    Response::serverError($e);
+}

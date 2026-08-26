@@ -49,4 +49,33 @@ class Response
     {
         self::error($message, 403);
     }
+
+    public static function serverError(\Throwable|string $error = 'Ocorreu um erro interno', int $statusCode = 500): void
+    {
+        $errorId = 'err_' . substr(bin2hex(random_bytes(8)), 0, 16);
+        $message = is_string($error) ? $error : $error->getMessage();
+        $file = $error instanceof \Throwable ? $error->getFile() : '';
+        $line = $error instanceof \Throwable ? $error->getLine() : 0;
+        $trace = $error instanceof \Throwable ? $error->getTraceAsString() : '';
+
+        error_log(sprintf('[SERVER_ERROR ID=%s] %s in %s:%d' . PHP_EOL . 'Trace:' . PHP_EOL . '%s', $errorId, $message, $file, $line, $trace));
+
+        $isDebug = (Config::get('APP_DEBUG') === 'true' || Config::get('APP_DEBUG') === '1') && Config::get('APP_ENV') !== 'production';
+
+        if ($isDebug) {
+            self::json([
+                'success' => false,
+                'error' => $message,
+                'error_id' => $errorId,
+                'file' => $file,
+                'line' => $line,
+            ], $statusCode);
+        } else {
+            self::json([
+                'success' => false,
+                'error' => 'Ocorreu um erro interno no servidor. Por favor, contate o suporte com o código do erro.',
+                'error_id' => $errorId,
+            ], $statusCode);
+        }
+    }
 }

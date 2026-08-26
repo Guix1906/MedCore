@@ -58,12 +58,7 @@ class Database
                     throw new PDOException("Driver de banco de dados não suportado: {$driver}");
                 }
             } catch (PDOException $e) {
-                http_response_code(500);
-                echo json_encode([
-                    'success' => false,
-                    'error' => 'Falha na conexão com o banco de dados: ' . $e->getMessage()
-                ]);
-                exit;
+                Response::serverError($e);
             }
         }
 
