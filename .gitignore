@@ -35,5 +35,13 @@ scratch
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
+# Databases & Storage
+*.sqlite
+*.sqlite*
+*.sqlite3
+*.db
+backend/storage/
+backend/storage/**
+backend/database/*.sqlite*
+backend/public/database/
 
