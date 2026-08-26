@@ -6,11 +6,11 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Core\Database;
 
-class CompanyController
+class CompanyController extends BaseController
 {
     public function members(Request $request): void
     {
-        $companyId = $request->getCompanyId() ?: 'comp_medcore_default';
+        $companyId = $this->getTenantCompanyId($request);
         $members = Database::fetchAll("
             SELECT cm.id, cm.company_id, cm.user_id, cm.role,
                    p.full_name, p.email, p.avatar_url
@@ -24,7 +24,7 @@ class CompanyController
 
     public function settings(Request $request): void
     {
-        $companyId = $request->getCompanyId() ?: 'comp_medcore_default';
+        $companyId = $this->getTenantCompanyId($request);
         $settings = Database::fetchOne("SELECT * FROM clinic_settings WHERE company_id = :cid", ['cid' => $companyId]);
 
         if (!$settings) {
@@ -49,7 +49,7 @@ class CompanyController
 
     public function updateSettings(Request $request): void
     {
-        $companyId = $request->getCompanyId() ?: 'comp_medcore_default';
+        $companyId = $this->getTenantCompanyId($request);
         $fields = ['clinic_name', 'phone', 'email', 'address', 'city', 'state', 'zip_code', 'cnpj', 'logo_url'];
         $updateData = [];
 
@@ -71,18 +71,19 @@ class CompanyController
 
     public function serviceTypes(Request $request): void
     {
-        $types = Database::fetchAll("SELECT * FROM service_types WHERE active = 1 ORDER BY name ASC");
+        $companyId = $this->getTenantCompanyId($request);
+        $types = Database::fetchAll("SELECT * FROM service_types WHERE (company_id = :cid OR company_id IS NULL) AND active = 1 ORDER BY name ASC", ['cid' => $companyId]);
         if (empty($types)) {
             $default = [
-                ['id' => 'srv_1', 'name' => 'Consulta Geral', 'price' => 250.00, 'duration_minutes' => 30],
-                ['id' => 'srv_2', 'name' => 'Primeira Consulta Especialista', 'price' => 350.00, 'duration_minutes' => 45],
-                ['id' => 'srv_3', 'name' => 'Retorno', 'price' => 0.00, 'duration_minutes' => 20],
-                ['id' => 'srv_4', 'name' => 'Exame Clínico Detalhado', 'price' => 180.00, 'duration_minutes' => 30],
+                ['id' => 'srv_1', 'company_id' => $companyId, 'name' => 'Consulta Geral', 'price' => 250.00, 'duration_minutes' => 30],
+                ['id' => 'srv_2', 'company_id' => $companyId, 'name' => 'Primeira Consulta Especialista', 'price' => 350.00, 'duration_minutes' => 45],
+                ['id' => 'srv_3', 'company_id' => $companyId, 'name' => 'Retorno', 'price' => 0.00, 'duration_minutes' => 20],
+                ['id' => 'srv_4', 'company_id' => $companyId, 'name' => 'Exame Clínico Detalhado', 'price' => 180.00, 'duration_minutes' => 30],
             ];
             foreach ($default as $st) {
                 Database::insert('service_types', array_merge($st, ['active' => 1]));
             }
-            $types = Database::fetchAll("SELECT * FROM service_types WHERE active = 1 ORDER BY name ASC");
+            $types = Database::fetchAll("SELECT * FROM service_types WHERE company_id = :cid AND active = 1 ORDER BY name ASC", ['cid' => $companyId]);
         }
 
         foreach ($types as &$st) {
@@ -94,7 +95,8 @@ class CompanyController
 
     public function cases(Request $request): void
     {
-        $cases = Database::fetchAll("SELECT * FROM cases ORDER BY created_at DESC");
+        $companyId = $this->getTenantCompanyId($request);
+        $cases = Database::fetchAll("SELECT * FROM cases WHERE company_id = :cid ORDER BY created_at DESC", ['cid' => $companyId]);
         Response::success($cases);
     }
 }

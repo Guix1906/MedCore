@@ -6,10 +6,11 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Core\Database;
 
-class TreatmentController
+class TreatmentController extends BaseController
 {
     public function index(Request $request): void
     {
+        $companyId = $this->getTenantCompanyId($request);
         $patientId = $request->query('patient_id');
         $status = $request->query('status');
 
@@ -18,11 +19,11 @@ class TreatmentController
                    p.name as patient_name,
                    d.name as doctor_name
             FROM treatments t
-            JOIN patients p ON p.id = t.patient_id
-            LEFT JOIN doctors d ON d.id = t.doctor_id
-            WHERE 1=1
+            JOIN patients p ON p.id = t.patient_id AND (p.company_id = t.company_id OR p.company_id IS NULL)
+            LEFT JOIN doctors d ON d.id = t.doctor_id AND (d.company_id = t.company_id OR d.company_id IS NULL)
+            WHERE t.company_id = :company_id
         ";
-        $params = [];
+        $params = ['company_id' => $companyId];
 
         if (!empty($patientId)) {
             $sql .= " AND t.patient_id = :patient_id";
@@ -48,14 +49,15 @@ class TreatmentController
 
     public function show(Request $request, array $params): void
     {
+        $companyId = $this->getTenantCompanyId($request);
         $id = $params['id'] ?? '';
         $treatment = Database::fetchOne("
             SELECT t.*, p.name as patient_name, d.name as doctor_name
             FROM treatments t
-            JOIN patients p ON p.id = t.patient_id
-            LEFT JOIN doctors d ON d.id = t.doctor_id
-            WHERE t.id = :id
-        ", ['id' => $id]);
+            JOIN patients p ON p.id = t.patient_id AND (p.company_id = t.company_id OR p.company_id IS NULL)
+            LEFT JOIN doctors d ON d.id = t.doctor_id AND (d.company_id = t.company_id OR d.company_id IS NULL)
+            WHERE t.id = :id AND t.company_id = :cid
+        ", ['id' => $id, 'cid' => $companyId]);
 
         if (!$treatment) {
             Response::notFound('Tratamento não encontrado');
@@ -80,6 +82,7 @@ class TreatmentController
 
     public function store(Request $request): void
     {
+        $companyId = $this->getTenantCompanyId($request);
         $patientId = $request->input('patient_id', $request->input('patientId'));
         $title = trim($request->input('title', ''));
         $startDate = $request->input('start_date', $request->input('startDate', date('Y-m-d')));
@@ -88,8 +91,10 @@ class TreatmentController
             Response::error('Paciente e título do tratamento são obrigatórios', 422);
         }
 
+        // Valida que o paciente pertence ao tenant
+        $this->findTenantResource('patients', $patientId, $companyId, 'Paciente');
+
         $id = $request->input('id') ?: 'trt_' . substr(bin2hex(random_bytes(8)), 0, 16);
-        $companyId = $request->getCompanyId();
         $totalValue = (float) $request->input('total_value', $request->input('totalValue', 0));
         $numInstallments = max(1, (int) $request->input('number_of_installments', $request->input('numberOfInstallments', 1)));
 
@@ -131,7 +136,7 @@ class TreatmentController
 
             Database::commit();
 
-            $created = Database::fetchOne("SELECT * FROM treatments WHERE id = :id", ['id' => $id]);
+            $created = $this->findTenantResource('treatments', $id, $companyId, 'Tratamento');
             Response::success($created, 'Tratamento criado com sucesso', 201);
         } catch (\Throwable $e) {
             Database::rollback();
@@ -141,7 +146,10 @@ class TreatmentController
 
     public function update(Request $request, array $params): void
     {
+        $companyId = $this->getTenantCompanyId($request);
         $id = $params['id'] ?? '';
+        $this->findTenantResource('treatments', $id, $companyId, 'Tratamento');
+
         $fields = ['title', 'description', 'start_date', 'end_date', 'status', 'total_value', 'doctor_id'];
         $updateData = [];
 
@@ -154,24 +162,28 @@ class TreatmentController
 
         if (!empty($updateData)) {
             $updateData['updated_at'] = date('Y-m-d H:i:s');
-            Database::update('treatments', $updateData, 'id = :id', ['id' => $id]);
+            Database::update('treatments', $updateData, 'id = :id AND company_id = :cid', ['id' => $id, 'cid' => $companyId]);
         }
 
-        $treatment = Database::fetchOne("SELECT * FROM treatments WHERE id = :id", ['id' => $id]);
+        $treatment = $this->findTenantResource('treatments', $id, $companyId, 'Tratamento');
         Response::success($treatment, 'Tratamento atualizado');
     }
 
     public function destroy(Request $request, array $params): void
     {
+        $companyId = $this->getTenantCompanyId($request);
         $id = $params['id'] ?? '';
-        Database::delete('treatments', 'id = :id', ['id' => $id]);
+        $this->deleteTenantResource('treatments', $id, $companyId, 'Tratamento');
         Response::success(null, 'Tratamento excluído');
     }
 
     // Medicamentos do tratamento
     public function storeMedication(Request $request, array $params): void
     {
+        $companyId = $this->getTenantCompanyId($request);
         $treatmentId = $params['id'] ?? $request->input('treatment_id');
+        $this->findTenantResource('treatments', $treatmentId, $companyId, 'Tratamento');
+
         $name = trim($request->input('name', ''));
         if (empty($name)) {
             Response::error('Nome do medicamento é obrigatório', 422);
@@ -195,7 +207,11 @@ class TreatmentController
 
     public function updateMedication(Request $request, array $params): void
     {
-        $id = $params['medicationId'] ?? $params['id'] ?? '';
+        $companyId = $this->getTenantCompanyId($request);
+        $treatmentId = $params['id'] ?? '';
+        $this->findTenantResource('treatments', $treatmentId, $companyId, 'Tratamento');
+
+        $medicationId = $params['medicationId'] ?? '';
         $fields = ['name', 'dosage', 'frequency', 'duration', 'instructions', 'status'];
         $updateData = [];
 
@@ -208,17 +224,21 @@ class TreatmentController
 
         if (!empty($updateData)) {
             $updateData['updated_at'] = date('Y-m-d H:i:s');
-            Database::update('treatment_medications', $updateData, 'id = :id', ['id' => $id]);
+            Database::update('treatment_medications', $updateData, 'id = :id AND treatment_id = :tid', ['id' => $medicationId, 'tid' => $treatmentId]);
         }
 
-        $med = Database::fetchOne("SELECT * FROM treatment_medications WHERE id = :id", ['id' => $id]);
+        $med = Database::fetchOne("SELECT * FROM treatment_medications WHERE id = :id", ['id' => $medicationId]);
         Response::success($med, 'Medicamento atualizado');
     }
 
     public function deleteMedication(Request $request, array $params): void
     {
-        $id = $params['medicationId'] ?? $params['id'] ?? '';
-        Database::delete('treatment_medications', 'id = :id', ['id' => $id]);
+        $companyId = $this->getTenantCompanyId($request);
+        $treatmentId = $params['id'] ?? '';
+        $this->findTenantResource('treatments', $treatmentId, $companyId, 'Tratamento');
+
+        $medicationId = $params['medicationId'] ?? '';
+        Database::delete('treatment_medications', 'id = :id AND treatment_id = :tid', ['id' => $medicationId, 'tid' => $treatmentId]);
         Response::success(null, 'Medicamento removido');
     }
 }

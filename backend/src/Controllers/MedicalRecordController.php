@@ -6,19 +6,20 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Core\Database;
 
-class MedicalRecordController
+class MedicalRecordController extends BaseController
 {
     public function index(Request $request): void
     {
+        $companyId = $this->getTenantCompanyId($request);
         $patientId = $request->query('patient_id');
         $sql = "
             SELECT r.*, d.name as doctor_name, p.name as patient_name
             FROM medical_records r
-            LEFT JOIN doctors d ON d.id = r.doctor_id
-            LEFT JOIN patients p ON p.id = r.patient_id
-            WHERE 1=1
+            LEFT JOIN doctors d ON d.id = r.doctor_id AND (d.company_id = r.company_id OR d.company_id IS NULL)
+            LEFT JOIN patients p ON p.id = r.patient_id AND (p.company_id = r.company_id OR p.company_id IS NULL)
+            WHERE r.company_id = :company_id
         ";
-        $params = [];
+        $params = ['company_id' => $companyId];
 
         if (!empty($patientId)) {
             $sql .= " AND r.patient_id = :patient_id";
@@ -33,14 +34,15 @@ class MedicalRecordController
 
     public function show(Request $request, array $params): void
     {
+        $companyId = $this->getTenantCompanyId($request);
         $id = $params['id'] ?? '';
         $record = Database::fetchOne("
             SELECT r.*, d.name as doctor_name, p.name as patient_name
             FROM medical_records r
-            LEFT JOIN doctors d ON d.id = r.doctor_id
-            LEFT JOIN patients p ON p.id = r.patient_id
-            WHERE r.id = :id
-        ", ['id' => $id]);
+            LEFT JOIN doctors d ON d.id = r.doctor_id AND (d.company_id = r.company_id OR d.company_id IS NULL)
+            LEFT JOIN patients p ON p.id = r.patient_id AND (p.company_id = r.company_id OR p.company_id IS NULL)
+            WHERE r.id = :id AND r.company_id = :cid
+        ", ['id' => $id, 'cid' => $companyId]);
 
         if (!$record) {
             Response::notFound('Prontuário não encontrado');
@@ -54,13 +56,16 @@ class MedicalRecordController
 
     public function store(Request $request): void
     {
+        $companyId = $this->getTenantCompanyId($request);
         $patientId = $request->input('patient_id', $request->input('patientId'));
         if (empty($patientId)) {
             Response::error('ID do paciente é obrigatório', 422);
         }
 
+        // Valida que o paciente pertence ao tenant
+        $this->findTenantResource('patients', $patientId, $companyId, 'Paciente');
+
         $id = $request->input('id') ?: 'rec_' . substr(bin2hex(random_bytes(8)), 0, 16);
-        $companyId = $request->getCompanyId();
 
         $data = [
             'id' => $id,
@@ -107,7 +112,7 @@ class MedicalRecordController
             }
         }
 
-        $record = Database::fetchOne("SELECT * FROM medical_records WHERE id = :id", ['id' => $id]);
+        $record = $this->findTenantResource('medical_records', $id, $companyId, 'Prontuário');
         Response::success($record, 'Prontuário salvo com sucesso', 201);
     }
 }

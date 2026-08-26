@@ -6,10 +6,11 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Core\Database;
 
-class AppointmentController
+class AppointmentController extends BaseController
 {
     public function index(Request $request): void
     {
+        $companyId = $this->getTenantCompanyId($request);
         $date = $request->query('date');
         $startDate = $request->query('start_date');
         $endDate = $request->query('end_date');
@@ -22,11 +23,11 @@ class AppointmentController
                    p.name as patient_name, p.phone as patient_phone, p.cpf as patient_cpf,
                    d.name as doctor_name, d.specialty as doctor_specialty
             FROM appointments a
-            JOIN patients p ON p.id = a.patient_id
-            JOIN doctors d ON d.id = a.doctor_id
-            WHERE 1=1
+            JOIN patients p ON p.id = a.patient_id AND (p.company_id = a.company_id OR p.company_id IS NULL)
+            JOIN doctors d ON d.id = a.doctor_id AND (d.company_id = a.company_id OR d.company_id IS NULL)
+            WHERE a.company_id = :company_id
         ";
-        $params = [];
+        $params = ['company_id' => $companyId];
 
         if (!empty($date)) {
             $sql .= " AND a.date = :date";
@@ -68,6 +69,7 @@ class AppointmentController
 
     public function store(Request $request): void
     {
+        $companyId = $this->getTenantCompanyId($request);
         $patientId = $request->input('patient_id', $request->input('patientId'));
         $doctorId = $request->input('doctor_id', $request->input('doctorId'));
         $date = $request->input('date');
@@ -79,7 +81,6 @@ class AppointmentController
         }
 
         $id = $request->input('id') ?: 'apt_' . substr(bin2hex(random_bytes(8)), 0, 16);
-        $companyId = $request->getCompanyId();
 
         $data = [
             'id' => $id,
@@ -122,20 +123,17 @@ class AppointmentController
             FROM appointments a
             JOIN patients p ON p.id = a.patient_id
             JOIN doctors d ON d.id = a.doctor_id
-            WHERE a.id = :id
-        ", ['id' => $id]);
+            WHERE a.id = :id AND a.company_id = :cid
+        ", ['id' => $id, 'cid' => $companyId]);
 
         Response::success($appointment, 'Consulta agendada com sucesso', 201);
     }
 
     public function update(Request $request, array $params): void
     {
+        $companyId = $this->getTenantCompanyId($request);
         $id = $params['id'] ?? '';
-        $existing = Database::fetchOne("SELECT * FROM appointments WHERE id = :id", ['id' => $id]);
-
-        if (!$existing) {
-            Response::notFound('Consulta não encontrada');
-        }
+        $this->findTenantResource('appointments', $id, $companyId, 'Consulta');
 
         $fields = ['patient_id', 'doctor_id', 'date', 'start_time', 'end_time', 'type', 'status', 'notes', 'insurance', 'amount', 'online'];
         $updateData = [];
@@ -155,7 +153,7 @@ class AppointmentController
 
         if (!empty($updateData)) {
             $updateData['updated_at'] = date('Y-m-d H:i:s');
-            Database::update('appointments', $updateData, 'id = :id', ['id' => $id]);
+            Database::update('appointments', $updateData, 'id = :id AND company_id = :cid', ['id' => $id, 'cid' => $companyId]);
         }
 
         $updated = Database::fetchOne("
@@ -163,16 +161,17 @@ class AppointmentController
             FROM appointments a
             JOIN patients p ON p.id = a.patient_id
             JOIN doctors d ON d.id = a.doctor_id
-            WHERE a.id = :id
-        ", ['id' => $id]);
+            WHERE a.id = :id AND a.company_id = :cid
+        ", ['id' => $id, 'cid' => $companyId]);
 
         Response::success($updated, 'Agendamento atualizado com sucesso');
     }
 
     public function destroy(Request $request, array $params): void
     {
+        $companyId = $this->getTenantCompanyId($request);
         $id = $params['id'] ?? '';
-        Database::delete('appointments', 'id = :id', ['id' => $id]);
+        $this->deleteTenantResource('appointments', $id, $companyId, 'Consulta');
         Response::success(null, 'Consulta desmarcada com sucesso');
     }
 }

@@ -111,7 +111,7 @@ class Request
 
     public function getCompanyId(): ?string
     {
-        return $this->user['active_company_id'] ?? $this->getHeader('X-Company-Id') ?? null;
+        return $this->user['active_company_id'] ?? $this->user['company_id'] ?? null;
     }
 
     private function extractHeaders(): array

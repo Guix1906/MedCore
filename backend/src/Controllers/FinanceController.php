@@ -6,15 +6,16 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Core\Database;
 
-class FinanceController
+class FinanceController extends BaseController
 {
     public function transactions(Request $request): void
     {
+        $companyId = $this->getTenantCompanyId($request);
         $type = $request->query('type');
         $status = $request->query('status');
         $startDate = $request->query('start_date');
         $endDate = $request->query('end_date');
-        $limit = (int) $request->query('limit', 1000);
+        $limit = max(1, min(1000, (int) $request->query('limit', 1000)));
 
         $sql = "
             SELECT t.*, 
@@ -22,20 +23,20 @@ class FinanceController
                    c.name as category_name, c.color as category_color,
                    a.name as account_name
             FROM transactions t
-            LEFT JOIN patients p ON p.id = t.patient_id
+            LEFT JOIN patients p ON p.id = t.patient_id AND (p.company_id = t.company_id OR p.company_id IS NULL)
             LEFT JOIN financial_categories c ON c.id = t.category_id
             LEFT JOIN financial_accounts a ON a.id = t.account_id
-            WHERE 1=1
+            WHERE t.company_id = :company_id
         ";
-        $params = [];
+        $params = ['company_id' => $companyId];
 
         if (!empty($type)) {
-            $sql .= " AND t.type = :type";
+            $sql .= " AND (t.type = :type OR (t.type = 'receita' AND :type = 'income') OR (t.type = 'despesa' AND :type = 'expense') OR (t.type = 'income' AND :type = 'receita') OR (t.type = 'expense' AND :type = 'despesa'))";
             $params['type'] = $type;
         }
 
         if (!empty($status)) {
-            $sql .= " AND t.status = :status";
+            $sql .= " AND (t.status = :status OR (t.status = 'pago' AND :status = 'completed') OR (t.status = 'pendente' AND :status = 'pending') OR (t.status = 'completed' AND :status = 'pago') OR (t.status = 'pending' AND :status = 'pendente'))";
             $params['status'] = $status;
         }
 
@@ -45,7 +46,8 @@ class FinanceController
             $params['end_date'] = $endDate;
         }
 
-        $sql .= " ORDER BY t.date DESC, t.created_at DESC LIMIT {$limit}";
+        $sql .= " ORDER BY t.date DESC, t.created_at DESC LIMIT :limit";
+        $params['limit'] = $limit;
 
         $transactions = Database::fetchAll($sql, $params);
 
@@ -58,32 +60,33 @@ class FinanceController
 
     public function metrics(Request $request): void
     {
+        $companyId = $this->getTenantCompanyId($request);
         $startDate = $request->query('start_date', date('Y-m-01'));
         $endDate = $request->query('end_date', date('Y-m-t'));
 
         $income = Database::fetchOne("
             SELECT COALESCE(SUM(amount), 0) as total 
             FROM transactions 
-            WHERE type = 'income' AND status = 'completed' AND date BETWEEN :start AND :end
-        ", ['start' => $startDate, 'end' => $endDate]);
+            WHERE company_id = :cid AND (type = 'income' OR type = 'receita') AND (status = 'completed' OR status = 'pago') AND date BETWEEN :start AND :end
+        ", ['cid' => $companyId, 'start' => $startDate, 'end' => $endDate]);
 
         $expense = Database::fetchOne("
             SELECT COALESCE(SUM(amount), 0) as total 
             FROM transactions 
-            WHERE type = 'expense' AND status = 'completed' AND date BETWEEN :start AND :end
-        ", ['start' => $startDate, 'end' => $endDate]);
+            WHERE company_id = :cid AND (type = 'expense' OR type = 'despesa') AND (status = 'completed' OR status = 'pago') AND date BETWEEN :start AND :end
+        ", ['cid' => $companyId, 'start' => $startDate, 'end' => $endDate]);
 
         $pendingIncome = Database::fetchOne("
             SELECT COALESCE(SUM(amount), 0) as total 
             FROM transactions 
-            WHERE type = 'income' AND status = 'pending' AND date BETWEEN :start AND :end
-        ", ['start' => $startDate, 'end' => $endDate]);
+            WHERE company_id = :cid AND (type = 'income' OR type = 'receita') AND (status = 'pending' OR status = 'pendente') AND date BETWEEN :start AND :end
+        ", ['cid' => $companyId, 'start' => $startDate, 'end' => $endDate]);
 
         $pendingExpense = Database::fetchOne("
             SELECT COALESCE(SUM(amount), 0) as total 
             FROM transactions 
-            WHERE type = 'expense' AND status = 'pending' AND date BETWEEN :start AND :end
-        ", ['start' => $startDate, 'end' => $endDate]);
+            WHERE company_id = :cid AND (type = 'expense' OR type = 'despesa') AND (status = 'pending' OR status = 'pendente') AND date BETWEEN :start AND :end
+        ", ['cid' => $companyId, 'start' => $startDate, 'end' => $endDate]);
 
         $totalIncome = (float) ($income['total'] ?? 0);
         $totalExpense = (float) ($expense['total'] ?? 0);
@@ -99,6 +102,7 @@ class FinanceController
 
     public function storeTransaction(Request $request): void
     {
+        $companyId = $this->getTenantCompanyId($request);
         $description = trim($request->input('description', ''));
         $amount = (float) $request->input('amount', 0);
         $type = $request->input('type', 'income');
@@ -109,7 +113,6 @@ class FinanceController
         }
 
         $id = $request->input('id') ?: 'tx_' . substr(bin2hex(random_bytes(8)), 0, 16);
-        $companyId = $request->getCompanyId();
 
         Database::insert('transactions', [
             'id' => $id,
@@ -129,13 +132,16 @@ class FinanceController
             'notes' => $request->input('notes'),
         ]);
 
-        $tx = Database::fetchOne("SELECT * FROM transactions WHERE id = :id", ['id' => $id]);
+        $tx = $this->findTenantResource('transactions', $id, $companyId, 'Transação');
         Response::success($tx, 'Transação registrada com sucesso', 201);
     }
 
     public function updateTransaction(Request $request, array $params): void
     {
+        $companyId = $this->getTenantCompanyId($request);
         $id = $params['id'] ?? '';
+        $this->findTenantResource('transactions', $id, $companyId, 'Transação');
+
         $fields = ['description', 'amount', 'type', 'date', 'due_date', 'status', 'payment_method', 'notes', 'category_id', 'account_id'];
         $updateData = [];
 
@@ -148,32 +154,34 @@ class FinanceController
 
         if (!empty($updateData)) {
             $updateData['updated_at'] = date('Y-m-d H:i:s');
-            Database::update('transactions', $updateData, 'id = :id', ['id' => $id]);
+            Database::update('transactions', $updateData, 'id = :id AND company_id = :cid', ['id' => $id, 'cid' => $companyId]);
         }
 
-        $tx = Database::fetchOne("SELECT * FROM transactions WHERE id = :id", ['id' => $id]);
+        $tx = $this->findTenantResource('transactions', $id, $companyId, 'Transação');
         Response::success($tx, 'Transação atualizada');
     }
 
     public function deleteTransaction(Request $request, array $params): void
     {
+        $companyId = $this->getTenantCompanyId($request);
         $id = $params['id'] ?? '';
-        Database::delete('transactions', 'id = :id', ['id' => $id]);
+        $this->deleteTenantResource('transactions', $id, $companyId, 'Transação');
         Response::success(null, 'Transação excluída');
     }
 
     public function accounts(Request $request): void
     {
-        $accounts = Database::fetchAll("SELECT * FROM financial_accounts WHERE active = 1 ORDER BY name ASC");
+        $companyId = $this->getTenantCompanyId($request);
+        $accounts = Database::fetchAll("SELECT * FROM financial_accounts WHERE (company_id = :cid OR company_id IS NULL) AND active = 1 ORDER BY name ASC", ['cid' => $companyId]);
         if (empty($accounts)) {
             $defaultAccs = [
-                ['id' => 'acc_main', 'name' => 'Conta Principal (Itaú)', 'type' => 'checking', 'balance' => 45280.00],
-                ['id' => 'acc_caixa', 'name' => 'Caixa Físico Recepção', 'type' => 'cash', 'balance' => 1850.00],
+                ['id' => 'acc_main_' . substr(bin2hex(random_bytes(4)), 0, 8), 'company_id' => $companyId, 'name' => 'Conta Principal', 'type' => 'checking', 'balance' => 0.00],
+                ['id' => 'acc_caixa_' . substr(bin2hex(random_bytes(4)), 0, 8), 'company_id' => $companyId, 'name' => 'Caixa Físico', 'type' => 'cash', 'balance' => 0.00],
             ];
             foreach ($defaultAccs as $acc) {
                 Database::insert('financial_accounts', array_merge($acc, ['active' => 1]));
             }
-            $accounts = Database::fetchAll("SELECT * FROM financial_accounts WHERE active = 1 ORDER BY name ASC");
+            $accounts = Database::fetchAll("SELECT * FROM financial_accounts WHERE company_id = :cid AND active = 1 ORDER BY name ASC", ['cid' => $companyId]);
         }
 
         foreach ($accounts as &$a) {
@@ -185,19 +193,20 @@ class FinanceController
 
     public function categories(Request $request): void
     {
-        $categories = Database::fetchAll("SELECT * FROM financial_categories ORDER BY name ASC");
+        $companyId = $this->getTenantCompanyId($request);
+        $categories = Database::fetchAll("SELECT * FROM financial_categories WHERE (company_id = :cid OR company_id IS NULL) ORDER BY name ASC", ['cid' => $companyId]);
         if (empty($categories)) {
             $defaultCats = [
-                ['id' => 'cat_1', 'name' => 'Consultas Médicas', 'type' => 'income', 'color' => '#10B981'],
-                ['id' => 'cat_2', 'name' => 'Procedimentos & Cirurgias', 'type' => 'income', 'color' => '#3B82F6'],
-                ['id' => 'cat_3', 'name' => 'Materiais & Medicamentos', 'type' => 'expense', 'color' => '#EF4444'],
-                ['id' => 'cat_4', 'name' => 'Aluguel & Infraestrutura', 'type' => 'expense', 'color' => '#F59E0B'],
-                ['id' => 'cat_5', 'name' => 'Folha de Pagamento', 'type' => 'expense', 'color' => '#8B5CF6'],
+                ['id' => 'cat_1_' . substr(bin2hex(random_bytes(4)), 0, 8), 'company_id' => $companyId, 'name' => 'Consultas Médicas', 'type' => 'income', 'color' => '#10B981'],
+                ['id' => 'cat_2_' . substr(bin2hex(random_bytes(4)), 0, 8), 'company_id' => $companyId, 'name' => 'Procedimentos & Cirurgias', 'type' => 'income', 'color' => '#3B82F6'],
+                ['id' => 'cat_3_' . substr(bin2hex(random_bytes(4)), 0, 8), 'company_id' => $companyId, 'name' => 'Materiais & Medicamentos', 'type' => 'expense', 'color' => '#EF4444'],
+                ['id' => 'cat_4_' . substr(bin2hex(random_bytes(4)), 0, 8), 'company_id' => $companyId, 'name' => 'Aluguel & Infraestrutura', 'type' => 'expense', 'color' => '#F59E0B'],
+                ['id' => 'cat_5_' . substr(bin2hex(random_bytes(4)), 0, 8), 'company_id' => $companyId, 'name' => 'Folha de Pagamento', 'type' => 'expense', 'color' => '#8B5CF6'],
             ];
             foreach ($defaultCats as $c) {
                 Database::insert('financial_categories', $c);
             }
-            $categories = Database::fetchAll("SELECT * FROM financial_categories ORDER BY name ASC");
+            $categories = Database::fetchAll("SELECT * FROM financial_categories WHERE company_id = :cid ORDER BY name ASC", ['cid' => $companyId]);
         }
         Response::success($categories);
     }

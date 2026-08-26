@@ -6,11 +6,12 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Core\Database;
 
-class SearchController
+class SearchController extends BaseController
 {
     public function search(Request $request): void
     {
-        $q = trim($request->query('q', ''));
+        $companyId = $this->getTenantCompanyId($request);
+        $q = trim((string) $request->query('q', ''));
         if (empty($q)) {
             Response::success([]);
         }
@@ -18,13 +19,13 @@ class SearchController
         $results = [];
         $searchTerm = "%{$q}%";
 
-        // 1. Pacientes
+        // 1. Pacientes do tenant
         $patients = Database::fetchAll("
             SELECT id, name as label, COALESCE(phone, email, cpf, '') as extra, created_at 
             FROM patients 
-            WHERE name LIKE :q OR cpf LIKE :q OR phone LIKE :q 
+            WHERE company_id = :cid AND (name LIKE :q OR cpf LIKE :q OR phone LIKE :q)
             LIMIT 10
-        ", ['q' => $searchTerm]);
+        ", ['cid' => $companyId, 'q' => $searchTerm]);
         foreach ($patients as $p) {
             $results[] = [
                 'kind' => 'patient',
@@ -35,13 +36,13 @@ class SearchController
             ];
         }
 
-        // 2. Médicos
+        // 2. Médicos do tenant
         $doctors = Database::fetchAll("
             SELECT id, name as label, COALESCE(specialty, crm, '') as extra, created_at 
             FROM doctors 
-            WHERE name LIKE :q OR specialty LIKE :q OR crm LIKE :q 
+            WHERE (company_id = :cid OR company_id IS NULL) AND active = 1 AND (name LIKE :q OR specialty LIKE :q OR crm LIKE :q)
             LIMIT 5
-        ", ['q' => $searchTerm]);
+        ", ['cid' => $companyId, 'q' => $searchTerm]);
         foreach ($doctors as $d) {
             $results[] = [
                 'kind' => 'doctor',
@@ -52,14 +53,14 @@ class SearchController
             ];
         }
 
-        // 3. Tratamentos
+        // 3. Tratamentos do tenant
         $treatments = Database::fetchAll("
             SELECT t.id, t.title as label, p.name as extra, t.created_at 
             FROM treatments t 
             JOIN patients p ON p.id = t.patient_id 
-            WHERE t.title LIKE :q OR p.name LIKE :q 
+            WHERE t.company_id = :cid AND (t.title LIKE :q OR p.name LIKE :q)
             LIMIT 5
-        ", ['q' => $searchTerm]);
+        ", ['cid' => $companyId, 'q' => $searchTerm]);
         foreach ($treatments as $t) {
             $results[] = [
                 'kind' => 'treatment',
@@ -70,13 +71,13 @@ class SearchController
             ];
         }
 
-        // 4. Estoque
+        // 4. Estoque do tenant
         $items = Database::fetchAll("
             SELECT id, name as label, COALESCE(category, '') as extra, created_at 
             FROM inventory_items 
-            WHERE name LIKE :q OR category LIKE :q 
+            WHERE (company_id = :cid OR company_id IS NULL) AND active = 1 AND (name LIKE :q OR category LIKE :q)
             LIMIT 5
-        ", ['q' => $searchTerm]);
+        ", ['cid' => $companyId, 'q' => $searchTerm]);
         foreach ($items as $it) {
             $results[] = [
                 'kind' => 'inventory',

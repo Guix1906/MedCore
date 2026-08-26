@@ -6,19 +6,17 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Core\Database;
 
-class PatientController
+class PatientController extends BaseController
 {
     public function index(Request $request): void
     {
-        $q = trim($request->query('q', ''));
+        $companyId = $this->getTenantCompanyId($request);
+        $q = trim((string) $request->query('q', ''));
         $active = $request->query('active');
-        $limit = (int) $request->query('limit', 500);
-        if ($limit <= 0 || $limit > 2000) {
-            $limit = 500;
-        }
+        $limit = max(1, min(500, (int) $request->query('limit', 500)));
 
-        $sql = "SELECT id, name, email, phone, cpf, birth_date, gender, insurance, insurance_number, address, city, state, zip_code, emergency_contact_name, emergency_contact_phone, notes, active, created_at, updated_at FROM patients WHERE 1=1";
-        $params = [];
+        $sql = "SELECT id, name, email, phone, cpf, birth_date, gender, insurance, insurance_number, address, city, state, zip_code, emergency_contact_name, emergency_contact_phone, notes, active, created_at, updated_at FROM patients WHERE company_id = :company_id";
+        $params = ['company_id' => $companyId];
 
         if (!empty($q)) {
             $sql .= " AND (name LIKE :q_name OR email LIKE :q_email OR phone LIKE :q_phone OR cpf LIKE :q_cpf)";
@@ -34,7 +32,8 @@ class PatientController
             $params['active'] = $active ? 1 : 0;
         }
 
-        $sql .= " ORDER BY name ASC LIMIT {$limit}";
+        $sql .= " ORDER BY name ASC LIMIT :limit";
+        $params['limit'] = $limit;
 
         $patients = Database::fetchAll($sql, $params);
 
@@ -48,31 +47,28 @@ class PatientController
 
     public function show(Request $request, array $params): void
     {
+        $companyId = $this->getTenantCompanyId($request);
         $id = $params['id'] ?? '';
-        $patient = Database::fetchOne("SELECT * FROM patients WHERE id = :id", ['id' => $id]);
-
-        if (!$patient) {
-            Response::notFound('Paciente não encontrado');
-        }
+        $patient = $this->findTenantResource('patients', $id, $companyId, 'Paciente');
 
         $patient['active'] = (bool) $patient['active'];
 
-        // Buscar histórico de consultas e prontuários
+        // Buscar histórico de consultas e prontuários pertencentes ao tenant
         $appointments = Database::fetchAll("
             SELECT a.*, d.name as doctor_name 
             FROM appointments a 
             LEFT JOIN doctors d ON d.id = a.doctor_id 
-            WHERE a.patient_id = :id 
+            WHERE a.patient_id = :id AND (a.company_id = :cid OR a.company_id IS NULL)
             ORDER BY a.date DESC, a.start_time DESC
-        ", ['id' => $id]);
+        ", ['id' => $id, 'cid' => $companyId]);
 
         $records = Database::fetchAll("
             SELECT r.*, d.name as doctor_name 
             FROM medical_records r 
             LEFT JOIN doctors d ON d.id = r.doctor_id 
-            WHERE r.patient_id = :id 
+            WHERE r.patient_id = :id AND (r.company_id = :cid OR r.company_id IS NULL)
             ORDER BY r.created_at DESC
-        ", ['id' => $id]);
+        ", ['id' => $id, 'cid' => $companyId]);
 
         $patient['appointments'] = $appointments;
         $patient['medical_records'] = $records;
@@ -82,6 +78,7 @@ class PatientController
 
     public function store(Request $request): void
     {
+        $companyId = $this->getTenantCompanyId($request);
         $name = trim($request->input('name', ''));
         if (empty($name)) {
             Response::error('Nome do paciente é obrigatório', 422);
@@ -93,7 +90,6 @@ class PatientController
         }
 
         $id = $request->input('id') ?: 'pat_' . substr(bin2hex(random_bytes(8)), 0, 16);
-        $companyId = $request->getCompanyId();
 
         $data = [
             'id' => $id,
@@ -119,7 +115,7 @@ class PatientController
 
         Database::insert('patients', $data);
 
-        // Registrar log de atividade
+        // Registrar log de atividade com escopo
         Database::execute("INSERT INTO activity_logs (id, company_id, user_id, entity_type, entity_id, entity_label, action, metadata) VALUES (:id, :cid, :uid, 'patient', :eid, :elabel, 'create', :meta)", [
             'id' => 'act_' . substr(bin2hex(random_bytes(6)), 0, 12),
             'cid' => $companyId,
@@ -129,7 +125,7 @@ class PatientController
             'meta' => json_encode(['name' => $name])
         ]);
 
-        $created = Database::fetchOne("SELECT * FROM patients WHERE id = :id", ['id' => $id]);
+        $created = $this->findTenantResource('patients', $id, $companyId, 'Paciente');
         $created['active'] = (bool) $created['active'];
 
         Response::success($created, 'Paciente cadastrado com sucesso', 201);
@@ -137,12 +133,9 @@ class PatientController
 
     public function update(Request $request, array $params): void
     {
+        $companyId = $this->getTenantCompanyId($request);
         $id = $params['id'] ?? '';
-        $existing = Database::fetchOne("SELECT * FROM patients WHERE id = :id", ['id' => $id]);
-
-        if (!$existing) {
-            Response::notFound('Paciente não encontrado');
-        }
+        $this->findTenantResource('patients', $id, $companyId, 'Paciente');
 
         $cpf = $request->input('cpf');
         if ($cpf !== null && trim($cpf) !== '' && !$this->isValidCpf($cpf)) {
@@ -169,10 +162,10 @@ class PatientController
 
         if (!empty($updateData)) {
             $updateData['updated_at'] = date('Y-m-d H:i:s');
-            Database::update('patients', $updateData, 'id = :id', ['id' => $id]);
+            Database::update('patients', $updateData, 'id = :id AND company_id = :cid', ['id' => $id, 'cid' => $companyId]);
         }
 
-        $updated = Database::fetchOne("SELECT * FROM patients WHERE id = :id", ['id' => $id]);
+        $updated = $this->findTenantResource('patients', $id, $companyId, 'Paciente');
         $updated['active'] = (bool) $updated['active'];
 
         Response::success($updated, 'Paciente atualizado com sucesso');
@@ -180,14 +173,9 @@ class PatientController
 
     public function destroy(Request $request, array $params): void
     {
+        $companyId = $this->getTenantCompanyId($request);
         $id = $params['id'] ?? '';
-        $existing = Database::fetchOne("SELECT * FROM patients WHERE id = :id", ['id' => $id]);
-
-        if (!$existing) {
-            Response::notFound('Paciente não encontrado');
-        }
-
-        Database::delete('patients', 'id = :id', ['id' => $id]);
+        $this->deleteTenantResource('patients', $id, $companyId, 'Paciente');
 
         Response::success(null, 'Paciente excluído com sucesso');
     }
