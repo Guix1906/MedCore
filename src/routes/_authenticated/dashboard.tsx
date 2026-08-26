@@ -1,12 +1,7 @@
 import type { DbRow, Json, IconType } from "@/lib/types";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-} from "recharts";
+import { ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import ReactApexChart from "react-apexcharts";
 import {
   HelpCircle,
@@ -57,57 +52,11 @@ type Appt = {
   title?: string;
   when?: Date;
 };
+import { BRL, fmtBR, parseMeta, hexToHsl } from "@/features/dashboard/dashboard-utils";
+
 type Patient = { id: string; name: string; gender: string | null; birth_date: string | null };
 type DashboardTx = { id: string; type: string; amount: number; date: string; status: string };
 type Doctor = { id: string; name: string; avatar_url?: string | null };
-
-const BRL = (v: number) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
-
-const fmtBR = (d: Date) =>
-  d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", "");
-
-function parseMeta(desc: string | null | undefined): { color?: string; status?: string; clientId?: string; type?: string } | null {
-  if (!desc) return null;
-  const m = desc.match(/<!--AGENDAMENTO_META:(.*?)-->/s);
-  if (!m) return null;
-  try {
-    return JSON.parse(m[1]);
-  } catch {
-    return null;
-  }
-}
-
-function hexToHsl(hex: string) {
-  const r = parseInt(hex.slice(1, 3), 16) / 255;
-  const g = parseInt(hex.slice(3, 5), 16) / 255;
-  const b = parseInt(hex.slice(5, 7), 16) / 255;
-
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  let h = 0;
-  let s = 0;
-  const l = (max + min) / 2;
-
-  if (max !== min) {
-    const d = max - min;
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-    switch (max) {
-      case r:
-        h = (g - b) / d + (g < b ? 6 : 0);
-        break;
-      case g:
-        h = (b - r) / d + 2;
-        break;
-      case b:
-        h = (r - g) / d + 4;
-        break;
-    }
-    h /= 6;
-  }
-
-  return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
-}
 
 function softenColor(hex: string) {
   if (!hex || !hex.startsWith("#")) return "rgba(124, 92, 252, 0.08)";
@@ -187,7 +136,9 @@ function DashboardPage() {
         if (phpEvents && Array.isArray(phpEvents)) {
           return phpEvents.map((e) => {
             const startsAt = new Date(e.start_time);
-            const endsAt = e.end_time ? new Date(e.end_time) : new Date(startsAt.getTime() + 30 * 60_000);
+            const endsAt = e.end_time
+              ? new Date(e.end_time)
+              : new Date(startsAt.getTime() + 30 * 60_000);
             const y = startsAt.getFullYear();
             const m = String(startsAt.getMonth() + 1).padStart(2, "0");
             const d = String(startsAt.getDate()).padStart(2, "0");
@@ -212,20 +163,20 @@ function DashboardPage() {
         .from("events")
         .select("id, title, description, starts_at, ends_at, assigned_to, case_id")
         .order("starts_at", { ascending: true });
-      
+
       const mapped = (data ?? []).map((e) => {
         const meta = parseMeta(e.description);
         const startsAt = new Date(e.starts_at);
         const endsAt = e.ends_at ? new Date(e.ends_at) : new Date(startsAt.getTime() + 30 * 60_000);
-        
+
         const y = startsAt.getFullYear();
         const m = String(startsAt.getMonth() + 1).padStart(2, "0");
         const d = String(startsAt.getDate()).padStart(2, "0");
         const dateStr = `${y}-${m}-${d}`;
-        
+
         const startStr = startsAt.toTimeString().slice(0, 5);
         const endStr = endsAt.toTimeString().slice(0, 5);
-        
+
         return {
           id: e.id,
           patient_id: meta?.clientId || null,
@@ -385,7 +336,12 @@ function DashboardPage() {
     return days.map((d) => {
       const iso = toISO(d);
       const total = tx
-        .filter((t) => t.date === iso && (t.type === "income" || t.type === "receita") && t.status !== "cancelado")
+        .filter(
+          (t) =>
+            t.date === iso &&
+            (t.type === "income" || t.type === "receita") &&
+            t.status !== "cancelado",
+        )
         .reduce((s, r) => s + Number(r.amount), 0);
       return {
         name: d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", ""),
@@ -407,7 +363,7 @@ function DashboardPage() {
       mapped as unknown as Parameters<typeof calcCashFlow>[0],
       period,
       undefined,
-      range
+      range,
     );
   }, [tx, period, range]);
 
@@ -812,7 +768,9 @@ function DashboardPage() {
                   <div>
                     <div className="flex items-start justify-between">
                       <div className="flex flex-col space-y-1">
-                        <div className={`text-[26px] font-bold tabular-nums ${balance.saldo < 0 ? "text-[#FF355B]" : "text-[#22C55E]"}`}>
+                        <div
+                          className={`text-[26px] font-bold tabular-nums ${balance.saldo < 0 ? "text-[#FF355B]" : "text-[#22C55E]"}`}
+                        >
                           {showBalance ? (
                             <StatNumber value={balance.saldo} format={BRL} />
                           ) : (
@@ -821,7 +779,9 @@ function DashboardPage() {
                         </div>
                         <div className="text-[12px] text-[#6B7280]">
                           de{" "}
-                          <span className={`font-semibold ${balance.saldoPrev < 0 ? "text-[#FF355B]" : "text-[#22C55E]"}`}>
+                          <span
+                            className={`font-semibold ${balance.saldoPrev < 0 ? "text-[#FF355B]" : "text-[#22C55E]"}`}
+                          >
                             {showBalance ? BRL(balance.saldoPrev) : "R$ ••••••"}
                           </span>{" "}
                           previstos
@@ -914,9 +874,7 @@ function DashboardPage() {
                             className="w-2.5 h-2.5 rounded-full shrink-0"
                             style={{ backgroundColor: accent }}
                           />
-                          <span className="text-[13px] font-bold text-[#1F2937]">
-                            {name}
-                          </span>
+                          <span className="text-[13px] font-bold text-[#1F2937]">{name}</span>
                         </div>
                         <div className="text-[11px] text-[#6B7280] font-semibold ml-4.5">
                           {a.start_time} - {a.end_time}
