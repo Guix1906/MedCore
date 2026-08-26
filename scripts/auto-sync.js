@@ -1,113 +1,65 @@
-import { spawn } from 'child_process';
-import fs from 'fs';
+import { spawnSync } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import readline from 'readline';
+import { scanStagedFiles } from './check-secrets.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 
-const IGNORED_PATHS = [
-  '.git',
-  'node_modules',
-  '.output',
-  'dist',
-  'dist-ssr',
-  '.tanstack',
-  '.vinxi',
-  '.wrangler',
-  '.dev.vars',
-  'scratch',
-  '.env',
-  '.env.local',
-  '.env.production'
-];
-
-let syncTimeout = null;
-let isSyncing = false;
-let pendingChanges = false;
-const DEBOUNCE_MS = 3000; // Aguarda 3 segundos após a última edição
-
-function isIgnored(filePath) {
-  const relative = path.relative(rootDir, filePath).replace(/\\/g, '/');
-  return IGNORED_PATHS.some(ignored => relative === ignored || relative.startsWith(ignored + '/'));
+function runGit(args) {
+  const result = spawnSync('git', args, { cwd: rootDir, encoding: 'utf8', stdio: 'inherit' });
+  if (result.status !== 0) {
+    throw new Error(`Erro ao executar git ${args.join(' ')}`);
+  }
 }
 
-function runGit(args) {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('git', args, { cwd: rootDir, stdio: 'pipe' });
-    let stdout = '';
-    let stderr = '';
+async function manualSync() {
+  console.log('====================================================');
+  console.log(' 🔄 MedCore Sincronização Manual (Sob Demanda)');
+  console.log('====================================================');
 
-    proc.stdout.on('data', data => { stdout += data.toString(); });
-    proc.stderr.on('data', data => { stderr += data.toString(); });
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
 
-    proc.on('close', code => {
-      if (code === 0) resolve(stdout.trim());
-      else reject(new Error(stderr.trim() || `Exit code ${code}`));
-    });
+  const branch = spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: rootDir, encoding: 'utf8' }).stdout.trim();
+  console.log(`📌 Branch atual: ${branch}`);
+
+  rl.question(`Deseja sincronizar as alterações na branch "${branch}"? (s/N): `, (answer) => {
+    rl.close();
+    if (answer.trim().toLowerCase() !== 's' && answer.trim().toLowerCase() !== 'sim') {
+      console.log('Operação cancelada pelo usuário.');
+      process.exit(0);
+    }
+
+    try {
+      console.log('1. Executando verificações de tipos...');
+      const tsc = spawnSync('npx', ['tsc', '--noEmit'], { cwd: rootDir, encoding: 'utf8', stdio: 'inherit', shell: true });
+      if (tsc.status !== 0) {
+        console.error('❌ Falha na verificação de tipos. Corrija os erros antes de sincronizar.');
+        process.exit(1);
+      }
+
+      console.log('2. Verificando segredos com check-secrets...');
+      const ok = scanStagedFiles();
+      if (!ok) {
+        console.error('❌ Segredos detectados. Sincronização cancelada.');
+        process.exit(1);
+      }
+
+      console.log('3. Enviando alterações para o remote...');
+      runGit(['push', 'origin', branch]);
+
+      console.log('✅ Sincronização concluída com sucesso!');
+    } catch (err) {
+      console.error('❌ Erro na sincronização:', err.message);
+      process.exit(1);
+    }
   });
 }
 
-async function doSync() {
-  if (isSyncing) {
-    pendingChanges = true;
-    return;
-  }
+manualSync();
 
-  isSyncing = true;
-  pendingChanges = false;
-
-  try {
-    const status = await runGit(['status', '--porcelain']);
-    if (!status) {
-      isSyncing = false;
-      return;
-    }
-
-    const timestamp = new Date().toLocaleTimeString('pt-BR');
-    console.log(`\n[Auto-Sync ${timestamp}] 📝 Alterações detectadas no código. Sincronizando com o GitHub...`);
-
-    await runGit(['add', '.']);
-    const commitMsg = `auto-sync: ${new Date().toISOString().replace('T', ' ').substring(0, 19)}`;
-    await runGit(['commit', '-m', commitMsg]);
-    console.log(`[Auto-Sync ${timestamp}] 💾 Commit realizado: ${commitMsg}`);
-
-    // Push to remote
-    await runGit(['push', 'origin', 'main']);
-    console.log(`[Auto-Sync ${timestamp}] 🚀 Enviado com sucesso para o GitHub (main)!`);
-  } catch (err) {
-    console.error(`[Auto-Sync] Erro na sincronização:`, err.message || err);
-  } finally {
-    isSyncing = false;
-    if (pendingChanges) {
-      pendingChanges = false;
-      scheduleSync(1000);
-    }
-  }
-}
-
-function scheduleSync(delay = DEBOUNCE_MS) {
-  if (syncTimeout) clearTimeout(syncTimeout);
-  syncTimeout = setTimeout(() => {
-    doSync();
-  }, delay);
-}
-
-console.log('====================================================');
-console.log(' 🔄 MedCore Auto-Sync Ativo (Tempo Real -> GitHub)');
-console.log(` 📂 Monitorando: ${rootDir}`);
-console.log(` 🌐 Repositório: https://github.com/Guix1906/MedCore`);
-console.log('====================================================');
-
-// Initial sync
-doSync();
-
-// Watch directory recursively
-fs.watch(rootDir, { recursive: true }, (eventType, filename) => {
-  if (!filename) return;
-  const fullPath = path.join(rootDir, filename);
-  if (isIgnored(fullPath)) return;
-
-  scheduleSync();
-});
