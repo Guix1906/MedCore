@@ -366,3 +366,52 @@ CREATE TABLE IF NOT EXISTS cases (
     status TEXT NOT NULL DEFAULT 'open',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- =========================================================
+-- ÍNDICES DE ALTA PERFORMANCE E ISOLAMENTO MULTI-TENANT
+-- =========================================================
+
+-- Profiles e Membros
+CREATE INDEX IF NOT EXISTS idx_profiles_email ON profiles(email);
+CREATE INDEX IF NOT EXISTS idx_company_members_company ON company_members(company_id);
+CREATE INDEX IF NOT EXISTS idx_company_members_user ON company_members(user_id);
+
+-- Médicos e Pacientes
+CREATE INDEX IF NOT EXISTS idx_doctors_company ON doctors(company_id);
+CREATE INDEX IF NOT EXISTS idx_patients_company ON patients(company_id);
+CREATE INDEX IF NOT EXISTS idx_patients_cpf ON patients(cpf);
+CREATE INDEX IF NOT EXISTS idx_patients_name ON patients(company_id, name);
+
+-- Agendamentos
+CREATE INDEX IF NOT EXISTS idx_appointments_company ON appointments(company_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_date_time ON appointments(company_id, date, start_time);
+CREATE INDEX IF NOT EXISTS idx_appointments_patient ON appointments(patient_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_doctor ON appointments(doctor_id);
+
+-- Prontuários e Prescrições
+CREATE INDEX IF NOT EXISTS idx_medical_records_company ON medical_records(company_id);
+CREATE INDEX IF NOT EXISTS idx_medical_records_patient ON medical_records(patient_id);
+CREATE INDEX IF NOT EXISTS idx_prescriptions_record ON prescriptions(medical_record_id);
+
+-- Tratamentos e Parcelas
+CREATE INDEX IF NOT EXISTS idx_treatments_company ON treatments(company_id);
+CREATE INDEX IF NOT EXISTS idx_treatments_patient ON treatments(patient_id);
+CREATE INDEX IF NOT EXISTS idx_treatment_installments_treatment ON treatment_installments(treatment_id);
+CREATE INDEX IF NOT EXISTS idx_treatment_medications_treatment ON treatment_medications(treatment_id);
+
+-- Transações Financeiras
+CREATE INDEX IF NOT EXISTS idx_transactions_company ON transactions(company_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_date_status ON transactions(company_id, date, status);
+CREATE INDEX IF NOT EXISTS idx_transactions_type_status ON transactions(company_id, type, status);
+CREATE INDEX IF NOT EXISTS idx_transactions_patient ON transactions(patient_id);
+
+-- Agenda, Tarefas e Eventos
+CREATE INDEX IF NOT EXISTS idx_tasks_company_due ON tasks(company_id, due_date);
+CREATE INDEX IF NOT EXISTS idx_events_company_time ON events(company_id, start_time);
+CREATE INDEX IF NOT EXISTS idx_deadlines_company_due ON deadlines(company_id, due_date);
+
+-- Estoque e Notificações
+CREATE INDEX IF NOT EXISTS idx_inventory_items_company ON inventory_items(company_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_company ON activity_logs(company_id, created_at);
+
