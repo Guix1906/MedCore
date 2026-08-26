@@ -128,7 +128,11 @@ function FinanceiroPage() {
     }
   };
 
-  const { data: txData, isLoading: loading, refetch: load } = useQuery({
+  const {
+    data: txData,
+    isLoading: loading,
+    refetch: load,
+  } = useQuery({
     queryKey: ["transactions"],
     staleTime: 5 * 60_000,
     gcTime: 30 * 60_000,
@@ -189,7 +193,8 @@ function FinanceiroPage() {
       (r) =>
         r.status === "pendente" &&
         r.type === "income" &&
-        (r.description?.toLowerCase().includes("restante") || r.description?.toLowerCase().includes("sinal")),
+        (r.description?.toLowerCase().includes("restante") ||
+          r.description?.toLowerCase().includes("sinal")),
     );
   }, [rows]);
 
@@ -383,19 +388,29 @@ function FinanceiroPage() {
                 Saldos Devedores A Cobrar na Recepção ({pendingSinais.length})
               </h4>
               <span className="text-[12px] font-bold text-amber-800 bg-amber-100/90 px-3 py-1 rounded-full border border-amber-300/50">
-                Total Pendente: {BRL(pendingSinais.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0))}
+                Total Pendente:{" "}
+                {BRL(pendingSinais.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0))}
               </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {pendingSinais.slice(0, 6).map((item) => (
-                <div key={item.id} className="bg-white border border-amber-200/80 p-3.5 rounded-xl flex items-center justify-between shadow-2xs hover:border-amber-400 transition">
+                <div
+                  key={item.id}
+                  className="bg-white border border-amber-200/80 p-3.5 rounded-xl flex items-center justify-between shadow-2xs hover:border-amber-400 transition"
+                >
                   <div className="truncate pr-2">
                     <div className="text-[13px] font-bold text-[#111827] truncate">
-                      {item.patient_id ? (patientMap[item.patient_id] ?? "Paciente") : "Paciente Sem Cadastro"}
+                      {item.patient_id
+                        ? (patientMap[item.patient_id] ?? "Paciente")
+                        : "Paciente Sem Cadastro"}
                     </div>
-                    <div className="text-[11.5px] text-[#6B7280] truncate mt-0.5">{item.description}</div>
-                    <div className="text-[13px] font-extrabold text-amber-700 mt-1">{BRL(Number(item.amount) || 0)}</div>
+                    <div className="text-[11.5px] text-[#6B7280] truncate mt-0.5">
+                      {item.description}
+                    </div>
+                    <div className="text-[13px] font-extrabold text-amber-700 mt-1">
+                      {BRL(Number(item.amount) || 0)}
+                    </div>
                   </div>
                   <button
                     onClick={() => setStatus(item.id, "concluido")}
@@ -557,9 +572,7 @@ function FinanceiroPage() {
             <tbody ref={tbodyRef}>
               {filtered.map((r) => (
                 <tr key={r.id} className="border-t border-[#F3F4F6] hover:bg-[#FAF7FF]">
-                  <td className="px-4 py-3 text-[#374151]">
-                    {formatDateBR(r.date)}
-                  </td>
+                  <td className="px-4 py-3 text-[#374151]">{formatDateBR(r.date)}</td>
                   <td className="px-4 py-3 text-[#111827] font-medium">{r.description ?? "—"}</td>
                   <td className="px-4 py-3 text-[#374151]">{r.category ?? "—"}</td>
                   <td className="px-4 py-3 text-[#374151]">

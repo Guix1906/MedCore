@@ -57,14 +57,14 @@ export function calcKPIs(rows: Transaction[]): KPIs {
     despesaPaga,
     despesaPrevista,
     saldoAtual: receitaPaga - despesaPaga,
-    saldoPrevisto: (receitaPaga + receitaPrevista) - (despesaPaga + despesaPrevista),
+    saldoPrevisto: receitaPaga + receitaPrevista - (despesaPaga + despesaPrevista),
   };
 }
 
 const fmtLabel = (
   key: string,
   period: "day" | "week" | "month" | "year",
-  customRange?: [Date, Date]
+  customRange?: [Date, Date],
 ) => {
   if (customRange && period !== "day") {
     const fmt = (x: Date) => {
@@ -76,7 +76,9 @@ const fmtLabel = (
     if (period === "week") {
       return `${fmt(customRange[0])} - ${fmt(customRange[1])}`;
     } else if (period === "month") {
-      return customRange[0].toLocaleDateString("pt-BR", { month: "short", year: "numeric" }).replace(".", "");
+      return customRange[0]
+        .toLocaleDateString("pt-BR", { month: "short", year: "numeric" })
+        .replace(".", "");
     } else {
       return String(customRange[0].getFullYear());
     }
@@ -109,7 +111,7 @@ export function calcCashFlow(
   rows: Transaction[],
   period: "day" | "week" | "month" | "year",
   limit?: number,
-  customRange?: [Date, Date]
+  customRange?: [Date, Date],
 ): CashFlowDay[] {
   const paid = (r: Transaction) => r.status === "pago" || r.status === "concluido";
   const pending = (r: Transaction) => r.status === "pendente" || r.status === "vencido";
@@ -182,8 +184,8 @@ export function calcCashFlow(
   const baseKeys = customRange
     ? generateRangeKeys(customRange[0], customRange[1])
     : limit
-    ? generateRecentKeys()
-    : [];
+      ? generateRecentKeys()
+      : [];
 
   const isSingleSummary = customRange && period !== "day" && baseKeys.length > 0;
   const singleKey = isSingleSummary ? baseKeys[0] : null;
@@ -219,13 +221,16 @@ export function calcCashFlow(
       }
     });
 
-  const finalKeys = baseKeys.length > 0 ? baseKeys : Array.from(
-    new Set([
-      ...Object.keys(activeData),
-      ...Object.keys(pendingRData),
-      ...Object.keys(pendingDData),
-    ])
-  ).sort();
+  const finalKeys =
+    baseKeys.length > 0
+      ? baseKeys
+      : Array.from(
+          new Set([
+            ...Object.keys(activeData),
+            ...Object.keys(pendingRData),
+            ...Object.keys(pendingDData),
+          ]),
+        ).sort();
 
   return finalKeys.map((key) => {
     const a = activeData[key] ?? { entradas: 0, saidas: 0 };

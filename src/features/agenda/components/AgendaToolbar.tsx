@@ -1,6 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from "react";
 import { createPortal } from "react-dom";
-import { ChevronLeft, ChevronRight, Search, MapPin, Filter, UserCheck, ChevronDown, Plus } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  MapPin,
+  Filter,
+  UserCheck,
+  ChevronDown,
+  Plus,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
@@ -72,12 +81,15 @@ export function CityFilterDropdown({
         aria-haspopup="menu"
         aria-expanded={open}
         className="h-9 inline-flex items-center gap-1.5 rounded-md bg-transparent border-0 outline-none ring-0 shadow-none px-2.5 hover:bg-[#F3EEFF] text-[#2E3448] hover:text-[#7C3AED] transition-colors cursor-pointer select-none group/citybtn focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:border-0 focus:border-0 active:outline-none active:ring-0 active:border-0"
-        style={{ fontFamily: "Inter, ui-sans-serif, system-ui", border: "none", outline: "none", boxShadow: "none" }}
+        style={{
+          fontFamily: "Inter, ui-sans-serif, system-ui",
+          border: "none",
+          outline: "none",
+          boxShadow: "none",
+        }}
       >
         <MapPin className="h-4 w-4 shrink-0 text-[#7C3AED] transition-colors" />
-        <span
-          className="leading-none truncate max-w-[150px] text-[13.5px] font-semibold text-[#2E3448] group-hover/citybtn:text-[#7C3AED] transition-colors"
-        >
+        <span className="leading-none truncate max-w-[150px] text-[13.5px] font-semibold text-[#2E3448] group-hover/citybtn:text-[#7C3AED] transition-colors">
           {currentLabel}
         </span>
         <ChevronDown
@@ -130,7 +142,10 @@ export function CityFilterDropdown({
                       style={{ background: "#6D5EF8" }}
                     />
                   )}
-                  <MapPin className="h-4 w-4 shrink-0" style={{ color: active ? "#6D5EF8" : "#8B95A7" }} />
+                  <MapPin
+                    className="h-4 w-4 shrink-0"
+                    style={{ color: active ? "#6D5EF8" : "#8B95A7" }}
+                  />
                   <span
                     className="text-[13px] leading-none truncate"
                     style={{
@@ -297,7 +312,10 @@ export function AgendaToolbar({
       <div className="flex items-center gap-2 flex-1 max-w-[650px] justify-end">
         {onSearchChange && (
           <div className="relative flex-1 min-w-[180px]">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <Search
+              size={15}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+            />
             <input
               value={search}
               onChange={(e) => onSearchChange(e.target.value)}
@@ -308,11 +326,7 @@ export function AgendaToolbar({
         )}
 
         {cityFilter !== undefined && onCityChange && cities && (
-          <CityFilterDropdown
-            cityFilter={cityFilter}
-            onCityChange={onCityChange}
-            cities={cities}
-          />
+          <CityFilterDropdown cityFilter={cityFilter} onCityChange={onCityChange} cities={cities} />
         )}
 
         {view !== undefined && onViewChange && (

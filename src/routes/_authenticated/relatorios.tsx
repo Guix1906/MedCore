@@ -130,18 +130,10 @@ function RelatoriosPage() {
     const isPaid = (t: { status: string }) => t.status === "pago" || t.status === "concluido";
     const isPending = (t: { status: string }) => t.status === "pendente" || t.status === "vencido";
 
-    const receita = active
-      .filter(isIncome)
-      .reduce((s, t) => s + Number(t.amount || 0), 0);
-    const despesa = active
-      .filter(isExpense)
-      .reduce((s, t) => s + Number(t.amount || 0), 0);
-    const pago = active
-      .filter(isPaid)
-      .reduce((s, t) => s + Number(t.amount || 0), 0);
-    const pendente = active
-      .filter(isPending)
-      .reduce((s, t) => s + Number(t.amount || 0), 0);
+    const receita = active.filter(isIncome).reduce((s, t) => s + Number(t.amount || 0), 0);
+    const despesa = active.filter(isExpense).reduce((s, t) => s + Number(t.amount || 0), 0);
+    const pago = active.filter(isPaid).reduce((s, t) => s + Number(t.amount || 0), 0);
+    const pendente = active.filter(isPending).reduce((s, t) => s + Number(t.amount || 0), 0);
     return { receita, despesa, saldo: receita - despesa, pago, pendente };
   }, [transactions]);
 

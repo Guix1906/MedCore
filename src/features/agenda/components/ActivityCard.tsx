@@ -1,4 +1,12 @@
-import { memo, useCallback, useEffect, useRef, useState, type MouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { KIND_COLOR, type Activity } from "@/components/agenda/agenda-types";
 import { cn } from "@/utils/cn";
 import { KindIcon } from "./KindIcon";
@@ -8,7 +16,17 @@ import {
   HoverCardPortal,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
-import { CheckCircle2, ClipboardList, DollarSign, MessageSquare, User, MessageCircle, Clock, CircleDollarSign, MapPin } from "lucide-react";
+import {
+  CheckCircle2,
+  ClipboardList,
+  DollarSign,
+  MessageSquare,
+  User,
+  MessageCircle,
+  Clock,
+  CircleDollarSign,
+  MapPin,
+} from "lucide-react";
 import { useActiveCompany } from "@/hooks/use-active-company";
 import { useCompanyMembers } from "@/hooks/use-company-members";
 
@@ -148,13 +166,17 @@ function ActivityHoverContent({
   const { byId } = useCompanyMembers(companyId);
   const ownerName = a.assignedTo ? (byId.get(a.assignedTo) ?? null) : null;
 
-  const openDetails = (event: MouseEvent<HTMLButtonElement> | ReactPointerEvent<HTMLButtonElement>) => {
+  const openDetails = (
+    event: MouseEvent<HTMLButtonElement> | ReactPointerEvent<HTMLButtonElement>,
+  ) => {
     event.preventDefault();
     event.stopPropagation();
     onView();
   };
 
-  const openEdit = (event: MouseEvent<HTMLButtonElement> | ReactPointerEvent<HTMLButtonElement>) => {
+  const openEdit = (
+    event: MouseEvent<HTMLButtonElement> | ReactPointerEvent<HTMLButtonElement>,
+  ) => {
     event.preventDefault();
     event.stopPropagation();
     if (onEdit) {
@@ -171,7 +193,10 @@ function ActivityHoverContent({
   const financialStatus = a.location || "Sem previsão de recebimento";
 
   const meta = parseMeta(a.description);
-  const rawPhone = (meta as any)?.patientPhone || (meta as any)?.phone || a.description?.match(/(\(?\d{2}\)?\s?\d{4,5}-?\d{4})/)?.[1];
+  const rawPhone =
+    (meta as any)?.patientPhone ||
+    (meta as any)?.phone ||
+    a.description?.match(/(\(?\d{2}\)?\s?\d{4,5}-?\d{4})/)?.[1];
   const waUrl = getWhatsAppUrl(rawPhone, patientName);
 
   return (
@@ -308,12 +333,14 @@ export function ActivityCard({
     const pointerId = e.pointerId;
     const startX = e.clientX;
     const startY = e.clientY;
-    const effectiveColWidth = colWidth || (targetElement.parentElement?.clientWidth || 120);
+    const effectiveColWidth = colWidth || targetElement.parentElement?.clientWidth || 120;
 
     const initialStart = a.start instanceof Date ? a.start : new Date(a.start);
     const startMs = !isNaN(initialStart.getTime()) ? initialStart.getTime() : Date.now();
     const initialEnd = a.end
-      ? (a.end instanceof Date ? a.end : new Date(a.end))
+      ? a.end instanceof Date
+        ? a.end
+        : new Date(a.end)
       : new Date(startMs + 45 * 60 * 1000);
     const durationMs = initialEnd.getTime() - startMs;
 
@@ -411,7 +438,9 @@ export function ActivityCard({
     const initialStart = a.start instanceof Date ? a.start : new Date(a.start);
     const startMs = !isNaN(initialStart.getTime()) ? initialStart.getTime() : Date.now();
     const initialEnd = a.end
-      ? (a.end instanceof Date ? a.end : new Date(a.end))
+      ? a.end instanceof Date
+        ? a.end
+        : new Date(a.end)
       : new Date(startMs + 45 * 60 * 1000);
     const initialStartMs = initialStart.getTime();
     const initialEndMs = initialEnd.getTime();
@@ -424,7 +453,11 @@ export function ActivityCard({
     for (const sib of otherSiblings) {
       const sibStart = sib.start instanceof Date ? sib.start : new Date(sib.start);
       const sibStartMs = sibStart.getTime();
-      const sibEnd = sib.end ? (sib.end instanceof Date ? sib.end : new Date(sib.end)) : new Date(sibStartMs + 45 * 60 * 1000);
+      const sibEnd = sib.end
+        ? sib.end instanceof Date
+          ? sib.end
+          : new Date(sib.end)
+        : new Date(sibStartMs + 45 * 60 * 1000);
       const sibEndMs = sibEnd.getTime();
 
       if (sibEndMs <= initialStartMs) {
@@ -444,10 +477,10 @@ export function ActivityCard({
     const onPointerMove = (moveEvent: PointerEvent) => {
       const deltaY = moveEvent.clientY - startY;
       // 1.2px = 1 min -> passos de 15 min (18px por retângulo da grade). Atualização síncrona sem delay!
-      const rawDeltaMinutes = Math.round((deltaY / 1.2) / 15) * 15;
+      const rawDeltaMinutes = Math.round(deltaY / 1.2 / 15) * 15;
 
       if (edge === "top") {
-        let maxDelta = Math.floor((initialEndMs - initialStartMs - 15 * 60 * 1000) / (60 * 1000));
+        const maxDelta = Math.floor((initialEndMs - initialStartMs - 15 * 60 * 1000) / (60 * 1000));
         let targetDelta = Math.min(rawDeltaMinutes, maxDelta);
         const targetStartMs = initialStartMs + targetDelta * 60 * 1000;
 
@@ -464,7 +497,9 @@ export function ActivityCard({
           setResizeState({ edge, deltaMinutes: targetDelta });
         }
       } else {
-        let minDelta = -Math.floor((initialEndMs - initialStartMs - 15 * 60 * 1000) / (60 * 1000));
+        const minDelta = -Math.floor(
+          (initialEndMs - initialStartMs - 15 * 60 * 1000) / (60 * 1000),
+        );
         let targetDelta = Math.max(rawDeltaMinutes, minDelta);
         const targetEndMs = initialEndMs + targetDelta * 60 * 1000;
 
@@ -609,23 +644,26 @@ export function ActivityCard({
     };
   }, [hoverOpen, cancelCloseTimer]);
 
-  const closeOnLeave = useCallback((event: MouseEvent<HTMLElement>) => {
-    cancelOpenTimer();
-    const next = event.relatedTarget;
-    if (
-      next instanceof Node &&
-      (contentRef.current?.contains(next) || triggerRef.current?.contains(next))
-    ) {
+  const closeOnLeave = useCallback(
+    (event: MouseEvent<HTMLElement>) => {
+      cancelOpenTimer();
+      const next = event.relatedTarget;
+      if (
+        next instanceof Node &&
+        (contentRef.current?.contains(next) || triggerRef.current?.contains(next))
+      ) {
+        cancelCloseTimer();
+        return;
+      }
+      // Adiciona tolerância para movimento do mouse
       cancelCloseTimer();
-      return;
-    }
-    // Adiciona tolerância para movimento do mouse
-    cancelCloseTimer();
-    closeTimerRef.current = setTimeout(() => {
-      setHoverOpen(false);
-      closeTimerRef.current = null;
-    }, 350);
-  }, [cancelCloseTimer, cancelOpenTimer]);
+      closeTimerRef.current = setTimeout(() => {
+        setHoverOpen(false);
+        closeTimerRef.current = null;
+      }, 350);
+    },
+    [cancelCloseTimer, cancelOpenTimer],
+  );
 
   const meta = parseMeta(a.description);
   const accent = meta?.color || "#7C5CFC";
@@ -643,7 +681,7 @@ export function ActivityCard({
   }
 
   // Cálculo dinâmico do estilo e do horário durante e após o estiramento
-  let computedStyle = { ...style };
+  const computedStyle = { ...style };
   let displayStart = new Date(a.start);
   let displayEnd = a.end ? new Date(a.end) : new Date(a.start.getTime() + 45 * 60 * 1000);
 
@@ -687,7 +725,10 @@ export function ActivityCard({
     computedStyle.height = Math.max(24, (endH - startH) * 72 - heightOffset);
   }
 
-  const startLabel = displayStart.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  const startLabel = displayStart.toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
   const endLabel = displayEnd.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   const timeRange = `${startLabel} - ${endLabel}`;
 
@@ -764,13 +805,17 @@ export function ActivityCard({
             background: lightBg,
             borderRadius: 8,
             padding: "6px 8px 6px 12px",
-            boxShadow: (resizeState || moveState) ? "0 10px 25px rgba(0,0,0,0.18)" : "0 1px 2px rgba(0,0,0,.05)",
-            transition: (resizeState || moveState)
-              ? "none"
-              : "background-color 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1), transform 0.28s cubic-bezier(0.16, 1, 0.3, 1)",
+            boxShadow:
+              resizeState || moveState
+                ? "0 10px 25px rgba(0,0,0,0.18)"
+                : "0 1px 2px rgba(0,0,0,.05)",
+            transition:
+              resizeState || moveState
+                ? "none"
+                : "background-color 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1), transform 0.28s cubic-bezier(0.16, 1, 0.3, 1)",
             position: "absolute",
             overflow: "hidden",
-            zIndex: (resizeState || moveState) ? 40 : undefined,
+            zIndex: resizeState || moveState ? 40 : undefined,
           }}
           onMouseEnter={(e) => {
             if (resizeState || moveState) return;
@@ -804,7 +849,9 @@ export function ActivityCard({
             }}
           />
 
-          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, width: "100%" }}>
+          <div
+            style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, width: "100%" }}
+          >
             <span
               style={{
                 width: 8,
@@ -878,7 +925,10 @@ export function ActivityCard({
           style={{ pointerEvents: "auto" }}
         >
           {/* Ponte invisível estendida de colisão que mantém o cursor ativo mesmo em movimento na diagonal */}
-          <span aria-hidden className="absolute -right-20 -top-20 -bottom-20 w-32 pointer-events-auto" />
+          <span
+            aria-hidden
+            className="absolute -right-20 -top-20 -bottom-20 w-32 pointer-events-auto"
+          />
           <ActivityHoverContent a={a} onView={onClick} onEdit={onEdit} />
         </HoverCardContent>
       </HoverCardPortal>

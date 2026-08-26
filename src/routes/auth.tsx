@@ -107,7 +107,16 @@ function DiscreteMedicalIllustration() {
           </linearGradient>
         </defs>
         {/* Continuous Baseline Grid */}
-        <line x1="0" y1="40" x2="500" y2="40" stroke="#0284C7" strokeOpacity="0.15" strokeDasharray="4 4" strokeWidth="1" />
+        <line
+          x1="0"
+          y1="40"
+          x2="500"
+          y2="40"
+          stroke="#0284C7"
+          strokeOpacity="0.15"
+          strokeDasharray="4 4"
+          strokeWidth="1"
+        />
         {/* ECG Heartbeat Path */}
         <motion.path
           d="M 0 40 L 100 40 L 115 25 L 125 55 L 140 10 L 155 65 L 170 35 L 180 40 L 300 40 L 315 25 L 325 55 L 340 10 L 355 65 L 370 35 L 380 40 L 500 40"
@@ -216,7 +225,7 @@ function AuthPage() {
       ) {
         toast.error(
           "O provedor Google ainda não foi habilitado no seu painel do Supabase (Authentication -> Providers -> Google). Use o login por email/senha.",
-          { duration: 6000 }
+          { duration: 6000 },
         );
       } else {
         toast.error(msg);
@@ -229,7 +238,6 @@ function AuthPage() {
   return (
     /* Fundo com gradiente azul/branco elegante e limpo */
     <div className="h-screen max-h-screen relative w-full flex items-center justify-center p-3 sm:p-4 lg:p-6 overflow-hidden bg-gradient-to-br from-[#E0F2FE] via-[#F4F9FF] to-[#FFFFFF]">
-      
       {/* Luzes Suaves de Fundo (Radiant Ambient Blue Glow Orbs) */}
       <div className="absolute -top-24 -right-24 w-[700px] h-[700px] bg-gradient-to-bl from-[#00A8CC]/25 via-sky-200/35 to-transparent rounded-full blur-3xl pointer-events-none" />
       <div className="absolute top-1/3 -left-32 w-[600px] h-[600px] bg-gradient-to-tr from-blue-200/40 via-indigo-100/25 to-transparent rounded-full blur-3xl pointer-events-none" />
@@ -258,7 +266,12 @@ function AuthPage() {
         transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }}
         className="absolute bottom-0 left-0 w-[450px] sm:w-[580px] lg:w-[700px] pointer-events-none select-none z-0"
       >
-        <svg viewBox="0 0 800 600" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-auto">
+        <svg
+          viewBox="0 0 800 600"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          className="w-full h-auto"
+        >
           <defs>
             <linearGradient id="glass-wave-grad" x1="0%" y1="100%" x2="100%" y2="0%">
               <stop offset="0%" stopColor="#00A8CC" stopOpacity="0.85" />
@@ -286,7 +299,6 @@ function AuthPage() {
 
       {/* Main Container */}
       <div className="w-full max-w-[1140px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 items-center relative z-10">
-        
         {/* COLUNA ESQUERDA: Marca, Ilustração Médica Discreta & Cards de Benefícios em Vidro */}
         <motion.div
           initial={{ opacity: 0, x: -35 }}
@@ -294,7 +306,6 @@ function AuthPage() {
           transition={{ duration: 0.6, ease: "easeOut" }}
           className="lg:col-span-6 space-y-5 pr-0 lg:pr-2"
         >
-          
           {/* Logo & Headline */}
           <div>
             <MedCoreLogo size="large" />
@@ -312,7 +323,6 @@ function AuthPage() {
 
           {/* 3 Cards de Vidro Translúcido (Glassmorphism) */}
           <div className="space-y-3 pt-1">
-            
             {/* Benefício 1 */}
             <motion.div
               initial={{ opacity: 0, y: 15 }}
@@ -375,9 +385,7 @@ function AuthPage() {
                 </p>
               </div>
             </motion.div>
-
           </div>
-
         </motion.div>
 
         {/* COLUNA DIREITA: Card Translúcido com Blur (Glassmorphism Puro) */}
@@ -387,10 +395,8 @@ function AuthPage() {
           transition={{ duration: 0.55, delay: 0.15, ease: "easeOut" }}
           className="lg:col-span-6 flex flex-col items-center lg:items-end w-full"
         >
-          
           {/* Card Translúcido com Blur & Campos Arredondados */}
           <div className="w-full max-w-[440px] bg-white/75 backdrop-blur-3xl rounded-[32px] p-6 sm:p-8 shadow-[0_30px_80px_-15px_rgba(2,132,199,0.18)] border border-white/90 relative overflow-hidden">
-            
             {/* Barra de Reflexo do Vidro no Topo */}
             <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#00A8CC] via-[#0284C7] to-[#3B82F6]" />
 
@@ -413,20 +419,19 @@ function AuthPage() {
               {mode === "signin"
                 ? "Acesse sua Clínica"
                 : mode === "signup"
-                ? "Criar Conta Premium"
-                : "Recuperar Acesso"}
+                  ? "Criar Conta Premium"
+                  : "Recuperar Acesso"}
             </h2>
             <p className="text-xs text-slate-500 text-center mt-1 mb-5 font-medium">
               {mode === "signin"
                 ? "Digite suas credenciais para acessar o painel"
                 : mode === "signup"
-                ? "Preencha os dados abaixo para cadastrar sua equipe"
-                : "Informe seu email cadastrado para redefinir a senha"}
+                  ? "Preencha os dados abaixo para cadastrar sua equipe"
+                  : "Informe seu email cadastrado para redefinir a senha"}
             </p>
 
             {/* Formulário com Campos Arredondados (Rounded Pill Inputs) */}
             <form onSubmit={submit} className="space-y-3.5">
-              
               <AnimatePresence mode="wait">
                 {mode === "signup" && (
                   <motion.div
@@ -561,8 +566,8 @@ function AuthPage() {
                       {mode === "signin"
                         ? "Entrar na Clínica"
                         : mode === "signup"
-                        ? "Criar Conta"
-                        : "Enviar instruções"}
+                          ? "Criar Conta"
+                          : "Enviar instruções"}
                     </span>
                   </>
                 )}
@@ -628,21 +633,14 @@ function AuthPage() {
                 </>
               )}
             </p>
-
           </div>
 
           {/* Rodapé Premium */}
           <div className="w-full max-w-[440px] text-center mt-3 sm:mt-4 text-[11px] sm:text-xs text-slate-400 font-medium tracking-tight">
             MedCore © 2026 — Gestão Inteligente para Clínicas Premium &nbsp;|&nbsp; v2.0.0
           </div>
-
         </motion.div>
-
       </div>
     </div>
   );
 }
-
-
-
-

@@ -25,7 +25,10 @@ import {
   Check,
   Play,
 } from "lucide-react";
-import { PatientDetailsModal, type PatientDetailsData } from "@/components/pacientes/PatientDetailsModal";
+import {
+  PatientDetailsModal,
+  type PatientDetailsData,
+} from "@/components/pacientes/PatientDetailsModal";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -35,12 +38,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { KIND_COLOR, type Activity } from "@/components/agenda/agenda-types";
 import { pad2 } from "@/lib/date-utils";
 import { AddToGoogleCalendarButton } from "./AddToGoogleCalendarButton";
@@ -92,19 +90,43 @@ function StatusIconBadge({ kind, color }: { kind: "clock" | "x" | "check"; color
   return (
     <div className="relative w-5 h-5 flex items-center justify-center shrink-0">
       {kind === "clock" && (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-slate-700">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="w-4 h-4 text-slate-700"
+        >
           <circle cx="12" cy="12" r="9" />
           <polyline points="12 7 12 12 15 15" />
         </svg>
       )}
       {kind === "x" && (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-slate-700">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="w-4 h-4 text-slate-700"
+        >
           <circle cx="12" cy="12" r="9" />
           <path d="M9.5 9.5l5 5m0-5l-5 5" />
         </svg>
       )}
       {kind === "check" && (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-slate-700">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="w-4 h-4 text-slate-700"
+        >
           <circle cx="12" cy="12" r="9" />
           <path d="M8.5 12l2.5 2.5 4.5-4.5" />
         </svg>
@@ -125,14 +147,56 @@ const STATUS_OPTIONS: Array<{
   color: string;
   defaultColor: string;
 }> = [
-  { value: "Agendado", label: "Agendado", kind: "clock", color: "#8B5CF6", defaultColor: "#8B5CF6" },
-  { value: "Confirmado", label: "Confirmado", kind: "clock", color: "#3B82F6", defaultColor: "#3B82F6" },
-  { value: "Remarcado", label: "Remarcado", kind: "clock", color: "#F59E0B", defaultColor: "#F59E0B" },
+  {
+    value: "Agendado",
+    label: "Agendado",
+    kind: "clock",
+    color: "#8B5CF6",
+    defaultColor: "#8B5CF6",
+  },
+  {
+    value: "Confirmado",
+    label: "Confirmado",
+    kind: "clock",
+    color: "#3B82F6",
+    defaultColor: "#3B82F6",
+  },
+  {
+    value: "Remarcado",
+    label: "Remarcado",
+    kind: "clock",
+    color: "#F59E0B",
+    defaultColor: "#F59E0B",
+  },
   { value: "Cancelado", label: "Cancelado", kind: "x", color: "#EF4444", defaultColor: "#EF4444" },
-  { value: "Não compareceu", label: "Não compareceu", kind: "x", color: "#475569", defaultColor: "#475569" },
-  { value: "Aguardando", label: "Aguardando", kind: "check", color: "#3B82F6", defaultColor: "#0284C7" },
-  { value: "Em atendimento", label: "Em atendimento", kind: "check", color: "#F59E0B", defaultColor: "#F59E0B" },
-  { value: "Concluído", label: "Concluído", kind: "check", color: "#10B981", defaultColor: "#10B981" },
+  {
+    value: "Não compareceu",
+    label: "Não compareceu",
+    kind: "x",
+    color: "#475569",
+    defaultColor: "#475569",
+  },
+  {
+    value: "Aguardando",
+    label: "Aguardando",
+    kind: "check",
+    color: "#3B82F6",
+    defaultColor: "#0284C7",
+  },
+  {
+    value: "Em atendimento",
+    label: "Em atendimento",
+    kind: "check",
+    color: "#F59E0B",
+    defaultColor: "#F59E0B",
+  },
+  {
+    value: "Concluído",
+    label: "Concluído",
+    kind: "check",
+    color: "#10B981",
+    defaultColor: "#10B981",
+  },
 ];
 
 function StatusSelectDropdown({
@@ -166,7 +230,7 @@ function StatusSelectDropdown({
           "w-full h-11 px-3 bg-white rounded-xl flex items-center justify-between transition-all shadow-2xs cursor-pointer select-none",
           open
             ? "border-2 border-[#7C3AED] ring-3 ring-[#7C3AED]/20"
-            : "border border-slate-200 hover:border-slate-300"
+            : "border border-slate-200 hover:border-slate-300",
         )}
       >
         <div className="flex items-center gap-2 min-w-0">
@@ -199,14 +263,11 @@ function StatusSelectDropdown({
                     "w-full px-3.5 py-2.5 flex items-center justify-between text-left transition-all cursor-pointer select-none",
                     isSelected
                       ? "bg-[#8B5CF6] text-white font-bold"
-                      : "hover:bg-slate-50 text-slate-700 font-medium"
+                      : "hover:bg-slate-50 text-slate-700 font-medium",
                   )}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <StatusIconBadge
-                      kind={opt.kind}
-                      color={isSelected ? "#FFFFFF" : opt.color}
-                    />
+                    <StatusIconBadge kind={opt.kind} color={isSelected ? "#FFFFFF" : opt.color} />
                     <span className="text-[13px] truncate">{opt.label}</span>
                   </div>
                   {isSelected && <Check className="h-4 w-4 text-white shrink-0" />}
@@ -231,7 +292,13 @@ const BRAND_COLORS = [
   { hex: "#64748B", label: "Cinza" },
 ];
 
-function ColorPickerDropdown({ color, onChange }: { color: string; onChange: (hex: string) => void }) {
+function ColorPickerDropdown({
+  color,
+  onChange,
+}: {
+  color: string;
+  onChange: (hex: string) => void;
+}) {
   const [open, setOpen] = useState(false);
 
   const safeHex = useMemo(() => {
@@ -250,14 +317,21 @@ function ColorPickerDropdown({ color, onChange }: { color: string; onChange: (he
           className="h-5 w-5 rounded-md border border-slate-200/80 shadow-2xs shrink-0"
           style={{ backgroundColor: safeHex }}
         />
-        <ChevronDown className={cn("h-4 w-4 text-slate-400 shrink-0 transition-transform", open && "rotate-180")} />
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 text-slate-400 shrink-0 transition-transform",
+            open && "rotate-180",
+          )}
+        />
       </button>
 
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-12 z-50 p-3 bg-white border border-slate-200 rounded-2xl shadow-xl w-48 space-y-2.5 animate-in fade-in zoom-in-95">
-            <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Selecione uma cor</div>
+            <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+              Selecione uma cor
+            </div>
             <div className="grid grid-cols-4 gap-2">
               {BRAND_COLORS.map((c) => (
                 <button
@@ -335,7 +409,11 @@ export function EditAppointmentModal({
   useEffect(() => {
     if (!activity) return;
 
-    setNotes(activity.description ? activity.description.replace(/<!--AGENDAMENTO_META:.*?-->/s, "").trim() : "");
+    setNotes(
+      activity.description
+        ? activity.description.replace(/<!--AGENDAMENTO_META:.*?-->/s, "").trim()
+        : "",
+    );
     if (ownerName) setProfessionalName(ownerName);
     if (activity.title) setPatientName(activity.title);
 
@@ -365,13 +443,20 @@ export function EditAppointmentModal({
   const handleSave = async () => {
     setSaving(true);
     try {
-      const id = activity.id && activity.id.includes(":") ? activity.id.split(":")[1] : (activity.id || "");
+      const id =
+        activity.id && activity.id.includes(":") ? activity.id.split(":")[1] : activity.id || "";
 
       const [year, month, day] = dayDate.split("-").map(Number);
       const [startH, startM] = startTime.split(":").map(Number);
       const [endH, endM] = endTime.split(":").map(Number);
 
-      const newStart = new Date(year || 2026, (month || 8) - 1, day || 6, startH || 9, startM || 15);
+      const newStart = new Date(
+        year || 2026,
+        (month || 8) - 1,
+        day || 6,
+        startH || 9,
+        startM || 15,
+      );
       const newEnd = new Date(year || 2026, (month || 8) - 1, day || 6, endH || 11, endM || 0);
 
       const metaObj = {
@@ -806,7 +891,10 @@ export function ActivityDrawer({
   return (
     <>
       <Sheet open={!!activity && !editModalOpen} onOpenChange={(v) => !v && onClose()}>
-        <SheetContent side="right" className="tela-detalhes-evento bg-white border-l border-[#E5E7EB] text-[#1F2937] w-full sm:max-w-[420px] p-0 flex flex-col gap-0 shadow-2xl">
+        <SheetContent
+          side="right"
+          className="tela-detalhes-evento bg-white border-l border-[#E5E7EB] text-[#1F2937] w-full sm:max-w-[420px] p-0 flex flex-col gap-0 shadow-2xl"
+        >
           <SheetHeader className="px-5 pt-5 pb-3 border-b border-[#E5E7EB] space-y-0">
             <SheetTitle className="text-[17px] font-semibold text-[#0F172A] leading-none">
               Detalhes do evento

@@ -114,7 +114,12 @@ export function AgendaFilters({
           aria-haspopup="menu"
           aria-expanded={open}
           className="h-9 inline-flex items-center gap-1.5 rounded-md bg-transparent border-0 outline-none ring-0 shadow-none px-2.5 hover:bg-[#F3EEFF] text-[#2E3448] hover:text-[#7C3AED] transition-colors cursor-pointer select-none group/viewbtn focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:border-0 focus:border-0 active:outline-none active:ring-0 active:border-0"
-          style={{ fontFamily: "Inter, ui-sans-serif, system-ui", border: "none", outline: "none", boxShadow: "none" }}
+          style={{
+            fontFamily: "Inter, ui-sans-serif, system-ui",
+            border: "none",
+            outline: "none",
+            boxShadow: "none",
+          }}
         >
           <CurrentIcon className="h-4 w-4 text-[#5D667C] group-hover/viewbtn:text-[#7C3AED] transition-colors" />
           <span className="leading-none text-[13.5px] font-semibold text-[#2E3448] group-hover/viewbtn:text-[#7C3AED] transition-colors">

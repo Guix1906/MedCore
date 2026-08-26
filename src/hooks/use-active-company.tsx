@@ -23,7 +23,11 @@ export function useActiveCompany() {
     queryKey: qk.activeCompany(user?.id),
     staleTime: staleTimes.slow,
     gcTime: 30 * 60_000,
-    placeholderData: { companyId: defaultCompanyId, fullName: storedUser?.full_name || null, needsPersist: false },
+    placeholderData: {
+      companyId: defaultCompanyId,
+      fullName: storedUser?.full_name || null,
+      needsPersist: false,
+    },
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     enabled: !!user?.id && !context?.companyId,
@@ -51,7 +55,7 @@ export function useActiveCompany() {
           .eq("user_id", user.id);
 
         const validCompanyIds = (memberships ?? []).map((m) => m.company_id);
-        
+
         let companyId: string | null = null;
         let needsPersist = false;
 

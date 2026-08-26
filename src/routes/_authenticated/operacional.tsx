@@ -5,4 +5,3 @@ export const Route = createFileRoute("/_authenticated/operacional")({
     throw redirect({ to: "/dashboard", replace: true });
   },
 });
-

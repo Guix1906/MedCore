@@ -58,9 +58,12 @@ export function useAgendaMutations(onDone: (a: Activity | null) => void) {
 
   const reschedule = useMutation({
     onMutate: async ({ a, newStart }: { a: Activity; newStart: Date }) => {
-      const validStart = newStart instanceof Date && !isNaN(newStart.getTime()) ? newStart : new Date(a.start);
+      const validStart =
+        newStart instanceof Date && !isNaN(newStart.getTime()) ? newStart : new Date(a.start);
       const durationMs = a.end ? a.end.getTime() - a.start.getTime() : 60 * 60 * 1000;
-      const validEnd = a.end ? new Date(validStart.getTime() + durationMs) : new Date(validStart.getTime() + 60 * 60 * 1000);
+      const validEnd = a.end
+        ? new Date(validStart.getTime() + durationMs)
+        : new Date(validStart.getTime() + 60 * 60 * 1000);
 
       a.start = validStart;
       a.end = validEnd;
@@ -72,23 +75,22 @@ export function useAgendaMutations(onDone: (a: Activity | null) => void) {
         updateStoredLocalEventTimes(targetId, validStart.toISOString(), validEnd.toISOString());
 
         // 2. Atualiza o cache do React Query
-        qc.setQueriesData(
-          { queryKey: ["agenda-events"] },
-          (old: any) => {
-            if (!Array.isArray(old)) return old;
-            return old.map((evt: any) =>
-              evt.id === targetId
-                ? { ...evt, starts_at: validStart.toISOString(), ends_at: validEnd.toISOString() }
-                : evt,
-            );
-          },
-        );
+        qc.setQueriesData({ queryKey: ["agenda-events"] }, (old: any) => {
+          if (!Array.isArray(old)) return old;
+          return old.map((evt: any) =>
+            evt.id === targetId
+              ? { ...evt, starts_at: validStart.toISOString(), ends_at: validEnd.toISOString() }
+              : evt,
+          );
+        });
       }
     },
     mutationFn: async ({ a, newStart }: { a: Activity; newStart: Date }) => {
       const targetId = a.id && a.id.includes(":") ? a.id.split(":")[1] : a.id;
       const durationMs = a.end ? a.end.getTime() - a.start.getTime() : 60 * 60 * 1000;
-      const newEnd = a.end ? new Date(newStart.getTime() + durationMs) : new Date(newStart.getTime() + 60 * 60 * 1000);
+      const newEnd = a.end
+        ? new Date(newStart.getTime() + durationMs)
+        : new Date(newStart.getTime() + 60 * 60 * 1000);
 
       if (a.source === "task") {
         try {
@@ -128,8 +130,14 @@ export function useAgendaMutations(onDone: (a: Activity | null) => void) {
 
   const resize = useMutation({
     onMutate: async ({ a, newStart, newEnd }) => {
-      const validStart = newStart instanceof Date && !isNaN(newStart.getTime()) ? newStart : new Date(a.start);
-      let validEnd = newEnd instanceof Date && !isNaN(newEnd.getTime()) ? newEnd : (a.end ? new Date(a.end) : new Date(validStart.getTime() + 15 * 60 * 1000));
+      const validStart =
+        newStart instanceof Date && !isNaN(newStart.getTime()) ? newStart : new Date(a.start);
+      let validEnd =
+        newEnd instanceof Date && !isNaN(newEnd.getTime())
+          ? newEnd
+          : a.end
+            ? new Date(a.end)
+            : new Date(validStart.getTime() + 15 * 60 * 1000);
       if (validEnd.getTime() <= validStart.getTime()) {
         validEnd = new Date(validStart.getTime() + 15 * 60 * 1000);
       }
@@ -137,23 +145,20 @@ export function useAgendaMutations(onDone: (a: Activity | null) => void) {
       a.start = validStart;
       a.end = validEnd;
 
-      const targetId = a.id && a.id.includes(":") ? a.id.split(":")[1] : (a.id || "");
+      const targetId = a.id && a.id.includes(":") ? a.id.split(":")[1] : a.id || "";
       if (a.source === "event") {
         // 1. Salva localmente de forma síncrona
         updateStoredLocalEventTimes(targetId, validStart.toISOString(), validEnd.toISOString());
 
         // 2. Atualiza o cache do React Query
-        qc.setQueriesData(
-          { queryKey: ["agenda-events"] },
-          (old: any) => {
-            if (!Array.isArray(old)) return old;
-            return old.map((evt: any) =>
-              evt.id === targetId
-                ? { ...evt, starts_at: validStart.toISOString(), ends_at: validEnd.toISOString() }
-                : evt,
-            );
-          },
-        );
+        qc.setQueriesData({ queryKey: ["agenda-events"] }, (old: any) => {
+          if (!Array.isArray(old)) return old;
+          return old.map((evt: any) =>
+            evt.id === targetId
+              ? { ...evt, starts_at: validStart.toISOString(), ends_at: validEnd.toISOString() }
+              : evt,
+          );
+        });
       }
     },
     mutationFn: async ({ a, newStart, newEnd }: { a: Activity; newStart: Date; newEnd: Date }) => {
@@ -172,7 +177,7 @@ export function useAgendaMutations(onDone: (a: Activity | null) => void) {
         validEnd = new Date(validStart.getTime() + 15 * 60 * 1000);
       }
 
-      const targetId = a.id && a.id.includes(":") ? a.id.split(":")[1] : (a.id || "");
+      const targetId = a.id && a.id.includes(":") ? a.id.split(":")[1] : a.id || "";
 
       try {
         if (a.source === "event") {
@@ -195,7 +200,10 @@ export function useAgendaMutations(onDone: (a: Activity | null) => void) {
         } else {
           const pad2 = (n: number) => String(n).padStart(2, "0");
           const d = `${validStart.getFullYear()}-${pad2(validStart.getMonth() + 1)}-${pad2(validStart.getDate())}`;
-          const { error } = await supabase.from("deadlines").update({ due_date: d }).eq("id", targetId);
+          const { error } = await supabase
+            .from("deadlines")
+            .update({ due_date: d })
+            .eq("id", targetId);
           if (error) console.warn("Supabase deadline update:", error);
         }
       } catch (err) {

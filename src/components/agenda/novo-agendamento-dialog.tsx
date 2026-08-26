@@ -203,7 +203,13 @@ const Section = memo(function Section({
   );
 });
 
-const FieldLabel = memo(function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
+const FieldLabel = memo(function FieldLabel({
+  children,
+  required,
+}: {
+  children: React.ReactNode;
+  required?: boolean;
+}) {
   return (
     <Label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
       {children}
@@ -225,7 +231,7 @@ const FinancialNumberInput = memo(function FinancialNumberInput({
   className?: string;
 }) {
   const [localText, setLocalText] = useState<string>(() =>
-    value === "" || value === undefined || value === null ? "" : String(value)
+    value === "" || value === undefined || value === null ? "" : String(value),
   );
 
   useEffect(() => {
@@ -335,7 +341,12 @@ export function NovoAgendamentoDialog({
   const [type, setType] = useState<(typeof TYPES)[number]["id"]>("atendimento");
   const [title, setTitle] = useState("");
   const [clientId, setClientId] = useState("");
-  const [selectedClientObj, setSelectedClientObj] = useState<{ id: string; name: string; cpf?: string | null; phone?: string | null } | null>(null);
+  const [selectedClientObj, setSelectedClientObj] = useState<{
+    id: string;
+    name: string;
+    cpf?: string | null;
+    phone?: string | null;
+  } | null>(null);
   const [assignedTo, setAssignedTo] = useState(user?.id ?? "");
   const [selectedDoctorObj, setSelectedDoctorObj] = useState<MemberOpt | null>(null);
   const [status, setStatus] = useState<(typeof STATUS)[number]["id"]>("agendado");
@@ -372,7 +383,7 @@ export function NovoAgendamentoDialog({
   const [selectedProcedure, setSelectedProcedure] = useState("");
   const [allowOtherProcedures, setAllowOtherProcedures] = useState(false);
   const [dayEnd, setDayEnd] = useState("");
-  
+
   // Dynamic Attributes & Financial Sinal/Deposit
   const { cities: availableCities } = useClinicCities();
   const [isNewPatient, setIsNewPatient] = useState(false);
@@ -517,7 +528,9 @@ export function NovoAgendamentoDialog({
       try {
         let query = supabase.from("events").select("id, title, starts_at, description, patient_id");
         if (isUuid(clientId)) {
-          query = query.or(`patient_id.eq.${clientId},description.ilike.%"clientId":"${clientId}"%`);
+          query = query.or(
+            `patient_id.eq.${clientId},description.ilike.%"clientId":"${clientId}"%`,
+          );
         } else {
           query = query.ilike("description", `%"clientId":"${clientId}"%`);
         }
@@ -560,7 +573,9 @@ export function NovoAgendamentoDialog({
             e.patient_id === clientId ||
             e.case_id === clientId ||
             (e.description && e.description.includes(clientId)) ||
-            (selectedClientObj?.name && e.title && e.title.toLowerCase().includes(selectedClientObj.name.toLowerCase()));
+            (selectedClientObj?.name &&
+              e.title &&
+              e.title.toLowerCase().includes(selectedClientObj.name.toLowerCase()));
 
           if (isMatch && !historyMap.has(e.id)) {
             historyMap.set(e.id, {
@@ -763,12 +778,16 @@ export function NovoAgendamentoDialog({
   });
 
   const selectedClient = useMemo(
-    () => clients.find((c: IdOpt) => c.id === clientId) || (selectedClientObj?.id === clientId ? selectedClientObj : null),
+    () =>
+      clients.find((c: IdOpt) => c.id === clientId) ||
+      (selectedClientObj?.id === clientId ? selectedClientObj : null),
     [clients, clientId, selectedClientObj],
   );
   const selectedCase = useMemo(() => cases.find((c: IdOpt) => c.id === caseId), [cases, caseId]);
   const responsible = useMemo(
-    () => members.find((m: MemberOpt) => m.id === assignedTo) || (selectedDoctorObj?.id === assignedTo ? selectedDoctorObj : null),
+    () =>
+      members.find((m: MemberOpt) => m.id === assignedTo) ||
+      (selectedDoctorObj?.id === assignedTo ? selectedDoctorObj : null),
     [members, assignedTo, selectedDoctorObj],
   );
 
@@ -780,10 +799,7 @@ export function NovoAgendamentoDialog({
     return result;
   }, [members, selectedDoctorObj]);
 
-  const statusMeta = useMemo(
-    () => STATUS.find((s) => s.id === status) ?? STATUS[0],
-    [status],
-  );
+  const statusMeta = useMemo(() => STATUS.find((s) => s.id === status) ?? STATUS[0], [status]);
 
   // Deriva o título automaticamente a partir do cliente + tipo
   useEffect(() => {
@@ -856,12 +872,13 @@ export function NovoAgendamentoDialog({
         color,
         recurrence,
         clientId: clientId || null,
-        participants: type === "lembrete"
-          ? selectedProfs.map(id => {
-              const m = members.find(x => x.id === id);
-              return { id, name: m?.full_name ?? "Sem nome", role: "Colaborador" };
-            })
-          : participants,
+        participants:
+          type === "lembrete"
+            ? selectedProfs.map((id) => {
+                const m = members.find((x) => x.id === id);
+                return { id, name: m?.full_name ?? "Sem nome", role: "Colaborador" };
+              })
+            : participants,
         reminders,
         checklist,
         tags,
@@ -871,12 +888,19 @@ export function NovoAgendamentoDialog({
         selectedProfs: type === "bloqueio" || type === "evento" ? selectedProfs : undefined,
         allClinic: type === "bloqueio" ? allClinic : undefined,
         allDay: type === "lembrete" ? allDay : undefined,
-        selectedProcedure: type === "evento" || type === "atendimento" ? (selectedProcedure || undefined) : undefined,
+        selectedProcedure:
+          type === "evento" || type === "atendimento" ? selectedProcedure || undefined : undefined,
         allowOtherProcedures: type === "evento" ? allowOtherProcedures : undefined,
         isNewPatient: type === "atendimento" ? isNewPatient : undefined,
-        procedurePrice: type === "atendimento" && (totalAmt > 0 || sinalAmt > 0) ? (totalAmt > 0 ? totalAmt : sinalAmt) : undefined,
+        procedurePrice:
+          type === "atendimento" && (totalAmt > 0 || sinalAmt > 0)
+            ? totalAmt > 0
+              ? totalAmt
+              : sinalAmt
+            : undefined,
         downPayment: type === "atendimento" && sinalAmt > 0 ? sinalAmt : 0,
-        remainingValue: type === "atendimento" ? Math.max(0, (totalAmt > 0 ? totalAmt : sinalAmt) - sinalAmt) : 0,
+        remainingValue:
+          type === "atendimento" ? Math.max(0, (totalAmt > 0 ? totalAmt : sinalAmt) - sinalAmt) : 0,
         downPaymentMethod: type === "atendimento" ? downPaymentMethod : undefined,
         city: type === "atendimento" ? city : undefined,
         consultationType: type === "atendimento" ? consultationType : undefined,
@@ -889,14 +913,19 @@ export function NovoAgendamentoDialog({
         .filter(Boolean)
         .join("");
 
-      const finalAssignedTo = type === "bloqueio" || type === "evento" || type === "lembrete"
-        ? (selectedProfs[0] || user.id)
-        : (assignedTo || null);
+      const finalAssignedTo =
+        type === "bloqueio" || type === "evento" || type === "lembrete"
+          ? selectedProfs[0] || user.id
+          : assignedTo || null;
 
       const validCreatedBy = isUuid(user?.id) ? user.id : ensureValidUuid(user?.id);
       const validCompanyId = isUuid(companyId) ? companyId : ensureValidUuid(companyId);
       const validAssignedTo = finalAssignedTo
-        ? (isUuid(finalAssignedTo) ? finalAssignedTo : (finalAssignedTo === user?.id ? validCreatedBy : toValidUuid(finalAssignedTo)))
+        ? isUuid(finalAssignedTo)
+          ? finalAssignedTo
+          : finalAssignedTo === user?.id
+            ? validCreatedBy
+            : toValidUuid(finalAssignedTo)
         : null;
       const validCaseId = caseId && isUuid(caseId) ? caseId : toValidUuid(caseId);
       const validPatientId = clientId && isUuid(clientId) ? clientId : toValidUuid(clientId);
@@ -977,9 +1006,11 @@ export function NovoAgendamentoDialog({
         // Sincronização Financeira Imediata e Robusta
         // ============================================================
         if (totalAmt > 0 || sinalAmt > 0) {
-          const proc = selectedProcedure && selectedProcedure !== "__none"
-            ? (procedures.find(p => p.id === selectedProcedure) || allProceduresList.find(p => p.id === selectedProcedure))
-            : null;
+          const proc =
+            selectedProcedure && selectedProcedure !== "__none"
+              ? procedures.find((p) => p.id === selectedProcedure) ||
+                allProceduresList.find((p) => p.id === selectedProcedure)
+              : null;
           const procName = proc ? `Procedimento: ${proc.name}` : "Consulta / Atendimento";
 
           let dbDoctorId: string | null = null;
@@ -1147,25 +1178,22 @@ export function NovoAgendamentoDialog({
       } as unknown as Activity;
 
       // Optimistic cache update
-      qc.setQueriesData(
-        { queryKey: ["agenda-events"] },
-        (old: any) => {
-          const item = {
-            id: insertedId,
-            title: finalTitle,
-            description,
-            event_type: "meeting" as const,
-            starts_at: startsAt.toISOString(),
-            ends_at: endsAt.toISOString(),
-            location,
-            assigned_to: finalAssignedTo || null,
-            case_id: caseId || null,
-          };
-          if (!Array.isArray(old)) return [item];
-          const exists = old.some((e: any) => e.id === insertedId);
-          return exists ? old.map((e: any) => (e.id === insertedId ? item : e)) : [item, ...old];
-        }
-      );
+      qc.setQueriesData({ queryKey: ["agenda-events"] }, (old: any) => {
+        const item = {
+          id: insertedId,
+          title: finalTitle,
+          description,
+          event_type: "meeting" as const,
+          starts_at: startsAt.toISOString(),
+          ends_at: endsAt.toISOString(),
+          location,
+          assigned_to: finalAssignedTo || null,
+          case_id: caseId || null,
+        };
+        if (!Array.isArray(old)) return [item];
+        const exists = old.some((e: any) => e.id === insertedId);
+        return exists ? old.map((e: any) => (e.id === insertedId ? item : e)) : [item, ...old];
+      });
 
       return { createdActivity, asDraft };
     },
@@ -1197,91 +1225,597 @@ export function NovoAgendamentoDialog({
 
   return (
     <>
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl p-0 gap-0 overflow-hidden max-h-[92vh] flex flex-col rounded-2xl border-border/70 [&>button.absolute]:hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 md:px-8 py-5 border-b border-border/70 bg-gradient-to-b from-background to-background/60">
-          <div>
-            <DialogTitle className="text-2xl font-bold tracking-tight">
-              {type === "bloqueio"
-                ? "Novo bloqueio de horário"
-                : type === "lembrete"
-                  ? "Novo lembrete"
-                  : type === "evento"
-                    ? "Novo evento"
-                    : "Novo Agendamento"}
-            </DialogTitle>
-            <DialogDescription className="sr-only">
-              Crie um novo agendamento com todos os detalhes.
-            </DialogDescription>
-          </div>
-          <button
-            onClick={() => onOpenChange(false)}
-            aria-label="Fechar"
-            className="group grid place-items-center h-10 w-10 rounded-full hover:bg-primary/10 transition-all cursor-pointer"
-          >
-            <X className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-transform duration-300 group-hover:rotate-90 group-hover:scale-110" />
-          </button>
-        </div>
-
-        {/* Scroll body */}
-        <div className="overflow-y-auto flex-1 px-6 md:px-8 py-6 space-y-5 bg-gradient-to-b from-background/40 to-background/80">
-          {/* Tipo */}
-          <div className="space-y-1.5">
-            <FieldLabel required>Tipo</FieldLabel>
-            <div className="flex flex-wrap gap-2 p-1.5 rounded-xl border border-border/70 bg-background">
-              {TYPES.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setType(t.id)}
-                  className={cn(
-                    "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200",
-                    type === t.id
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
-                  )}
-                >
-                  {t.label}
-                </button>
-              ))}
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-4xl p-0 gap-0 overflow-hidden max-h-[92vh] flex flex-col rounded-2xl border-border/70 [&>button.absolute]:hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 md:px-8 py-5 border-b border-border/70 bg-gradient-to-b from-background to-background/60">
+            <div>
+              <DialogTitle className="text-2xl font-bold tracking-tight">
+                {type === "bloqueio"
+                  ? "Novo bloqueio de horário"
+                  : type === "lembrete"
+                    ? "Novo lembrete"
+                    : type === "evento"
+                      ? "Novo evento"
+                      : "Novo Agendamento"}
+              </DialogTitle>
+              <DialogDescription className="sr-only">
+                Crie um novo agendamento com todos os detalhes.
+              </DialogDescription>
             </div>
+            <button
+              onClick={() => onOpenChange(false)}
+              aria-label="Fechar"
+              className="group grid place-items-center h-10 w-10 rounded-full hover:bg-primary/10 transition-all cursor-pointer"
+            >
+              <X className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-transform duration-300 group-hover:rotate-90 group-hover:scale-110" />
+            </button>
           </div>
 
-          {/* Form rendering */}
-          {type === "bloqueio" ? (
-            <>
-              {/* Bloqueio de Horário Form */}
-              <Section title="Dados básicos" icon={FileText}>
-                <div className="grid gap-4">
-                  {/* Título */}
-                  <div className="space-y-1.5">
-                    <FieldLabel required>Título</FieldLabel>
-                    <DebouncedInput
-                      value={title}
-                      onChange={setTitle}
-                      placeholder="Bloqueio de horário"
-                      className="h-11 rounded-xl"
-                    />
-                  </div>
+          {/* Scroll body */}
+          <div className="overflow-y-auto flex-1 px-6 md:px-8 py-6 space-y-5 bg-gradient-to-b from-background/40 to-background/80">
+            {/* Tipo */}
+            <div className="space-y-1.5">
+              <FieldLabel required>Tipo</FieldLabel>
+              <div className="flex flex-wrap gap-2 p-1.5 rounded-xl border border-border/70 bg-background">
+                {TYPES.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setType(t.id)}
+                    className={cn(
+                      "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+                      type === t.id
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
+                    )}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-                  {/* Profissionais + Clínica toda */}
-                  <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-end">
-                    <div className="space-y-1.5 flex-1 min-w-0">
+            {/* Form rendering */}
+            {type === "bloqueio" ? (
+              <>
+                {/* Bloqueio de Horário Form */}
+                <Section title="Dados básicos" icon={FileText}>
+                  <div className="grid gap-4">
+                    {/* Título */}
+                    <div className="space-y-1.5">
+                      <FieldLabel required>Título</FieldLabel>
+                      <DebouncedInput
+                        value={title}
+                        onChange={setTitle}
+                        placeholder="Bloqueio de horário"
+                        className="h-11 rounded-xl"
+                      />
+                    </div>
+
+                    {/* Profissionais + Clínica toda */}
+                    <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-end">
+                      <div className="space-y-1.5 flex-1 min-w-0">
+                        <FieldLabel>Profissionais</FieldLabel>
+                        <Popover open={partOpen && !allClinic} onOpenChange={setPartOpen}>
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              disabled={allClinic}
+                              className={cn(
+                                "w-full h-11 rounded-xl border border-border/70 bg-background px-3 flex items-center justify-between text-sm transition text-left",
+                                allClinic &&
+                                  "opacity-50 cursor-not-allowed bg-gray-50 dark:bg-muted/10",
+                              )}
+                            >
+                              <div className="flex flex-wrap gap-1.5 items-center overflow-hidden">
+                                {selectedProfs.length === 0 ? (
+                                  <span className="text-muted-foreground">
+                                    Selecionar profissionais
+                                  </span>
+                                ) : (
+                                  selectedProfs.map((id) => {
+                                    const member = members.find((m) => m.id === id);
+                                    if (!member) return null;
+                                    return (
+                                      <span
+                                        key={id}
+                                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-semibold uppercase tracking-wider bg-[#F4EBFF] text-[#7F56D9] border border-[#D6BBFB]"
+                                      >
+                                        {member.full_name}
+                                        <span
+                                          role="button"
+                                          tabIndex={0}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedProfs((prev) =>
+                                              prev.filter((x) => x !== id),
+                                            );
+                                          }}
+                                          className="hover:text-red-500 transition-colors ml-1 cursor-pointer"
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </span>
+                                      </span>
+                                    );
+                                  })
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 ml-2 shrink-0">
+                                {selectedProfs.length > 0 && (
+                                  <span
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedProfs([]);
+                                    }}
+                                    className="text-muted-foreground hover:text-foreground cursor-pointer"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </span>
+                                )}
+                                <span className="text-muted-foreground text-[10px]">▼</span>
+                              </div>
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent
+                            className="w-[var(--radix-popover-trigger-width)] max-h-[200px] p-0"
+                            align="start"
+                          >
+                            <Command>
+                              <CommandInput placeholder="Buscar profissional..." />
+                              <CommandList>
+                                <CommandEmpty>Nenhum profissional encontrado.</CommandEmpty>
+                                <CommandGroup>
+                                  {members.map((m) => {
+                                    const isSelected = selectedProfs.includes(m.id);
+                                    return (
+                                      <CommandItem
+                                        key={m.id}
+                                        value={m.full_name ?? ""}
+                                        onSelect={() => {
+                                          if (isSelected) {
+                                            setSelectedProfs((prev) =>
+                                              prev.filter((x) => x !== m.id),
+                                            );
+                                          } else {
+                                            setSelectedProfs((prev) => [...prev, m.id]);
+                                          }
+                                        }}
+                                      >
+                                        <div className="flex items-center gap-2 w-full">
+                                          <Checkbox checked={isSelected} />
+                                          <span>{m.full_name ?? "Sem nome"}</span>
+                                        </div>
+                                      </CommandItem>
+                                    );
+                                  })}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+
+                      <div className="flex items-center gap-2 h-11 pb-2">
+                        <button
+                          type="button"
+                          onClick={() => setAllClinic(!allClinic)}
+                          className={cn(
+                            "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                            allClinic ? "bg-[#7C3AED]" : "bg-[#EAECF0]",
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                              allClinic ? "translate-x-5" : "translate-x-0",
+                            )}
+                          />
+                        </button>
+                        <span className="text-sm font-medium text-[#344054]">Clínica toda</span>
+                      </div>
+                    </div>
+
+                    {/* Observações */}
+                    <div className="space-y-1.5">
+                      <FieldLabel>Observações</FieldLabel>
+                      <DebouncedTextarea
+                        value={notes}
+                        onChange={setNotes}
+                        placeholder="Digite"
+                        rows={3}
+                        className="rounded-xl resize-none"
+                      />
+                    </div>
+                  </div>
+                </Section>
+
+                {/* Data (Collapsible) */}
+                <div className="rounded-2xl border border-border/70 bg-card/60 p-5 md:p-6 shadow-sm transition-all hover:shadow-md">
+                  <div
+                    onClick={() => setDataExpanded(!dataExpanded)}
+                    className="flex items-center justify-between cursor-pointer select-none"
+                  >
+                    <h3 className="text-sm font-semibold tracking-tight text-foreground flex items-center gap-2">
+                      <CalendarIcon className="h-4 w-4 text-primary" />
+                      Data
+                    </h3>
+                    <span className="text-muted-foreground font-semibold">
+                      {dataExpanded ? "▲" : "▼"}
+                    </span>
+                  </div>
+                  {dataExpanded && (
+                    <div className="grid gap-4 mt-4">
+                      <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-4 items-end">
+                        <div className="space-y-1.5">
+                          <FieldLabel required>Dia</FieldLabel>
+                          <div className="relative">
+                            <Input
+                              type="date"
+                              value={day}
+                              onChange={(e) => setDay(e.target.value)}
+                              className="h-11 rounded-xl pl-10"
+                            />
+                            <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <FieldLabel required>Hora</FieldLabel>
+                          <div className="relative">
+                            <Input
+                              type="time"
+                              disabled={allDay}
+                              value={start}
+                              onChange={(e) => setStart(e.target.value)}
+                              className={cn("h-11 rounded-xl pl-10", allDay && "opacity-50")}
+                            />
+                            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 h-11 pb-2">
+                          <button
+                            type="button"
+                            onClick={() => setAllDay(!allDay)}
+                            className={cn(
+                              "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                              allDay ? "bg-[#7C3AED]" : "bg-[#EAECF0]",
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                                allDay ? "translate-x-5" : "translate-x-0",
+                              )}
+                            />
+                          </button>
+                          <span className="text-sm font-medium text-[#344054]">Dia inteiro</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <FieldLabel required>Recorrência</FieldLabel>
+                        <Select value={recurrence} onValueChange={setRecurrence}>
+                          <SelectTrigger className="h-11 rounded-xl">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Não se repete</SelectItem>
+                            <SelectItem value="daily">Todos os dias</SelectItem>
+                            <SelectItem value="weekly">Semanal</SelectItem>
+                            <SelectItem value="biweekly">Quinzenal</SelectItem>
+                            <SelectItem value="monthly">Mensal</SelectItem>
+                            <SelectItem value="yearly">Anual</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : type === "lembrete" ? (
+              <>
+                {/* Lembrete Form */}
+                <Section title="Dados básicos" icon={FileText}>
+                  <div className="grid gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Título */}
+                      <div className="space-y-1.5">
+                        <FieldLabel required>Título</FieldLabel>
+                        <Input
+                          value={title}
+                          onChange={(e) => setTitle(e.target.value)}
+                          placeholder="Lembrete"
+                          className="h-11 rounded-xl"
+                        />
+                      </div>
+
+                      {/* Participantes */}
+                      <div className="space-y-1.5">
+                        <FieldLabel>Participantes</FieldLabel>
+                        <Popover open={partOpen} onOpenChange={setPartOpen}>
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              className="w-full h-11 rounded-xl border border-border/70 bg-background px-3 flex items-center justify-between text-sm transition text-left"
+                            >
+                              <div className="flex flex-wrap gap-1.5 items-center overflow-hidden">
+                                {selectedProfs.length === 0 ? (
+                                  <span className="text-muted-foreground">
+                                    Selecionar participantes
+                                  </span>
+                                ) : (
+                                  selectedProfs.map((id) => {
+                                    const member = members.find((m) => m.id === id);
+                                    if (!member) return null;
+                                    return (
+                                      <span
+                                        key={id}
+                                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-semibold uppercase tracking-wider bg-[#F4EBFF] text-[#7F56D9] border border-[#D6BBFB]"
+                                      >
+                                        {member.full_name}
+                                        <span
+                                          role="button"
+                                          tabIndex={0}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedProfs((prev) =>
+                                              prev.filter((x) => x !== id),
+                                            );
+                                          }}
+                                          className="hover:text-red-500 transition-colors ml-1 cursor-pointer"
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </span>
+                                      </span>
+                                    );
+                                  })
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 ml-2 shrink-0">
+                                {selectedProfs.length > 0 && (
+                                  <span
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedProfs([]);
+                                    }}
+                                    className="text-muted-foreground hover:text-foreground cursor-pointer"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </span>
+                                )}
+                                <span className="text-muted-foreground text-[10px]">▼</span>
+                              </div>
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent
+                            className="w-[var(--radix-popover-trigger-width)] max-h-[200px] p-0"
+                            align="start"
+                          >
+                            <Command>
+                              <CommandInput placeholder="Buscar colaborador..." />
+                              <CommandList>
+                                <CommandEmpty>Nenhum colaborador encontrado.</CommandEmpty>
+                                <CommandGroup>
+                                  {members.map((m) => {
+                                    const isSelected = selectedProfs.includes(m.id);
+                                    return (
+                                      <CommandItem
+                                        key={m.id}
+                                        value={m.full_name ?? ""}
+                                        onSelect={() => {
+                                          if (isSelected) {
+                                            setSelectedProfs((prev) =>
+                                              prev.filter((x) => x !== m.id),
+                                            );
+                                          } else {
+                                            setSelectedProfs((prev) => [...prev, m.id]);
+                                          }
+                                        }}
+                                      >
+                                        <div className="flex items-center gap-2 w-full">
+                                          <Checkbox checked={isSelected} />
+                                          <span>{m.full_name ?? "Sem nome"}</span>
+                                        </div>
+                                      </CommandItem>
+                                    );
+                                  })}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </div>
+
+                    {/* Observações */}
+                    <div className="space-y-1.5">
+                      <FieldLabel>Observações</FieldLabel>
+                      <DebouncedTextarea
+                        value={notes}
+                        onChange={setNotes}
+                        placeholder="Digite"
+                        rows={3}
+                        className="rounded-xl resize-none"
+                      />
+                    </div>
+                  </div>
+                </Section>
+
+                {/* Data (Collapsible) */}
+                <div className="rounded-2xl border border-border/70 bg-card/60 p-5 md:p-6 shadow-sm transition-all hover:shadow-md">
+                  <div
+                    onClick={() => setDataExpanded(!dataExpanded)}
+                    className="flex items-center justify-between cursor-pointer select-none"
+                  >
+                    <h3 className="text-sm font-semibold tracking-tight text-foreground flex items-center gap-2">
+                      <CalendarIcon className="h-4 w-4 text-primary" />
+                      Data
+                    </h3>
+                    <span className="text-muted-foreground font-semibold">
+                      {dataExpanded ? "▲" : "▼"}
+                    </span>
+                  </div>
+                  {dataExpanded && (
+                    <div className="grid gap-4 mt-4">
+                      <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-4 items-end">
+                        <div className="space-y-1.5">
+                          <FieldLabel required>Dia</FieldLabel>
+                          <div className="relative">
+                            <Input
+                              type="date"
+                              value={day}
+                              onChange={(e) => setDay(e.target.value)}
+                              className="h-11 rounded-xl pl-10"
+                            />
+                            <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <FieldLabel required>Hora</FieldLabel>
+                          <div className="relative">
+                            <Input
+                              type="time"
+                              disabled={allDay}
+                              value={start}
+                              onChange={(e) => setStart(e.target.value)}
+                              className={cn("h-11 rounded-xl pl-10", allDay && "opacity-50")}
+                            />
+                            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 h-11 pb-2">
+                          <button
+                            type="button"
+                            onClick={() => setAllDay(!allDay)}
+                            className={cn(
+                              "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                              allDay ? "bg-[#7C3AED]" : "bg-[#EAECF0]",
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                                allDay ? "translate-x-5" : "translate-x-0",
+                              )}
+                            />
+                          </button>
+                          <span className="text-sm font-medium text-[#344054]">Dia inteiro</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <FieldLabel required>Recorrência</FieldLabel>
+                        <Select value={recurrence} onValueChange={setRecurrence}>
+                          <SelectTrigger className="h-11 rounded-xl">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Não se repete</SelectItem>
+                            <SelectItem value="daily">Todos os dias</SelectItem>
+                            <SelectItem value="weekly">Semanal</SelectItem>
+                            <SelectItem value="biweekly">Quinzenal</SelectItem>
+                            <SelectItem value="monthly">Mensal</SelectItem>
+                            <SelectItem value="yearly">Anual</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : type === "evento" ? (
+              <>
+                {/* Evento Form */}
+                <Section title="Dados básicos" icon={FileText}>
+                  <div className="grid gap-4">
+                    {/* Título do evento */}
+                    <div className="space-y-1.5">
+                      <FieldLabel required>Título do evento</FieldLabel>
+                      <DebouncedInput
+                        value={title}
+                        onChange={setTitle}
+                        placeholder="Digite"
+                        className="h-11 rounded-xl"
+                      />
+                    </div>
+
+                    {/* Range de Data e Hora */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="space-y-1.5">
+                        <FieldLabel required>Data de início</FieldLabel>
+                        <div className="relative">
+                          <Input
+                            type="date"
+                            value={day}
+                            onChange={(e) => setDay(e.target.value)}
+                            className="h-11 rounded-xl pl-10"
+                          />
+                          <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <FieldLabel required>Hora de início</FieldLabel>
+                        <div className="relative">
+                          <Input
+                            type="time"
+                            value={start}
+                            onChange={(e) => setStart(e.target.value)}
+                            className="h-11 rounded-xl pl-10"
+                          />
+                          <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <FieldLabel required>Data de fim</FieldLabel>
+                        <div className="relative">
+                          <Input
+                            type="date"
+                            value={dayEnd}
+                            onChange={(e) => setDayEnd(e.target.value)}
+                            className="h-11 rounded-xl pl-10"
+                          />
+                          <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <FieldLabel required>Hora de fim</FieldLabel>
+                        <div className="relative">
+                          <Input
+                            type="time"
+                            value={end}
+                            onChange={(e) => setEnd(e.target.value)}
+                            className="h-11 rounded-xl pl-10"
+                          />
+                          <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Profissionais */}
+                    <div className="space-y-1.5">
                       <FieldLabel>Profissionais</FieldLabel>
-                      <Popover open={partOpen && !allClinic} onOpenChange={setPartOpen}>
+                      <Popover open={partOpen} onOpenChange={setPartOpen}>
                         <PopoverTrigger asChild>
                           <button
                             type="button"
-                            disabled={allClinic}
-                            className={cn(
-                              "w-full h-11 rounded-xl border border-border/70 bg-background px-3 flex items-center justify-between text-sm transition text-left",
-                              allClinic && "opacity-50 cursor-not-allowed bg-gray-50 dark:bg-muted/10"
-                            )}
+                            className="w-full h-11 rounded-xl border border-border/70 bg-background px-3 flex items-center justify-between text-sm transition text-left"
                           >
                             <div className="flex flex-wrap gap-1.5 items-center overflow-hidden">
                               {selectedProfs.length === 0 ? (
-                                <span className="text-muted-foreground">Selecionar profissionais</span>
+                                <span className="text-muted-foreground">
+                                  Selecionar profissionais
+                                </span>
                               ) : (
                                 selectedProfs.map((id) => {
                                   const member = members.find((m) => m.id === id);
@@ -1326,7 +1860,10 @@ export function NovoAgendamentoDialog({
                             </div>
                           </button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-h-[200px] p-0" align="start">
+                        <PopoverContent
+                          className="w-[var(--radix-popover-trigger-width)] max-h-[200px] p-0"
+                          align="start"
+                        >
                           <Command>
                             <CommandInput placeholder="Buscar profissional..." />
                             <CommandList>
@@ -1340,7 +1877,9 @@ export function NovoAgendamentoDialog({
                                       value={m.full_name ?? ""}
                                       onSelect={() => {
                                         if (isSelected) {
-                                          setSelectedProfs((prev) => prev.filter((x) => x !== m.id));
+                                          setSelectedProfs((prev) =>
+                                            prev.filter((x) => x !== m.id),
+                                          );
                                         } else {
                                           setSelectedProfs((prev) => [...prev, m.id]);
                                         }
@@ -1360,1410 +1899,996 @@ export function NovoAgendamentoDialog({
                       </Popover>
                     </div>
 
-                    <div className="flex items-center gap-2 h-11 pb-2">
+                    {/* Procedimentos */}
+                    <div className="space-y-1.5">
+                      <FieldLabel>Procedimento / Serviço</FieldLabel>
+                      <Select
+                        value={selectedProcedure || "__none"}
+                        onValueChange={(v) => setSelectedProcedure(v === "__none" ? "" : v)}
+                      >
+                        <SelectTrigger className="h-11 rounded-xl font-medium border-primary/40 bg-primary/5">
+                          <SelectValue placeholder="Pesquise/Selecione o procedimento" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[320px]">
+                          <SelectItem value="__none">Nenhum (Somente consulta simples)</SelectItem>
+                          {Object.entries(groupedProceduresList).map(([cat, items]) => (
+                            <SelectGroup key={cat}>
+                              <SelectLabel className="font-bold text-xs text-primary uppercase tracking-wider px-2 py-1.5 bg-muted/40">
+                                {cat}
+                              </SelectLabel>
+                              {items.map((p) => (
+                                <SelectItem
+                                  key={p.id}
+                                  value={p.id}
+                                  className="cursor-pointer font-normal pl-4"
+                                >
+                                  {p.name}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Switch permitindo outros procedimentos */}
+                    <div className="flex items-center gap-2 pt-2">
                       <button
                         type="button"
-                        onClick={() => setAllClinic(!allClinic)}
+                        onClick={() => setAllowOtherProcedures(!allowOtherProcedures)}
                         className={cn(
                           "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                          allClinic ? "bg-[#7C3AED]" : "bg-[#EAECF0]"
+                          allowOtherProcedures ? "bg-primary" : "bg-[#EAECF0]",
                         )}
                       >
                         <span
                           className={cn(
                             "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                            allClinic ? "translate-x-5" : "translate-x-0"
+                            allowOtherProcedures ? "translate-x-5" : "translate-x-0",
                           )}
                         />
                       </button>
-                      <span className="text-sm font-medium text-[#344054]">Clínica toda</span>
+                      <span className="text-sm font-medium text-[#344054]">
+                        Permitir agendamentos de outros procedimentos nesta data
+                      </span>
                     </div>
                   </div>
+                </Section>
+              </>
+            ) : (
+              <>
+                {/* Agendamento (Default) Form */}
+                <Section title="Dados básicos" icon={FileText}>
+                  <div className="grid gap-4">
+                    {/* Paciente */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <FieldLabel required>Paciente</FieldLabel>
 
-                  {/* Observações */}
-                  <div className="space-y-1.5">
-                    <FieldLabel>Observações</FieldLabel>
-                    <DebouncedTextarea
-                      value={notes}
-                      onChange={setNotes}
-                      placeholder="Digite"
-                      rows={3}
-                      className="rounded-xl resize-none"
-                    />
-                  </div>
-                </div>
-              </Section>
+                        <div className="flex items-center gap-2.5">
+                          <button
+                            type="button"
+                            onClick={() => setQuickPatientOpen(true)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#F5F3FF] border border-[#DDD6FE] text-[#7C3AED] hover:bg-[#EDE9FE] text-xs font-semibold transition-colors cursor-pointer"
+                            title="Cadastrar novo paciente"
+                          >
+                            <UserPlus className="h-3.5 w-3.5" />
+                            <span>+ Novo paciente</span>
+                          </button>
 
-              {/* Data (Collapsible) */}
-              <div className="rounded-2xl border border-border/70 bg-card/60 p-5 md:p-6 shadow-sm transition-all hover:shadow-md">
-                <div
-                  onClick={() => setDataExpanded(!dataExpanded)}
-                  className="flex items-center justify-between cursor-pointer select-none"
-                >
-                  <h3 className="text-sm font-semibold tracking-tight text-foreground flex items-center gap-2">
-                    <CalendarIcon className="h-4 w-4 text-primary" />
-                    Data
-                  </h3>
-                  <span className="text-muted-foreground font-semibold">
-                    {dataExpanded ? "▲" : "▼"}
-                  </span>
-                </div>
-                {dataExpanded && (
-                  <div className="grid gap-4 mt-4">
-                    <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-4 items-end">
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = !isNewPatient;
+                                setIsNewPatient(next);
+                                if (next) {
+                                  setConsultationType("nova_consulta");
+                                } else {
+                                  setConsultationType(
+                                    patientHistory.length === 1
+                                      ? "1_retorno"
+                                      : "retorno_recorrente",
+                                  );
+                                }
+                              }}
+                              className={cn(
+                                "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                                isNewPatient ? "bg-[#7C3AED]" : "bg-[#EAECF0]",
+                              )}
+                            >
+                              <span
+                                className={cn(
+                                  "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                                  isNewPatient ? "translate-x-4" : "translate-x-0",
+                                )}
+                              />
+                            </button>
+                            <span className="text-xs font-medium text-[#344054]">1ª Vez</span>
+                          </div>
+                        </div>
+                      </div>
+                      <ClientPicker
+                        value={clientId}
+                        onChange={(v, obj) => {
+                          setClientId(v);
+                          setSelectedClientObj(obj ?? null);
+                        }}
+                        clients={clients}
+                        selectedClient={selectedClientObj}
+                      />
+
+                      {/* Resumo/Histórico do Paciente para a Secretaria */}
+                      {clientId && (
+                        <div className="mt-2.5 p-3 rounded-xl border border-primary/20 bg-primary/5 flex flex-col gap-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                              <User className="h-3.5 w-3.5 text-primary" /> Ficha do Paciente
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={cn(
+                                  "text-[10px] font-bold px-2 py-0.5 rounded-full",
+                                  isNewPatient
+                                    ? "bg-amber-100 text-amber-800"
+                                    : "bg-emerald-100 text-emerald-800",
+                                )}
+                              >
+                                {isNewPatient
+                                  ? "Novo Paciente (1ª Consulta)"
+                                  : "Paciente Recorrente"}
+                              </span>
+                              <span className="text-[10px] font-semibold bg-white border border-border px-2 py-0.5 rounded-full text-muted-foreground">
+                                {patientHistory.length} consulta(s) anterior(es)
+                              </span>
+                            </div>
+                          </div>
+                          {patientHistory.length > 0 && (
+                            <div className="text-[11px] text-muted-foreground mt-0.5">
+                              Último atendimento:{" "}
+                              <span className="font-semibold text-foreground">
+                                {patientHistory[0].date.toLocaleDateString("pt-BR")} —{" "}
+                                {patientHistory[0].title}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Cidade de Atendimento + Tipo de Consulta */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-1.5">
-                        <FieldLabel required>Dia</FieldLabel>
-                        <div className="relative">
+                        <FieldLabel required>Cidade de Atendimento</FieldLabel>
+                        <Select value={city} onValueChange={setCity}>
+                          <SelectTrigger className="h-11 rounded-xl">
+                            <SelectValue
+                              placeholder={
+                                availableCities.length === 0
+                                  ? "Nenhuma cidade cadastrada"
+                                  : "Selecione a cidade"
+                              }
+                            />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableCities.length === 0 ? (
+                              <div className="p-3 text-xs text-muted-foreground text-center">
+                                Nenhuma cidade cadastrada.
+                                <br />
+                                <span className="text-primary font-medium">
+                                  Cadastre em Configurações.
+                                </span>
+                              </div>
+                            ) : (
+                              availableCities.map((c) => (
+                                <SelectItem key={c} value={c}>
+                                  {c}
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <FieldLabel required>Tipo de Atendimento</FieldLabel>
+                        <Select
+                          value={consultationType}
+                          onValueChange={(v) => {
+                            setConsultationType(v);
+                            if (v === "nova_consulta") {
+                              setIsNewPatient(true);
+                            } else {
+                              setIsNewPatient(false);
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="h-11 rounded-xl">
+                            <SelectValue placeholder="Selecione o tipo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="nova_consulta">Nova Consulta</SelectItem>
+                            <SelectItem value="1_retorno">1º Retorno</SelectItem>
+                            <SelectItem value="retorno_recorrente">Retorno Recorrente</SelectItem>
+                            <SelectItem value="procedimento">Procedimento / Tratamento</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {/* Responsável + Status + Cor */}
+                    <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-4">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <FieldLabel>Responsável</FieldLabel>
+                          <button
+                            type="button"
+                            onClick={() => setShowNewDoctorModal(true)}
+                            className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                          >
+                            <UserPlus size={12} />+ Novo Médico
+                          </button>
+                        </div>
+                        <Select
+                          value={assignedTo || "__none"}
+                          onValueChange={(v) => setAssignedTo(v === "__none" ? "" : v)}
+                        >
+                          <SelectTrigger className="h-11 rounded-xl">
+                            <SelectValue placeholder="Selecionar responsável">
+                              {responsible ? (
+                                <span className="flex items-center gap-2">
+                                  <Avatar
+                                    name={responsible.full_name}
+                                    url={responsible.avatar_url}
+                                  />
+                                  <span className="truncate">{responsible.full_name}</span>
+                                </span>
+                              ) : (
+                                "Selecionar responsável"
+                              )}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {allMembersList.map((m: MemberOpt) => (
+                              <SelectItem key={m.id} value={m.id}>
+                                <span className="flex items-center gap-2">
+                                  <Avatar name={m.full_name} url={m.avatar_url} />
+                                  <span className="flex flex-col">
+                                    <span className="text-sm">{m.full_name ?? "Sem nome"}</span>
+                                    {m.role && (
+                                      <span className="text-[10px] text-muted-foreground">
+                                        {m.role}
+                                      </span>
+                                    )}
+                                  </span>
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <FieldLabel>Status</FieldLabel>
+                        <Select
+                          value={status}
+                          onValueChange={(v) => setStatus(v as (typeof STATUS)[number]["id"])}
+                        >
+                          <SelectTrigger className="h-11 rounded-xl">
+                            <SelectValue>
+                              <span className="flex items-center gap-2">
+                                <span
+                                  className="h-2.5 w-2.5 rounded-full"
+                                  style={{ background: statusMeta.color }}
+                                />
+                                {statusMeta.label}
+                              </span>
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {STATUS.map((s) => (
+                              <SelectItem key={s.id} value={s.id}>
+                                <span className="flex items-center gap-2">
+                                  <span
+                                    className="h-2.5 w-2.5 rounded-full"
+                                    style={{ background: s.color }}
+                                  />
+                                  {s.label}
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <FieldLabel>Cor</FieldLabel>
+                        <div className="flex items-center gap-1.5 p-2 rounded-xl border border-border/70 bg-background h-11">
+                          {COLORS.map((c) => (
+                            <button
+                              key={c}
+                              type="button"
+                              aria-label={`Cor ${c}`}
+                              onClick={() => setColor(c)}
+                              className={cn(
+                                "h-6 w-6 rounded-full transition-all duration-150 hover:scale-110",
+                                color === c &&
+                                  "ring-2 ring-offset-2 ring-offset-background ring-primary scale-110",
+                              )}
+                              style={{ background: c }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Procedimento e Valores / Sinal */}
+                    <div className="space-y-3 p-4 rounded-xl border border-border/70 bg-muted/20">
+                      <div className="text-xs font-bold text-foreground uppercase tracking-wider">
+                        Procedimento & Financeiro (Sinal / Restante)
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <FieldLabel>Procedimento / Serviço</FieldLabel>
+                          <Select
+                            value={selectedProcedure || "__none"}
+                            onValueChange={(v) => {
+                              const val = v === "__none" ? "" : v;
+                              setSelectedProcedure(val);
+                              if (val) {
+                                const found =
+                                  procedures.find((p) => p.id === val) ||
+                                  (allProceduresList.find((p) => p.id === val) as any);
+                                if (found && found.price) {
+                                  setProcedurePrice(found.price);
+                                }
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="h-11 rounded-xl bg-background font-medium border-primary/40">
+                              <SelectValue placeholder="Selecionar procedimento na lista..." />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-[320px]">
+                              <SelectItem value="__none">Nenhum (Somente agendamento)</SelectItem>
+                              {Object.entries(groupedProceduresList).map(([cat, items]) => (
+                                <SelectGroup key={cat}>
+                                  <SelectLabel className="font-bold text-xs text-primary uppercase tracking-wider px-2 py-1.5 bg-muted/40">
+                                    {cat}
+                                  </SelectLabel>
+                                  {items.map((p) => (
+                                    <SelectItem
+                                      key={p.id}
+                                      value={p.id}
+                                      className="cursor-pointer font-normal pl-4"
+                                    >
+                                      {p.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectGroup>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <FieldLabel>Valor Total (R$)</FieldLabel>
+                          <FinancialNumberInput
+                            placeholder="0,00"
+                            value={procedurePrice}
+                            onChange={setProcedurePrice}
+                            className="h-11 rounded-xl bg-background font-semibold"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+                        <div className="space-y-1.5">
+                          <FieldLabel>Sinal Pago (R$)</FieldLabel>
+                          <FinancialNumberInput
+                            placeholder="0,00"
+                            value={downPayment}
+                            onChange={setDownPayment}
+                            className="h-11 rounded-xl bg-background border-emerald-500/50 text-emerald-700 font-semibold"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <FieldLabel>Forma do Sinal</FieldLabel>
+                          <Select value={downPaymentMethod} onValueChange={setDownPaymentMethod}>
+                            <SelectTrigger className="h-11 rounded-xl bg-background">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pix">Pix</SelectItem>
+                              <SelectItem value="cartao_credito">Cartão de Crédito</SelectItem>
+                              <SelectItem value="cartao_debito">Cartão de Débito</SelectItem>
+                              <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                              <SelectItem value="boleto">Boleto Bancário</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <FieldLabel>Restante A Cobrar (R$)</FieldLabel>
                           <Input
+                            type="text"
+                            readOnly
+                            value={
+                              (Number(procedurePrice) || 0) > 0 || (Number(downPayment) || 0) > 0
+                                ? new Intl.NumberFormat("pt-BR", {
+                                    style: "currency",
+                                    currency: "BRL",
+                                  }).format(
+                                    Math.max(
+                                      0,
+                                      (Number(procedurePrice) || 0) - (Number(downPayment) || 0),
+                                    ),
+                                  )
+                                : "R$ 0,00"
+                            }
+                            className="h-11 rounded-xl bg-amber-500/10 border-amber-500/50 text-amber-900 font-bold cursor-not-allowed"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Observações */}
+                    <div className="space-y-1.5">
+                      <FieldLabel>Observações</FieldLabel>
+                      <DebouncedTextarea
+                        value={notes}
+                        onChange={setNotes}
+                        placeholder="Digite observações sobre este agendamento..."
+                        rows={3}
+                        className="rounded-xl resize-none"
+                      />
+                    </div>
+                  </div>
+                </Section>
+
+                <Section title="Data e horário" icon={Clock}>
+                  <div className="grid gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-1.5">
+                        <FieldLabel required>Data</FieldLabel>
+                        <div className="relative">
+                          <DebouncedInput
                             type="date"
                             value={day}
-                            onChange={(e) => setDay(e.target.value)}
+                            onChange={setDay}
                             className="h-11 rounded-xl pl-10"
                           />
                           <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                         </div>
                       </div>
-
                       <div className="space-y-1.5">
-                        <FieldLabel required>Hora</FieldLabel>
+                        <FieldLabel required>Hora inicial</FieldLabel>
                         <div className="relative">
-                          <Input
+                          <DebouncedInput
                             type="time"
-                            disabled={allDay}
                             value={start}
-                            onChange={(e) => setStart(e.target.value)}
-                            className={cn("h-11 rounded-xl pl-10", allDay && "opacity-50")}
+                            onChange={setStart}
+                            className="h-11 rounded-xl pl-10"
                           />
                           <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                         </div>
                       </div>
-
-                      <div className="flex items-center gap-2 h-11 pb-2">
-                        <button
-                          type="button"
-                          onClick={() => setAllDay(!allDay)}
-                          className={cn(
-                            "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                            allDay ? "bg-[#7C3AED]" : "bg-[#EAECF0]"
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                              allDay ? "translate-x-5" : "translate-x-0"
-                            )}
+                      <div className="space-y-1.5">
+                        <FieldLabel required>Hora final</FieldLabel>
+                        <div className="relative">
+                          <DebouncedInput
+                            type="time"
+                            value={end}
+                            onChange={setEnd}
+                            className="h-11 rounded-xl pl-10"
                           />
-                        </button>
-                        <span className="text-sm font-medium text-[#344054]">Dia inteiro</span>
+                          <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                        </div>
                       </div>
                     </div>
-
                     <div className="space-y-1.5">
-                      <FieldLabel required>Recorrência</FieldLabel>
+                      <FieldLabel>Recorrência</FieldLabel>
                       <Select value={recurrence} onValueChange={setRecurrence}>
                         <SelectTrigger className="h-11 rounded-xl">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="none">Não se repete</SelectItem>
-                          <SelectItem value="daily">Todos os dias</SelectItem>
-                          <SelectItem value="weekly">Semanal</SelectItem>
-                          <SelectItem value="biweekly">Quinzenal</SelectItem>
-                          <SelectItem value="monthly">Mensal</SelectItem>
-                          <SelectItem value="yearly">Anual</SelectItem>
+                          {RECURRENCE.map((r) => (
+                            <SelectItem key={r.id} value={r.id}>
+                              {r.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
+                      {recurrence === "custom" && (
+                        <div className="mt-3 rounded-xl border border-border/70 bg-muted/40 p-4 text-xs text-muted-foreground">
+                          Recorrência personalizada — configure abaixo (intervalo, dias da semana e
+                          término). Em breve.
+                        </div>
+                      )}
                     </div>
                   </div>
-                )}
-              </div>
-            </>
-          ) : type === "lembrete" ? (
-            <>
-              {/* Lembrete Form */}
-              <Section title="Dados básicos" icon={FileText}>
-                <div className="grid gap-4">
+                </Section>
+
+                <Section
+                  title="Local"
+                  icon={MapPin}
+                  actions={
+                    mapsUrl && (
+                      <a
+                        href={mapsUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs font-medium text-primary hover:text-primary inline-flex items-center gap-1"
+                      >
+                        <ExternalLink className="h-3 w-3" /> Abrir no Google Maps
+                      </a>
+                    )
+                  }
+                >
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Título */}
                     <div className="space-y-1.5">
-                      <FieldLabel required>Título</FieldLabel>
-                      <Input
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        placeholder="Lembrete"
+                      <FieldLabel>Local</FieldLabel>
+                      <DebouncedInput
+                        value={locName}
+                        onChange={setLocName}
+                        placeholder="Nome do local"
                         className="h-11 rounded-xl"
                       />
                     </div>
-
-                    {/* Participantes */}
                     <div className="space-y-1.5">
-                      <FieldLabel>Participantes</FieldLabel>
-                      <Popover open={partOpen} onOpenChange={setPartOpen}>
-                        <PopoverTrigger asChild>
-                          <button
-                            type="button"
-                            className="w-full h-11 rounded-xl border border-border/70 bg-background px-3 flex items-center justify-between text-sm transition text-left"
-                          >
-                            <div className="flex flex-wrap gap-1.5 items-center overflow-hidden">
-                              {selectedProfs.length === 0 ? (
-                                <span className="text-muted-foreground">Selecionar participantes</span>
-                              ) : (
-                                selectedProfs.map((id) => {
-                                  const member = members.find((m) => m.id === id);
-                                  if (!member) return null;
-                                  return (
-                                    <span
-                                      key={id}
-                                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-semibold uppercase tracking-wider bg-[#F4EBFF] text-[#7F56D9] border border-[#D6BBFB]"
-                                    >
-                                      {member.full_name}
-                                      <span
-                                        role="button"
-                                        tabIndex={0}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setSelectedProfs((prev) => prev.filter((x) => x !== id));
-                                        }}
-                                        className="hover:text-red-500 transition-colors ml-1 cursor-pointer"
-                                      >
-                                        <X className="h-3 w-3" />
-                                      </span>
-                                    </span>
-                                  );
-                                })
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 ml-2 shrink-0">
-                              {selectedProfs.length > 0 && (
-                                <span
-                                  role="button"
-                                  tabIndex={0}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedProfs([]);
-                                  }}
-                                  className="text-muted-foreground hover:text-foreground cursor-pointer"
-                                >
-                                  <X className="h-4 w-4" />
-                                </span>
-                              )}
-                              <span className="text-muted-foreground text-[10px]">▼</span>
-                            </div>
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-h-[200px] p-0" align="start">
-                          <Command>
-                            <CommandInput placeholder="Buscar colaborador..." />
-                            <CommandList>
-                              <CommandEmpty>Nenhum colaborador encontrado.</CommandEmpty>
-                              <CommandGroup>
-                                {members.map((m) => {
-                                  const isSelected = selectedProfs.includes(m.id);
-                                  return (
-                                    <CommandItem
-                                      key={m.id}
-                                      value={m.full_name ?? ""}
-                                      onSelect={() => {
-                                        if (isSelected) {
-                                          setSelectedProfs((prev) => prev.filter((x) => x !== m.id));
-                                        } else {
-                                          setSelectedProfs((prev) => [...prev, m.id]);
-                                        }
-                                      }}
-                                    >
-                                      <div className="flex items-center gap-2 w-full">
-                                        <Checkbox checked={isSelected} />
-                                        <span>{m.full_name ?? "Sem nome"}</span>
-                                      </div>
-                                    </CommandItem>
-                                  );
-                                })}
-                              </CommandGroup>
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
+                      <FieldLabel>Sala</FieldLabel>
+                      <DebouncedInput
+                        value={locRoom}
+                        onChange={setLocRoom}
+                        placeholder="Ex.: Sala 302"
+                        className="h-11 rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <FieldLabel>Cidade</FieldLabel>
+                      <DebouncedInput
+                        value={locCity}
+                        onChange={setLocCity}
+                        className="h-11 rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <FieldLabel>Estado</FieldLabel>
+                      <DebouncedInput
+                        value={locState}
+                        onChange={setLocState}
+                        className="h-11 rounded-xl"
+                      />
+                    </div>
+                    <div className="space-y-1.5 md:col-span-2">
+                      <FieldLabel>Endereço completo</FieldLabel>
+                      <DebouncedInput
+                        value={locAddress}
+                        onChange={setLocAddress}
+                        placeholder="Rua, número, bairro"
+                        className="h-11 rounded-xl"
+                      />
                     </div>
                   </div>
+                </Section>
 
-                  {/* Observações */}
-                  <div className="space-y-1.5">
-                    <FieldLabel>Observações</FieldLabel>
-                    <DebouncedTextarea
-                      value={notes}
-                      onChange={setNotes}
-                      placeholder="Digite"
-                      rows={3}
-                      className="rounded-xl resize-none"
-                    />
-                  </div>
-                </div>
-              </Section>
-
-              {/* Data (Collapsible) */}
-              <div className="rounded-2xl border border-border/70 bg-card/60 p-5 md:p-6 shadow-sm transition-all hover:shadow-md">
-                <div
-                  onClick={() => setDataExpanded(!dataExpanded)}
-                  className="flex items-center justify-between cursor-pointer select-none"
-                >
-                  <h3 className="text-sm font-semibold tracking-tight text-foreground flex items-center gap-2">
-                    <CalendarIcon className="h-4 w-4 text-primary" />
-                    Data
-                  </h3>
-                  <span className="text-muted-foreground font-semibold">
-                    {dataExpanded ? "▲" : "▼"}
-                  </span>
-                </div>
-                {dataExpanded && (
-                  <div className="grid gap-4 mt-4">
-                    <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-4 items-end">
-                      <div className="space-y-1.5">
-                        <FieldLabel required>Dia</FieldLabel>
-                        <div className="relative">
-                          <Input
-                            type="date"
-                            value={day}
-                            onChange={(e) => setDay(e.target.value)}
-                            className="h-11 rounded-xl pl-10"
-                          />
-                          <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                        </div>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <FieldLabel required>Hora</FieldLabel>
-                        <div className="relative">
-                          <Input
-                            type="time"
-                            disabled={allDay}
-                            value={start}
-                            onChange={(e) => setStart(e.target.value)}
-                            className={cn("h-11 rounded-xl pl-10", allDay && "opacity-50")}
-                          />
-                          <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 h-11 pb-2">
-                        <button
-                          type="button"
-                          onClick={() => setAllDay(!allDay)}
-                          className={cn(
-                            "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                            allDay ? "bg-[#7C3AED]" : "bg-[#EAECF0]"
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                              allDay ? "translate-x-5" : "translate-x-0"
-                            )}
-                          />
-                        </button>
-                        <span className="text-sm font-medium text-[#344054]">Dia inteiro</span>
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <FieldLabel required>Recorrência</FieldLabel>
-                      <Select value={recurrence} onValueChange={setRecurrence}>
-                        <SelectTrigger className="h-11 rounded-xl">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Não se repete</SelectItem>
-                          <SelectItem value="daily">Todos os dias</SelectItem>
-                          <SelectItem value="weekly">Semanal</SelectItem>
-                          <SelectItem value="biweekly">Quinzenal</SelectItem>
-                          <SelectItem value="monthly">Mensal</SelectItem>
-                          <SelectItem value="yearly">Anual</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </>
-          ) : type === "evento" ? (
-            <>
-              {/* Evento Form */}
-              <Section title="Dados básicos" icon={FileText}>
-                <div className="grid gap-4">
-                  {/* Título do evento */}
-                  <div className="space-y-1.5">
-                    <FieldLabel required>Título do evento</FieldLabel>
-                    <DebouncedInput
-                      value={title}
-                      onChange={setTitle}
-                      placeholder="Digite"
-                      className="h-11 rounded-xl"
-                    />
-                  </div>
-
-                  {/* Range de Data e Hora */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="space-y-1.5">
-                      <FieldLabel required>Data de início</FieldLabel>
-                      <div className="relative">
-                        <Input
-                          type="date"
-                          value={day}
-                          onChange={(e) => setDay(e.target.value)}
-                          className="h-11 rounded-xl pl-10"
-                        />
-                        <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <FieldLabel required>Hora de início</FieldLabel>
-                      <div className="relative">
-                        <Input
-                          type="time"
-                          value={start}
-                          onChange={(e) => setStart(e.target.value)}
-                          className="h-11 rounded-xl pl-10"
-                        />
-                        <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <FieldLabel required>Data de fim</FieldLabel>
-                      <div className="relative">
-                        <Input
-                          type="date"
-                          value={dayEnd}
-                          onChange={(e) => setDayEnd(e.target.value)}
-                          className="h-11 rounded-xl pl-10"
-                        />
-                        <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <FieldLabel required>Hora de fim</FieldLabel>
-                      <div className="relative">
-                        <Input
-                          type="time"
-                          value={end}
-                          onChange={(e) => setEnd(e.target.value)}
-                          className="h-11 rounded-xl pl-10"
-                        />
-                        <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Profissionais */}
-                  <div className="space-y-1.5">
-                    <FieldLabel>Profissionais</FieldLabel>
+                <Section
+                  title="Participantes"
+                  icon={UserPlus}
+                  actions={
                     <Popover open={partOpen} onOpenChange={setPartOpen}>
                       <PopoverTrigger asChild>
-                        <button
-                          type="button"
-                          className="w-full h-11 rounded-xl border border-border/70 bg-background px-3 flex items-center justify-between text-sm transition text-left"
+                        <Button
+                          size="sm"
+                          className={cn(
+                            "rounded-xl h-9",
+                            GREEN.grad,
+                            "text-white hover:opacity-90",
+                          )}
                         >
-                          <div className="flex flex-wrap gap-1.5 items-center overflow-hidden">
-                            {selectedProfs.length === 0 ? (
-                              <span className="text-muted-foreground">Selecionar profissionais</span>
-                            ) : (
-                              selectedProfs.map((id) => {
-                                const member = members.find((m) => m.id === id);
-                                if (!member) return null;
-                                return (
-                                  <span
-                                    key={id}
-                                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-semibold uppercase tracking-wider bg-[#F4EBFF] text-[#7F56D9] border border-[#D6BBFB]"
-                                  >
-                                    {member.full_name}
-                                    <span
-                                      role="button"
-                                      tabIndex={0}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedProfs((prev) => prev.filter((x) => x !== id));
-                                      }}
-                                      className="hover:text-red-500 transition-colors ml-1 cursor-pointer"
-                                    >
-                                      <X className="h-3 w-3" />
-                                    </span>
-                                  </span>
-                                );
-                              })
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 ml-2 shrink-0">
-                            {selectedProfs.length > 0 && (
-                              <span
-                                role="button"
-                                tabIndex={0}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedProfs([]);
-                                }}
-                                className="text-muted-foreground hover:text-foreground cursor-pointer"
-                              >
-                                <X className="h-4 w-4" />
-                              </span>
-                            )}
-                            <span className="text-muted-foreground text-[10px]">▼</span>
-                          </div>
-                        </button>
+                          <Plus className="h-4 w-4 mr-1" /> Adicionar participante
+                        </Button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-h-[200px] p-0" align="start">
+                      <PopoverContent className="p-0 w-[320px]" align="end">
                         <Command>
-                          <CommandInput placeholder="Buscar profissional..." />
+                          <CommandInput placeholder="Buscar colaborador..." />
                           <CommandList>
-                            <CommandEmpty>Nenhum profissional encontrado.</CommandEmpty>
+                            <CommandEmpty>Nenhum colaborador.</CommandEmpty>
                             <CommandGroup>
-                              {members.map((m) => {
-                                const isSelected = selectedProfs.includes(m.id);
-                                return (
-                                  <CommandItem
-                                    key={m.id}
-                                    value={m.full_name ?? ""}
-                                    onSelect={() => {
-                                      if (isSelected) {
-                                        setSelectedProfs((prev) => prev.filter((x) => x !== m.id));
-                                      } else {
-                                        setSelectedProfs((prev) => [...prev, m.id]);
-                                      }
-                                    }}
-                                  >
-                                    <div className="flex items-center gap-2 w-full">
-                                      <Checkbox checked={isSelected} />
-                                      <span>{m.full_name ?? "Sem nome"}</span>
-                                    </div>
-                                  </CommandItem>
-                                );
-                              })}
+                              {members.map((m: MemberOpt) => (
+                                <CommandItem
+                                  key={m.id}
+                                  value={m.full_name ?? m.id}
+                                  onSelect={() => addParticipant(m)}
+                                >
+                                  <Avatar name={m.full_name} url={m.avatar_url} />
+                                  <span className="ml-2">{m.full_name ?? "Sem nome"}</span>
+                                </CommandItem>
+                              ))}
                             </CommandGroup>
                           </CommandList>
                         </Command>
                       </PopoverContent>
                     </Popover>
-                  </div>
-
-                  {/* Procedimentos */}
-                  <div className="space-y-1.5">
-                    <FieldLabel>Procedimento / Serviço</FieldLabel>
-                    <Select value={selectedProcedure || "__none"} onValueChange={(v) => setSelectedProcedure(v === "__none" ? "" : v)}>
-                      <SelectTrigger className="h-11 rounded-xl font-medium border-primary/40 bg-primary/5">
-                        <SelectValue placeholder="Pesquise/Selecione o procedimento" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-[320px]">
-                        <SelectItem value="__none">Nenhum (Somente consulta simples)</SelectItem>
-                        {Object.entries(groupedProceduresList).map(([cat, items]) => (
-                          <SelectGroup key={cat}>
-                            <SelectLabel className="font-bold text-xs text-primary uppercase tracking-wider px-2 py-1.5 bg-muted/40">
-                              {cat}
-                            </SelectLabel>
-                            {items.map((p) => (
-                              <SelectItem key={p.id} value={p.id} className="cursor-pointer font-normal pl-4">
-                                {p.name}
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Switch permitindo outros procedimentos */}
-                  <div className="flex items-center gap-2 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setAllowOtherProcedures(!allowOtherProcedures)}
-                      className={cn(
-                        "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                        allowOtherProcedures ? "bg-primary" : "bg-[#EAECF0]"
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                          allowOtherProcedures ? "translate-x-5" : "translate-x-0"
-                        )}
-                      />
-                    </button>
-                    <span className="text-sm font-medium text-[#344054]">
-                      Permitir agendamentos de outros procedimentos nesta data
-                    </span>
-                  </div>
-                </div>
-              </Section>
-            </>
-          ) : (
-            <>
-              {/* Agendamento (Default) Form */}
-              <Section title="Dados básicos" icon={FileText}>
-                <div className="grid gap-4">
-                  {/* Paciente */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <FieldLabel required>Paciente</FieldLabel>
-                      
-                      <div className="flex items-center gap-2.5">
-                        <button
-                          type="button"
-                          onClick={() => setQuickPatientOpen(true)}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#F5F3FF] border border-[#DDD6FE] text-[#7C3AED] hover:bg-[#EDE9FE] text-xs font-semibold transition-colors cursor-pointer"
-                          title="Cadastrar novo paciente"
-                        >
-                          <UserPlus className="h-3.5 w-3.5" />
-                          <span>+ Novo paciente</span>
-                        </button>
-
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const next = !isNewPatient;
-                              setIsNewPatient(next);
-                              if (next) {
-                                setConsultationType("nova_consulta");
-                              } else {
-                                setConsultationType(patientHistory.length === 1 ? "1_retorno" : "retorno_recorrente");
-                              }
-                            }}
-                            className={cn(
-                              "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                              isNewPatient ? "bg-[#7C3AED]" : "bg-[#EAECF0]"
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                                isNewPatient ? "translate-x-4" : "translate-x-0"
-                              )}
-                            />
-                          </button>
-                          <span className="text-xs font-medium text-[#344054]">1ª Vez</span>
-                        </div>
-                      </div>
-                    </div>
-                    <ClientPicker
-                      value={clientId}
-                      onChange={(v, obj) => {
-                        setClientId(v);
-                        setSelectedClientObj(obj ?? null);
-                      }}
-                      clients={clients}
-                      selectedClient={selectedClientObj}
-                    />
-
-                    {/* Resumo/Histórico do Paciente para a Secretaria */}
-                    {clientId && (
-                      <div className="mt-2.5 p-3 rounded-xl border border-primary/20 bg-primary/5 flex flex-col gap-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                            <User className="h-3.5 w-3.5 text-primary" /> Ficha do Paciente
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={cn(
-                                "text-[10px] font-bold px-2 py-0.5 rounded-full",
-                                isNewPatient
-                                  ? "bg-amber-100 text-amber-800"
-                                  : "bg-emerald-100 text-emerald-800"
-                              )}
-                            >
-                              {isNewPatient ? "Novo Paciente (1ª Consulta)" : "Paciente Recorrente"}
-                            </span>
-                            <span className="text-[10px] font-semibold bg-white border border-border px-2 py-0.5 rounded-full text-muted-foreground">
-                              {patientHistory.length} consulta(s) anterior(es)
-                            </span>
-                          </div>
-                        </div>
-                        {patientHistory.length > 0 && (
-                          <div className="text-[11px] text-muted-foreground mt-0.5">
-                            Último atendimento:{" "}
-                            <span className="font-semibold text-foreground">
-                              {patientHistory[0].date.toLocaleDateString("pt-BR")} — {patientHistory[0].title}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Cidade de Atendimento + Tipo de Consulta */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <FieldLabel required>Cidade de Atendimento</FieldLabel>
-                      <Select value={city} onValueChange={setCity}>
-                        <SelectTrigger className="h-11 rounded-xl">
-                          <SelectValue placeholder={availableCities.length === 0 ? "Nenhuma cidade cadastrada" : "Selecione a cidade"} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {availableCities.length === 0 ? (
-                            <div className="p-3 text-xs text-muted-foreground text-center">
-                              Nenhuma cidade cadastrada.<br />
-                              <span className="text-primary font-medium">Cadastre em Configurações.</span>
-                            </div>
-                          ) : (
-                            availableCities.map((c) => (
-                              <SelectItem key={c} value={c}>
-                                {c}
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <FieldLabel required>Tipo de Atendimento</FieldLabel>
-                      <Select
-                        value={consultationType}
-                        onValueChange={(v) => {
-                          setConsultationType(v);
-                          if (v === "nova_consulta") {
-                            setIsNewPatient(true);
-                          } else {
-                            setIsNewPatient(false);
-                          }
-                        }}
-                      >
-                        <SelectTrigger className="h-11 rounded-xl">
-                          <SelectValue placeholder="Selecione o tipo" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="nova_consulta">Nova Consulta</SelectItem>
-                          <SelectItem value="1_retorno">1º Retorno</SelectItem>
-                          <SelectItem value="retorno_recorrente">Retorno Recorrente</SelectItem>
-                          <SelectItem value="procedimento">Procedimento / Tratamento</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  {/* Responsável + Status + Cor */}
-                  <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-4">
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <FieldLabel>Responsável</FieldLabel>
-                        <button
-                          type="button"
-                          onClick={() => setShowNewDoctorModal(true)}
-                          className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
-                        >
-                          <UserPlus size={12} />
-                          + Novo Médico
-                        </button>
-                      </div>
-                      <Select
-                        value={assignedTo || "__none"}
-                        onValueChange={(v) => setAssignedTo(v === "__none" ? "" : v)}
-                      >
-                        <SelectTrigger className="h-11 rounded-xl">
-                          <SelectValue placeholder="Selecionar responsável">
-                            {responsible ? (
-                              <span className="flex items-center gap-2">
-                                <Avatar name={responsible.full_name} url={responsible.avatar_url} />
-                                <span className="truncate">{responsible.full_name}</span>
-                              </span>
-                            ) : (
-                              "Selecionar responsável"
-                            )}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {allMembersList.map((m: MemberOpt) => (
-                            <SelectItem key={m.id} value={m.id}>
-                              <span className="flex items-center gap-2">
-                                <Avatar name={m.full_name} url={m.avatar_url} />
-                                <span className="flex flex-col">
-                                  <span className="text-sm">{m.full_name ?? "Sem nome"}</span>
-                                  {m.role && (
-                                    <span className="text-[10px] text-muted-foreground">{m.role}</span>
-                                  )}
-                                </span>
-                              </span>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <FieldLabel>Status</FieldLabel>
-                      <Select
-                        value={status}
-                        onValueChange={(v) => setStatus(v as (typeof STATUS)[number]["id"])}
-                      >
-                        <SelectTrigger className="h-11 rounded-xl">
-                          <SelectValue>
-                            <span className="flex items-center gap-2">
-                              <span
-                                className="h-2.5 w-2.5 rounded-full"
-                                style={{ background: statusMeta.color }}
-                              />
-                              {statusMeta.label}
-                            </span>
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {STATUS.map((s) => (
-                            <SelectItem key={s.id} value={s.id}>
-                              <span className="flex items-center gap-2">
-                                <span
-                                  className="h-2.5 w-2.5 rounded-full"
-                                  style={{ background: s.color }}
-                                />
-                                {s.label}
-                              </span>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <FieldLabel>Cor</FieldLabel>
-                      <div className="flex items-center gap-1.5 p-2 rounded-xl border border-border/70 bg-background h-11">
-                        {COLORS.map((c) => (
-                          <button
-                            key={c}
-                            type="button"
-                            aria-label={`Cor ${c}`}
-                            onClick={() => setColor(c)}
-                            className={cn(
-                              "h-6 w-6 rounded-full transition-all duration-150 hover:scale-110",
-                              color === c &&
-                                "ring-2 ring-offset-2 ring-offset-background ring-primary scale-110",
-                            )}
-                            style={{ background: c }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Procedimento e Valores / Sinal */}
-                  <div className="space-y-3 p-4 rounded-xl border border-border/70 bg-muted/20">
-                    <div className="text-xs font-bold text-foreground uppercase tracking-wider">
-                      Procedimento & Financeiro (Sinal / Restante)
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <FieldLabel>Procedimento / Serviço</FieldLabel>
-                        <Select
-                          value={selectedProcedure || "__none"}
-                          onValueChange={(v) => {
-                            const val = v === "__none" ? "" : v;
-                            setSelectedProcedure(val);
-                            if (val) {
-                              const found = procedures.find((p) => p.id === val) || (allProceduresList.find((p) => p.id === val) as any);
-                              if (found && found.price) {
-                                setProcedurePrice(found.price);
-                              }
-                            }
-                          }}
-                        >
-                          <SelectTrigger className="h-11 rounded-xl bg-background font-medium border-primary/40">
-                            <SelectValue placeholder="Selecionar procedimento na lista..." />
-                          </SelectTrigger>
-                          <SelectContent className="max-h-[320px]">
-                            <SelectItem value="__none">Nenhum (Somente agendamento)</SelectItem>
-                            {Object.entries(groupedProceduresList).map(([cat, items]) => (
-                              <SelectGroup key={cat}>
-                                <SelectLabel className="font-bold text-xs text-primary uppercase tracking-wider px-2 py-1.5 bg-muted/40">
-                                  {cat}
-                                </SelectLabel>
-                                {items.map((p) => (
-                                  <SelectItem key={p.id} value={p.id} className="cursor-pointer font-normal pl-4">
-                                    {p.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectGroup>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <FieldLabel>Valor Total (R$)</FieldLabel>
-                        <FinancialNumberInput
-                          placeholder="0,00"
-                          value={procedurePrice}
-                          onChange={setProcedurePrice}
-                          className="h-11 rounded-xl bg-background font-semibold"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
-                      <div className="space-y-1.5">
-                        <FieldLabel>Sinal Pago (R$)</FieldLabel>
-                        <FinancialNumberInput
-                          placeholder="0,00"
-                          value={downPayment}
-                          onChange={setDownPayment}
-                          className="h-11 rounded-xl bg-background border-emerald-500/50 text-emerald-700 font-semibold"
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <FieldLabel>Forma do Sinal</FieldLabel>
-                        <Select value={downPaymentMethod} onValueChange={setDownPaymentMethod}>
-                          <SelectTrigger className="h-11 rounded-xl bg-background">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="pix">Pix</SelectItem>
-                            <SelectItem value="cartao_credito">Cartão de Crédito</SelectItem>
-                            <SelectItem value="cartao_debito">Cartão de Débito</SelectItem>
-                            <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                            <SelectItem value="boleto">Boleto Bancário</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <FieldLabel>Restante A Cobrar (R$)</FieldLabel>
-                        <Input
-                          type="text"
-                          readOnly
-                          value={
-                            (Number(procedurePrice) || 0) > 0 || (Number(downPayment) || 0) > 0
-                              ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
-                                  Math.max(0, (Number(procedurePrice) || 0) - (Number(downPayment) || 0))
-                                )
-                              : "R$ 0,00"
-                          }
-                          className="h-11 rounded-xl bg-amber-500/10 border-amber-500/50 text-amber-900 font-bold cursor-not-allowed"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Observações */}
-                  <div className="space-y-1.5">
-                    <FieldLabel>Observações</FieldLabel>
-                    <DebouncedTextarea
-                      value={notes}
-                      onChange={setNotes}
-                      placeholder="Digite observações sobre este agendamento..."
-                      rows={3}
-                      className="rounded-xl resize-none"
-                    />
-                  </div>
-                </div>
-              </Section>
-
-              <Section title="Data e horário" icon={Clock}>
-                <div className="grid gap-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-1.5">
-                      <FieldLabel required>Data</FieldLabel>
-                      <div className="relative">
-                        <DebouncedInput
-                          type="date"
-                          value={day}
-                          onChange={setDay}
-                          className="h-11 rounded-xl pl-10"
-                        />
-                        <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <FieldLabel required>Hora inicial</FieldLabel>
-                      <div className="relative">
-                        <DebouncedInput
-                          type="time"
-                          value={start}
-                          onChange={setStart}
-                          className="h-11 rounded-xl pl-10"
-                        />
-                        <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <FieldLabel required>Hora final</FieldLabel>
-                      <div className="relative">
-                        <DebouncedInput
-                          type="time"
-                          value={end}
-                          onChange={setEnd}
-                          className="h-11 rounded-xl pl-10"
-                        />
-                        <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <FieldLabel>Recorrência</FieldLabel>
-                    <Select value={recurrence} onValueChange={setRecurrence}>
-                      <SelectTrigger className="h-11 rounded-xl">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {RECURRENCE.map((r) => (
-                          <SelectItem key={r.id} value={r.id}>
-                            {r.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {recurrence === "custom" && (
-                      <div className="mt-3 rounded-xl border border-border/70 bg-muted/40 p-4 text-xs text-muted-foreground">
-                        Recorrência personalizada — configure abaixo (intervalo, dias da semana e
-                        término). Em breve.
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </Section>
-
-              <Section
-                title="Local"
-                icon={MapPin}
-                actions={
-                  mapsUrl && (
-                    <a
-                      href={mapsUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-xs font-medium text-primary hover:text-primary inline-flex items-center gap-1"
-                    >
-                      <ExternalLink className="h-3 w-3" /> Abrir no Google Maps
-                    </a>
-                  )
-                }
-              >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <FieldLabel>Local</FieldLabel>
-                    <DebouncedInput
-                      value={locName}
-                      onChange={setLocName}
-                      placeholder="Nome do local"
-                      className="h-11 rounded-xl"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <FieldLabel>Sala</FieldLabel>
-                    <DebouncedInput
-                      value={locRoom}
-                      onChange={setLocRoom}
-                      placeholder="Ex.: Sala 302"
-                      className="h-11 rounded-xl"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <FieldLabel>Cidade</FieldLabel>
-                    <DebouncedInput value={locCity} onChange={setLocCity} className="h-11 rounded-xl" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <FieldLabel>Estado</FieldLabel>
-                    <DebouncedInput
-                      value={locState}
-                      onChange={setLocState}
-                      className="h-11 rounded-xl"
-                    />
-                  </div>
-                  <div className="space-y-1.5 md:col-span-2">
-                    <FieldLabel>Endereço completo</FieldLabel>
-                    <DebouncedInput
-                      value={locAddress}
-                      onChange={setLocAddress}
-                      placeholder="Rua, número, bairro"
-                      className="h-11 rounded-xl"
-                    />
-                  </div>
-                </div>
-              </Section>
-
-              <Section
-                title="Participantes"
-                icon={UserPlus}
-                actions={
-                  <Popover open={partOpen} onOpenChange={setPartOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        size="sm"
-                        className={cn("rounded-xl h-9", GREEN.grad, "text-white hover:opacity-90")}
-                      >
-                        <Plus className="h-4 w-4 mr-1" /> Adicionar participante
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="p-0 w-[320px]" align="end">
-                      <Command>
-                        <CommandInput placeholder="Buscar colaborador..." />
-                        <CommandList>
-                          <CommandEmpty>Nenhum colaborador.</CommandEmpty>
-                          <CommandGroup>
-                            {members.map((m: MemberOpt) => (
-                              <CommandItem
-                                key={m.id}
-                                value={m.full_name ?? m.id}
-                                onSelect={() => addParticipant(m)}
-                              >
-                                <Avatar name={m.full_name} url={m.avatar_url} />
-                                <span className="ml-2">{m.full_name ?? "Sem nome"}</span>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                }
-              >
-                {participants.length === 0 ? (
-                  <div className="text-sm text-muted-foreground text-center py-6">
-                    Nenhum participante adicionado.
-                  </div>
-                ) : (
-                  <div className="overflow-hidden rounded-xl border border-border/70">
-                    <table className="w-full text-sm">
-                      <thead className="bg-muted/50 text-[11px] uppercase tracking-wider text-muted-foreground">
-                        <tr>
-                          <th className="text-left px-4 py-2.5 font-medium">Nome</th>
-                          <th className="text-left px-4 py-2.5 font-medium">Cargo</th>
-                          <th className="text-left px-4 py-2.5 font-medium">Telefone</th>
-                          <th className="text-left px-4 py-2.5 font-medium">E-mail</th>
-                          <th className="w-10" />
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {participants.map((p) => (
-                          <tr key={p.id} className="border-t border-border/70 hover:bg-muted/30">
-                            <td className="px-4 py-2.5 flex items-center gap-2">
-                              <Avatar name={p.name} /> {p.name}
-                            </td>
-                            <td className="px-4 py-2.5 text-muted-foreground">{p.role ?? "—"}</td>
-                            <td className="px-4 py-2.5 text-muted-foreground">{p.phone ?? "—"}</td>
-                            <td className="px-4 py-2.5 text-muted-foreground">{p.email ?? "—"}</td>
-                            <td className="px-4 py-2.5">
-                              <button
-                                onClick={() =>
-                                  setParticipants((prev) => prev.filter((x) => x.id !== p.id))
-                                }
-                                className="p-1.5 rounded-lg hover:bg-rose-500/10 text-muted-foreground hover:text-rose-500 transition"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </Section>
-
-              <Section title="Documentos" icon={Paperclip}>
-                <div
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setDropActive(true);
-                  }}
-                  onDragLeave={() => setDropActive(false)}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setDropActive(false);
-                    if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files);
-                  }}
-                  onClick={() => inputFilesRef.current?.click()}
-                  className={cn(
-                    "rounded-xl border-2 border-dashed p-8 text-center cursor-pointer transition-all",
-                    dropActive
-                      ? "border-primary bg-primary/10"
-                      : "border-border/70 hover:border-primary/50 hover:bg-primary/5",
-                  )}
+                  }
                 >
-                  <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                  <p className="text-sm font-medium">Arraste arquivos aqui ou clique para enviar</p>
-                  <p className="text-xs text-muted-foreground mt-1">PDF, DOCX, imagens ou ZIP</p>
-                  <input
-                    ref={inputFilesRef}
-                    type="file"
-                    hidden
-                    multiple
-                    accept=".pdf,.doc,.docx,.zip,image/*"
-                    onChange={(e) => e.target.files && addFiles(e.target.files)}
-                  />
-                </div>
-                {files.length > 0 && (
-                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {files.map((f) => (
-                      <div
-                        key={f.id}
-                        className="flex items-center gap-3 rounded-xl border border-border/70 bg-card px-3 py-2.5"
-                      >
-                        <FileText className="h-5 w-5 text-primary shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{f.name}</p>
-                          <p className="text-[11px] text-muted-foreground">{formatSize(f.size)}</p>
+                  {participants.length === 0 ? (
+                    <div className="text-sm text-muted-foreground text-center py-6">
+                      Nenhum participante adicionado.
+                    </div>
+                  ) : (
+                    <div className="overflow-hidden rounded-xl border border-border/70">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/50 text-[11px] uppercase tracking-wider text-muted-foreground">
+                          <tr>
+                            <th className="text-left px-4 py-2.5 font-medium">Nome</th>
+                            <th className="text-left px-4 py-2.5 font-medium">Cargo</th>
+                            <th className="text-left px-4 py-2.5 font-medium">Telefone</th>
+                            <th className="text-left px-4 py-2.5 font-medium">E-mail</th>
+                            <th className="w-10" />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {participants.map((p) => (
+                            <tr key={p.id} className="border-t border-border/70 hover:bg-muted/30">
+                              <td className="px-4 py-2.5 flex items-center gap-2">
+                                <Avatar name={p.name} /> {p.name}
+                              </td>
+                              <td className="px-4 py-2.5 text-muted-foreground">{p.role ?? "—"}</td>
+                              <td className="px-4 py-2.5 text-muted-foreground">
+                                {p.phone ?? "—"}
+                              </td>
+                              <td className="px-4 py-2.5 text-muted-foreground">
+                                {p.email ?? "—"}
+                              </td>
+                              <td className="px-4 py-2.5">
+                                <button
+                                  onClick={() =>
+                                    setParticipants((prev) => prev.filter((x) => x.id !== p.id))
+                                  }
+                                  className="p-1.5 rounded-lg hover:bg-rose-500/10 text-muted-foreground hover:text-rose-500 transition"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Section>
+
+                <Section title="Documentos" icon={Paperclip}>
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDropActive(true);
+                    }}
+                    onDragLeave={() => setDropActive(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDropActive(false);
+                      if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files);
+                    }}
+                    onClick={() => inputFilesRef.current?.click()}
+                    className={cn(
+                      "rounded-xl border-2 border-dashed p-8 text-center cursor-pointer transition-all",
+                      dropActive
+                        ? "border-primary bg-primary/10"
+                        : "border-border/70 hover:border-primary/50 hover:bg-primary/5",
+                    )}
+                  >
+                    <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                    <p className="text-sm font-medium">
+                      Arraste arquivos aqui ou clique para enviar
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">PDF, DOCX, imagens ou ZIP</p>
+                    <input
+                      ref={inputFilesRef}
+                      type="file"
+                      hidden
+                      multiple
+                      accept=".pdf,.doc,.docx,.zip,image/*"
+                      onChange={(e) => e.target.files && addFiles(e.target.files)}
+                    />
+                  </div>
+                  {files.length > 0 && (
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {files.map((f) => (
+                        <div
+                          key={f.id}
+                          className="flex items-center gap-3 rounded-xl border border-border/70 bg-card px-3 py-2.5"
+                        >
+                          <FileText className="h-5 w-5 text-primary shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{f.name}</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {formatSize(f.size)}
+                            </p>
+                          </div>
+                          <button
+                            className="p-1.5 rounded-lg hover:bg-muted transition"
+                            title="Baixar"
+                          >
+                            <Download className="h-4 w-4 text-muted-foreground" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setFiles((prev) => prev.filter((x) => x.id !== f.id));
+                            }}
+                            className="p-1.5 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition text-muted-foreground"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
                         </div>
-                        <button className="p-1.5 rounded-lg hover:bg-muted transition" title="Baixar">
-                          <Download className="h-4 w-4 text-muted-foreground" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setFiles((prev) => prev.filter((x) => x.id !== f.id));
-                          }}
-                          className="p-1.5 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition text-muted-foreground"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Section>
+                      ))}
+                    </div>
+                  )}
+                </Section>
 
-              <Section
-                title="Lembretes"
-                icon={Bell}
-                actions={
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="rounded-xl h-9"
-                    onClick={() =>
-                      setReminders((prev) => [
-                        ...prev,
-                        { id: crypto.randomUUID(), when: "15m", kind: "system" },
-                      ])
-                    }
-                  >
-                    <Plus className="h-4 w-4 mr-1" /> Adicionar lembrete
-                  </Button>
-                }
+                <Section
+                  title="Lembretes"
+                  icon={Bell}
+                  actions={
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="rounded-xl h-9"
+                      onClick={() =>
+                        setReminders((prev) => [
+                          ...prev,
+                          { id: crypto.randomUUID(), when: "15m", kind: "system" },
+                        ])
+                      }
+                    >
+                      <Plus className="h-4 w-4 mr-1" /> Adicionar lembrete
+                    </Button>
+                  }
+                >
+                  {reminders.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      Nenhum lembrete configurado.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {reminders.map((r) => (
+                        <div
+                          key={r.id}
+                          className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center"
+                        >
+                          <Select
+                            value={r.when}
+                            onValueChange={(v) =>
+                              setReminders((prev) =>
+                                prev.map((x) => (x.id === r.id ? { ...x, when: v } : x)),
+                              )
+                            }
+                          >
+                            <SelectTrigger className="h-10 rounded-xl">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {REMINDER_WHEN.map((o) => (
+                                <SelectItem key={o.id} value={o.id}>
+                                  {o.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Select
+                            value={r.kind}
+                            onValueChange={(v) =>
+                              setReminders((prev) =>
+                                prev.map((x) => (x.id === r.id ? { ...x, kind: v } : x)),
+                              )
+                            }
+                          >
+                            <SelectTrigger className="h-10 rounded-xl">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {REMINDER_KIND.map((o) => (
+                                <SelectItem key={o.id} value={o.id}>
+                                  {o.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <button
+                            onClick={() =>
+                              setReminders((prev) => prev.filter((x) => x.id !== r.id))
+                            }
+                            className="h-10 w-10 grid place-items-center rounded-xl hover:bg-rose-500/10 hover:text-rose-500 text-muted-foreground transition"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Section>
+
+                <Section
+                  title="Checklist"
+                  icon={ListChecks}
+                  actions={
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="rounded-xl h-9"
+                      onClick={() =>
+                        setChecklist((prev) => [
+                          ...prev,
+                          { id: crypto.randomUUID(), text: "", done: false },
+                        ])
+                      }
+                    >
+                      <Plus className="h-4 w-4 mr-1" /> Adicionar item
+                    </Button>
+                  }
+                >
+                  {checklist.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      Nenhuma tarefa relacionada.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {checklist.map((it) => (
+                        <div
+                          key={it.id}
+                          className="grid grid-cols-[auto_1fr_140px_1fr_auto] gap-2 items-center"
+                        >
+                          <Checkbox
+                            checked={it.done}
+                            onCheckedChange={(v) =>
+                              setChecklist((prev) =>
+                                prev.map((x) => (x.id === it.id ? { ...x, done: !!v } : x)),
+                              )
+                            }
+                          />
+                          <Input
+                            value={it.text}
+                            onChange={(e) =>
+                              setChecklist((prev) =>
+                                prev.map((x) =>
+                                  x.id === it.id ? { ...x, text: e.target.value } : x,
+                                ),
+                              )
+                            }
+                            placeholder="Descrição da tarefa"
+                            className="h-10 rounded-xl"
+                          />
+                          <Input
+                            type="date"
+                            value={it.due ?? ""}
+                            onChange={(e) =>
+                              setChecklist((prev) =>
+                                prev.map((x) =>
+                                  x.id === it.id ? { ...x, due: e.target.value } : x,
+                                ),
+                              )
+                            }
+                            className="h-10 rounded-xl"
+                          />
+                          <Select
+                            value={it.owner ?? "__none"}
+                            onValueChange={(v) =>
+                              setChecklist((prev) =>
+                                prev.map((x) =>
+                                  x.id === it.id
+                                    ? { ...x, owner: v === "__none" ? undefined : v }
+                                    : x,
+                                ),
+                              )
+                            }
+                          >
+                            <SelectTrigger className="h-10 rounded-xl">
+                              <SelectValue placeholder="Responsável" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none">Sem responsável</SelectItem>
+                              {members.map((m: MemberOpt) => (
+                                <SelectItem key={m.id} value={m.id}>
+                                  {m.full_name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <button
+                            onClick={() =>
+                              setChecklist((prev) => prev.filter((x) => x.id !== it.id))
+                            }
+                            className="h-10 w-10 grid place-items-center rounded-xl hover:bg-rose-500/10 hover:text-rose-500 text-muted-foreground transition"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Section>
+
+                <Section title="Anexos rápidos" icon={Paperclip}>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    <QuickAttach
+                      icon={Camera}
+                      label="Adicionar foto"
+                      onClick={() => inputFilesRef.current?.click()}
+                    />
+                    <QuickAttach
+                      icon={ScanLine}
+                      label="Escanear documento"
+                      onClick={() => toast.info("Em breve")}
+                    />
+                    <QuickAttach
+                      icon={FileText}
+                      label="Importar PDF"
+                      onClick={() => inputFilesRef.current?.click()}
+                    />
+                    <QuickAttach
+                      icon={FolderOpen}
+                      label="Importar do Processo"
+                      onClick={() => toast.info("Em breve")}
+                    />
+                  </div>
+                </Section>
+              </>
+            )}
+          </div>
+
+          {/* Footer */}
+          {type === "bloqueio" || type === "lembrete" || type === "evento" ? (
+            <div className="border-t border-border/70 px-6 md:px-8 py-4 flex items-center justify-center bg-background/95 backdrop-blur">
+              <Button
+                onClick={() => save.mutate(false)}
+                disabled={save.isPending}
+                className={cn(
+                  "rounded-xl h-[46px] px-8 text-white font-semibold border-0 bg-[#7C3AED] hover:bg-[#6D28D9] transition-all duration-200 hover:scale-[1.02]",
+                )}
               >
-                {reminders.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    Nenhum lembrete configurado.
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {reminders.map((r) => (
-                      <div key={r.id} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
-                        <Select
-                          value={r.when}
-                          onValueChange={(v) =>
-                            setReminders((prev) =>
-                              prev.map((x) => (x.id === r.id ? { ...x, when: v } : x)),
-                            )
-                          }
-                        >
-                          <SelectTrigger className="h-10 rounded-xl">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {REMINDER_WHEN.map((o) => (
-                              <SelectItem key={o.id} value={o.id}>
-                                {o.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Select
-                          value={r.kind}
-                          onValueChange={(v) =>
-                            setReminders((prev) =>
-                              prev.map((x) => (x.id === r.id ? { ...x, kind: v } : x)),
-                            )
-                          }
-                        >
-                          <SelectTrigger className="h-10 rounded-xl">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {REMINDER_KIND.map((o) => (
-                              <SelectItem key={o.id} value={o.id}>
-                                {o.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <button
-                          onClick={() => setReminders((prev) => prev.filter((x) => x.id !== r.id))}
-                          className="h-10 w-10 grid place-items-center rounded-xl hover:bg-rose-500/10 hover:text-rose-500 text-muted-foreground transition"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Section>
-
-              <Section
-                title="Checklist"
-                icon={ListChecks}
-                actions={
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="rounded-xl h-9"
-                    onClick={() =>
-                      setChecklist((prev) => [
-                        ...prev,
-                        { id: crypto.randomUUID(), text: "", done: false },
-                      ])
-                    }
-                  >
-                    <Plus className="h-4 w-4 mr-1" /> Adicionar item
-                  </Button>
-                }
+                {save.isPending ? "Salvando..." : "Salvar"}
+              </Button>
+            </div>
+          ) : (
+            <div className="border-t border-border/70 px-6 md:px-8 py-4 flex items-center justify-end gap-2 bg-background/95 backdrop-blur">
+              <Button
+                variant="ghost"
+                onClick={() => onOpenChange(false)}
+                className="rounded-xl h-11 px-5"
               >
-                {checklist.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    Nenhuma tarefa relacionada.
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {checklist.map((it) => (
-                      <div
-                        key={it.id}
-                        className="grid grid-cols-[auto_1fr_140px_1fr_auto] gap-2 items-center"
-                      >
-                        <Checkbox
-                          checked={it.done}
-                          onCheckedChange={(v) =>
-                            setChecklist((prev) =>
-                              prev.map((x) => (x.id === it.id ? { ...x, done: !!v } : x)),
-                            )
-                          }
-                        />
-                        <Input
-                          value={it.text}
-                          onChange={(e) =>
-                            setChecklist((prev) =>
-                              prev.map((x) => (x.id === it.id ? { ...x, text: e.target.value } : x)),
-                            )
-                          }
-                          placeholder="Descrição da tarefa"
-                          className="h-10 rounded-xl"
-                        />
-                        <Input
-                          type="date"
-                          value={it.due ?? ""}
-                          onChange={(e) =>
-                            setChecklist((prev) =>
-                              prev.map((x) => (x.id === it.id ? { ...x, due: e.target.value } : x)),
-                            )
-                          }
-                          className="h-10 rounded-xl"
-                        />
-                        <Select
-                          value={it.owner ?? "__none"}
-                          onValueChange={(v) =>
-                            setChecklist((prev) =>
-                              prev.map((x) =>
-                                x.id === it.id ? { ...x, owner: v === "__none" ? undefined : v } : x,
-                              ),
-                            )
-                          }
-                        >
-                          <SelectTrigger className="h-10 rounded-xl">
-                            <SelectValue placeholder="Responsável" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none">Sem responsável</SelectItem>
-                            {members.map((m: MemberOpt) => (
-                              <SelectItem key={m.id} value={m.id}>
-                                {m.full_name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <button
-                          onClick={() => setChecklist((prev) => prev.filter((x) => x.id !== it.id))}
-                          className="h-10 w-10 grid place-items-center rounded-xl hover:bg-rose-500/10 hover:text-rose-500 text-muted-foreground transition"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+                Cancelar
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => save.mutate(true)}
+                disabled={save.isPending}
+                className="rounded-xl h-11 px-5"
+              >
+                Salvar rascunho
+              </Button>
+              <Button
+                onClick={() => save.mutate(false)}
+                disabled={save.isPending}
+                className={cn(
+                  "rounded-[14px] h-[46px] px-6 text-white font-semibold border-0",
+                  GREEN.grad,
+                  "shadow-lg shadow-primary/25 transition-all duration-200 hover:shadow-xl hover:shadow-primary/40 hover:scale-[1.02]",
                 )}
-              </Section>
-
-              <Section title="Anexos rápidos" icon={Paperclip}>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  <QuickAttach
-                    icon={Camera}
-                    label="Adicionar foto"
-                    onClick={() => inputFilesRef.current?.click()}
-                  />
-                  <QuickAttach
-                    icon={ScanLine}
-                    label="Escanear documento"
-                    onClick={() => toast.info("Em breve")}
-                  />
-                  <QuickAttach
-                    icon={FileText}
-                    label="Importar PDF"
-                    onClick={() => inputFilesRef.current?.click()}
-                  />
-                  <QuickAttach
-                    icon={FolderOpen}
-                    label="Importar do Processo"
-                    onClick={() => toast.info("Em breve")}
-                  />
-                </div>
-              </Section>
-            </>
+              >
+                {save.isPending ? "Salvando..." : "Salvar Agendamento"}
+              </Button>
+            </div>
           )}
-        </div>
+        </DialogContent>
+      </Dialog>
 
-        {/* Footer */}
-        {type === "bloqueio" || type === "lembrete" || type === "evento" ? (
-          <div className="border-t border-border/70 px-6 md:px-8 py-4 flex items-center justify-center bg-background/95 backdrop-blur">
-            <Button
-              onClick={() => save.mutate(false)}
-              disabled={save.isPending}
-              className={cn(
-                "rounded-xl h-[46px] px-8 text-white font-semibold border-0 bg-[#7C3AED] hover:bg-[#6D28D9] transition-all duration-200 hover:scale-[1.02]",
-              )}
-            >
-              {save.isPending ? "Salvando..." : "Salvar"}
-            </Button>
-          </div>
-        ) : (
-          <div className="border-t border-border/70 px-6 md:px-8 py-4 flex items-center justify-end gap-2 bg-background/95 backdrop-blur">
-            <Button
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-              className="rounded-xl h-11 px-5"
-            >
-              Cancelar
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => save.mutate(true)}
-              disabled={save.isPending}
-              className="rounded-xl h-11 px-5"
-            >
-              Salvar rascunho
-            </Button>
-            <Button
-              onClick={() => save.mutate(false)}
-              disabled={save.isPending}
-              className={cn(
-                "rounded-[14px] h-[46px] px-6 text-white font-semibold border-0",
-                GREEN.grad,
-                "shadow-lg shadow-primary/25 transition-all duration-200 hover:shadow-xl hover:shadow-primary/40 hover:scale-[1.02]",
-              )}
-            >
-              {save.isPending ? "Salvando..." : "Salvar Agendamento"}
-            </Button>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
-
-    <PatientModal
-      open={quickPatientOpen}
-      onClose={() => setQuickPatientOpen(false)}
+      <PatientModal
+        open={quickPatientOpen}
+        onClose={() => setQuickPatientOpen(false)}
         onSaved={(newPatient) => {
           if (newPatient?.id) {
             const item = {
@@ -2777,7 +2902,9 @@ export function NovoAgendamentoDialog({
             setIsNewPatient(true);
             qc.setQueryData(["patients-picker"], (old: any = []) => {
               const exists = old.some((p: any) => p.id === newPatient.id);
-              return exists ? old.map((p: any) => (p.id === newPatient.id ? item : p)) : [item, ...old];
+              return exists
+                ? old.map((p: any) => (p.id === newPatient.id ? item : p))
+                : [item, ...old];
             });
             qc.invalidateQueries({ queryKey: ["patients-picker"] });
             qc.invalidateQueries({ queryKey: ["patients-list"] });
@@ -2795,7 +2922,9 @@ export function NovoAgendamentoDialog({
           setAssignedTo(newDoc.id);
           qc.setQueriesData({ queryKey: qk.membersMini(companyId) }, (old: any = []) => {
             const exists = old.some((m: any) => m.id === newDoc.id);
-            return exists ? old.map((m: any) => m.id === newDoc.id ? newDoc : m) : [newDoc, ...old];
+            return exists
+              ? old.map((m: any) => (m.id === newDoc.id ? newDoc : m))
+              : [newDoc, ...old];
           });
           qc.invalidateQueries({ queryKey: qk.membersMini(companyId) });
           qc.invalidateQueries({ queryKey: ["allowed-doctors"] });
@@ -2956,7 +3085,11 @@ function NewDoctorDialog({
             <Button type="button" variant="outline" onClick={onClose} className="rounded-xl h-10">
               Cancelar
             </Button>
-            <Button type="submit" disabled={saving} className="rounded-xl h-10 bg-primary text-primary-foreground font-bold">
+            <Button
+              type="submit"
+              disabled={saving}
+              className="rounded-xl h-10 bg-primary text-primary-foreground font-bold"
+            >
               {saving ? "Salvando..." : "Salvar Médico"}
             </Button>
           </div>
@@ -3021,7 +3154,10 @@ const ClientPicker = memo(function ClientPicker({
   selectedClient,
 }: {
   value: string;
-  onChange: (v: string, clientObj?: { id: string; name: string; cpf?: string | null; phone?: string | null } | null) => void;
+  onChange: (
+    v: string,
+    clientObj?: { id: string; name: string; cpf?: string | null; phone?: string | null } | null,
+  ) => void;
   clients: { id: string; name: string; cpf?: string | null; phone?: string | null }[];
   selectedClient?: { id: string; name: string; cpf?: string | null; phone?: string | null } | null;
 }) {
@@ -3031,8 +3167,9 @@ const ClientPicker = memo(function ClientPicker({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const current = useMemo(
-    () => clients.find((c) => c.id === value) || (selectedClient?.id === value ? selectedClient : null),
-    [clients, value, selectedClient]
+    () =>
+      clients.find((c) => c.id === value) || (selectedClient?.id === value ? selectedClient : null),
+    [clients, value, selectedClient],
   );
 
   // Click outside listener
@@ -3065,7 +3202,8 @@ const ClientPicker = memo(function ClientPicker({
         const nameNorm = normalize(c.name || "");
         if (nameNorm.includes(s)) return true;
         if (c.cpf && sDigits.length > 2 && c.cpf.replace(/\D/g, "").includes(sDigits)) return true;
-        if (c.phone && sDigits.length > 2 && c.phone.replace(/\D/g, "").includes(sDigits)) return true;
+        if (c.phone && sDigits.length > 2 && c.phone.replace(/\D/g, "").includes(sDigits))
+          return true;
         return false;
       })
       .slice(0, 60);

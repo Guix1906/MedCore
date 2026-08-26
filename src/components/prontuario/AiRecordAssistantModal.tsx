@@ -71,12 +71,16 @@ export function AiRecordAssistantModal({
   const [transcript, setTranscript] = useState("");
   const [manualText, setManualText] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
-  const [structuredResult, setStructuredResult] = useState<StructuredConsultationResult | null>(null);
+  const [structuredResult, setStructuredResult] = useState<StructuredConsultationResult | null>(
+    null,
+  );
   const [editedSections, setEditedSections] = useState<Record<string, string>>({});
   const [selectedSections, setSelectedSections] = useState<Record<string, boolean>>({});
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [copiedSectionId, setCopiedSectionId] = useState<string | null>(null);
-  const [audioLevels, setAudioLevels] = useState<number[]>([15, 20, 25, 18, 22, 30, 24, 18, 20, 15, 22, 18]);
+  const [audioLevels, setAudioLevels] = useState<number[]>([
+    15, 20, 25, 18, 22, 30, 24, 18, 20, 15, 22, 18,
+  ]);
 
   const recognitionRef = useRef<any>(null);
   const finalTranscriptRef = useRef<string>("");
@@ -125,8 +129,7 @@ export function AiRecordAssistantModal({
       }
 
       const fullLive = (
-        (finalTranscriptRef.current ? finalTranscriptRef.current + " " : "") +
-        interim
+        (finalTranscriptRef.current ? finalTranscriptRef.current + " " : "") + interim
       ).trim();
 
       setTranscript(fullLive);
@@ -240,7 +243,8 @@ export function AiRecordAssistantModal({
 
     if (!recognition) {
       toast.info("Reconhecimento por voz", {
-        description: "Seu navegador não possui suporte à Web Speech API. Você pode usar a aba de digitação.",
+        description:
+          "Seu navegador não possui suporte à Web Speech API. Você pode usar a aba de digitação.",
       });
       setMode("text");
       return;
@@ -376,13 +380,19 @@ export function AiRecordAssistantModal({
 
     const finalStructured: StructuredConsultationResult = {
       ...structuredResult,
-      queixaPrincipal: selectedSections["queixa"] ? (editedSections["queixa"] || "") : "",
-      historicoFamiliar: selectedSections["historico_familiar"] ? (editedSections["historico_familiar"] || "") : "",
-      tratamentosAnteriores: selectedSections["tratamentos"] ? (editedSections["tratamentos"] || "") : "",
-      alergias: selectedSections["alergias"] ? (editedSections["alergias"] || "") : "",
-      historicoPessoal: selectedSections["historico_pessoal"] ? (editedSections["historico_pessoal"] || "") : "",
-      medicacoesEmUso: selectedSections["medicacoes"] ? (editedSections["medicacoes"] || "") : "",
-      condutaPlano: selectedSections["conduta"] ? (editedSections["conduta"] || "") : "",
+      queixaPrincipal: selectedSections["queixa"] ? editedSections["queixa"] || "" : "",
+      historicoFamiliar: selectedSections["historico_familiar"]
+        ? editedSections["historico_familiar"] || ""
+        : "",
+      tratamentosAnteriores: selectedSections["tratamentos"]
+        ? editedSections["tratamentos"] || ""
+        : "",
+      alergias: selectedSections["alergias"] ? editedSections["alergias"] || "" : "",
+      historicoPessoal: selectedSections["historico_pessoal"]
+        ? editedSections["historico_pessoal"] || ""
+        : "",
+      medicacoesEmUso: selectedSections["medicacoes"] ? editedSections["medicacoes"] || "" : "",
+      condutaPlano: selectedSections["conduta"] ? editedSections["conduta"] || "" : "",
     };
 
     onInsert(finalStructured, section?.key);
@@ -437,7 +447,8 @@ export function AiRecordAssistantModal({
                 </span>
               </div>
               <p className="text-[12.5px] text-slate-500 mt-0.5">
-                Fale ou digite os dados clínicos e a IA organizará a consulta em formato de prontuário.
+                Fale ou digite os dados clínicos e a IA organizará a consulta em formato de
+                prontuário.
               </p>
             </div>
           </div>
@@ -520,7 +531,8 @@ export function AiRecordAssistantModal({
                       onClick={startRecording}
                       className="relative z-10 flex h-18 w-18 items-center justify-center rounded-full text-white transition-all shadow-md hover:brightness-110 active:scale-95 cursor-pointer"
                       style={{
-                        background: "linear-gradient(135deg, #FF7A59 0%, #D946EF 50%, #6366F1 100%)",
+                        background:
+                          "linear-gradient(135deg, #FF7A59 0%, #D946EF 50%, #6366F1 100%)",
                       }}
                       title="Começar a registrar consulta"
                     >
@@ -580,8 +592,10 @@ export function AiRecordAssistantModal({
                   <div className="text-[15px] font-bold text-slate-800">
                     {recordingState === "idle" && "Começar a registrar consulta"}
                     {isRecording && "Gravando consulta médica..."}
-                    {recordingState === "paused" && `Consulta pausada (${formatSeconds(recordingSeconds)})`}
-                    {recordingState === "finished" && `Consulta finalizada (${formatSeconds(recordingSeconds)})`}
+                    {recordingState === "paused" &&
+                      `Consulta pausada (${formatSeconds(recordingSeconds)})`}
+                    {recordingState === "finished" &&
+                      `Consulta finalizada (${formatSeconds(recordingSeconds)})`}
                   </div>
                   <p className="text-[12.5px] text-slate-500 max-w-md">
                     {recordingState === "idle" &&
@@ -744,7 +758,9 @@ export function AiRecordAssistantModal({
                   {structuredResult.condicoesDetectadas.length > 0 && (
                     <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-800 text-[11.5px] font-semibold">
                       <span>Condições identificadas:</span>
-                      <span className="underline">{structuredResult.condicoesDetectadas.join(", ")}</span>
+                      <span className="underline">
+                        {structuredResult.condicoesDetectadas.join(", ")}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -755,7 +771,8 @@ export function AiRecordAssistantModal({
                     const isSelected = !!selectedSections[sec.id];
                     const content = editedSections[sec.id] ?? sec.content;
                     const isUnclear = sec.isUnclear || content.includes("(Revisar");
-                    const isNotInformed = content === "Não informado na consulta." || !content.trim();
+                    const isNotInformed =
+                      content === "Não informado na consulta." || !content.trim();
 
                     return (
                       <div

@@ -269,10 +269,7 @@ function ServiceTypes() {
       destructive: true,
     });
     if (!ok) return;
-    const { error } = await (supabase as DbRow)
-      .from("service_types")
-      .delete()
-      .eq("id", s.id);
+    const { error } = await (supabase as DbRow).from("service_types").delete().eq("id", s.id);
     if (error) toast.error("Erro: " + error.message);
     else {
       toast.success("Serviço excluído");
@@ -611,7 +608,8 @@ function CitySettings() {
           <MapPin className="text-[#8B47FF]" size={18} /> Cidades de Atendimento
         </h2>
         <p className="text-[12.5px] text-[#6B7280] mt-1">
-          Cadastre as cidades onde a clínica e o médico realizam atendimentos. Elas ficarão disponíveis no agendamento e no filtro da agenda.
+          Cadastre as cidades onde a clínica e o médico realizam atendimentos. Elas ficarão
+          disponíveis no agendamento e no filtro da agenda.
         </p>
       </div>
 
@@ -641,7 +639,10 @@ function CitySettings() {
           </div>
         ) : (
           cities.map((city) => (
-            <div key={city} className="flex items-center justify-between p-3 bg-white hover:bg-[#F9FAFB] transition">
+            <div
+              key={city}
+              className="flex items-center justify-between p-3 bg-white hover:bg-[#F9FAFB] transition"
+            >
               <span className="text-[13.5px] font-medium text-[#111827] flex items-center gap-2">
                 <MapPin size={14} className="text-[#8B47FF]" /> {city}
               </span>

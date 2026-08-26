@@ -185,7 +185,7 @@ export function BeautifulDatePicker({
           open
             ? "border-[#8B47FF] ring-2 ring-[#8B47FF]/10 bg-white"
             : "border-[#E5E7EB] bg-white hover:border-[#8B47FF]/60",
-          !formattedDisplay ? "text-[#9CA3AF]" : "text-[#111827]"
+          !formattedDisplay ? "text-[#9CA3AF]" : "text-[#111827]",
         )}
       >
         <div className="flex items-center gap-2.5 min-w-0 flex-1">
@@ -193,14 +193,12 @@ export function BeautifulDatePicker({
             size={16}
             className={cn(
               "shrink-0 transition-colors",
-              formattedDisplay ? "text-[#8B47FF]" : "text-[#9CA3AF]"
+              formattedDisplay ? "text-[#8B47FF]" : "text-[#9CA3AF]",
             )}
           />
           {formattedDisplay ? (
             <div className="flex items-center gap-2 truncate">
-              <span className="font-semibold text-[#111827]">
-                {formattedDisplay.dateFormatted}
-              </span>
+              <span className="font-semibold text-[#111827]">{formattedDisplay.dateFormatted}</span>
               {formattedDisplay.ageStr && (
                 <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#F5F3FF] text-[#8B47FF] border border-[#DDD6FE]">
                   {formattedDisplay.ageStr}
@@ -296,8 +294,7 @@ export function BeautifulDatePicker({
           <div className="grid grid-cols-7 gap-1 text-center">
             {calendarDays.map((dObj, idx) => {
               const isSelected = value === dObj.dateStr;
-              const isToday =
-                new Date().toISOString().slice(0, 10) === dObj.dateStr;
+              const isToday = new Date().toISOString().slice(0, 10) === dObj.dateStr;
 
               return (
                 <button
@@ -311,7 +308,7 @@ export function BeautifulDatePicker({
                       : dObj.isCurrentMonth
                         ? "text-[#111827] hover:bg-[#F5F3FF] hover:text-[#8B47FF]"
                         : "text-[#D1D5DB] hover:bg-slate-50",
-                    isToday && !isSelected && "border border-[#8B47FF] font-bold text-[#8B47FF]"
+                    isToday && !isSelected && "border border-[#8B47FF] font-bold text-[#8B47FF]",
                   )}
                 >
                   {dObj.day}

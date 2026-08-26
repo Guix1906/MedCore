@@ -184,7 +184,7 @@ export function DailyGrid({
                   siblings={timed}
                   style={{ top, height }}
                   onClick={() => onActivityClick(a)}
-                  onEdit={() => onActivityEdit ? onActivityEdit(a) : onActivityClick(a)}
+                  onEdit={() => (onActivityEdit ? onActivityEdit(a) : onActivityClick(a))}
                   onDragStart={() => {
                     draggedRef.current = a;
                   }}

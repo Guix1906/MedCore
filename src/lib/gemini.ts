@@ -77,7 +77,10 @@ export async function generateConsultationRecord({
       }
     }
   } catch (err) {
-    console.warn("Falha no serviço de IA server-side, utilizando sintetizador de segurança local:", err);
+    console.warn(
+      "Falha no serviço de IA server-side, utilizando sintetizador de segurança local:",
+      err,
+    );
   }
 
   // Fallback factual
@@ -90,7 +93,10 @@ function parseConsultationObj(rawInput: any): StructuredConsultationResult | nul
     if (typeof rawInput === "string") {
       let cleanJson = rawInput.trim();
       if (cleanJson.startsWith("```json")) {
-        cleanJson = cleanJson.replace(/^```json/, "").replace(/```$/, "").trim();
+        cleanJson = cleanJson
+          .replace(/^```json/, "")
+          .replace(/```$/, "")
+          .trim();
       } else if (cleanJson.startsWith("```")) {
         cleanJson = cleanJson.replace(/^```/, "").replace(/```$/, "").trim();
       }
@@ -137,7 +143,9 @@ function parseConsultationObj(rawInput: any): StructuredConsultationResult | nul
         description: "Tratamentos, cirurgias e procedimentos prévios",
         content: tratamentosAnteriores,
         isUnclear: tratamentosAnteriores.includes("(Revisar"),
-        selected: Boolean(tratamentosAnteriores && tratamentosAnteriores !== "Não informado na consulta."),
+        selected: Boolean(
+          tratamentosAnteriores && tratamentosAnteriores !== "Não informado na consulta.",
+        ),
       },
       {
         id: "alergias",
@@ -205,13 +213,62 @@ function sanitizeClinicalField(val: unknown): string {
 
 function buildEmptyConsultationResult(): StructuredConsultationResult {
   const sections: ClinicalSectionData[] = [
-    { id: "queixa", title: "Queixa Principal", fieldTarget: "Campo: Queixa Principal", description: "Motivo relatado da consulta", content: "", selected: false },
-    { id: "historico_familiar", title: "Histórico Familiar", fieldTarget: "Campo: Histórico Familiar", description: "Antecedentes familiares", content: "", selected: false },
-    { id: "tratamentos", title: "Tratamentos Anteriores", fieldTarget: "Campo: Tratamentos Anteriores", description: "Procedimentos e tratamentos prévios", content: "", selected: false },
-    { id: "alergias", title: "Alergias", fieldTarget: "Campo: Alergias", description: "Reações e alergias relatadas", content: "", selected: false },
-    { id: "historico_pessoal", title: "Histórico Médico Pessoal", fieldTarget: "Campo: Condições / Outras condições", description: "Condições prévias do paciente", content: "", selected: false },
-    { id: "medicacoes", title: "Medicações em Uso", fieldTarget: "Campo: Medicações em uso atualmente", description: "Fármacos e dosagens atuais", content: "", selected: false },
-    { id: "conduta", title: "Conduta e Orientações", fieldTarget: "Campo: Orientações / Conduta Clínica", description: "Prescrições e orientações médicas", content: "", selected: false },
+    {
+      id: "queixa",
+      title: "Queixa Principal",
+      fieldTarget: "Campo: Queixa Principal",
+      description: "Motivo relatado da consulta",
+      content: "",
+      selected: false,
+    },
+    {
+      id: "historico_familiar",
+      title: "Histórico Familiar",
+      fieldTarget: "Campo: Histórico Familiar",
+      description: "Antecedentes familiares",
+      content: "",
+      selected: false,
+    },
+    {
+      id: "tratamentos",
+      title: "Tratamentos Anteriores",
+      fieldTarget: "Campo: Tratamentos Anteriores",
+      description: "Procedimentos e tratamentos prévios",
+      content: "",
+      selected: false,
+    },
+    {
+      id: "alergias",
+      title: "Alergias",
+      fieldTarget: "Campo: Alergias",
+      description: "Reações e alergias relatadas",
+      content: "",
+      selected: false,
+    },
+    {
+      id: "historico_pessoal",
+      title: "Histórico Médico Pessoal",
+      fieldTarget: "Campo: Condições / Outras condições",
+      description: "Condições prévias do paciente",
+      content: "",
+      selected: false,
+    },
+    {
+      id: "medicacoes",
+      title: "Medicações em Uso",
+      fieldTarget: "Campo: Medicações em uso atualmente",
+      description: "Fármacos e dosagens atuais",
+      content: "",
+      selected: false,
+    },
+    {
+      id: "conduta",
+      title: "Conduta e Orientações",
+      fieldTarget: "Campo: Orientações / Conduta Clínica",
+      description: "Prescrições e orientações médicas",
+      content: "",
+      selected: false,
+    },
   ];
 
   return {
@@ -240,21 +297,73 @@ function fallbackConsultationSynthesis(transcript: string): StructuredConsultati
 
   const condicoesDetectadas: string[] = [];
   const lower = clean.toLowerCase();
-  if (lower.includes("hipertens") || lower.includes("pressão alta")) condicoesDetectadas.push("Hipertensão");
+  if (lower.includes("hipertens") || lower.includes("pressão alta"))
+    condicoesDetectadas.push("Hipertensão");
   if (lower.includes("diabet") || lower.includes("glicemia")) condicoesDetectadas.push("Diabetes");
-  if (lower.includes("cardíac") || lower.includes("coração")) condicoesDetectadas.push("Doenças cardíacas");
-  if (lower.includes("asma") || lower.includes("bronquite")) condicoesDetectadas.push("Asma ou problemas respiratórios");
+  if (lower.includes("cardíac") || lower.includes("coração"))
+    condicoesDetectadas.push("Doenças cardíacas");
+  if (lower.includes("asma") || lower.includes("bronquite"))
+    condicoesDetectadas.push("Asma ou problemas respiratórios");
   if (lower.includes("tireoid")) condicoesDetectadas.push("Problemas de tireoide");
   if (lower.includes("câncer") || lower.includes("neoplasia")) condicoesDetectadas.push("Câncer");
 
   const sections: ClinicalSectionData[] = [
-    { id: "queixa", title: "Queixa Principal", fieldTarget: "Campo: Queixa Principal", description: "Motivo relatado da consulta", content: queixaPrincipal, selected: true },
-    { id: "historico_familiar", title: "Histórico Familiar", fieldTarget: "Campo: Histórico Familiar", description: "Antecedentes familiares", content: historicoFamiliar, selected: false },
-    { id: "tratamentos", title: "Tratamentos Anteriores", fieldTarget: "Campo: Tratamentos Anteriores", description: "Procedimentos e tratamentos prévios", content: tratamentosAnteriores, selected: false },
-    { id: "alergias", title: "Alergias", fieldTarget: "Campo: Alergias", description: "Reações e alergias relatadas", content: alergias, selected: false },
-    { id: "historico_pessoal", title: "Histórico Médico Pessoal", fieldTarget: "Campo: Condições / Outras condições", description: "Condições prévias do paciente", content: historicoPessoal, selected: false },
-    { id: "medicacoes", title: "Medicações em Uso", fieldTarget: "Campo: Medicações em uso atualmente", description: "Fármacos e dosagens atuais", content: medicacoesEmUso, selected: false },
-    { id: "conduta", title: "Conduta e Orientações", fieldTarget: "Campo: Orientações / Conduta Clínica", description: "Prescrições e orientações médicas", content: condutaPlano, selected: true },
+    {
+      id: "queixa",
+      title: "Queixa Principal",
+      fieldTarget: "Campo: Queixa Principal",
+      description: "Motivo relatado da consulta",
+      content: queixaPrincipal,
+      selected: true,
+    },
+    {
+      id: "historico_familiar",
+      title: "Histórico Familiar",
+      fieldTarget: "Campo: Histórico Familiar",
+      description: "Antecedentes familiares",
+      content: historicoFamiliar,
+      selected: false,
+    },
+    {
+      id: "tratamentos",
+      title: "Tratamentos Anteriores",
+      fieldTarget: "Campo: Tratamentos Anteriores",
+      description: "Procedimentos e tratamentos prévios",
+      content: tratamentosAnteriores,
+      selected: false,
+    },
+    {
+      id: "alergias",
+      title: "Alergias",
+      fieldTarget: "Campo: Alergias",
+      description: "Reações e alergias relatadas",
+      content: alergias,
+      selected: false,
+    },
+    {
+      id: "historico_pessoal",
+      title: "Histórico Médico Pessoal",
+      fieldTarget: "Campo: Condições / Outras condições",
+      description: "Condições prévias do paciente",
+      content: historicoPessoal,
+      selected: false,
+    },
+    {
+      id: "medicacoes",
+      title: "Medicações em Uso",
+      fieldTarget: "Campo: Medicações em uso atualmente",
+      description: "Fármacos e dosagens atuais",
+      content: medicacoesEmUso,
+      selected: false,
+    },
+    {
+      id: "conduta",
+      title: "Conduta e Orientações",
+      fieldTarget: "Campo: Orientações / Conduta Clínica",
+      description: "Prescrições e orientações médicas",
+      content: condutaPlano,
+      selected: true,
+    },
   ];
 
   return {
@@ -283,11 +392,14 @@ export async function generateMedicalRecordContent({
   const titleLower = sectionTitle.toLowerCase();
 
   if (titleLower.includes("queixa")) return result.queixaPrincipal;
-  if (titleLower.includes("familiar") || titleLower.includes("antecedente")) return result.historicoFamiliar;
+  if (titleLower.includes("familiar") || titleLower.includes("antecedente"))
+    return result.historicoFamiliar;
   if (titleLower.includes("tratamento")) return result.tratamentosAnteriores;
   if (titleLower.includes("alergia")) return result.alergias;
-  if (titleLower.includes("pessoal") || titleLower.includes("condições")) return result.historicoPessoal;
-  if (titleLower.includes("medicaç") || titleLower.includes("medicamento")) return result.medicacoesEmUso;
+  if (titleLower.includes("pessoal") || titleLower.includes("condições"))
+    return result.historicoPessoal;
+  if (titleLower.includes("medicaç") || titleLower.includes("medicamento"))
+    return result.medicacoesEmUso;
   if (titleLower.includes("conduta") || titleLower.includes("orientaç")) return result.condutaPlano;
   return result.queixaPrincipal || rawInput;
 }

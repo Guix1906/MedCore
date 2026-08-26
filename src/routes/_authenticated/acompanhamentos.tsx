@@ -45,7 +45,10 @@ export const Route = createFileRoute("/_authenticated/acompanhamentos")({
   head: () => ({
     meta: [
       { title: "Acompanhamentos • MedCore" },
-      { name: "description", content: "Gestão completa de tratamentos, fases clínicas e acompanhamentos." },
+      {
+        name: "description",
+        content: "Gestão completa de tratamentos, fases clínicas e acompanhamentos.",
+      },
     ],
   }),
   component: AcompanhamentosPage,
@@ -237,7 +240,7 @@ function AcompanhamentosPage() {
       return;
     }
     const msg = encodeURIComponent(
-      `Olá ${t.patients?.name}! Entramos em contato da clínica sobre o seu acompanhamento "${t.title}". Como você está se sentindo?`
+      `Olá ${t.patients?.name}! Entramos em contato da clínica sobre o seu acompanhamento "${t.title}". Como você está se sentindo?`,
     );
     window.open(`https://wa.me/55${phone}?text=${msg}`, "_blank");
   };
@@ -253,9 +256,7 @@ function AcompanhamentosPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-[#111827] tracking-tight">
-                Acompanhamentos
-              </h1>
+              <h1 className="text-2xl font-bold text-[#111827] tracking-tight">Acompanhamentos</h1>
               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 text-purple-700">
                 Copiloto Clínico
               </span>
@@ -310,7 +311,12 @@ function AcompanhamentosPage() {
             { label: "Total cadastrados", value: kpis.total, color: "#8B47FF", icon: Activity },
             { label: "Em andamento", value: kpis.ativos, color: "#10B981", icon: TrendingUp },
             { label: "Finalizados", value: kpis.finalizados, color: "#1E40AF", icon: CheckCircle2 },
-            { label: "Valor sob gestão", value: brl(kpis.receita), color: "#F59E0B", icon: Sparkles },
+            {
+              label: "Valor sob gestão",
+              value: brl(kpis.receita),
+              color: "#F59E0B",
+              icon: Sparkles,
+            },
           ].map((k, i) => {
             const Icon = k.icon;
             return (
@@ -346,7 +352,10 @@ function AcompanhamentosPage() {
         {/* Barra de Filtros e Busca */}
         <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 shadow-sm flex flex-wrap items-center gap-2.5">
           <div className="relative flex-1 min-w-[240px]">
-            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search
+              size={16}
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+            />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
@@ -427,7 +436,10 @@ function AcompanhamentosPage() {
                           <div className="flex items-center gap-3 min-w-0">
                             <div
                               className="h-11 w-11 shrink-0 rounded-2xl flex items-center justify-center shadow-xs"
-                              style={{ background: (t.color || "#8B47FF") + "18", color: t.color || "#8B47FF" }}
+                              style={{
+                                background: (t.color || "#8B47FF") + "18",
+                                color: t.color || "#8B47FF",
+                              }}
                             >
                               <Activity size={20} />
                             </div>
@@ -466,14 +478,18 @@ function AcompanhamentosPage() {
                         {/* Dados adicionais */}
                         <div className="mt-4 grid grid-cols-2 gap-3 text-[12.5px] bg-slate-50/80 p-3 rounded-xl">
                           <div>
-                            <div className="text-slate-400 text-[11px] font-semibold uppercase">Início</div>
+                            <div className="text-slate-400 text-[11px] font-semibold uppercase">
+                              Início
+                            </div>
                             <div className="text-slate-800 font-semibold mt-0.5 flex items-center gap-1">
                               <CalIcon size={12} className="text-purple-600" />
                               {new Date(t.start_date).toLocaleDateString("pt-BR")}
                             </div>
                           </div>
                           <div>
-                            <div className="text-slate-400 text-[11px] font-semibold uppercase">Valor</div>
+                            <div className="text-slate-400 text-[11px] font-semibold uppercase">
+                              Valor
+                            </div>
                             <div className="text-slate-900 font-bold mt-0.5">
                               {brl(Number(t.total_value))}
                             </div>
@@ -507,7 +523,10 @@ function AcompanhamentosPage() {
                             className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl bg-purple-50 group-hover:bg-purple-600 text-purple-700 group-hover:text-white text-[12.5px] font-bold transition-all shadow-2xs"
                           >
                             <span>Gerenciar</span>
-                            <ChevronRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+                            <ChevronRight
+                              size={14}
+                              className="group-hover:translate-x-0.5 transition-transform"
+                            />
                           </div>
                         </div>
                       </div>
@@ -735,10 +754,7 @@ function TreatmentManageModal({
       notes: form.notes.trim() || null,
     };
 
-    const { error } = await supabase
-      .from("treatments")
-      .update(payload)
-      .eq("id", treatment.id);
+    const { error } = await supabase.from("treatments").update(payload).eq("id", treatment.id);
 
     setSaving(false);
     if (error) {
@@ -765,14 +781,15 @@ function TreatmentManageModal({
           <div className="flex items-center gap-3 min-w-0">
             <div
               className="h-10 w-10 shrink-0 rounded-2xl flex items-center justify-center"
-              style={{ background: (treatment.color || "#8B47FF") + "18", color: treatment.color || "#8B47FF" }}
+              style={{
+                background: (treatment.color || "#8B47FF") + "18",
+                color: treatment.color || "#8B47FF",
+              }}
             >
               <Activity size={20} />
             </div>
             <div className="min-w-0">
-              <div className="text-[16px] font-bold text-slate-900 truncate">
-                {treatment.title}
-              </div>
+              <div className="text-[16px] font-bold text-slate-900 truncate">{treatment.title}</div>
               <div className="text-[12px] text-slate-500 flex items-center gap-1.5 mt-0.5">
                 <UserIcon size={12} className="text-slate-400" />
                 <span className="font-semibold">{treatment.patients?.name || "Paciente"}</span>
@@ -843,7 +860,9 @@ function TreatmentManageModal({
                 <select
                   className={inputCls}
                   value={form.status}
-                  onChange={(e) => setForm({ ...form, status: e.target.value as Treatment["status"] })}
+                  onChange={(e) =>
+                    setForm({ ...form, status: e.target.value as Treatment["status"] })
+                  }
                 >
                   <option value="em_andamento">Em andamento</option>
                   <option value="pausado">Pausado</option>
@@ -999,7 +1018,9 @@ function TreatmentManageModal({
                     {treatment.patients?.name || "Paciente não identificado"}
                   </div>
                   <div className="text-[12.5px] text-slate-500 mt-0.5">
-                    {treatment.doctors?.name ? `Médico responsável: Dr(a). ${treatment.doctors.name}` : "Sem médico atribuído"}
+                    {treatment.doctors?.name
+                      ? `Médico responsável: Dr(a). ${treatment.doctors.name}`
+                      : "Sem médico atribuído"}
                   </div>
                 </div>
 
@@ -1011,7 +1032,7 @@ function TreatmentManageModal({
                         const phone = treatment.patients?.phone?.replace(/\D/g, "");
                         if (!phone) return;
                         const msg = encodeURIComponent(
-                          `Olá ${treatment.patients?.name}! Entramos em contato da clínica sobre o seu acompanhamento "${treatment.title}".`
+                          `Olá ${treatment.patients?.name}! Entramos em contato da clínica sobre o seu acompanhamento "${treatment.title}".`,
                         );
                         window.open(`https://wa.me/55${phone}?text=${msg}`, "_blank");
                       }}
@@ -1049,11 +1070,15 @@ function TreatmentManageModal({
                     </div>
                   </div>
                   <div>
-                    <div className="text-slate-400 text-[10.5px] font-bold uppercase">Dias Corridos</div>
+                    <div className="text-slate-400 text-[10.5px] font-bold uppercase">
+                      Dias Corridos
+                    </div>
                     <div className="font-bold text-purple-700 mt-0.5">{passedDays} dias</div>
                   </div>
                   <div>
-                    <div className="text-slate-400 text-[10.5px] font-bold uppercase">Restantes</div>
+                    <div className="text-slate-400 text-[10.5px] font-bold uppercase">
+                      Restantes
+                    </div>
                     <div className="font-bold text-slate-800 mt-0.5">{remainingDays} dias</div>
                   </div>
                 </div>
@@ -1116,28 +1141,30 @@ function TreatmentManageModal({
                   Alterar Status do Acompanhamento
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {(["em_andamento", "pausado", "finalizado", "cancelado"] as const).map((statusKey) => (
-                    <button
-                      key={statusKey}
-                      type="button"
-                      onClick={() => handleQuickStatusChange(statusKey)}
-                      className={`h-8.5 px-3 rounded-xl text-[12px] font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                        treatment.status === statusKey
-                          ? "ring-2 ring-purple-600 ring-offset-1 font-extrabold"
-                          : "hover:opacity-80 opacity-60"
-                      }`}
-                      style={{
-                        background: STATUS_LABEL[statusKey].bg,
-                        color: STATUS_LABEL[statusKey].fg,
-                      }}
-                    >
-                      {statusKey === "em_andamento" && <PlayCircle size={14} />}
-                      {statusKey === "pausado" && <PauseCircle size={14} />}
-                      {statusKey === "finalizado" && <CheckCircle2 size={14} />}
-                      {statusKey === "cancelado" && <AlertCircle size={14} />}
-                      <span>{STATUS_LABEL[statusKey].label}</span>
-                    </button>
-                  ))}
+                  {(["em_andamento", "pausado", "finalizado", "cancelado"] as const).map(
+                    (statusKey) => (
+                      <button
+                        key={statusKey}
+                        type="button"
+                        onClick={() => handleQuickStatusChange(statusKey)}
+                        className={`h-8.5 px-3 rounded-xl text-[12px] font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                          treatment.status === statusKey
+                            ? "ring-2 ring-purple-600 ring-offset-1 font-extrabold"
+                            : "hover:opacity-80 opacity-60"
+                        }`}
+                        style={{
+                          background: STATUS_LABEL[statusKey].bg,
+                          color: STATUS_LABEL[statusKey].fg,
+                        }}
+                      >
+                        {statusKey === "em_andamento" && <PlayCircle size={14} />}
+                        {statusKey === "pausado" && <PauseCircle size={14} />}
+                        {statusKey === "finalizado" && <CheckCircle2 size={14} />}
+                        {statusKey === "cancelado" && <AlertCircle size={14} />}
+                        <span>{STATUS_LABEL[statusKey].label}</span>
+                      </button>
+                    ),
+                  )}
                 </div>
               </div>
             </div>
@@ -1202,7 +1229,9 @@ function TreatmentManageModal({
 
 // ============== MODAL NOVO ACOMPANHAMENTO ==============
 function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [patients, setPatients] = useState<{ id: string; name: string; phone?: string | null; cpf?: string | null }[]>([]);
+  const [patients, setPatients] = useState<
+    { id: string; name: string; phone?: string | null; cpf?: string | null }[]
+  >([]);
   const [doctors, setDoctors] = useState<{ id: string; name: string }[]>([]);
   const [loadingPatients, setLoadingPatients] = useState(true);
   const [patientSearch, setPatientSearch] = useState("");
@@ -1230,7 +1259,7 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
   const loadPatientsAndDoctors = async () => {
     setLoadingPatients(true);
     let pats: { id: string; name: string; phone?: string | null; cpf?: string | null }[] = [];
-    
+
     // 1. Tenta API PHP / Central
     try {
       const phpPat = await patientsService.getPatients({ limit: 500 });
@@ -1247,13 +1276,22 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
     // 2. Tenta Supabase
     if (pats.length === 0) {
       try {
-        const { data } = await supabase.from("patients").select("id,name,phone,cpf").order("name").limit(500);
+        const { data } = await supabase
+          .from("patients")
+          .select("id,name,phone,cpf")
+          .order("name")
+          .limit(500);
         if (data && data.length > 0) pats = data as any;
       } catch {}
     }
 
     // 3. Mescla com pacientes salvos localmente
-    const merged = mergeWithLocalPatients<{ id: string; name: string; phone?: string | null; cpf?: string | null }>(pats);
+    const merged = mergeWithLocalPatients<{
+      id: string;
+      name: string;
+      phone?: string | null;
+      cpf?: string | null;
+    }>(pats);
     merged.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
     setPatients(merged);
     setLoadingPatients(false);
@@ -1268,7 +1306,11 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
     } catch {}
     if (docs.length === 0) {
       try {
-        const { data: docData } = await supabase.from("doctors").select("id,name").order("name").limit(200);
+        const { data: docData } = await supabase
+          .from("doctors")
+          .select("id,name")
+          .order("name")
+          .limit(200);
         if (docData && docData.length > 0) docs = docData as any;
       } catch {}
     }
@@ -1286,7 +1328,7 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
       (p) =>
         (p.name && p.name.toLowerCase().includes(s)) ||
         (p.cpf && p.cpf.replace(/\D/g, "").includes(s)) ||
-        (p.phone && p.phone.replace(/\D/g, "").includes(s))
+        (p.phone && p.phone.replace(/\D/g, "").includes(s)),
     );
   }, [patients, patientSearch]);
 
@@ -1352,7 +1394,9 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
         >
           <div className="flex items-center justify-between px-6 py-4.5 border-b border-slate-100 sticky top-0 bg-white z-10">
             <div>
-              <div className="text-[16px] font-bold text-slate-900">Novo Acompanhamento Clínico</div>
+              <div className="text-[16px] font-bold text-slate-900">
+                Novo Acompanhamento Clínico
+              </div>
               <div className="text-[12px] text-slate-500 mt-0.5">
                 Defina o paciente, protocolo, cronograma e parâmetros iniciais.
               </div>
@@ -1375,8 +1419,7 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
                   onClick={() => setShowNewPatientModal(true)}
                   className="text-[11.5px] font-semibold text-[#8B47FF] hover:underline flex items-center gap-1 cursor-pointer"
                 >
-                  <UserPlus size={13} />
-                  + Novo Paciente
+                  <UserPlus size={13} />+ Novo Paciente
                 </button>
               </div>
 
@@ -1416,7 +1459,9 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
                     }`}
                   >
                     <span className="text-slate-400">
-                      {loadingPatients ? "Carregando pacientes..." : "Selecione ou busque um paciente…"}
+                      {loadingPatients
+                        ? "Carregando pacientes..."
+                        : "Selecione ou busque um paciente…"}
                     </span>
                     <ChevronDown size={15} className="text-slate-400 shrink-0" />
                   </button>
@@ -1512,173 +1557,173 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
                 placeholder="Ex.: Emagrecimento Metabólico 90 dias / Reabilitação / Pós-Operatório"
               />
             </Field>
-          <Field label="Objetivo Clínico" className="md:col-span-2">
-            <textarea
-              rows={2}
-              className={inputCls}
-              value={form.objective}
-              onChange={(e) => setForm({ ...form, objective: e.target.value })}
-              placeholder="Meta clínica, parâmetros a atingir, redução de peso, cicatrização..."
-            />
-          </Field>
-          <Field label="Data de início">
-            <input
-              type="date"
-              className={inputCls}
-              value={form.start_date}
-              onChange={(e) => setForm({ ...form, start_date: e.target.value })}
-            />
-          </Field>
-          <Field label="Duração do Protocolo">
-            <select
-              className={inputCls}
-              value={form.protocol_days}
-              onChange={(e) => setForm({ ...form, protocol_days: e.target.value })}
-            >
-              <option value="30">30 dias (1 mês)</option>
-              <option value="60">60 dias (2 meses)</option>
-              <option value="90">90 dias (3 meses)</option>
-              <option value="120">120 dias (4 meses)</option>
-              <option value="180">180 dias (6 meses)</option>
-              <option value="365">365 dias (1 ano)</option>
-            </select>
-          </Field>
-          <Field label="Retorno automático (dias)">
-            <select
-              className={inputCls}
-              value={form.return_days}
-              onChange={(e) => setForm({ ...form, return_days: e.target.value })}
-            >
-              {[15, 30, 45, 60, 90, 120, 180, 365].map((n) => (
-                <option key={n} value={n}>
-                  {n} dias
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Valor total (R$)">
-            <input
-              inputMode="decimal"
-              className={inputCls}
-              value={form.total_value}
-              onChange={(e) => setForm({ ...form, total_value: onlyDecimal(e.target.value) })}
-              placeholder="0,00"
-            />
-          </Field>
-          <Field label="Entrada (R$)">
-            <input
-              inputMode="decimal"
-              className={inputCls}
-              value={form.down_payment}
-              onChange={(e) => setForm({ ...form, down_payment: onlyDecimal(e.target.value) })}
-              placeholder="0,00"
-            />
-          </Field>
-          <Field label="Desconto (R$)">
-            <input
-              inputMode="decimal"
-              className={inputCls}
-              value={form.discount}
-              onChange={(e) => setForm({ ...form, discount: onlyDecimal(e.target.value) })}
-              placeholder="0,00"
-            />
-          </Field>
-          <Field label="Nº de parcelas">
-            <input
-              type="number"
-              min={1}
-              inputMode="numeric"
-              className={inputCls}
-              value={form.installments_count}
-              onChange={(e) =>
-                setForm({ ...form, installments_count: e.target.value.replace(/\D/g, "") })
-              }
-              onBlur={(e) =>
-                setForm((f) => ({
-                  ...f,
-                  installments_count:
-                    e.target.value === "" ? "1" : String(Math.max(1, Number(e.target.value))),
-                }))
-              }
-              placeholder="1"
-            />
-          </Field>
-          <Field label="Forma de pagamento">
-            <select
-              className={inputCls}
-              value={form.payment_method}
-              onChange={(e) => setForm({ ...form, payment_method: e.target.value })}
-            >
-              <option value="pix">Pix</option>
-              <option value="dinheiro">Dinheiro</option>
-              <option value="cartao_credito">Cartão de crédito</option>
-              <option value="cartao_debito">Cartão de débito</option>
-              <option value="boleto">Boleto</option>
-              <option value="transferencia">Transferência</option>
-            </select>
-          </Field>
-          <Field label="Cor de identificação">
-            <div className="flex flex-wrap gap-2 pt-2">
-              {COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setForm({ ...form, color: c })}
-                  className="h-7 w-7 rounded-full border-2 transition cursor-pointer"
-                  style={{
-                    background: c,
-                    borderColor: form.color === c ? "#111827" : "transparent",
-                  }}
-                />
-              ))}
-            </div>
-          </Field>
-          <Field label="Observações iniciais" className="md:col-span-2">
-            <textarea
-              rows={2}
-              className={inputCls}
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              placeholder="Anotações internas..."
-            />
-          </Field>
-        </div>
+            <Field label="Objetivo Clínico" className="md:col-span-2">
+              <textarea
+                rows={2}
+                className={inputCls}
+                value={form.objective}
+                onChange={(e) => setForm({ ...form, objective: e.target.value })}
+                placeholder="Meta clínica, parâmetros a atingir, redução de peso, cicatrização..."
+              />
+            </Field>
+            <Field label="Data de início">
+              <input
+                type="date"
+                className={inputCls}
+                value={form.start_date}
+                onChange={(e) => setForm({ ...form, start_date: e.target.value })}
+              />
+            </Field>
+            <Field label="Duração do Protocolo">
+              <select
+                className={inputCls}
+                value={form.protocol_days}
+                onChange={(e) => setForm({ ...form, protocol_days: e.target.value })}
+              >
+                <option value="30">30 dias (1 mês)</option>
+                <option value="60">60 dias (2 meses)</option>
+                <option value="90">90 dias (3 meses)</option>
+                <option value="120">120 dias (4 meses)</option>
+                <option value="180">180 dias (6 meses)</option>
+                <option value="365">365 dias (1 ano)</option>
+              </select>
+            </Field>
+            <Field label="Retorno automático (dias)">
+              <select
+                className={inputCls}
+                value={form.return_days}
+                onChange={(e) => setForm({ ...form, return_days: e.target.value })}
+              >
+                {[15, 30, 45, 60, 90, 120, 180, 365].map((n) => (
+                  <option key={n} value={n}>
+                    {n} dias
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Valor total (R$)">
+              <input
+                inputMode="decimal"
+                className={inputCls}
+                value={form.total_value}
+                onChange={(e) => setForm({ ...form, total_value: onlyDecimal(e.target.value) })}
+                placeholder="0,00"
+              />
+            </Field>
+            <Field label="Entrada (R$)">
+              <input
+                inputMode="decimal"
+                className={inputCls}
+                value={form.down_payment}
+                onChange={(e) => setForm({ ...form, down_payment: onlyDecimal(e.target.value) })}
+                placeholder="0,00"
+              />
+            </Field>
+            <Field label="Desconto (R$)">
+              <input
+                inputMode="decimal"
+                className={inputCls}
+                value={form.discount}
+                onChange={(e) => setForm({ ...form, discount: onlyDecimal(e.target.value) })}
+                placeholder="0,00"
+              />
+            </Field>
+            <Field label="Nº de parcelas">
+              <input
+                type="number"
+                min={1}
+                inputMode="numeric"
+                className={inputCls}
+                value={form.installments_count}
+                onChange={(e) =>
+                  setForm({ ...form, installments_count: e.target.value.replace(/\D/g, "") })
+                }
+                onBlur={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    installments_count:
+                      e.target.value === "" ? "1" : String(Math.max(1, Number(e.target.value))),
+                  }))
+                }
+                placeholder="1"
+              />
+            </Field>
+            <Field label="Forma de pagamento">
+              <select
+                className={inputCls}
+                value={form.payment_method}
+                onChange={(e) => setForm({ ...form, payment_method: e.target.value })}
+              >
+                <option value="pix">Pix</option>
+                <option value="dinheiro">Dinheiro</option>
+                <option value="cartao_credito">Cartão de crédito</option>
+                <option value="cartao_debito">Cartão de débito</option>
+                <option value="boleto">Boleto</option>
+                <option value="transferencia">Transferência</option>
+              </select>
+            </Field>
+            <Field label="Cor de identificação">
+              <div className="flex flex-wrap gap-2 pt-2">
+                {COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setForm({ ...form, color: c })}
+                    className="h-7 w-7 rounded-full border-2 transition cursor-pointer"
+                    style={{
+                      background: c,
+                      borderColor: form.color === c ? "#111827" : "transparent",
+                    }}
+                  />
+                ))}
+              </div>
+            </Field>
+            <Field label="Observações iniciais" className="md:col-span-2">
+              <textarea
+                rows={2}
+                className={inputCls}
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                placeholder="Anotações internas..."
+              />
+            </Field>
+          </div>
 
-        <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-2.5 sticky bottom-0 bg-white">
-          <button
-            onClick={onClose}
-            className="h-10 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[13px] font-semibold transition cursor-pointer"
-          >
-            Cancelar
-          </button>
-          <button
-            disabled={saving}
-            onClick={submit}
-            className="h-10 px-5 rounded-xl bg-[#8B47FF] hover:bg-[#7A3AE6] text-white text-[13px] font-bold shadow-sm transition active:scale-98 disabled:opacity-50 cursor-pointer"
-          >
-            {saving ? "Salvando…" : "Criar acompanhamento"}
-          </button>
+          <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-2.5 sticky bottom-0 bg-white">
+            <button
+              onClick={onClose}
+              className="h-10 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[13px] font-semibold transition cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              disabled={saving}
+              onClick={submit}
+              className="h-10 px-5 rounded-xl bg-[#8B47FF] hover:bg-[#7A3AE6] text-white text-[13px] font-bold shadow-sm transition active:scale-98 disabled:opacity-50 cursor-pointer"
+            >
+              {saving ? "Salvando…" : "Criar acompanhamento"}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
 
-    {showNewPatientModal && (
-      <PatientModal
-        open={showNewPatientModal}
-        onClose={() => setShowNewPatientModal(false)}
-        onSaved={(newPat) => {
-          if (newPat && newPat.id) {
-            setPatients((prev) => [newPat, ...prev.filter((p) => p.id !== newPat.id)]);
-            setForm((f) => ({ ...f, patient_id: newPat.id }));
-          } else {
-            loadPatientsAndDoctors();
-          }
-          setShowNewPatientModal(false);
-        }}
-      />
-    )}
-  </>
-);
+      {showNewPatientModal && (
+        <PatientModal
+          open={showNewPatientModal}
+          onClose={() => setShowNewPatientModal(false)}
+          onSaved={(newPat) => {
+            if (newPat && newPat.id) {
+              setPatients((prev) => [newPat, ...prev.filter((p) => p.id !== newPat.id)]);
+              setForm((f) => ({ ...f, patient_id: newPat.id }));
+            } else {
+              loadPatientsAndDoctors();
+            }
+            setShowNewPatientModal(false);
+          }}
+        />
+      )}
+    </>
+  );
 }
 
 const inputCls =

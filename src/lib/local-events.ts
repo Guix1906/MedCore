@@ -28,7 +28,10 @@ export function saveStoredLocalEvent(event: RawEvent, companyId?: string | null)
   if (typeof window === "undefined" || !event?.id) return;
   try {
     const current: StoredLocalEvent[] = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-    const itemToSave: StoredLocalEvent = { ...event, company_id: companyId || event.case_id || null };
+    const itemToSave: StoredLocalEvent = {
+      ...event,
+      company_id: companyId || event.case_id || null,
+    };
     const exists = current.some((e) => e.id === event.id);
     const next = exists
       ? current.map((e) => (e.id === event.id ? { ...e, ...itemToSave } : e))
@@ -94,7 +97,10 @@ export function updateStoredLocalEventTimes(
   }
 }
 
-export function mergeWithLocalEvents(remoteEvents: RawEvent[], companyId?: string | null): RawEvent[] {
+export function mergeWithLocalEvents(
+  remoteEvents: RawEvent[],
+  companyId?: string | null,
+): RawEvent[] {
   const local = getStoredLocalEvents(companyId);
   if (!local.length) return remoteEvents;
 

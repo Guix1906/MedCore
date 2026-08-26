@@ -257,9 +257,7 @@ export default function AgendaSidebar({
           ))}
           {cells.map((c, i) => {
             const active = isSameDay(c.date, selected) && !c.muted;
-            const holiday = !c.muted
-              ? yearHolidays.find((h) => isSameDay(h.date, c.date))
-              : null;
+            const holiday = !c.muted ? yearHolidays.find((h) => isSameDay(h.date, c.date)) : null;
             return (
               <button
                 key={i}

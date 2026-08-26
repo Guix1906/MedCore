@@ -99,7 +99,8 @@ function TreatmentDetailPage() {
       id: "ev-1",
       date: new Date().toLocaleDateString("pt-BR"),
       doctor_name: "Dr. Responsável",
-      notes: "Consulta de início de protocolo. Paciente orientado sobre horários das medicações e hidratação.",
+      notes:
+        "Consulta de início de protocolo. Paciente orientado sobre horários das medicações e hidratação.",
       parameters: "Pressão: 120/80 mmHg • Peso: 72.4 kg",
       next_step: "Avaliação de retorno em 30 dias com exames de controle.",
     },
@@ -109,9 +110,11 @@ function TreatmentDetailPage() {
     {
       id: "ph-1",
       title: "Registro de Evolução Clínica",
-      beforeUrl: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500&auto=format&fit=crop&q=80",
+      beforeUrl:
+        "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500&auto=format&fit=crop&q=80",
       beforeDate: "Dia 1 (Início)",
-      afterUrl: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=500&auto=format&fit=crop&q=80",
+      afterUrl:
+        "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=500&auto=format&fit=crop&q=80",
       afterDate: "Dia 30 (Atual)",
     },
   ]);
@@ -259,7 +262,9 @@ function TreatmentDetailPage() {
           <div className="flex items-center gap-2">
             <Link
               to="/prontuario"
-              search={{ patientName: treatment.patients?.name, patientId: treatment.patient_id } as any}
+              search={
+                { patientName: treatment.patients?.name, patientId: treatment.patient_id } as any
+              }
               className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700 text-[12.5px] font-bold transition"
             >
               <FileText size={14} />
@@ -282,7 +287,10 @@ function TreatmentDetailPage() {
             <div className="flex items-center gap-4 min-w-0">
               <div
                 className="h-14 w-14 rounded-2xl flex items-center justify-center shrink-0 shadow-xs"
-                style={{ background: (treatment.color || "#8B47FF") + "20", color: treatment.color || "#8B47FF" }}
+                style={{
+                  background: (treatment.color || "#8B47FF") + "20",
+                  color: treatment.color || "#8B47FF",
+                }}
               >
                 <Activity size={26} />
               </div>
@@ -344,7 +352,8 @@ function TreatmentDetailPage() {
 
           {treatment.objective && (
             <div className="mt-4 pt-3.5 border-t border-slate-100 text-[13px] text-slate-700 leading-relaxed bg-slate-50/70 p-3 rounded-xl">
-              <span className="font-bold text-slate-900">Objetivo Clínico:</span> {treatment.objective}
+              <span className="font-bold text-slate-900">Objetivo Clínico:</span>{" "}
+              {treatment.objective}
             </div>
           )}
         </div>
@@ -528,15 +537,20 @@ function ResumoTab({
         <div className="mt-4 p-4 rounded-2xl bg-white/90 border border-purple-100/70 text-[13px] text-slate-700 leading-relaxed space-y-2">
           <p>
             📍 <b>Status do Tratamento:</b> O paciente encontra-se no{" "}
-            <b>dia {kpis.passedDays} de {kpis.totalDays}</b> ({kpis.progress}% da meta atingida).
-            Possui <b>{kpis.activeMeds} medicação(ões) ativa(s)</b> no cronograma diário.
+            <b>
+              dia {kpis.passedDays} de {kpis.totalDays}
+            </b>{" "}
+            ({kpis.progress}% da meta atingida). Possui{" "}
+            <b>{kpis.activeMeds} medicação(ões) ativa(s)</b> no cronograma diário.
           </p>
           <p>
-            💳 <b>Adesão Financeira:</b> {kpis.pendingInstallments === 0 ? (
+            💳 <b>Adesão Financeira:</b>{" "}
+            {kpis.pendingInstallments === 0 ? (
               <span className="text-emerald-700 font-bold">100% quitado / sem pendências.</span>
             ) : (
               <span>
-                Possui <b>{kpis.pendingInstallments} parcela(s) pendente(s)</b> ({brl(kpis.pending)} a receber).
+                Possui <b>{kpis.pendingInstallments} parcela(s) pendente(s)</b> ({brl(kpis.pending)}{" "}
+                a receber).
               </span>
             )}
           </p>
@@ -545,11 +559,13 @@ function ResumoTab({
             {kpis.nextReturn ? (
               <span>
                 Retorno marcado para <b>{new Date(kpis.nextReturn).toLocaleDateString("pt-BR")}</b>.
-                Recomenda-se avaliar a adesão medicamentosa e registrar fotos de evolução na aba dedicada.
+                Recomenda-se avaliar a adesão medicamentosa e registrar fotos de evolução na aba
+                dedicada.
               </span>
             ) : (
               <span>
-                Não há retorno agendado. Recomenda-se definir uma data de retorno para o checkpoint dos 30 dias.
+                Não há retorno agendado. Recomenda-se definir uma data de retorno para o checkpoint
+                dos 30 dias.
               </span>
             )}
           </p>
@@ -693,7 +709,9 @@ function MedicacoesTab({
       {filtered.length === 0 ? (
         <div className="text-center py-20 bg-white rounded-3xl border border-slate-200/80 shadow-sm">
           <Pill size={44} className="mx-auto text-slate-300" strokeWidth={1.5} />
-          <div className="mt-3 text-[16px] font-bold text-slate-800">Nenhuma medicação no filtro</div>
+          <div className="mt-3 text-[16px] font-bold text-slate-800">
+            Nenhuma medicação no filtro
+          </div>
           <div className="text-[13px] text-slate-500 mt-1">
             Adicione medicações e organize por horários do dia.
           </div>
@@ -726,9 +744,7 @@ function MedicacoesTab({
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <div className="text-[15px] font-bold text-[#0F172A]">
-                              {m.name}
-                            </div>
+                            <div className="text-[15px] font-bold text-[#0F172A]">{m.name}</div>
                             {m.period && (
                               <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-700">
                                 {PERIOD_LABEL[m.period] ?? m.period}
@@ -762,7 +778,8 @@ function MedicacoesTab({
 
                           {m.notes && (
                             <div className="text-[12.5px] text-slate-700 mt-2 bg-slate-50 rounded-xl p-2.5 border border-slate-100">
-                              <span className="font-semibold text-slate-800">Orientação:</span> {m.notes}
+                              <span className="font-semibold text-slate-800">Orientação:</span>{" "}
+                              {m.notes}
                             </div>
                           )}
                         </div>
@@ -893,9 +910,11 @@ function NewMedicationModal({
               value={f.unit}
               onChange={(e) => setF({ ...f, unit: e.target.value })}
             >
-              {["mg", "ml", "g", "mcg", "UI", "gotas", "cápsula(s)", "comprimido(s)", "ampola"].map((u) => (
-                <option key={u}>{u}</option>
-              ))}
+              {["mg", "ml", "g", "mcg", "UI", "gotas", "cápsula(s)", "comprimido(s)", "ampola"].map(
+                (u) => (
+                  <option key={u}>{u}</option>
+                ),
+              )}
             </select>
           </div>
           <div>
@@ -905,9 +924,11 @@ function NewMedicationModal({
               value={f.route}
               onChange={(e) => setF({ ...f, route: e.target.value })}
             >
-              {["Oral", "Sublingual", "Subcutânea", "Intramuscular", "Tópica", "Inalatória"].map((r) => (
-                <option key={r}>{r}</option>
-              ))}
+              {["Oral", "Sublingual", "Subcutânea", "Intramuscular", "Tópica", "Inalatória"].map(
+                (r) => (
+                  <option key={r}>{r}</option>
+                ),
+              )}
             </select>
           </div>
           <div>
@@ -1037,11 +1058,7 @@ function EvolucaoTab({
                 <span className="text-slate-500">{p.beforeDate}</span>
               </div>
               <div className="h-64 overflow-hidden relative">
-                <img
-                  src={p.beforeUrl}
-                  alt="Antes"
-                  className="w-full h-full object-cover"
-                />
+                <img src={p.beforeUrl} alt="Antes" className="w-full h-full object-cover" />
               </div>
             </div>
 
@@ -1051,11 +1068,7 @@ function EvolucaoTab({
                 <span className="text-purple-700">{p.afterDate}</span>
               </div>
               <div className="h-64 overflow-hidden relative">
-                <img
-                  src={p.afterUrl}
-                  alt="Depois"
-                  className="w-full h-full object-cover"
-                />
+                <img src={p.afterUrl} alt="Depois" className="w-full h-full object-cover" />
               </div>
             </div>
           </div>
@@ -1128,9 +1141,14 @@ function EvolucaoTab({
         {/* Lista de notas */}
         <div className="space-y-3 pt-2">
           {evolutions.map((ev) => (
-            <div key={ev.id} className="p-4 rounded-2xl border border-slate-200/90 bg-slate-50/60 space-y-2">
+            <div
+              key={ev.id}
+              className="p-4 rounded-2xl border border-slate-200/90 bg-slate-50/60 space-y-2"
+            >
               <div className="flex items-center justify-between text-[12.5px]">
-                <span className="font-bold text-slate-900">{ev.doctor_name || "Médico Responsável"}</span>
+                <span className="font-bold text-slate-900">
+                  {ev.doctor_name || "Médico Responsável"}
+                </span>
                 <span className="text-purple-600 font-semibold">{ev.date}</span>
               </div>
               <p className="text-[13px] text-slate-700 leading-relaxed">{ev.notes}</p>
@@ -1203,7 +1221,10 @@ function FinanceiroTab({
           { label: "Total recebido", value: brl(paid), color: "#059669" },
           { label: "Saldo pendente", value: brl(pending), color: "#EF4444" },
         ].map((c) => (
-          <div key={c.label} className="bg-white rounded-2xl border border-slate-200/80 p-4.5 shadow-sm">
+          <div
+            key={c.label}
+            className="bg-white rounded-2xl border border-slate-200/80 p-4.5 shadow-sm"
+          >
             <div className="text-[11.5px] font-bold uppercase tracking-wider text-slate-400">
               {c.label}
             </div>
@@ -1256,12 +1277,17 @@ function FinanceiroTab({
                 const dias =
                   row.status === "pendente" && overdue ? daysBetween(row.due_date, new Date()) : 0;
                 return (
-                  <tr key={row.id} className="border-t border-slate-100 hover:bg-slate-50/60 transition">
+                  <tr
+                    key={row.id}
+                    className="border-t border-slate-100 hover:bg-slate-50/60 transition"
+                  >
                     <td className="px-5 py-3 font-bold text-slate-800">{row.number}ª</td>
                     <td className="px-5 py-3 text-slate-700">
                       {new Date(row.due_date).toLocaleDateString("pt-BR")}
                     </td>
-                    <td className="px-5 py-3 font-bold text-slate-900">{brl(Number(row.amount))}</td>
+                    <td className="px-5 py-3 font-bold text-slate-900">
+                      {brl(Number(row.amount))}
+                    </td>
                     <td className="px-5 py-3 text-slate-500">
                       {row.paid_date ? new Date(row.paid_date).toLocaleDateString("pt-BR") : "—"}
                     </td>

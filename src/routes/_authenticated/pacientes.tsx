@@ -104,7 +104,9 @@ function PacientesPage() {
         try {
           const { data } = await supabase
             .from("patients")
-            .select("id,name,email,phone,cpf,birth_date,gender,insurance,city,state,address,zip_code,notes,active,created_at")
+            .select(
+              "id,name,email,phone,cpf,birth_date,gender,insurance,city,state,address,zip_code,notes,active,created_at",
+            )
             .order("name")
             .limit(2000);
           rawList = (data ?? []) as Patient[];
@@ -248,10 +250,7 @@ function PacientesPage() {
           {p.active ? "Ativo" : "Inativo"}
         </span>
       </td>
-      <td
-        className="px-4 py-3 text-right"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
         <div className="inline-flex gap-1">
           <Link
             to="/prontuario"

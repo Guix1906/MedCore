@@ -83,7 +83,8 @@ const DEFAULT_PATIENT: PatientProfileData = {
   notes: "Esse paciente é um paciente de exemplo.",
   created_at: "15/08/2026 09:49:12",
   active: true,
-  photoUrl: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&auto=format&fit=crop&q=80",
+  photoUrl:
+    "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&auto=format&fit=crop&q=80",
 };
 
 const TABS = [
@@ -118,7 +119,8 @@ export function PatientFullProfileView({
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [aiSection, setAiSection] = useState<AiSectionContext | null>(null);
 
-  const isExample = !patient || !patient.id || Boolean(patient.name?.toLowerCase().includes("exemplo"));
+  const isExample =
+    !patient || !patient.id || Boolean(patient.name?.toLowerCase().includes("exemplo"));
 
   const data = useMemo(() => {
     if (isExample && (!patient || !patient.id)) {
@@ -210,7 +212,9 @@ export function PatientFullProfileView({
         } catch {}
       }
 
-      all.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+      all.sort(
+        (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime(),
+      );
       return all;
     },
   });
@@ -248,15 +252,18 @@ export function PatientFullProfileView({
     // 1. Salva no LocalStorage garantindo persistência imediata
     try {
       if (data.id) localStorage.setItem("medcore_prontuario_" + data.id, JSON.stringify(newRecord));
-      if (data.name) localStorage.setItem("medcore_prontuario_" + data.name, JSON.stringify(newRecord));
+      if (data.name)
+        localStorage.setItem("medcore_prontuario_" + data.name, JSON.stringify(newRecord));
 
       const prevHistKey = data.id
         ? "medcore_prontuario_history_" + data.id
         : "medcore_prontuario_history_" + data.name;
       const prevHist = JSON.parse(localStorage.getItem(prevHistKey) || "[]");
       const nextHist = [newRecord, ...prevHist.filter((h: any) => h.id !== newRecord.id)];
-      if (data.id) localStorage.setItem("medcore_prontuario_history_" + data.id, JSON.stringify(nextHist));
-      if (data.name) localStorage.setItem("medcore_prontuario_history_" + data.name, JSON.stringify(nextHist));
+      if (data.id)
+        localStorage.setItem("medcore_prontuario_history_" + data.id, JSON.stringify(nextHist));
+      if (data.name)
+        localStorage.setItem("medcore_prontuario_history_" + data.name, JSON.stringify(nextHist));
     } catch (e) {
       console.warn("Aviso ao salvar localmente:", e);
     }
@@ -298,9 +305,7 @@ export function PatientFullProfileView({
     setAiModalOpen(true);
   };
 
-  const handleAiInsert = (
-    content: string | StructuredConsultationResult,
-  ) => {
+  const handleAiInsert = (content: string | StructuredConsultationResult) => {
     if (typeof content === "string") {
       setAnamnese(content);
     } else {
@@ -388,11 +393,7 @@ export function PatientFullProfileView({
           <div className="relative mb-3.5">
             <div className="relative h-24 w-24 rounded-full overflow-hidden border-2 border-white shadow-md bg-purple-100 flex items-center justify-center">
               {data.photoUrl ? (
-                <img
-                  src={data.photoUrl}
-                  alt={data.name}
-                  className="h-full w-full object-cover"
-                />
+                <img src={data.photoUrl} alt={data.name} className="h-full w-full object-cover" />
               ) : (
                 <div className="h-full w-full bg-[#7B3AF5] text-white font-bold text-2xl flex items-center justify-center">
                   {data.name
@@ -530,7 +531,9 @@ export function PatientFullProfileView({
                   <div>
                     <p className="text-[12.5px] font-bold text-[#1E293B]">Data de nascimento</p>
                     <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">
-                      {data.birth_date ? `${data.birth_date}${data.age ? ` (${data.age})` : ""}` : "Não informada"}
+                      {data.birth_date
+                        ? `${data.birth_date}${data.age ? ` (${data.age})` : ""}`
+                        : "Não informada"}
                     </p>
                   </div>
                 </div>
@@ -543,7 +546,13 @@ export function PatientFullProfileView({
                   <div>
                     <p className="text-[12.5px] font-bold text-[#1E293B]">Sexo</p>
                     <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">
-                      {data.gender === "F" ? "Feminino" : data.gender === "M" ? "Masculino" : data.gender === "O" ? "Outro" : (data.gender || "Não informado")}
+                      {data.gender === "F"
+                        ? "Feminino"
+                        : data.gender === "M"
+                          ? "Masculino"
+                          : data.gender === "O"
+                            ? "Outro"
+                            : data.gender || "Não informado"}
                     </p>
                   </div>
                 </div>
@@ -555,7 +564,9 @@ export function PatientFullProfileView({
                   </div>
                   <div>
                     <p className="text-[12.5px] font-bold text-[#1E293B]">Email</p>
-                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">{data.email || "Não informado"}</p>
+                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">
+                      {data.email || "Não informado"}
+                    </p>
                   </div>
                 </div>
 
@@ -581,7 +592,8 @@ export function PatientFullProfileView({
                   <div>
                     <p className="text-[12.5px] font-bold text-[#1E293B]">Notificações</p>
                     <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">
-                      {data.notifications || (data.phone ? "WhatsApp / SMS ativo" : "Não recebe notificações")}
+                      {data.notifications ||
+                        (data.phone ? "WhatsApp / SMS ativo" : "Não recebe notificações")}
                     </p>
                   </div>
                 </div>
@@ -598,14 +610,21 @@ export function PatientFullProfileView({
                         {data.address && <p>{data.address}</p>}
                         {(data.neighborhood || data.city || data.state) && (
                           <p>
-                            {[data.neighborhood, [data.city, data.state].filter(Boolean).join(" - ")].filter(Boolean).join(", ")}
+                            {[
+                              data.neighborhood,
+                              [data.city, data.state].filter(Boolean).join(" - "),
+                            ]
+                              .filter(Boolean)
+                              .join(", ")}
                           </p>
                         )}
                         {data.cep && <p>CEP: {data.cep}</p>}
                         <p>{data.country || "Brasil"}</p>
                       </div>
                     ) : (
-                      <p className="text-[13.5px] text-slate-400 font-medium mt-0.5">Endereço não informado</p>
+                      <p className="text-[13.5px] text-slate-400 font-medium mt-0.5">
+                        Endereço não informado
+                      </p>
                     )}
                   </div>
                 </div>
@@ -617,7 +636,9 @@ export function PatientFullProfileView({
                   </div>
                   <div>
                     <p className="text-[12.5px] font-bold text-[#1E293B]">CPF</p>
-                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">{data.cpf || "Não informado"}</p>
+                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">
+                      {data.cpf || "Não informado"}
+                    </p>
                   </div>
                 </div>
 
@@ -628,7 +649,9 @@ export function PatientFullProfileView({
                   </div>
                   <div>
                     <p className="text-[12.5px] font-bold text-[#1E293B]">Observações</p>
-                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">{data.notes || "Nenhuma observação registrada."}</p>
+                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">
+                      {data.notes || "Nenhuma observação registrada."}
+                    </p>
                   </div>
                 </div>
 
@@ -688,7 +711,8 @@ export function PatientFullProfileView({
                     Prontuário Clínico & Anamnese
                   </h2>
                   <p className="text-[12.5px] text-slate-500 mt-0.5">
-                    Prontuário integrado de <strong className="text-slate-700">{data.name}</strong>. Os dados salvos aqui e na central de atendimento são 100% sincronizados.
+                    Prontuário integrado de <strong className="text-slate-700">{data.name}</strong>.
+                    Os dados salvos aqui e na central de atendimento são 100% sincronizados.
                   </p>
                 </div>
 
@@ -735,7 +759,8 @@ export function PatientFullProfileView({
                         Anamnese & Evolução Clínica
                       </h3>
                       <p className="text-[11.5px] text-slate-400">
-                        Motivo da consulta, sintomas, antecedentes, exame clínico e conduta terapêutica.
+                        Motivo da consulta, sintomas, antecedentes, exame clínico e conduta
+                        terapêutica.
                       </p>
                     </div>
                   </div>
@@ -851,7 +876,8 @@ export function PatientFullProfileView({
                       Nenhum atendimento finalizado registrado ainda para {data.name}.
                     </p>
                     <p className="text-[12px] text-slate-400 max-w-sm mx-auto">
-                      Você pode escrever a anamnese no campo acima ou clicar em "Atendimento com IA" para gerar anotações clínicas automáticas.
+                      Você pode escrever a anamnese no campo acima ou clicar em "Atendimento com IA"
+                      para gerar anotações clínicas automáticas.
                     </p>
                   </div>
                 )}

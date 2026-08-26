@@ -166,7 +166,9 @@ export function WeeklyGrid({
             return (
               <div
                 key={d.toISOString()}
-                className={cn("relative z-[1] px-2 flex items-center justify-center border-r border-slate-200/90")}
+                className={cn(
+                  "relative z-[1] px-2 flex items-center justify-center border-r border-slate-200/90",
+                )}
                 data-agenda-day-header
                 data-selected={isSelected || undefined}
               >
@@ -184,7 +186,9 @@ export function WeeklyGrid({
                   <span
                     className={cn(
                       "text-[14px] lowercase",
-                      isToday || isSelected ? "text-[#475467] font-semibold" : "text-[#64748B] font-normal",
+                      isToday || isSelected
+                        ? "text-[#475467] font-semibold"
+                        : "text-[#64748B] font-normal",
                     )}
                   >
                     {WEEKDAY_SHORT[d.getDay()]}
@@ -389,7 +393,7 @@ export function WeeklyGrid({
                         style={{ top, height }}
                         colWidth={gridContentWidth ? (gridContentWidth - TIME_COL) / 7 : undefined}
                         onClick={() => onActivityClick(a)}
-                        onEdit={() => onActivityEdit ? onActivityEdit(a) : onActivityClick(a)}
+                        onEdit={() => (onActivityEdit ? onActivityEdit(a) : onActivityClick(a))}
                         onDragStart={() => {
                           draggedRef.current = a;
                         }}

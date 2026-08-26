@@ -277,9 +277,12 @@ export function AddTaskModal({
 
       const { data: authData } = await supabase.auth.getUser();
       const supabaseAuthId = authData?.user?.id;
-      const validCreatedBy = supabaseAuthId && isUuid(supabaseAuthId) ? supabaseAuthId : ensureValidUuid(ctx.userId);
+      const validCreatedBy =
+        supabaseAuthId && isUuid(supabaseAuthId) ? supabaseAuthId : ensureValidUuid(ctx.userId);
       const validCompanyId = isUuid(ctx.companyId) ? ctx.companyId : ensureValidUuid(ctx.companyId);
-      const validAssignedTo = isUuid(f.assigned_to) ? f.assigned_to : ensureValidUuid(f.assigned_to);
+      const validAssignedTo = isUuid(f.assigned_to)
+        ? f.assigned_to
+        : ensureValidUuid(f.assigned_to);
       const validCaseId = f.case_id && isUuid(f.case_id) ? f.case_id : toValidUuid(f.case_id);
 
       const { error } = await supabase.from("tasks").insert({
@@ -386,7 +389,8 @@ export function AddEventModal({
 
       const validCreatedBy = isUuid(ctx.userId) ? ctx.userId : ensureValidUuid(ctx.userId);
       const validCompanyId = isUuid(ctx.companyId) ? ctx.companyId : ensureValidUuid(ctx.companyId);
-      const validAssignedTo = f.assigned_to && isUuid(f.assigned_to) ? f.assigned_to : toValidUuid(f.assigned_to);
+      const validAssignedTo =
+        f.assigned_to && isUuid(f.assigned_to) ? f.assigned_to : toValidUuid(f.assigned_to);
       const validCaseId = f.case_id && isUuid(f.case_id) ? f.case_id : toValidUuid(f.case_id);
       const location = f.location
         ? `${f.location}${f.location_kind !== "presencial" ? ` (${f.location_kind})` : ""}`
@@ -415,7 +419,8 @@ export function AddEventModal({
         try {
           const { data: authData } = await supabase.auth.getUser();
           const supabaseAuthId = authData?.user?.id;
-          const remoteCreatedBy = supabaseAuthId && isUuid(supabaseAuthId) ? supabaseAuthId : validCreatedBy;
+          const remoteCreatedBy =
+            supabaseAuthId && isUuid(supabaseAuthId) ? supabaseAuthId : validCreatedBy;
 
           const { error } = await supabase.from("events").insert({
             id: insertedId,
@@ -579,9 +584,11 @@ export function AddDeadlineModal({
 
       const { data: authData } = await supabase.auth.getUser();
       const supabaseAuthId = authData?.user?.id;
-      const validCreatedBy = supabaseAuthId && isUuid(supabaseAuthId) ? supabaseAuthId : ensureValidUuid(ctx.userId);
+      const validCreatedBy =
+        supabaseAuthId && isUuid(supabaseAuthId) ? supabaseAuthId : ensureValidUuid(ctx.userId);
       const validCompanyId = isUuid(ctx.companyId) ? ctx.companyId : ensureValidUuid(ctx.companyId);
-      const validAssignedTo = f.assigned_to && isUuid(f.assigned_to) ? f.assigned_to : toValidUuid(f.assigned_to);
+      const validAssignedTo =
+        f.assigned_to && isUuid(f.assigned_to) ? f.assigned_to : toValidUuid(f.assigned_to);
       const validCaseId = f.case_id && isUuid(f.case_id) ? f.case_id : toValidUuid(f.case_id);
 
       const { error } = await supabase.from("deadlines").insert({
@@ -734,7 +741,8 @@ export function AddHearingModal({
 
       const validCreatedBy = isUuid(ctx.userId) ? ctx.userId : ensureValidUuid(ctx.userId);
       const validCompanyId = isUuid(ctx.companyId) ? ctx.companyId : ensureValidUuid(ctx.companyId);
-      const validAssignedTo = f.assigned_to && isUuid(f.assigned_to) ? f.assigned_to : toValidUuid(f.assigned_to);
+      const validAssignedTo =
+        f.assigned_to && isUuid(f.assigned_to) ? f.assigned_to : toValidUuid(f.assigned_to);
       const validCaseId = f.case_id && isUuid(f.case_id) ? f.case_id : toValidUuid(f.case_id);
 
       const insertedId = crypto.randomUUID();
@@ -760,7 +768,8 @@ export function AddHearingModal({
         try {
           const { data: authData } = await supabase.auth.getUser();
           const supabaseAuthId = authData?.user?.id;
-          const remoteCreatedBy = supabaseAuthId && isUuid(supabaseAuthId) ? supabaseAuthId : validCreatedBy;
+          const remoteCreatedBy =
+            supabaseAuthId && isUuid(supabaseAuthId) ? supabaseAuthId : validCreatedBy;
 
           const { error } = await supabase.from("events").insert({
             id: insertedId,

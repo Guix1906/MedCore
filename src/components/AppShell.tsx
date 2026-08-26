@@ -137,7 +137,8 @@ const EXPANDED = 232;
 
 const PHONE_NUMBER = "5599984898934";
 const WHATSAPP_URL =
-  `https://wa.me/${PHONE_NUMBER}?text=` + encodeURIComponent("Olá! Entrando em contato via MedCore.");
+  `https://wa.me/${PHONE_NUMBER}?text=` +
+  encodeURIComponent("Olá! Entrando em contato via MedCore.");
 
 export default function AppShell({ children, title }: { children: ReactNode; title?: string }) {
   useSessionTimeout();
@@ -422,8 +423,6 @@ export default function AppShell({ children, title }: { children: ReactNode; tit
             </motion.button>
           </Tooltip>
 
-
-
           {/* Novo (dropdown) */}
           <div className="relative">
             <motion.button
@@ -488,8 +487,6 @@ export default function AppShell({ children, title }: { children: ReactNode; tit
             <HelpCircle size={19} strokeWidth={1.8} color="#374151" />
             <span className="text-[13.5px] font-medium text-[#374151] hidden sm:inline">Ajuda</span>
           </motion.button>
-
-
 
           {/* Perfil */}
           <div className="relative">

@@ -3,8 +3,7 @@
  * Integração de alta performance com cache inteligente, injeção de JWT e deduplicação de requisições.
  */
 
-const API_BASE_URL =
-  (import.meta.env?.VITE_API_URL as string) || "http://127.0.0.1:8000/api";
+const API_BASE_URL = (import.meta.env?.VITE_API_URL as string) || "http://127.0.0.1:8000/api";
 
 const TOKEN_STORAGE_KEY = "medcore_php_token";
 const USER_STORAGE_KEY = "medcore_php_user";
@@ -75,10 +74,7 @@ export function setStoredUser(user: any, remember: boolean = true): void {
   }
 }
 
-async function request<T = any>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
+async function request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
   const url = `${API_BASE_URL}${cleanEndpoint}`;
 
@@ -126,7 +122,11 @@ async function request<T = any>(
         }
 
         // Se for erro temporário de servidor (502, 503, 504) e método idempotente, tentar novamente
-        if ([502, 503, 504].includes(response.status) && (method === "GET" || method === "HEAD") && attempt < 2) {
+        if (
+          [502, 503, 504].includes(response.status) &&
+          (method === "GET" || method === "HEAD") &&
+          attempt < 2
+        ) {
           const delay = Math.pow(2, attempt) * 300;
           await new Promise((res) => setTimeout(res, delay));
           return fetchWithRetry(attempt + 1);
@@ -135,7 +135,7 @@ async function request<T = any>(
         throw new ApiError(
           json.error || json.message || `Erro HTTP ${response.status}`,
           response.status,
-          json.details
+          json.details,
         );
       }
 
@@ -153,8 +153,10 @@ async function request<T = any>(
 
       const isAbort = err.name === "AbortError" || err.message?.includes("aborted");
       throw new ApiError(
-        isAbort ? "A requisição excedeu o tempo limite de resposta (20s)." : (err.message || "Erro de conexão com o servidor."),
-        0
+        isAbort
+          ? "A requisição excedeu o tempo limite de resposta (20s)."
+          : err.message || "Erro de conexão com o servidor.",
+        0,
       );
     }
   };

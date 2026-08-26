@@ -115,9 +115,9 @@ export function ProntuarioHub({
   });
 
   // 3. Pacientes recentes (recuperados do histórico do localStorage ou banco)
-  const [recentPatients, setRecentPatients] = useState<{ id: string; name: string; date: string }[]>(
-    [],
-  );
+  const [recentPatients, setRecentPatients] = useState<
+    { id: string; name: string; date: string }[]
+  >([]);
 
   useEffect(() => {
     try {
@@ -175,7 +175,8 @@ export function ProntuarioHub({
                 Central de Atendimentos
               </h1>
               <p className="mt-1 text-[13.5px] text-[#6B7280]">
-                Busque um paciente ou selecione um agendamento da fila de hoje para iniciar a Anamnese.
+                Busque um paciente ou selecione um agendamento da fila de hoje para iniciar a
+                Anamnese.
               </p>
             </div>
 
@@ -199,10 +200,7 @@ export function ProntuarioHub({
           {/* Campo de Busca Rápida */}
           <div className="relative mt-6">
             <div className="relative flex items-center">
-              <Search
-                size={18}
-                className="absolute left-4 text-[#9CA3AF] pointer-events-none"
-              />
+              <Search size={18} className="absolute left-4 text-[#9CA3AF] pointer-events-none" />
               <input
                 type="text"
                 value={search}
@@ -295,7 +293,8 @@ export function ProntuarioHub({
                       Nenhum agendamento para hoje
                     </div>
                     <p className="text-[12.5px] text-[#6B7280] max-w-sm mx-auto mt-0.5">
-                      Você pode utilizar a busca acima para iniciar o atendimento de qualquer paciente cadastrado.
+                      Você pode utilizar a busca acima para iniciar o atendimento de qualquer
+                      paciente cadastrado.
                     </p>
                   </div>
                 </div>
@@ -347,9 +346,7 @@ export function ProntuarioHub({
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <History size={18} className="text-[#8B47FF]" />
-              <h2 className="text-[15px] font-bold text-[#111827]">
-                Atendimentos Recentes
-              </h2>
+              <h2 className="text-[15px] font-bold text-[#111827]">Atendimentos Recentes</h2>
             </div>
 
             <div className="rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-xs space-y-3">

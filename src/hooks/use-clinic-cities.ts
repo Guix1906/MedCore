@@ -35,7 +35,7 @@ export function getStoredCities(): string[] {
           if (Array.isArray(parsed)) {
             // Remove legacy defaults
             const filtered = parsed.filter(
-              (c) => typeof c === "string" && !LEGACY_DEFAULT_CITIES.has(c.trim().toLowerCase())
+              (c) => typeof c === "string" && !LEGACY_DEFAULT_CITIES.has(c.trim().toLowerCase()),
             );
             localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
             return filtered;
@@ -50,7 +50,8 @@ export function getStoredCities(): string[] {
 
     if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed.filter((c) => typeof c === "string" && c.trim().length > 0);
+      if (Array.isArray(parsed))
+        return parsed.filter((c) => typeof c === "string" && c.trim().length > 0);
     }
   } catch {
     /* fallback */

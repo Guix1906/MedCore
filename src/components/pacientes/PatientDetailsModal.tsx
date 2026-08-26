@@ -76,7 +76,8 @@ const DEFAULT_PATIENT: PatientDetailsData = {
   notes: "Esse paciente é um paciente de exemplo.",
   created_at: "15/08/2026 09:49:12",
   active: true,
-  photoUrl: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&auto=format&fit=crop&q=80",
+  photoUrl:
+    "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&auto=format&fit=crop&q=80",
 };
 
 const TABS = [
@@ -140,10 +141,7 @@ export function PatientDetailsModal({
     setAiModalOpen(true);
   };
 
-  const handleAiInsert = (
-    content: string | StructuredConsultationResult,
-    sectionKey?: string
-  ) => {
+  const handleAiInsert = (content: string | StructuredConsultationResult, sectionKey?: string) => {
     if (typeof content === "string") {
       if (sectionKey === "queixa") setQueixa(content);
       else if (sectionKey === "historico_familiar") setHistoricoFamiliar(content);
@@ -162,7 +160,10 @@ export function PatientDetailsModal({
         setHistoricoFamiliar(content.historicoFamiliar);
       }
       if (isValid(content.tratamentosAnteriores) || isValid(content.condutaPlano)) {
-        const full = [content.tratamentosAnteriores, content.condutaPlano ? `Conduta e Orientações:\n${content.condutaPlano}` : ""]
+        const full = [
+          content.tratamentosAnteriores,
+          content.condutaPlano ? `Conduta e Orientações:\n${content.condutaPlano}` : "",
+        ]
           .filter(isValid)
           .join("\n\n");
         setTratamentos(full);
@@ -174,7 +175,9 @@ export function PatientDetailsModal({
         setMedicacoes(content.medicacoesEmUso);
       }
       if (isValid(content.historicoPessoal)) {
-        setHistoricoPessoal((prev) => (prev ? `${prev}\n${content.historicoPessoal}` : content.historicoPessoal));
+        setHistoricoPessoal((prev) =>
+          prev ? `${prev}\n${content.historicoPessoal}` : content.historicoPessoal,
+        );
       }
       if (content.condicoesDetectadas && content.condicoesDetectadas.length > 0) {
         setConditions((prev) => {
@@ -219,11 +222,7 @@ export function PatientDetailsModal({
             <div className="relative mb-3">
               <div className="relative h-20 w-20 rounded-full overflow-hidden border-2 border-white shadow-md bg-purple-100 flex items-center justify-center">
                 {data.photoUrl ? (
-                  <img
-                    src={data.photoUrl}
-                    alt={data.name}
-                    className="h-full w-full object-cover"
-                  />
+                  <img src={data.photoUrl} alt={data.name} className="h-full w-full object-cover" />
                 ) : (
                   <div className="h-full w-full bg-[#7B3AF5] text-white font-bold text-xl flex items-center justify-center">
                     {data.name
@@ -323,7 +322,9 @@ export function PatientDetailsModal({
                   >
                     <span>{tab.label}</span>
                     {tab.id === "prontuario" && (
-                      <Sparkles className={`h-3 w-3 ${isActive ? "text-white" : "text-[#7B3AF5]"}`} />
+                      <Sparkles
+                        className={`h-3 w-3 ${isActive ? "text-white" : "text-[#7B3AF5]"}`}
+                      />
                     )}
                   </button>
                 );
@@ -379,7 +380,9 @@ export function PatientDetailsModal({
                       </div>
                       <button
                         type="button"
-                        onClick={() => openAiForSection({ key: "queixa", title: "Queixa Principal" })}
+                        onClick={() =>
+                          openAiForSection({ key: "queixa", title: "Queixa Principal" })
+                        }
                         className="text-[11.5px] font-semibold text-purple-600 hover:text-purple-800 flex items-center gap-1 cursor-pointer"
                       >
                         <Sparkles size={12} /> IA
@@ -407,7 +410,12 @@ export function PatientDetailsModal({
                       </div>
                       <button
                         type="button"
-                        onClick={() => openAiForSection({ key: "historico_familiar", title: "Histórico Familiar" })}
+                        onClick={() =>
+                          openAiForSection({
+                            key: "historico_familiar",
+                            title: "Histórico Familiar",
+                          })
+                        }
                         className="text-[11.5px] font-semibold text-purple-600 hover:text-purple-800 flex items-center gap-1 cursor-pointer"
                       >
                         <Sparkles size={12} /> IA
@@ -435,7 +443,9 @@ export function PatientDetailsModal({
                       </div>
                       <button
                         type="button"
-                        onClick={() => openAiForSection({ key: "tratamentos", title: "Tratamentos Anteriores" })}
+                        onClick={() =>
+                          openAiForSection({ key: "tratamentos", title: "Tratamentos Anteriores" })
+                        }
                         className="text-[11.5px] font-semibold text-purple-600 hover:text-purple-800 flex items-center gap-1 cursor-pointer"
                       >
                         <Sparkles size={12} /> IA
@@ -457,9 +467,7 @@ export function PatientDetailsModal({
                         <div className="h-6 w-6 rounded-md bg-rose-100 text-rose-700 flex items-center justify-center">
                           <ShieldAlert size={14} />
                         </div>
-                        <label className="text-[13.5px] font-bold text-slate-800">
-                          Alergias
-                        </label>
+                        <label className="text-[13.5px] font-bold text-slate-800">Alergias</label>
                       </div>
                       <button
                         type="button"
@@ -491,7 +499,12 @@ export function PatientDetailsModal({
                       </div>
                       <button
                         type="button"
-                        onClick={() => openAiForSection({ key: "historico_pessoal", title: "Histórico Médico Pessoal" })}
+                        onClick={() =>
+                          openAiForSection({
+                            key: "historico_pessoal",
+                            title: "Histórico Médico Pessoal",
+                          })
+                        }
                         className="text-[11.5px] font-semibold text-purple-600 hover:text-purple-800 flex items-center gap-1 cursor-pointer"
                       >
                         <Sparkles size={12} /> IA
@@ -500,11 +513,16 @@ export function PatientDetailsModal({
 
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
                       {CONDICOES_PRONTUARIO.map((c) => (
-                        <label key={c} className="flex items-center gap-2 text-[12px] text-slate-700 cursor-pointer">
+                        <label
+                          key={c}
+                          className="flex items-center gap-2 text-[12px] text-slate-700 cursor-pointer"
+                        >
                           <input
                             type="checkbox"
                             checked={!!condicoes[c]}
-                            onChange={(e) => setConditions((prev) => ({ ...prev, [c]: e.target.checked }))}
+                            onChange={(e) =>
+                              setConditions((prev) => ({ ...prev, [c]: e.target.checked }))
+                            }
                             className="rounded text-purple-600 focus:ring-purple-500 h-3.5 w-3.5"
                           />
                           <span>{c}</span>
@@ -635,7 +653,9 @@ export function PatientDetailsModal({
                       <p className="text-[12.5px] font-bold text-[#1E293B]">Endereço</p>
                       <div className="text-[13px] text-[#7B3AF5] font-medium mt-0.5 leading-snug">
                         <p>{data.address || "Av. Pedro Álvares Cabral, SN"}</p>
-                        <p>{data.neighborhood || "Vila Mariana"}, {data.city || "São Paulo"}</p>
+                        <p>
+                          {data.neighborhood || "Vila Mariana"}, {data.city || "São Paulo"}
+                        </p>
                       </div>
                     </div>
                   </div>

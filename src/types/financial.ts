@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Vocabulário Canônico do Módulo Financeiro (MedCore)
+ * Vocabulï¿½rio Canï¿½nico do Mï¿½dulo Financeiro (MedCore)
  */
 export enum FinancialType {
   RECEITA = "receita",

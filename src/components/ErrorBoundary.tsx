@@ -40,7 +40,8 @@ export class ErrorBoundary extends Component<Props, State> {
               Ocorreu um imprevisto de execução
             </h3>
             <p className="text-xs text-gray-600 mb-6 leading-relaxed">
-              O sistema protegeu sua sessão com segurança. Nenhuma informação de paciente foi afetada. Por favor, recarregue a página.
+              O sistema protegeu sua sessão com segurança. Nenhuma informação de paciente foi
+              afetada. Por favor, recarregue a página.
             </p>
             <button
               onClick={this.handleReload}

@@ -86,7 +86,9 @@ export default function ProntuarioPage() {
   const [tab, setTab] = useState<TabKey>("anamnese");
 
   // Lê parâmetros da URL caso o atendimento tenha sido iniciado a partir da agenda ou paciente
-  const searchParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+  const searchParams = new URLSearchParams(
+    typeof window !== "undefined" ? window.location.search : "",
+  );
   const paramPatientId = searchParams.get("patientId") || searchParams.get("id");
   const paramPatientName =
     searchParams.get("patientName") || searchParams.get("name") || searchParams.get("patient");
@@ -103,7 +105,11 @@ export default function ProntuarioPage() {
           const phpPat = await patientsService.getPatientById(paramPatientId);
           if (phpPat) return phpPat;
         } catch {}
-        const { data } = await supabase.from("patients").select("*").eq("id", paramPatientId).maybeSingle();
+        const { data } = await supabase
+          .from("patients")
+          .select("*")
+          .eq("id", paramPatientId)
+          .maybeSingle();
         if (data) return data;
       }
       if (paramPatientName) {
@@ -112,7 +118,12 @@ export default function ProntuarioPage() {
           const phpList = await patientsService.getPatients({ q: clean, limit: 1 });
           if (phpList && phpList[0]) return phpList[0];
         } catch {}
-        const { data } = await supabase.from("patients").select("*").ilike("name", `%${clean}%`).limit(1).maybeSingle();
+        const { data } = await supabase
+          .from("patients")
+          .select("*")
+          .ilike("name", `%${clean}%`)
+          .limit(1)
+          .maybeSingle();
         if (data) return data;
       }
       return null;
@@ -193,10 +204,7 @@ export default function ProntuarioPage() {
     setAiModalOpen(true);
   };
 
-  const handleAiInsert = (
-    content: string | StructuredConsultationResult,
-    sectionKey?: string
-  ) => {
+  const handleAiInsert = (content: string | StructuredConsultationResult, sectionKey?: string) => {
     if (typeof content === "string") {
       queixaRef.current?.setText(content);
     } else {
@@ -223,7 +231,7 @@ export default function ProntuarioPage() {
         parts.push(`Conduta e Orientações:\n${content.condutaPlano}`);
       }
 
-      const fullText = parts.length > 0 ? parts.join("\n\n") : (content.queixaPrincipal || "");
+      const fullText = parts.length > 0 ? parts.join("\n\n") : content.queixaPrincipal || "";
       queixaRef.current?.setText(fullText);
     }
     markDirty();
@@ -271,14 +279,23 @@ export default function ProntuarioPage() {
 
     // 1. Salva no LocalStorage com chave do ID e com chave do Nome
     try {
-      if (targetPatientId) localStorage.setItem("medcore_prontuario_" + targetPatientId, JSON.stringify(newRecord));
-      if (patientName) localStorage.setItem("medcore_prontuario_" + patientName, JSON.stringify(newRecord));
+      if (targetPatientId)
+        localStorage.setItem("medcore_prontuario_" + targetPatientId, JSON.stringify(newRecord));
+      if (patientName)
+        localStorage.setItem("medcore_prontuario_" + patientName, JSON.stringify(newRecord));
 
-      const histKey = targetPatientId ? "medcore_prontuario_history_" + targetPatientId : "medcore_prontuario_history_" + patientName;
+      const histKey = targetPatientId
+        ? "medcore_prontuario_history_" + targetPatientId
+        : "medcore_prontuario_history_" + patientName;
       const prevHist = JSON.parse(localStorage.getItem(histKey) || "[]");
       const nextHist = [newRecord, ...prevHist.filter((h: any) => h.id !== newRecord.id)];
-      if (targetPatientId) localStorage.setItem("medcore_prontuario_history_" + targetPatientId, JSON.stringify(nextHist));
-      if (patientName) localStorage.setItem("medcore_prontuario_history_" + patientName, JSON.stringify(nextHist));
+      if (targetPatientId)
+        localStorage.setItem(
+          "medcore_prontuario_history_" + targetPatientId,
+          JSON.stringify(nextHist),
+        );
+      if (patientName)
+        localStorage.setItem("medcore_prontuario_history_" + patientName, JSON.stringify(nextHist));
     } catch (e) {
       console.warn("Aviso ao salvar localmente:", e);
     }
@@ -315,7 +332,6 @@ export default function ProntuarioPage() {
     setTimeout(() => navigate({ to: "/pacientes" }), 600);
   };
 
-
   if (!hasActivePatient) {
     return (
       <ProntuarioHub
@@ -340,7 +356,12 @@ export default function ProntuarioPage() {
           <aside className="-mt-6 w-[240px] shrink-0 border-r border-[#E5E7EB] pr-0 pt-6 min-h-[calc(100vh-80px)]">
             <button
               type="button"
-              onClick={() => navigate({ to: "/prontuario", search: { patientId: undefined, patientName: undefined } })}
+              onClick={() =>
+                navigate({
+                  to: "/prontuario",
+                  search: { patientId: undefined, patientName: undefined },
+                })
+              }
               className="mb-3.5 flex items-center gap-1.5 text-[12px] font-semibold text-[#8B47FF] hover:text-[#7A3CE3] transition-colors cursor-pointer"
             >
               <ArrowLeft size={14} /> Voltar à central de hoje
@@ -354,7 +375,9 @@ export default function ProntuarioPage() {
                 <div className="truncate text-[13.5px] font-semibold tracking-tight text-foreground">
                   {patient.name}
                 </div>
-                <div className="text-[12.5px] leading-tight text-muted-foreground">{patient.age}</div>
+                <div className="text-[12.5px] leading-tight text-muted-foreground">
+                  {patient.age}
+                </div>
               </div>
               <button
                 onClick={copyPatient}
@@ -412,11 +435,18 @@ export default function ProntuarioPage() {
                     animate="show"
                   >
                     {previousRecord?.complaint && (
-                      <motion.div variants={fadeUp} className="rounded-xl border border-purple-100 bg-purple-50/50 p-3 flex flex-col gap-2">
+                      <motion.div
+                        variants={fadeUp}
+                        className="rounded-xl border border-purple-100 bg-purple-50/50 p-3 flex flex-col gap-2"
+                      >
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-semibold text-purple-900 flex items-center gap-1.5">
                             <FileText className="h-3.5 w-3.5 text-purple-600" />
-                            Registro da consulta anterior ({new Date(previousRecord.created_at || previousRecord.finished_at || Date.now()).toLocaleDateString("pt-BR")})
+                            Registro da consulta anterior (
+                            {new Date(
+                              previousRecord.created_at || previousRecord.finished_at || Date.now(),
+                            ).toLocaleDateString("pt-BR")}
+                            )
                           </span>
                           <button
                             type="button"
@@ -523,7 +553,8 @@ export default function ProntuarioPage() {
                       Cancelar atendimento?
                     </h3>
                     <p className="text-[13.5px] leading-relaxed text-slate-500">
-                      Tem certeza de que deseja descartar este atendimento? Todas as anotações clínicas e alterações não salvas serão perdidas.
+                      Tem certeza de que deseja descartar este atendimento? Todas as anotações
+                      clínicas e alterações não salvas serão perdidas.
                     </p>
                   </div>
                 </div>
@@ -563,7 +594,11 @@ export default function ProntuarioPage() {
             <div className="flex flex-1 items-center justify-between pl-10">
               {/* Esquerda: Contador de tempo + Botão Privado ao lado */}
               <div className="flex items-center gap-6">
-                <ConsultationTimer onTick={(s) => { secondsRef.current = s; }} />
+                <ConsultationTimer
+                  onTick={(s) => {
+                    secondsRef.current = s;
+                  }}
+                />
 
                 <div className="relative">
                   <button
@@ -764,34 +799,37 @@ function MemedTab() {
         <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary">
           <FileDigit className="h-8 w-8" />
         </div>
-        <h2 className="text-[20px] font-bold tracking-tight text-foreground">Prescrição Digital Memed</h2>
+        <h2 className="text-[20px] font-bold tracking-tight text-foreground">
+          Prescrição Digital Memed
+        </h2>
         <p className="mt-2 max-w-md text-[15px] text-muted-foreground">
-          Emita receitas digitais utilizando a plataforma Memed, com assinatura eletrônica do médico e envio ao paciente.
+          Emita receitas digitais utilizando a plataforma Memed, com assinatura eletrônica do médico
+          e envio ao paciente.
         </p>
-        
+
         {!active && (
           <div className="mt-6 flex items-center gap-2 rounded-md bg-amber-50 px-3 py-2 text-[13px] font-medium text-amber-700">
-            <AlertCircle className="h-4 w-4" />
-            A integração com a Memed ainda não foi configurada.
+            <AlertCircle className="h-4 w-4" />A integração com a Memed ainda não foi configurada.
           </div>
         )}
-        
+
         {active && (
           <div className="mt-6 flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2 text-[13px] font-medium text-emerald-700">
-            <Check className="h-4 w-4" />
-            ✅ Integração ativa.
+            <Check className="h-4 w-4" />✅ Integração ativa.
           </div>
         )}
 
         <div className="mt-8 flex flex-wrap justify-center gap-4">
-          <button 
+          <button
             className="flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-[14.5px] font-semibold text-primary-foreground shadow-[0_8px_20px_-8px_rgba(139,71,255,0.55)] transition-all hover:bg-primary-hover focus-ring"
-            onClick={() => toast.info("Fluxo Memed", { description: "Ponto de integração preparado." })}
+            onClick={() =>
+              toast.info("Fluxo Memed", { description: "Ponto de integração preparado." })
+            }
           >
             <PlusCircle className="h-5 w-5" />
             Emitir Receita via Memed
           </button>
-          <button 
+          <button
             onClick={() => setConfigOpen(true)}
             className="flex items-center gap-2 rounded-xl border border-[#c9cdd6] bg-white px-6 py-3 text-[14.5px] font-semibold text-foreground transition-all hover:bg-muted focus-ring"
           >
@@ -830,14 +868,14 @@ function MemedTab() {
 
       {configOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
           >
             <div className="border-b border-border-soft px-6 py-4 flex items-center justify-between">
               <h3 className="text-[17px] font-bold text-foreground">Configurações Memed</h3>
-              <button 
+              <button
                 onClick={() => setConfigOpen(false)}
                 className="text-muted-foreground hover:text-foreground transition-colors"
               >
@@ -846,43 +884,57 @@ function MemedTab() {
             </div>
             <div className="max-h-[70vh] overflow-y-auto p-6 space-y-6">
               <div className="space-y-4 pt-2">
-                <h4 className="text-[14px] font-bold text-foreground uppercase tracking-wider">Credenciais</h4>
+                <h4 className="text-[14px] font-bold text-foreground uppercase tracking-wider">
+                  Credenciais
+                </h4>
                 <div className="space-y-4">
                   <div className="space-y-1.5">
                     <label className="text-[13px] font-semibold text-foreground">API Key</label>
-                    <input type="text" placeholder="Insira sua API Key" className="w-full rounded-lg border border-[#c9cdd6] px-3 py-2.5 text-[14px] outline-none focus:border-primary transition-all" />
+                    <input
+                      type="text"
+                      placeholder="Insira sua API Key"
+                      className="w-full rounded-lg border border-[#c9cdd6] px-3 py-2.5 text-[14px] outline-none focus:border-primary transition-all"
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[13px] font-semibold text-foreground">Secret Key</label>
-                    <input type="password" placeholder="••••••••" className="w-full rounded-lg border border-[#c9cdd6] px-3 py-2.5 text-[14px] outline-none focus:border-primary transition-all" />
+                    <input
+                      type="password"
+                      placeholder="••••••••"
+                      className="w-full rounded-lg border border-[#c9cdd6] px-3 py-2.5 text-[14px] outline-none focus:border-primary transition-all"
+                    />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[13px] font-semibold text-foreground">Ambiente de Execução</label>
+                    <label className="text-[13px] font-semibold text-foreground">
+                      Ambiente de Execução
+                    </label>
                     <select className="w-full rounded-lg border border-[#c9cdd6] px-3 py-2.5 text-[14px] outline-none focus:border-primary bg-white transition-all">
                       <option>Produção (integrations)</option>
                       <option>Sandbox (homologação)</option>
                     </select>
                   </div>
                   <label className="flex cursor-pointer items-center gap-3 py-2 px-1 hover:bg-muted/30 rounded-lg transition-colors">
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       checked={active}
                       onChange={(e) => setActive(e.target.checked)}
-                      className="h-4.5 w-4.5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer" 
+                      className="h-4.5 w-4.5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
                     />
-                    <span className="text-[14px] font-medium text-foreground">Ativar Módulo de Prescrição Digital</span>
+                    <span className="text-[14px] font-medium text-foreground">
+                      Ativar Módulo de Prescrição Digital
+                    </span>
                   </label>
                 </div>
               </div>
             </div>
             <div className="flex items-center justify-end gap-3 bg-muted/30 px-6 py-4">
-              <button 
+              <button
                 onClick={() => setConfigOpen(false)}
                 className="text-[14px] font-medium text-muted-foreground hover:text-foreground"
               >
                 Cancelar
               </button>
-              <button 
+              <button
                 onClick={() => {
                   toast.success("Configurações salvas");
                   setConfigOpen(false);
@@ -900,7 +952,6 @@ function MemedTab() {
 }
 
 /* ------------------------- Rich Text Editor ------------------------- */
-
 
 type ToolButton = {
   icon: typeof Bold;
@@ -1212,4 +1263,3 @@ const ConsultationTimer = memo(function ConsultationTimer({
     </div>
   );
 });
-

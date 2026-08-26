@@ -44,8 +44,12 @@ export function buildAgendaFilterOptions({
 
   return {
     status: uniqSorted(activities.map((a) => statusLabel(a.status))),
-    profissional: uniqSorted(memberList.length > 0 ? memberList : activities.map((a) => (a.assignedTo ? (memberNameById.get(a.assignedTo) ?? null) : null))),
-    paciente: uniqSorted(patientNames.length > 0 ? patientNames : activities.map(a => a.title)),
+    profissional: uniqSorted(
+      memberList.length > 0
+        ? memberList
+        : activities.map((a) => (a.assignedTo ? (memberNameById.get(a.assignedTo) ?? null) : null)),
+    ),
+    paciente: uniqSorted(patientNames.length > 0 ? patientNames : activities.map((a) => a.title)),
     procedimento: uniqSorted(activities.map((a) => KIND_COLOR[a.kind]?.label ?? a.kind)),
     sala: uniqSorted(activities.map((a) => a.location)),
     convenio: uniqSorted(insuranceNames),
@@ -84,7 +88,8 @@ export function applyAgendaSidebarFilters({
     if (filters.tipoConsulta && kindLabel !== filters.tipoConsulta) return false;
 
     if (filters.sala) {
-      if (!a.location || !a.location.toLowerCase().includes(filters.sala.toLowerCase())) return false;
+      if (!a.location || !a.location.toLowerCase().includes(filters.sala.toLowerCase()))
+        return false;
     }
 
     if (filters.paciente) {

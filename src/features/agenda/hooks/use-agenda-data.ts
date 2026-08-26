@@ -50,9 +50,7 @@ export function useAgendaData(
         try {
           const { data } = await supabase
             .from("tasks")
-            .select(
-              "id, title, description, due_date, priority, status, assigned_to, case_id",
-            )
+            .select("id, title, description, due_date, priority, status, assigned_to, case_id")
             .eq("company_id", companyId);
           return (data ?? []) as RawTask[];
         } catch {}
@@ -197,7 +195,10 @@ export function useAgendaData(
 
   return {
     activities,
-    isLoading: (tasksQ.isLoading && !tasksQ.data) || (eventsQ.isLoading && !eventsQ.data) || (deadlinesQ.isLoading && !deadlinesQ.data),
+    isLoading:
+      (tasksQ.isLoading && !tasksQ.data) ||
+      (eventsQ.isLoading && !eventsQ.data) ||
+      (deadlinesQ.isLoading && !deadlinesQ.data),
     refresh,
   };
 }

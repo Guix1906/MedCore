@@ -46,7 +46,9 @@ export function saveStoredLocalPatient(patient: LocalPatient): void {
   inMemoryPatientsMap.set(patient.id, patient);
   if (typeof window !== "undefined") {
     window.dispatchEvent(
-      new CustomEvent("medcore_patients_updated", { detail: Array.from(inMemoryPatientsMap.values()) })
+      new CustomEvent("medcore_patients_updated", {
+        detail: Array.from(inMemoryPatientsMap.values()),
+      }),
     );
   }
 }
@@ -56,7 +58,9 @@ export function deleteStoredLocalPatient(id: string): void {
   inMemoryPatientsMap.delete(id);
   if (typeof window !== "undefined") {
     window.dispatchEvent(
-      new CustomEvent("medcore_patients_updated", { detail: Array.from(inMemoryPatientsMap.values()) })
+      new CustomEvent("medcore_patients_updated", {
+        detail: Array.from(inMemoryPatientsMap.values()),
+      }),
     );
   }
 }
@@ -78,4 +82,3 @@ export function mergeWithLocalPatients<T extends { id: string }>(remotePatients:
 
   return Array.from(map.values());
 }
-

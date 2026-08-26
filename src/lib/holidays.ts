@@ -75,11 +75,19 @@ export function getBrazilianHolidays(year: number): HolidayItem[] {
     { date: corpusChristi, title: "Corpus Christi", type: "facultativo" },
     { date: diaDosPais, title: "Dia dos Pais", type: "facultativo" },
     { date: new Date(year, 8, 7), title: "Independência do Brasil", type: "nacional" },
-    { date: new Date(year, 9, 12), title: "Nossa Senhora Aparecida / Dia das Crianças", type: "nacional" },
+    {
+      date: new Date(year, 9, 12),
+      title: "Nossa Senhora Aparecida / Dia das Crianças",
+      type: "nacional",
+    },
     { date: new Date(year, 10, 2), title: "Finados", type: "nacional" },
     { date: new Date(year, 10, 15), title: "Proclamação da República", type: "nacional" },
     { date: new Date(year, 10, 20), title: "Dia da Consciência Negra", type: "nacional" },
-    { date: new Date(year, 11, 24), title: "Véspera de Natal (Facultativo após 14h)", type: "facultativo" },
+    {
+      date: new Date(year, 11, 24),
+      title: "Véspera de Natal (Facultativo após 14h)",
+      type: "facultativo",
+    },
     { date: new Date(year, 11, 25), title: "Natal", type: "nacional" },
     { date: new Date(year, 11, 31), title: "Véspera de Ano Novo / Réveillon", type: "facultativo" },
   ];

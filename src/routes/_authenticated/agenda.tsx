@@ -82,7 +82,9 @@ export const Route = createFileRoute("/_authenticated/agenda")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  validateSearch: (search: Record<string, unknown>): {
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): {
     taskId?: string;
     deadlineId?: string;
     eventId?: string;
@@ -136,7 +138,9 @@ function AgendaPage() {
           }));
         }
       } catch {}
-      return (await supabase.from("patients").select("id, name, insurance").order("name")).data ?? [];
+      return (
+        (await supabase.from("patients").select("id, name, insurance").order("name")).data ?? []
+      );
     },
   });
 
@@ -346,8 +350,14 @@ function AgendaPage() {
                   {search.trim() !== "" ? (
                     <div className="p-4">
                       <div className="mb-4 flex items-center justify-between rounded-xl bg-purple-50 border border-purple-200 px-4 py-3 text-xs font-semibold text-[#6D5EF8]">
-                        <span>🔍 Resultados da busca por "{search}": {finalFiltered.length} agendamento(s) encontrado(s)</span>
-                        <button onClick={() => setSearch("")} className="hover:underline text-muted-foreground font-medium">
+                        <span>
+                          🔍 Resultados da busca por "{search}": {finalFiltered.length}{" "}
+                          agendamento(s) encontrado(s)
+                        </span>
+                        <button
+                          onClick={() => setSearch("")}
+                          className="hover:underline text-muted-foreground font-medium"
+                        >
                           Limpar busca
                         </button>
                       </div>
@@ -407,10 +417,6 @@ function AgendaPage() {
                   )}
                 </SectionCard>
               </div>
-
-
-
-
             </div>
           </div>
 
