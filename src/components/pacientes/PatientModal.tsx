@@ -44,8 +44,6 @@ export function PatientModal({
   onClose: () => void;
   onSaved: (updated?: any) => void;
 }) {
-  if (!open) return null;
-
   const queryClient = useQueryClient();
   const [f, setF] = useState(() => ({
     name: patient?.name ?? "",
@@ -83,6 +81,8 @@ export function PatientModal({
       setCpfError(null);
     }
   }, [patient]);
+
+  if (!open) return null;
 
   const set =
     (k: keyof typeof f) =>
@@ -150,7 +150,7 @@ export function PatientModal({
     setSaving(true);
     setCpfError(null);
 
-    const genderMapped = f.gender === "O" ? "outro" : (f.gender || null);
+    const genderMapped = f.gender === "O" ? "outro" : f.gender || null;
     const formattedCpf = cleanCpf ? formatCPF(cleanCpf) : null;
 
     const payload = {
@@ -174,8 +174,17 @@ export function PatientModal({
     try {
       // 1. Salva diretamente no Supabase com resposta ultra-rápida (~50ms)
       const res = patient?.id
-        ? await supabase.from("patients").update(payload).eq("id", patient.id).select().maybeSingle()
-        : await supabase.from("patients").insert({ ...payload, active: true }).select().maybeSingle();
+        ? await supabase
+            .from("patients")
+            .update(payload)
+            .eq("id", patient.id)
+            .select()
+            .maybeSingle()
+        : await supabase
+            .from("patients")
+            .insert({ ...payload, active: true })
+            .select()
+            .maybeSingle();
 
       if (res.error) {
         saveError = res.error;
@@ -185,7 +194,9 @@ export function PatientModal({
         if (patient?.id) {
           patientsService.updatePatient(patient.id, payload).catch(() => {});
         } else {
-          patientsService.createPatient({ ...payload, id: res.data.id, active: true }).catch(() => {});
+          patientsService
+            .createPatient({ ...payload, id: res.data.id, active: true })
+            .catch(() => {});
         }
       }
     } catch (err: any) {
@@ -221,13 +232,13 @@ export function PatientModal({
       }
     }
 
-    const finalPatient = savedData || ({
+    const finalPatient = savedData || {
       ...patient,
       ...payload,
       id: patient?.id ?? crypto.randomUUID(),
       active: true,
       created_at: new Date().toISOString(),
-    });
+    };
 
     // Salva na camada persistente local
     saveStoredLocalPatient(finalPatient);
@@ -246,7 +257,9 @@ export function PatientModal({
 
     queryClient.setQueryData(["patients-list"], (old: any = []) => {
       const exists = old.some((p: any) => p.id === finalPatient.id);
-      return exists ? old.map((p: any) => (p.id === finalPatient.id ? finalPatient : p)) : [finalPatient, ...old];
+      return exists
+        ? old.map((p: any) => (p.id === finalPatient.id ? finalPatient : p))
+        : [finalPatient, ...old];
     });
 
     queryClient.invalidateQueries({ queryKey: ["patients-picker"] });
@@ -254,7 +267,9 @@ export function PatientModal({
     queryClient.invalidateQueries({ queryKey: ["patients-mini"] });
     queryClient.invalidateQueries({ queryKey: ["patients"] });
 
-    toast.success(patient?.id ? "Paciente atualizado com sucesso" : "Paciente cadastrado com sucesso");
+    toast.success(
+      patient?.id ? "Paciente atualizado com sucesso" : "Paciente cadastrado com sucesso",
+    );
     onSaved(finalPatient);
     onClose();
   };
@@ -319,8 +334,9 @@ export function PatientModal({
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-[12px] text-[#6B7280] font-semibold block">CPF</label>
-                {f.cpf && f.cpf.replace(/\D/g, "").length === 11 && (
-                  isValidCPF(f.cpf) ? (
+                {f.cpf &&
+                  f.cpf.replace(/\D/g, "").length === 11 &&
+                  (isValidCPF(f.cpf) ? (
                     <span className="text-[11px] text-emerald-600 font-medium flex items-center gap-1">
                       <CheckCircle2 size={12} className="text-emerald-500" /> Válido
                     </span>
@@ -328,8 +344,7 @@ export function PatientModal({
                     <span className="text-[11px] text-rose-500 font-medium flex items-center gap-1">
                       <AlertCircle size={12} className="text-rose-500" /> Inválido
                     </span>
-                  )
-                )}
+                  ))}
               </div>
               <input
                 value={f.cpf}
@@ -338,7 +353,8 @@ export function PatientModal({
                 maxLength={14}
                 className={cn(
                   inp,
-                  cpfError && "border-rose-400 focus:border-rose-500 focus:ring-rose-500/10 bg-rose-50/20"
+                  cpfError &&
+                    "border-rose-400 focus:border-rose-500 focus:ring-rose-500/10 bg-rose-50/20",
                 )}
                 placeholder="000.000.000-00"
               />
@@ -384,7 +400,9 @@ export function PatientModal({
             </div>
 
             <div className="col-span-2">
-              <label className="text-[12px] text-[#6B7280] font-semibold block mb-1">Convênio</label>
+              <label className="text-[12px] text-[#6B7280] font-semibold block mb-1">
+                Convênio
+              </label>
               <input
                 value={f.insurance}
                 onChange={set("insurance")}
