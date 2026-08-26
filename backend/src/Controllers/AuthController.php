@@ -11,57 +11,60 @@ class AuthController
 {
     public function login(Request $request): void
     {
-        $email = trim($request->input('email', ''));
-        $password = trim($request->input('password', ''));
+        $email = trim(strtolower((string) $request->input('email', '')));
+        $password = (string) $request->input('password', '');
+        $ip = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
 
         if (empty($email) || empty($password)) {
             Response::error('Email e senha são obrigatórios', 422);
         }
 
-        $user = Database::fetchOne("SELECT * FROM profiles WHERE email = :email LIMIT 1", [
+        // 1. Rate limiting: 5 tentativas por 15 minutos por IP + email
+        $this->ensureLoginAttemptsTable();
+        $window = time() - (15 * 60);
+        $attempts = Database::fetchOne(
+            "SELECT COUNT(*) as total FROM login_attempts WHERE (ip = :ip OR email = :email) AND attempted_at > :window",
+            ['ip' => $ip, 'email' => $email, 'window' => $window]
+        );
+
+        if (($attempts['total'] ?? 0) >= 5) {
+            error_log(sprintf('[AUTH_SECURITY] Bloqueio por rate limit para IP: %s e Email: %s', $ip, $email));
+            Response::error('Muitas tentativas de login. Tente novamente em 15 minutos.', 429);
+        }
+
+        // 2. Busca estrita do usuário
+        $user = Database::fetchOne("SELECT * FROM profiles WHERE lower(email) = :email LIMIT 1", [
             'email' => $email
         ]);
 
-        // Para compatibilidade e facilidade de login no ambiente inicial
+        // 3. Validação de existência e hash de senha
         if (!$user) {
-            // Se usuário ainda não existe no SQLite local, cria automaticamente para login de demonstração/início
-            $userId = 'usr_' . substr(bin2hex(random_bytes(8)), 0, 12);
-            $companyId = 'comp_medcore_default';
-            
-            // Garantir que a clínica padrão existe
-            Database::execute("INSERT OR IGNORE INTO companies (id, name, slug) VALUES (:id, :name, :slug)", [
-                'id' => $companyId,
-                'name' => 'ClinicMed Premium Hub',
-                'slug' => 'clinicmed'
-            ]);
-
-            Database::insert('profiles', [
-                'id' => $userId,
-                'email' => $email,
-                'password_hash' => password_hash($password, PASSWORD_BCRYPT),
-                'full_name' => explode('@', $email)[0],
-                'active_company_id' => $companyId,
-                'is_active' => 1,
-            ]);
-
-            Database::execute("INSERT OR IGNORE INTO company_members (id, company_id, user_id, role) VALUES (:id, :cid, :uid, :role)", [
-                'id' => 'mem_' . substr(bin2hex(random_bytes(6)), 0, 10),
-                'cid' => $companyId,
-                'uid' => $userId,
-                'role' => 'admin'
-            ]);
-
-            $user = Database::fetchOne("SELECT * FROM profiles WHERE id = :id", ['id' => $userId]);
-        } else {
-            if (!empty($user['password_hash']) && !password_verify($password, $user['password_hash'])) {
-                // Em caso de senha não coincidir (a menos que seja a senha padrão)
-                if ($password !== 'medcore123' && $password !== 'admin123') {
-                    Response::error('Email ou senha inválidos', 401);
-                }
-            }
+            $this->recordFailedAttempt($ip, $email);
+            Response::error('Credenciais inválidas', 401);
         }
 
-        // Buscar membros e empresas
+        if (empty($user['password_hash'])) {
+            Database::execute("UPDATE profiles SET must_reset_password = 1 WHERE id = :id", ['id' => $user['id']]);
+            $this->recordFailedAttempt($ip, $email);
+            Response::error('Credenciais inválidas', 401);
+        }
+
+        if (!password_verify($password, $user['password_hash'])) {
+            $this->recordFailedAttempt($ip, $email);
+            Response::error('Credenciais inválidas', 401);
+        }
+
+        if (isset($user['is_active']) && (int)$user['is_active'] === 0) {
+            Response::error('Conta inativa ou bloqueada', 403);
+        }
+
+        // Limpar tentativas falhas após sucesso
+        Database::execute("DELETE FROM login_attempts WHERE ip = :ip OR email = :email", [
+            'ip' => $ip,
+            'email' => $email
+        ]);
+
+        // Buscar membros e empresas autorizadas
         $companies = Database::fetchAll("
             SELECT c.*, cm.role 
             FROM companies c 
@@ -85,11 +88,43 @@ class AuthController
                 'id' => $user['id'],
                 'email' => $user['email'],
                 'full_name' => $user['full_name'],
-                'avatar_url' => $user['avatar_url'],
+                'avatar_url' => $user['avatar_url'] ?? null,
                 'active_company_id' => $activeCompanyId,
             ],
             'companies' => $companies,
         ], 'Login realizado com sucesso');
+    }
+
+    private function ensureLoginAttemptsTable(): void
+    {
+        try {
+            Database::execute("
+                CREATE TABLE IF NOT EXISTS login_attempts (
+                    id TEXT PRIMARY KEY,
+                    ip TEXT NOT NULL,
+                    email TEXT NOT NULL,
+                    attempted_at INTEGER NOT NULL
+                )
+            ");
+            Database::execute("CREATE INDEX IF NOT EXISTS idx_login_attempts ON login_attempts(ip, email, attempted_at)");
+        } catch (\Throwable) {
+            // Silencioso se já existir
+        }
+    }
+
+    private function recordFailedAttempt(string $ip, string $email): void
+    {
+        error_log(sprintf('[AUTH_SECURITY] Tentativa de login falha para Email: %s a partir do IP: %s', $email, $ip));
+        try {
+            Database::execute("INSERT INTO login_attempts (id, ip, email, attempted_at) VALUES (:id, :ip, :email, :attempted_at)", [
+                'id' => 'att_' . substr(bin2hex(random_bytes(8)), 0, 16),
+                'ip' => $ip,
+                'email' => $email,
+                'attempted_at' => time()
+            ]);
+        } catch (\Throwable) {
+            // Não abortar por erro de log
+        }
     }
 
     public function register(Request $request): void

@@ -39,7 +39,7 @@ $adminId = 'usr_admin_medcore';
 Database::execute("INSERT OR IGNORE INTO profiles (id, email, password_hash, full_name, active_company_id, is_active) VALUES (:id, :email, :pass, :name, :cid, 1)", [
     'id' => $adminId,
     'email' => 'admin@medcore.com',
-    'pass' => password_hash('admin123', PASSWORD_BCRYPT),
+    'pass' => password_hash(getenv('SEED_ADMIN_PASSWORD') ?: bin2hex(random_bytes(12)), PASSWORD_BCRYPT),
     'name' => 'Dr. Administrador',
     'cid' => $companyId,
 ]);
