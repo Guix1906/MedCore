@@ -37,18 +37,6 @@ Autoloader::addNamespace('App', __DIR__ . '/../src');
 // Carregar variáveis de ambiente
 Config::load(__DIR__ . '/../.env');
 
-// Inicializar esquema do banco de dados automaticamente se for a primeira execução
-try {
-    $db = Database::getConnection();
-    $schemaFile = __DIR__ . '/../database/schema.sql';
-    if (file_exists($schemaFile)) {
-        $sql = file_get_contents($schemaFile);
-        $db->exec($sql);
-    }
-} catch (\Throwable $e) {
-    // Log interno se necessário
-}
-
 // Inicializar Router
 $router = new Router();
 $router->use(CorsMiddleware::class);
