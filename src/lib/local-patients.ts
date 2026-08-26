@@ -1,6 +1,6 @@
 /**
- * Local Patients Storage and Sync Helper
- * Ensures immediate persistence, high responsiveness, and seamless offline/fallback support.
+ * Local Patients In-Memory Helper (LGPD / PHI Compliant)
+ * Operates STRICTLY in-memory (volatile). NEVER writes sensitive PHI to plain localStorage.
  */
 
 export interface LocalPatient {
@@ -24,55 +24,51 @@ export interface LocalPatient {
 
 const STORAGE_KEY = "medcore_local_patients";
 
-export function getStoredLocalPatients(): LocalPatient[] {
-  if (typeof window === "undefined") return [];
+// Memória volátil (purga ao fechar aba/navegador)
+const inMemoryPatientsMap = new Map<string, LocalPatient>();
+
+// Purgar quaisquer dados residuais inseguros de localStorage legado
+if (typeof window !== "undefined") {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    localStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(STORAGE_KEY);
   } catch {
-    return [];
+    // Silencioso
   }
 }
 
+export function getStoredLocalPatients(): LocalPatient[] {
+  return Array.from(inMemoryPatientsMap.values());
+}
+
 export function saveStoredLocalPatient(patient: LocalPatient): void {
-  if (typeof window === "undefined" || !patient?.id) return;
-  try {
-    const current = getStoredLocalPatients();
-    const exists = current.some((p) => p.id === patient.id);
-    const updated = exists
-      ? current.map((p) => (p.id === patient.id ? { ...p, ...patient } : p))
-      : [patient, ...current];
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    window.dispatchEvent(new CustomEvent("medcore_patients_updated", { detail: updated }));
-  } catch (e) {
-    console.error("Erro ao salvar paciente localmente:", e);
+  if (!patient?.id) return;
+  inMemoryPatientsMap.set(patient.id, patient);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent("medcore_patients_updated", { detail: Array.from(inMemoryPatientsMap.values()) })
+    );
   }
 }
 
 export function deleteStoredLocalPatient(id: string): void {
-  if (typeof window === "undefined" || !id) return;
-  try {
-    const current = getStoredLocalPatients();
-    const filtered = current.filter((p) => p.id !== id);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
-    window.dispatchEvent(new CustomEvent("medcore_patients_updated", { detail: filtered }));
-  } catch (e) {
-    console.error("Erro ao excluir paciente local:", e);
+  if (!id) return;
+  inMemoryPatientsMap.delete(id);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent("medcore_patients_updated", { detail: Array.from(inMemoryPatientsMap.values()) })
+    );
   }
 }
 
 export function mergeWithLocalPatients<T extends { id: string }>(remotePatients: T[]): T[] {
-  const local = getStoredLocalPatients() as unknown as T[];
+  const local = Array.from(inMemoryPatientsMap.values()) as unknown as T[];
   if (!local.length) return remotePatients;
 
   const map = new Map<string, T>();
-  // 1. Adiciona lista remota
   remotePatients.forEach((p) => {
     if (p?.id) map.set(p.id, p);
   });
-  // 2. Mescla/Sobrescreve com lista local mais recente
   local.forEach((p) => {
     if (p?.id) {
       const existing = map.get(p.id);
@@ -82,3 +78,4 @@ export function mergeWithLocalPatients<T extends { id: string }>(remotePatients:
 
   return Array.from(map.values());
 }
+
