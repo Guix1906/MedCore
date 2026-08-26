@@ -16,10 +16,17 @@ export interface UserProfile {
   active_company_id?: string | null;
 }
 
+export interface CompanyMembership {
+  id: string;
+  name: string;
+  slug?: string | null;
+  role: string;
+}
+
 export interface AuthSession {
   token: string;
   user: UserProfile;
-  companies?: any[];
+  companies?: CompanyMembership[];
 }
 
 export const authService = {
@@ -53,8 +60,8 @@ export const authService = {
     removeStoredToken();
   },
 
-  async getMe(): Promise<{ user: UserProfile; companies: any[] }> {
-    return apiClient.get("/auth/me");
+  async getMe(): Promise<{ user: UserProfile; companies: CompanyMembership[] }> {
+    return apiClient.get<{ user: UserProfile; companies: CompanyMembership[] }>("/auth/me");
   },
 
   getSession(): { token: string | null; user: UserProfile | null } {

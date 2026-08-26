@@ -1,5 +1,20 @@
 import { apiClient } from "./api-client";
 
+export interface PatientAppointmentSummary {
+  id: string;
+  date: string;
+  start_time: string;
+  status: string;
+  doctor_name?: string | null;
+}
+
+export interface PatientMedicalRecordSummary {
+  id: string;
+  created_at: string;
+  diagnosis?: string | null;
+  doctor_name?: string | null;
+}
+
 export interface Patient {
   id: string;
   name: string;
@@ -20,8 +35,8 @@ export interface Patient {
   active: boolean;
   created_at: string;
   updated_at?: string;
-  appointments?: any[];
-  medical_records?: any[];
+  appointments?: PatientAppointmentSummary[];
+  medical_records?: PatientMedicalRecordSummary[];
 }
 
 export const patientsService = {

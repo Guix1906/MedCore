@@ -46,6 +46,27 @@ export interface FinancialCategory {
   icon?: string | null;
 }
 
+export interface TreatmentMedication {
+  id: string;
+  treatment_id?: string;
+  name: string;
+  dosage?: string | null;
+  frequency?: string | null;
+  duration?: string | null;
+  instructions?: string | null;
+  status?: string;
+}
+
+export interface TreatmentInstallment {
+  id: string;
+  treatment_id?: string;
+  number: number;
+  due_date: string;
+  amount: number;
+  paid_amount?: number | null;
+  status: string;
+}
+
 export interface Treatment {
   id: string;
   patient_id: string;
@@ -59,8 +80,8 @@ export interface Treatment {
   number_of_installments: number;
   patient_name?: string;
   doctor_name?: string;
-  medications?: any[];
-  installments?: any[];
+  medications?: TreatmentMedication[];
+  installments?: TreatmentInstallment[];
   created_at: string;
 }
 
@@ -137,12 +158,12 @@ export const financeService = {
     return apiClient.delete(`/treatments/${id}`);
   },
 
-  async addMedication(treatmentId: string, medication: any): Promise<any> {
-    return apiClient.post(`/treatments/${treatmentId}/medications`, medication);
+  async addMedication(treatmentId: string, medication: Partial<TreatmentMedication>): Promise<TreatmentMedication> {
+    return apiClient.post<TreatmentMedication>(`/treatments/${treatmentId}/medications`, medication);
   },
 
-  async updateMedication(treatmentId: string, medicationId: string, medication: any): Promise<any> {
-    return apiClient.put(`/treatments/${treatmentId}/medications/${medicationId}`, medication);
+  async updateMedication(treatmentId: string, medicationId: string, medication: Partial<TreatmentMedication>): Promise<TreatmentMedication> {
+    return apiClient.put<TreatmentMedication>(`/treatments/${treatmentId}/medications/${medicationId}`, medication);
   },
 
   async deleteMedication(treatmentId: string, medicationId: string): Promise<void> {
