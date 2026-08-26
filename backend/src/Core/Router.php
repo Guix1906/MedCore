@@ -68,6 +68,12 @@ class Router
         $method = $request->getMethod();
         $uri = $request->getUri();
 
+        // 1. Bloqueio estrito de arquivos sensíveis e bancos de dados
+        $rawUri = strtolower($uri);
+        if (preg_match('/\.(sqlite|sqlite3|db|env|sql)(\b|\?|&|$)/i', $rawUri) || str_contains($rawUri, '/database') || str_contains($rawUri, '/storage')) {
+            Response::forbidden('Acesso negado: recurso protegido');
+        }
+
         // Tratamento de pre-flight CORS
         if ($method === 'OPTIONS') {
             Response::json(['status' => 'ok'], 200, [

@@ -1,0 +1,12 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Bloquear arquivos com extensoes ou nomes sensiveis
+    RewriteRule \.(sqlite|sqlite3|db|env|sql|log|ini|bat|sh)$ - [F,L,NC]
+    RewriteRule ^(database|storage|config|src)/ - [F,L,NC]
+
+    # Redirecionar todas as outras requisicoes para o index.php
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.php [QSA,L]
+</IfModule>

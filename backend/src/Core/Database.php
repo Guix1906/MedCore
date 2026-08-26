@@ -16,10 +16,15 @@ class Database
 
             try {
                 if ($driver === 'sqlite') {
-                    $dbPath = Config::get('DB_PATH', __DIR__ . '/../../database/medcore.sqlite');
+                    $rawPath = Config::get('DB_PATH', 'storage/database/medcore.sqlite');
+                    if (str_starts_with($rawPath, '/') || preg_match('/^[A-Za-z]:[\\\\\/]/', $rawPath)) {
+                        $dbPath = $rawPath;
+                    } else {
+                        $dbPath = dirname(__DIR__, 2) . '/' . ltrim($rawPath, '/\\');
+                    }
                     $dir = dirname($dbPath);
                     if (!is_dir($dir)) {
-                        mkdir($dir, 0777, true);
+                        mkdir($dir, 0755, true);
                     }
                     self::$instance = new PDO("sqlite:{$dbPath}");
                     self::$instance->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
