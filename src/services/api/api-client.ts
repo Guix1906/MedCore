@@ -100,11 +100,12 @@ async function request<T = any>(
     return inFlightRequests.get(cacheKey) as Promise<T>;
   }
 
-  const fetchPromise = (async () => {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 600);
+  const fetchWithRetry = async (attempt: number = 0): Promise<T> => {
+    const controller = new AbortController();
+    const timeoutMs = 20000; // 20 segundos
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
+    try {
       const response = await fetch(url, {
         ...options,
         headers,
@@ -123,6 +124,14 @@ async function request<T = any>(
           // Token expirado ou inválido
           removeStoredToken();
         }
+
+        // Se for erro temporário de servidor (502, 503, 504) e método idempotente, tentar novamente
+        if ([502, 503, 504].includes(response.status) && (method === "GET" || method === "HEAD") && attempt < 2) {
+          const delay = Math.pow(2, attempt) * 300;
+          await new Promise((res) => setTimeout(res, delay));
+          return fetchWithRetry(attempt + 1);
+        }
+
         throw new ApiError(
           json.error || json.message || `Erro HTTP ${response.status}`,
           response.status,
@@ -132,8 +141,27 @@ async function request<T = any>(
 
       return json.data;
     } catch (err: any) {
+      clearTimeout(timeoutId);
       if (err instanceof ApiError) throw err;
-      throw new ApiError(err.message || "Erro de conexão com o servidor PHP", 0);
+
+      // Retry em caso de timeout de rede ou erro de conexão transitório para GET
+      if ((method === "GET" || method === "HEAD") && attempt < 2) {
+        const delay = Math.pow(2, attempt) * 300;
+        await new Promise((res) => setTimeout(res, delay));
+        return fetchWithRetry(attempt + 1);
+      }
+
+      const isAbort = err.name === "AbortError" || err.message?.includes("aborted");
+      throw new ApiError(
+        isAbort ? "A requisição excedeu o tempo limite de resposta (20s)." : (err.message || "Erro de conexão com o servidor."),
+        0
+      );
+    }
+  };
+
+  const fetchPromise = (async () => {
+    try {
+      return await fetchWithRetry();
     } finally {
       if (cacheKey) {
         inFlightRequests.delete(cacheKey);
