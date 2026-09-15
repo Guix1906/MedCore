@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
-  beforeLoad: async () => {
+  beforeLoad: async ({ location }) => {
     // 1. Validação do Token do backend PHP contra o servidor
     const token = getStoredToken();
     if (token) {
@@ -33,7 +33,7 @@ export const Route = createFileRoute("/_authenticated")({
     throw redirect({
       to: "/auth",
       search: {
-        redirect: window.location.pathname,
+        redirect: location?.pathname || "/dashboard",
       },
     });
   },
