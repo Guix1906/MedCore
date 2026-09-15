@@ -19,8 +19,12 @@ export const Route = createFileRoute("/_authenticated")({
       }
     }
 
-    // 2. Validação de sessão do Supabase
+    // 2. Validação instantânea da sessão do Supabase em memória/cache
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData?.session?.user) {
+        return { user: sessionData.session.user };
+      }
       const { data, error } = await supabase.auth.getUser();
       if (!error && data?.user) {
         return { user: data.user };

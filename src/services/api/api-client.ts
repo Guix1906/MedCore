@@ -74,7 +74,28 @@ export function setStoredUser(user: any, remember: boolean = true): void {
   }
 }
 
+let backendOfflineUntil = 0;
+
+export function isBackendReachable(): boolean {
+  if (typeof window === "undefined") return true;
+  // Bloqueio imediato de Mixed Content e localhost em ambientes HTTPS (Vercel/produção)
+  const isHttps = window.location.protocol === "https:";
+  const isLocalHost = API_BASE_URL.includes("localhost") || API_BASE_URL.includes("127.0.0.1");
+  if (isHttps && isLocalHost) {
+    return false;
+  }
+  // Se falhou recentemente, não bloqueia a UI do usuário
+  if (backendOfflineUntil && Date.now() < backendOfflineUntil) {
+    return false;
+  }
+  return true;
+}
+
 async function request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  if (!isBackendReachable()) {
+    throw new ApiError("Backend local indisponível em produção HTTPS. Usando banco em nuvem.", 503);
+  }
+
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
   const url = `${API_BASE_URL}${cleanEndpoint}`;
 
@@ -98,7 +119,7 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}): Pr
 
   const fetchWithRetry = async (attempt: number = 0): Promise<T> => {
     const controller = new AbortController();
-    const timeoutMs = 20000; // 20 segundos
+    const timeoutMs = 2500; // 2.5s max para nunca travar a navegação
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
@@ -117,17 +138,15 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}): Pr
 
       if (!response.ok || json.success === false) {
         if (response.status === 401) {
-          // Token expirado ou inválido
           removeStoredToken();
         }
 
-        // Se for erro temporário de servidor (502, 503, 504) e método idempotente, tentar novamente
         if (
           [502, 503, 504].includes(response.status) &&
           (method === "GET" || method === "HEAD") &&
-          attempt < 2
+          attempt < 1
         ) {
-          const delay = Math.pow(2, attempt) * 300;
+          const delay = 200;
           await new Promise((res) => setTimeout(res, delay));
           return fetchWithRetry(attempt + 1);
         }
@@ -144,18 +163,20 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}): Pr
       clearTimeout(timeoutId);
       if (err instanceof ApiError) throw err;
 
-      // Retry em caso de timeout de rede ou erro de conexão transitório para GET
-      if ((method === "GET" || method === "HEAD") && attempt < 2) {
-        const delay = Math.pow(2, attempt) * 300;
+      // Ativa circuit breaker por 60s em caso de falha de conexão ou timeout
+      backendOfflineUntil = Date.now() + 60_000;
+
+      const isAbort = err.name === "AbortError" || err.message?.includes("aborted");
+      const isNetworkFail = err.name === "TypeError" || err.message?.includes("Failed to fetch");
+
+      if (!isAbort && !isNetworkFail && (method === "GET" || method === "HEAD") && attempt < 1) {
+        const delay = 200;
         await new Promise((res) => setTimeout(res, delay));
         return fetchWithRetry(attempt + 1);
       }
 
-      const isAbort = err.name === "AbortError" || err.message?.includes("aborted");
       throw new ApiError(
-        isAbort
-          ? "A requisição excedeu o tempo limite de resposta (20s)."
-          : err.message || "Erro de conexão com o servidor.",
+        isAbort ? "Tempo limite de resposta esgotado (2.5s)." : err.message || "Erro de conexão.",
         0,
       );
     }
