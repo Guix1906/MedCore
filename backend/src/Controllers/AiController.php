@@ -17,26 +17,26 @@ class AiController extends BaseController
         // 1. Feature Flag / Consentimento LGPD
         $aiEnabled = Config::get('AI_FEATURE_ENABLED', 'true');
         if ($aiEnabled !== 'true' && $aiEnabled !== '1') {
-            Response::error('Recurso de IA desativado para esta clínica ou requer termo de consentimento (DPA/LGPD).', 403);
+            Response::error('Recurso de IA desativado para esta clï¿½nica ou requer termo de consentimento (DPA/LGPD).', 403);
         }
 
         $apiKey = Config::get('GEMINI_API_KEY');
         if (empty($apiKey)) {
-            Response::error('Chave de API de IA não configurada no servidor.', 503);
+            Response::error('Chave de API de IA nï¿½o configurada no servidor.', 503);
         }
 
         $rawTranscript = trim((string) $request->input('rawTranscript', ''));
         if (empty($rawTranscript)) {
-            Response::error('Transcrição da consulta é obrigatória', 422);
+            Response::error('Transcriï¿½ï¿½o da consulta ï¿½ obrigatï¿½ria', 422);
         }
 
-        // 2. Rate Limiting: máx 15 requisições de IA por minuto por usuário
+        // 2. Rate Limiting: mï¿½x 15 requisiï¿½ï¿½es de IA por minuto por usuï¿½rio
         $this->ensureAiRateLimit($userId);
 
-        // 3. Minimização / Anonimização de PHI antes do envio a provedores externos
+        // 3. Minimizaï¿½ï¿½o / Anonimizaï¿½ï¿½o de PHI antes do envio a provedores externos
         $minimizedTranscript = $this->minimizePhi($rawTranscript);
 
-        // 4. Execução Server-Side da chamada ao Gemini
+        // 4. Execuï¿½ï¿½o Server-Side da chamada ao Gemini
         $result = $this->callGeminiApi($apiKey, $minimizedTranscript);
 
         // 5. Log de Auditoria LGPD
@@ -56,7 +56,7 @@ class AiController extends BaseController
                 ])
             ]);
         } catch (\Throwable) {
-            // Não abortar
+            // Nï¿½o abortar
         }
 
         Response::success($result);
@@ -64,9 +64,9 @@ class AiController extends BaseController
 
     private function minimizePhi(string $text): string
     {
-        // Remove CPFs (XXX.XXX.XXX-XX ou 11 dígitos)
+        // Remove CPFs (XXX.XXX.XXX-XX ou 11 dï¿½gitos)
         $text = preg_replace('/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/', '[CPF_OMITIDO]', $text);
-        // Remove números de telefone
+        // Remove nï¿½meros de telefone
         $text = preg_replace('/\b(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?(?:9\d{4}|\d{4})[-\s]?\d{4}\b/', '[TELEFONE_OMITIDO]', $text);
         // Remove e-mails
         $text = preg_replace('/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/', '[EMAIL_OMITIDO]', $text);
@@ -75,9 +75,10 @@ class AiController extends BaseController
 
     private function callGeminiApi(string $apiKey, string $transcript): array
     {
-        $systemInstruction = "Você é um copiloto de documentação médica clínica em conformidade com LGPD.\nTransforme a transcrição clínica em um objeto JSON puro com as chaves: queixaPrincipal, historicoFamiliar, tratamentosAnteriores, alergias, historicoPessoal, condicoesDetectadas (array), medicacoesEmUso, condutaPlano.\nFidelidade estrita, não invente dados.";
+        $systemInstruction = "VocÃª Ã© um copiloto de documentaÃ§Ã£o mÃ©dica clÃ­nica em conformidade com LGPD.\nTransforme a transcriÃ§Ã£o clÃ­nica em um objeto JSON puro com as chaves: queixaPrincipal, historicoFamiliar, tratamentosAnteriores, alergias, historicoPessoal, condicoesDetectadas (array), medicacoesEmUso, condutaPlano.\nFidelidade estrita, nÃ£o invente dados.";
 
         $models = [
+            'gemini-3.6-flash',
             'gemini-2.5-flash',
             'gemini-2.0-flash',
             'gemini-1.5-flash'
@@ -88,7 +89,7 @@ class AiController extends BaseController
                 [
                     'role' => 'user',
                     'parts' => [
-                        ['text' => "{$systemInstruction}\n\nTranscrição:\n\"\"\"\n{$transcript}\n\"\"\""]
+                        ['text' => "{$systemInstruction}\n\nTranscricao:\n\"\"\"\n{$transcript}\n\"\"\""]
                     ]
                 ]
             ],
@@ -113,7 +114,13 @@ class AiController extends BaseController
                 'Content-Type: application/json'
             ]);
             curl_setopt($ch, CURLOPT_TIMEOUT, 20);
-            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+            $caBundle = ini_get('curl.cainfo') ?: ini_get('openssl.cafile');
+            if (!empty($caBundle) && file_exists($caBundle)) {
+                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+                curl_setopt($ch, CURLOPT_CAINFO, $caBundle);
+            } else {
+                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            }
 
             $response = curl_exec($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -137,16 +144,16 @@ class AiController extends BaseController
             }
         }
 
-        // Fallback estruturado se API externa estiver indisponível
+        // Fallback estruturado se API externa estiver indisponï¿½vel
         return [
             'queixaPrincipal' => $transcript,
-            'historicoFamiliar' => 'Não informado na consulta.',
-            'tratamentosAnteriores' => 'Não informado na consulta.',
-            'alergias' => 'Não informado na consulta.',
-            'historicoPessoal' => 'Não informado na consulta.',
+            'historicoFamiliar' => 'Nï¿½o informado na consulta.',
+            'tratamentosAnteriores' => 'Nï¿½o informado na consulta.',
+            'alergias' => 'Nï¿½o informado na consulta.',
+            'historicoPessoal' => 'Nï¿½o informado na consulta.',
             'condicoesDetectadas' => [],
-            'medicacoesEmUso' => 'Não informado na consulta.',
-            'condutaPlano' => 'Orientações registradas na consulta.'
+            'medicacoesEmUso' => 'Nï¿½o informado na consulta.',
+            'condutaPlano' => 'Orientaï¿½ï¿½es registradas na consulta.'
         ];
     }
 
@@ -167,7 +174,7 @@ class AiController extends BaseController
             )['total'] ?? 0;
 
             if ($count >= 15) {
-                Response::error('Limite de requisições de IA excedido (máximo 15 por minuto). Aguarde.', 429);
+                Response::error('Limite de requisiï¿½ï¿½es de IA excedido (mï¿½ximo 15 por minuto). Aguarde.', 429);
             }
 
             Database::execute(
