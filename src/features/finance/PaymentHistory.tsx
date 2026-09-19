@@ -101,7 +101,7 @@ export default function PaymentHistory({
       role="dialog"
       aria-modal="true"
       aria-label="Histórico financeiro"
-      className="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-4 print:static print:bg-white print:p-0"
+      className="fixed inset-0 z-[60] overflow-y-auto bg-black/40 p-4 print:static print:bg-white print:p-0"
     >
       <section className="mx-auto max-w-3xl rounded-2xl bg-white p-6 space-y-4">
         <div className="flex justify-between print:hidden">

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
@@ -19,6 +19,26 @@ import FinanceOperations from "@/features/finance/FinanceOperations";
 import PaymentHistory from "@/features/finance/PaymentHistory";
 import FinanceTabs, { FinanceTabId } from "@/components/finance/FinanceTabs";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import {
+  Plus,
+  ArrowDownLeft,
+  ArrowUpRight,
+  AlertCircle,
+  Building2,
+  User,
+  Wallet,
+  Calendar,
+} from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/financeiro")({
   head: () => ({ meta: [{ title: "Financeiro - MedCore" }] }),
@@ -63,7 +83,37 @@ function FinanceiroPage() {
   const [status, setStatus] = useState("all");
   const [account, setAccount] = useState("");
   const [selected, setSelected] = useState("");
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(() => {
+    if (typeof window !== "undefined") {
+      const p = new URLSearchParams(window.location.search);
+      return p.get("novo") === "true" || p.get("novo") === "lancamento" || p.get("novo") === "1";
+    }
+    return false;
+  });
+
+  const handleOpenCreating = () => {
+    setCreating(true);
+  };
+
+  const handleCloseCreating = () => {
+    setCreating(false);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("novo")) {
+        url.searchParams.delete("novo");
+        window.history.replaceState({}, "", url.toString());
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get("novo") === "true" || p.get("novo") === "lancamento" || p.get("novo") === "1") {
+        setCreating(true);
+      }
+    }
+  }, []);
   const [cancelId, setCancelId] = useState("");
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -154,9 +204,10 @@ function FinanceiroPage() {
           </div>
           <button
             disabled={operationsLocked || !data?.scopes.some((s) => s.can_create)}
-            onClick={() => setCreating(true)}
-            className="rounded-xl bg-purple-600 px-4 py-2 text-white disabled:opacity-50"
+            onClick={handleOpenCreating}
+            className="inline-flex items-center gap-2 rounded-xl bg-purple-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-purple-700 transition-colors disabled:opacity-50 cursor-pointer"
           >
+            <Plus size={16} strokeWidth={2.5} />
             Novo lançamento
           </button>
         </header>
@@ -429,7 +480,7 @@ function FinanceiroPage() {
                 }
               />
             )}
-            {creating && <NewTitle data={data} onClose={() => setCreating(false)} />}
+            {creating && <NewTitle data={data} open={creating} onClose={handleCloseCreating} />}
             {currentTitle && (
               <PaymentHistory
                 key={currentTitle.id}
@@ -470,14 +521,22 @@ function FinanceiroPage() {
   );
 }
 
-function NewTitle({ data, onClose }: { data: FinanceSnapshot; onClose: () => void }) {
+function NewTitle({
+  data,
+  open = true,
+  onClose,
+}: {
+  data?: FinanceSnapshot;
+  open?: boolean;
+  onClose: () => void;
+}) {
   const qc = useQueryClient();
-  const scopes = data.scopes.filter((s) => s.can_create);
+  const scopes = (data?.scopes || []).filter((s) => s.can_create);
   const [id] = useState(() => crypto.randomUUID());
   const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [scope, setScope] = useState(scopes[0]?.id || "legacy");
-  const [type, setType] = useState("receita");
+  const [scope, setScope] = useState(() => scopes[0]?.id || "legacy");
+  const [type, setType] = useState<"receita" | "despesa">("receita");
   const [amount, setAmount] = useState("");
   const [due, setDue] = useState(localDate());
   const [competence, setCompetence] = useState("");
@@ -485,7 +544,16 @@ function NewTitle({ data, onClose }: { data: FinanceSnapshot; onClose: () => voi
   const [category, setCategory] = useState("");
   const [patient, setPatient] = useState("");
   const [payer, setPayer] = useState("");
+
+  useEffect(() => {
+    if (scopes.length > 0 && scope === "legacy" && scopes[0]?.id) {
+      setScope(scopes[0].id);
+    }
+  }, [scopes, scope]);
+
   const company = scope === "legacy" ? null : scope;
+  const currentScope = scopes.find((s) => (s.id || "legacy") === scope);
+
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
     setBusy(true);
@@ -510,7 +578,7 @@ function NewTitle({ data, onClose }: { data: FinanceSnapshot; onClose: () => voi
         throw error;
       }
       await refreshFinance(qc);
-      toast.success("Título criado como pendente. Registre a baixa separadamente.");
+      toast.success("Título criado com sucesso como pendente.");
       onClose();
     } catch (error) {
       toast.error(errorMessage(error));
@@ -518,125 +586,273 @@ function NewTitle({ data, onClose }: { data: FinanceSnapshot; onClose: () => voi
       setBusy(false);
     }
   };
+
+  const inputStyle =
+    "w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 transition-all";
+
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Novo lançamento"
-      className="fixed inset-0 z-40 overflow-y-auto bg-black/40 p-4"
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen && !busy) onClose();
+      }}
     >
-      <form onSubmit={save} className="mx-auto max-w-2xl rounded-2xl bg-white p-6 space-y-4">
-        <h2 className="font-bold">Novo lançamento</h2>
-        <fieldset disabled={busy || submitted} className="grid gap-3 sm:grid-cols-2">
-          <label>
-            Clínica
-            <select
-              className={input}
-              value={scope}
-              onChange={(e) => {
-                setScope(e.target.value);
-                setPatient("");
-                setType("receita");
-              }}
+      <DialogContent className="sm:max-w-2xl w-[95vw] sm:w-full max-h-[90vh] flex flex-col p-0 overflow-hidden bg-white rounded-2xl shadow-2xl border border-slate-100 z-[100]">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b border-slate-100 text-left">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600 shadow-sm shrink-0">
+              <Wallet size={20} />
+            </div>
+            <div>
+              <DialogTitle className="text-lg font-bold text-slate-900">
+                Novo lançamento
+              </DialogTitle>
+              <DialogDescription className="text-xs text-slate-500 mt-0.5">
+                Cadastre um título a receber ou a pagar no financeiro.
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <form onSubmit={save} className="flex flex-col flex-1 overflow-hidden min-h-0">
+          <div className="overflow-y-auto px-6 py-4 space-y-4 flex-1">
+            {/* Tipo (Receita vs Despesa) */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                Tipo de lançamento
+              </label>
+              <div className="grid grid-cols-2 rounded-xl bg-slate-100 p-1 gap-1">
+                <button
+                  type="button"
+                  onClick={() => setType("receita")}
+                  className={cn(
+                    "flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-lg transition-all cursor-pointer",
+                    type === "receita"
+                      ? "bg-white text-emerald-700 shadow-sm font-semibold"
+                      : "text-slate-600 hover:text-slate-900",
+                  )}
+                >
+                  <ArrowDownLeft
+                    size={16}
+                    className={type === "receita" ? "text-emerald-600" : "text-slate-400"}
+                  />
+                  A receber (Receita)
+                </button>
+                <button
+                  type="button"
+                  disabled={!currentScope?.can_pay}
+                  onClick={() => setType("despesa")}
+                  title={
+                    !currentScope?.can_pay
+                      ? "Sem permissão para cadastrar despesas nesta unidade"
+                      : undefined
+                  }
+                  className={cn(
+                    "flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-lg transition-all cursor-pointer",
+                    type === "despesa"
+                      ? "bg-white text-rose-700 shadow-sm font-semibold"
+                      : "text-slate-600 hover:text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed",
+                  )}
+                >
+                  <ArrowUpRight
+                    size={16}
+                    className={type === "despesa" ? "text-rose-600" : "text-slate-400"}
+                  />
+                  A pagar (Despesa)
+                </button>
+              </div>
+            </div>
+
+            <fieldset disabled={busy || submitted} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {/* Clínica */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                    <Building2 size={13} className="text-slate-400" />
+                    Unidade / Clínica
+                  </label>
+                  <select
+                    className={inputStyle}
+                    value={scope}
+                    onChange={(e) => {
+                      setScope(e.target.value);
+                      setPatient("");
+                      setType("receita");
+                    }}
+                  >
+                    {scopes.map((s) => (
+                      <option key={s.id || "legacy"} value={s.id || "legacy"}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Valor */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Valor (R$) <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
+                      R$
+                    </span>
+                    <input
+                      required
+                      inputMode="decimal"
+                      placeholder="0,00"
+                      className={cn(inputStyle, "pl-11 font-semibold text-base text-slate-900")}
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Vencimento & Competência */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                    <Calendar size={13} className="text-slate-400" />
+                    Data de Vencimento <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    required
+                    type="date"
+                    className={inputStyle}
+                    value={due}
+                    onChange={(e) => setDue(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Competência (opcional)
+                  </label>
+                  <input
+                    type="date"
+                    className={inputStyle}
+                    value={competence}
+                    onChange={(e) => setCompetence(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Descrição */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Descrição administrativa <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  required
+                  placeholder="Ex: Consulta médica, Procedimento, Compra de insumos..."
+                  className={inputStyle}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </div>
+
+              {/* Categoria */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Categoria
+                </label>
+                <input
+                  placeholder="Ex: Consultas, Exames, Procedimentos, Material..."
+                  className={inputStyle}
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                />
+              </div>
+
+              {/* Paciente & Responsável/Fornecedor */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                    <User size={13} className="text-slate-400" />
+                    Paciente (opcional)
+                  </label>
+                  <select
+                    className={inputStyle}
+                    value={patient}
+                    onChange={(e) => {
+                      const selPatientId = e.target.value;
+                      setPatient(selPatientId);
+                      if (selPatientId && !payer) {
+                        const found = (data?.patients || []).find((p) => p.id === selPatientId);
+                        if (found?.name) setPayer(found.name);
+                      }
+                    }}
+                  >
+                    <option value="">Sem vínculo com paciente</option>
+                    {(data?.patients || [])
+                      .filter((p) => !company || !p.company_id || p.company_id === company)
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    {type === "receita"
+                      ? "Responsável Financeiro / Pagador"
+                      : "Favorecido / Fornecedor"}{" "}
+                    <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    required
+                    placeholder={
+                      type === "receita"
+                        ? "Nome do paciente ou pagador"
+                        : "Nome da empresa ou prestador"
+                    }
+                    className={inputStyle}
+                    value={payer}
+                    onChange={(e) => setPayer(e.target.value)}
+                  />
+                </div>
+              </div>
+            </fieldset>
+
+            {/* Aviso informativo */}
+            <div className="rounded-xl bg-slate-50 border border-slate-200/80 p-3 text-xs text-slate-600 flex items-start gap-2.5">
+              <AlertCircle size={15} className="text-slate-400 shrink-0 mt-0.5" />
+              <span>
+                Não inclua diagnósticos médicos ou dados clínicos sensíveis na descrição. Parcelas de orçamentos e tratamentos são geradas na aba <strong>Planos</strong>.
+              </span>
+            </div>
+
+            {submitted && (
+              <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800 flex items-start gap-2">
+                <AlertCircle size={15} className="text-amber-600 shrink-0 mt-0.5" />
+                <span>Solicitação enviada. Repetir não criará duplicidade.</span>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="px-6 py-4 bg-slate-50/80 border-t border-slate-100 flex flex-row items-center justify-end gap-3 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={onClose}
+              className="rounded-xl px-4 h-10 border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer"
             >
-              {scopes.map((s) => (
-                <option key={s.id || "legacy"} value={s.id || "legacy"}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Tipo
-            <select className={input} value={type} onChange={(e) => setType(e.target.value)}>
-              <option value="receita">A receber</option>
-              {scopes.find((s) => s.id === company)?.can_pay && (
-                <option value="despesa">A pagar</option>
-              )}
-            </select>
-          </label>
-          <label>
-            Valor (R$)
-            <input
-              required
-              inputMode="decimal"
-              className={input}
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-            />
-          </label>
-          <label>
-            Vencimento
-            <input
-              required
-              type="date"
-              className={input}
-              value={due}
-              onChange={(e) => setDue(e.target.value)}
-            />
-          </label>
-          <label>
-            Competência (se definida)
-            <input
-              type="date"
-              className={input}
-              value={competence}
-              onChange={(e) => setCompetence(e.target.value)}
-            />
-          </label>
-          <label>
-            Descrição administrativa
-            <input
-              required
-              className={input}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </label>
-          <label>
-            Categoria
-            <input
-              className={input}
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-            />
-          </label>
-          <label>
-            Paciente
-            <select className={input} value={patient} onChange={(e) => setPatient(e.target.value)}>
-              <option value="">Sem vínculo</option>
-              {data.patients
-                .filter((p) => p.company_id === company)
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-            </select>
-          </label>
-          <label>
-            Responsável financeiro / fornecedor
-            <input
-              required
-              className={input}
-              value={payer}
-              onChange={(e) => setPayer(e.target.value)}
-            />
-          </label>
-        </fieldset>
-        <p className="text-xs text-slate-600">
-          Não inclua diagnósticos ou informações clínicas na descrição. Parcelas de tratamentos são
-          geradas na aba Planos.
-        </p>
-        {submitted && <p role="alert">Solicitação enviada. Repetir não cria outro título.</p>}
-        <button disabled={busy} className="rounded-lg bg-purple-600 p-2 text-white">
-          {busy ? "Salvando..." : submitted ? "Repetir solicitação" : "Criar título pendente"}
-        </button>
-        <button disabled={busy} type="button" className="ml-3" onClick={onClose}>
-          Fechar
-        </button>
-      </form>
-    </div>
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              disabled={busy}
+              className="rounded-xl px-5 h-10 bg-purple-600 hover:bg-purple-700 text-white font-medium shadow-sm transition-all cursor-pointer"
+            >
+              {busy ? "Salvando..." : submitted ? "Repetir solicitação" : "Criar título pendente"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

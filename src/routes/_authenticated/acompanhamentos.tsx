@@ -717,14 +717,38 @@ function TreatmentManageModal({
     });
     if (!ok) return;
 
-    const { error } = await supabase.from("treatments").delete().eq("id", treatment.id);
-    if (error) {
-      toast.error("Erro ao excluir acompanhamento");
-      return;
+    setSaving(true);
+    try {
+      // 1. Tenta exclusão segura via RPC delete_treatment
+      const { error: rpcError } = await (supabase.rpc as any)("delete_treatment", {
+        p_id: treatment.id,
+      });
+      if (!rpcError) {
+        toast.success("Acompanhamento excluído com sucesso!");
+        onUpdated();
+        onClose();
+        return;
+      }
+
+      // 2. Se a RPC ainda não foi aplicada, limpa registros dependentes e tenta exclusão direta
+      await supabase.from("treatment_status_history").delete().eq("treatment_id", treatment.id);
+      await supabase.from("treatment_evolutions").delete().eq("treatment_id", treatment.id);
+      await supabase.from("treatment_photos").delete().eq("treatment_id", treatment.id);
+      await supabase.from("treatment_medication_uses").delete().eq("treatment_id", treatment.id);
+
+      const { error } = await supabase.from("treatments").delete().eq("id", treatment.id);
+      if (error) {
+        toast.error(`Não foi possível excluir: ${error.message || "Verifique se há títulos financeiros quitados."}`);
+        return;
+      }
+      toast.success("Acompanhamento excluído com sucesso!");
+      onUpdated();
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao excluir acompanhamento");
+    } finally {
+      setSaving(false);
     }
-    toast.success("Acompanhamento excluído com sucesso!");
-    onUpdated();
-    onClose();
   };
 
   const handleSaveEdit = async () => {
