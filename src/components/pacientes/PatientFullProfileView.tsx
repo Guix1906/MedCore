@@ -38,6 +38,8 @@ import {
   Filter,
   RefreshCw,
   PlusCircle,
+  Trash2,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { prontuarioService } from "@/services/api";
@@ -128,6 +130,18 @@ export function PatientFullProfileView({
   // Estado do Assistente IA
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [aiSection, setAiSection] = useState<AiSectionContext | null>(null);
+
+  // Estado para Edição de Prontuário
+  const [editingItem, setEditingItem] = useState<ClinicalHistoryItem | null>(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editComplaint, setEditComplaint] = useState("");
+  const [editConduct, setEditConduct] = useState("");
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  // Estado para Exclusão de Prontuário
+  const [deletingItem, setDeletingItem] = useState<ClinicalHistoryItem | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const isExample =
     !patient || !patient.id || Boolean(patient.name?.toLowerCase().includes("exemplo"));
@@ -268,6 +282,166 @@ export function PatientFullProfileView({
     queryClient.invalidateQueries({ queryKey: ["patient-clinical-history"] });
     queryClient.invalidateQueries({ queryKey: ["patient-medical-records"] });
     setIsSavingRecord(false);
+  };
+
+  const handleOpenEdit = (item: ClinicalHistoryItem) => {
+    setEditingItem(item);
+    setEditComplaint(item.complaint || item.evolution || "");
+    setEditConduct(item.conduct || "");
+    setEditModalOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingItem) return;
+    if (!editComplaint.trim()) {
+      toast.error("O prontuário não pode ficar com texto vazio.");
+      return;
+    }
+    setIsUpdating(true);
+    try {
+      // 1. Atualiza no Supabase se id válido
+      if (data.id && !isExample && editingItem.kind === "prontuario") {
+        try {
+          await supabase
+            .from("medical_records")
+            .update({
+              complaint: editComplaint.trim(),
+              conduct: editConduct.trim() || null,
+            })
+            .eq("id", editingItem.id);
+        } catch (e) {
+          console.warn("Supabase medical_records update fallback:", e);
+        }
+      }
+
+      // 2. Atualiza via API PHP
+      if (editingItem.kind === "prontuario") {
+        try {
+          await prontuarioService.updateRecord(editingItem.id, {
+            complaint: editComplaint.trim(),
+            conduct: editConduct.trim() || null,
+          });
+        } catch {}
+      }
+
+      // 3. Atualiza no LocalStorage
+      const updateLocal = (key: string) => {
+        try {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              const next = parsed.map((r: any) =>
+                r.id === editingItem.id
+                  ? { ...r, complaint: editComplaint.trim(), conduct: editConduct.trim() || null }
+                  : r,
+              );
+              localStorage.setItem(key, JSON.stringify(next));
+            } else if (parsed && parsed.id === editingItem.id) {
+              localStorage.setItem(
+                key,
+                JSON.stringify({
+                  ...parsed,
+                  complaint: editComplaint.trim(),
+                  conduct: editConduct.trim() || null,
+                }),
+              );
+            }
+          }
+        } catch {}
+      };
+
+      if (data.id) {
+        updateLocal("medcore_prontuario_history_" + data.id);
+        updateLocal("medcore_prontuario_" + data.id);
+      }
+      if (data.name) {
+        updateLocal("medcore_prontuario_history_" + data.name);
+        updateLocal("medcore_prontuario_" + data.name);
+      }
+
+      toast.success("Prontuário atualizado com sucesso!");
+      setEditModalOpen(false);
+      setEditingItem(null);
+      refreshHistory();
+      queryClient.invalidateQueries({ queryKey: ["patient-clinical-history"] });
+      queryClient.invalidateQueries({ queryKey: ["patient-medical-records"] });
+    } catch (err: any) {
+      toast.error("Erro ao atualizar prontuário: " + (err?.message || "Tente novamente"));
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleOpenDelete = (item: ClinicalHistoryItem) => {
+    setDeletingItem(item);
+    setDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return;
+    setIsDeleting(true);
+    try {
+      // 1. Exclui no Supabase
+      if (data.id && !isExample) {
+        if (deletingItem.kind === "prontuario") {
+          try {
+            await supabase.from("medical_records").delete().eq("id", deletingItem.id);
+          } catch (e) {
+            console.warn("Supabase medical_records delete fallback:", e);
+          }
+        } else if (deletingItem.kind === "consulta") {
+          try {
+            await supabase.from("appointments").delete().eq("id", deletingItem.id);
+          } catch (e) {
+            console.warn("Supabase appointments delete fallback:", e);
+          }
+        }
+      }
+
+      // 2. Exclui via API PHP
+      if (deletingItem.kind === "prontuario") {
+        try {
+          await prontuarioService.deleteRecord(deletingItem.id);
+        } catch {}
+      }
+
+      // 3. Remove do LocalStorage
+      const deleteLocal = (key: string) => {
+        try {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              const next = parsed.filter((r: any) => r.id !== deletingItem.id);
+              localStorage.setItem(key, JSON.stringify(next));
+            } else if (parsed && parsed.id === deletingItem.id) {
+              localStorage.removeItem(key);
+            }
+          }
+        } catch {}
+      };
+
+      if (data.id) {
+        deleteLocal("medcore_prontuario_history_" + data.id);
+        deleteLocal("medcore_prontuario_" + data.id);
+      }
+      if (data.name) {
+        deleteLocal("medcore_prontuario_history_" + data.name);
+        deleteLocal("medcore_prontuario_" + data.name);
+      }
+
+      toast.success("Prontuário excluído com sucesso!");
+      setDeleteModalOpen(false);
+      setDeletingItem(null);
+      refreshHistory();
+      queryClient.invalidateQueries({ queryKey: ["patient-clinical-history"] });
+      queryClient.invalidateQueries({ queryKey: ["patient-medical-records"] });
+    } catch (err: any) {
+      toast.error("Erro ao excluir prontuário: " + (err?.message || "Tente novamente"));
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const openAiForSection = (sec: { key: string; title: string; placeholder?: string }) => {
@@ -961,6 +1135,28 @@ export function PatientFullProfileView({
                                 <Copy size={13} />
                               </button>
                             )}
+
+                            {/* Botão Editar */}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEdit(item)}
+                              className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-slate-600 hover:text-purple-600 bg-slate-100 hover:bg-purple-50 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                              title="Editar anotações deste atendimento"
+                            >
+                              <Pencil size={12} />
+                              <span>Editar</span>
+                            </button>
+
+                            {/* Botão Excluir */}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDelete(item)}
+                              className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-slate-500 hover:text-rose-600 bg-slate-100 hover:bg-rose-50 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                              title="Excluir este prontuário"
+                            >
+                              <Trash2 size={12} />
+                              <span>Excluir</span>
+                            </button>
                           </div>
                         </div>
 
@@ -1034,6 +1230,136 @@ export function PatientFullProfileView({
         section={aiSection}
         onInsert={handleAiInsert}
       />
+
+      {/* Modal de Edição de Prontuário Clínico */}
+      {editModalOpen && editingItem && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-200 p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center">
+                  <Pencil size={16} />
+                </div>
+                <div>
+                  <h3 className="text-[16px] font-bold text-slate-900">
+                    Editar Prontuário Clínico
+                  </h3>
+                  <p className="text-[12px] text-slate-500">
+                    Atendimento de {editingItem.formattedDate} • {data.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditModalOpen(false);
+                  setEditingItem(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-3.5">
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-bold text-slate-700">
+                  Anamnese, Queixa & Evolução Clínica
+                </label>
+                <textarea
+                  rows={8}
+                  value={editComplaint}
+                  onChange={(e) => setEditComplaint(e.target.value)}
+                  placeholder="Anotações clínicas do atendimento..."
+                  className="w-full rounded-xl border border-slate-200 p-3.5 text-[13px] text-slate-800 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/15 outline-none transition-all resize-y min-h-[180px] leading-relaxed"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-bold text-slate-700">
+                  Conduta Terapêutica (opcional)
+                </label>
+                <textarea
+                  rows={3}
+                  value={editConduct}
+                  onChange={(e) => setEditConduct(e.target.value)}
+                  placeholder="Orientações, prescrições e condutas tomadas..."
+                  className="w-full rounded-xl border border-slate-200 p-3 text-[13px] text-slate-800 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/15 outline-none transition-all resize-y"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditModalOpen(false);
+                  setEditingItem(null);
+                }}
+                className="px-4 py-2 rounded-xl text-[13px] font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                disabled={isUpdating || !editComplaint.trim()}
+                className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-[13px] font-bold shadow-sm transition-all cursor-pointer"
+              >
+                <Save size={14} />
+                <span>{isUpdating ? "Salvando..." : "Salvar Alterações"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação de Exclusão de Prontuário */}
+      {deleteModalOpen && deletingItem && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-200 p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-start gap-3.5">
+              <div className="h-10 w-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <AlertTriangle size={20} />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-[16px] font-bold text-slate-900">
+                  Excluir este prontuário?
+                </h3>
+                <p className="text-[13px] text-slate-500 leading-relaxed">
+                  Tem certeza de que deseja excluir o atendimento de{" "}
+                  <strong className="text-slate-800">{deletingItem.formattedDate}</strong> de{" "}
+                  <strong className="text-slate-800">{data.name}</strong>? Esta ação removerá o
+                  registro do histórico do paciente.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteModalOpen(false);
+                  setDeletingItem(null);
+                }}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-xl text-[13px] font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-[13px] font-bold shadow-sm transition-all cursor-pointer"
+              >
+                <Trash2 size={14} />
+                <span>{isDeleting ? "Excluindo..." : "Sim, excluir"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

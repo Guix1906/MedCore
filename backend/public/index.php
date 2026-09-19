@@ -95,6 +95,8 @@ $router->delete('/api/deadlines/{id}', [AgendaController::class, 'deleteDeadline
 $router->get('/api/medical-records', [MedicalRecordController::class, 'index'], $auth);
 $router->get('/api/medical-records/{id}', [MedicalRecordController::class, 'show'], $auth);
 $router->post('/api/medical-records', [MedicalRecordController::class, 'store'], $auth);
+$router->put('/api/medical-records/{id}', [MedicalRecordController::class, 'update'], $auth);
+$router->delete('/api/medical-records/{id}', [MedicalRecordController::class, 'destroy'], $auth);
 
 // Financeiro
 $router->get('/api/transactions', [FinanceController::class, 'transactions'], $auth);

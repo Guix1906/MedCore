@@ -115,4 +115,39 @@ class MedicalRecordController extends BaseController
         $record = $this->findTenantResource('medical_records', $id, $companyId, 'Prontuário');
         Response::success($record, 'Prontuário salvo com sucesso', 201);
     }
+
+    public function update(Request $request, array $params): void
+    {
+        $companyId = $this->getTenantCompanyId($request);
+        $id = $params['id'] ?? '';
+        $this->findTenantResource('medical_records', $id, $companyId, 'Prontuário');
+
+        $data = [];
+        if ($request->has('complaint')) $data['complaint'] = $request->input('complaint');
+        if ($request->has('conduct')) $data['conduct'] = $request->input('conduct');
+        if ($request->has('diagnosis')) $data['diagnosis'] = $request->input('diagnosis');
+        if ($request->has('diagnosis_code')) $data['diagnosis_code'] = $request->input('diagnosis_code');
+        if ($request->has('evolution')) $data['evolution'] = $request->input('evolution');
+        if ($request->has('return_date')) $data['return_date'] = $request->input('return_date');
+        if ($request->has('return_notes')) $data['return_notes'] = $request->input('return_notes');
+
+        if (!empty($data)) {
+            Database::update('medical_records', $data, ['id' => $id, 'company_id' => $companyId]);
+        }
+
+        $record = $this->findTenantResource('medical_records', $id, $companyId, 'Prontuário');
+        Response::success($record, 'Prontuário atualizado com sucesso');
+    }
+
+    public function destroy(Request $request, array $params): void
+    {
+        $companyId = $this->getTenantCompanyId($request);
+        $id = $params['id'] ?? '';
+        $this->findTenantResource('medical_records', $id, $companyId, 'Prontuário');
+
+        Database::delete('prescriptions', ['medical_record_id' => $id]);
+        Database::delete('medical_records', ['id' => $id, 'company_id' => $companyId]);
+
+        Response::success(null, 'Prontuário excluído com sucesso');
+    }
 }

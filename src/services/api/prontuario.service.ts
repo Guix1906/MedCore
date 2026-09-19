@@ -53,4 +53,12 @@ export const prontuarioService = {
   async createRecord(data: Partial<MedicalRecord>): Promise<MedicalRecord> {
     return apiClient.post<MedicalRecord>("/medical-records", data);
   },
+
+  async updateRecord(id: string, data: Partial<MedicalRecord>): Promise<MedicalRecord> {
+    return apiClient.put<MedicalRecord>(`/medical-records/${id}`, data);
+  },
+
+  async deleteRecord(id: string): Promise<void> {
+    return apiClient.delete(`/medical-records/${id}`);
+  },
 };
