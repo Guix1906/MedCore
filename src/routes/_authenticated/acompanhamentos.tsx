@@ -1,3 +1,6 @@
+import TreatmentAlerts from "@/features/acompanhamentos/TreatmentAlerts";
+import { changeTreatmentStatus } from "@/features/acompanhamentos/ClinicalFollowup";
+import { localDate, protocolDeadline } from "@/features/acompanhamentos/followup-utils";
 import type { DbRow } from "@/lib/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, Outlet, useRouterState, useNavigate } from "@tanstack/react-router";
@@ -111,25 +114,23 @@ function AcompanhamentosPage() {
   const [openNew, setOpenNew] = useState(false);
   const [selectedTreatment, setSelectedTreatment] = useState<Treatment | null>(null);
 
-  const { data: rows = [], isLoading: loading } = useQuery({
+  const {
+    data: rows = [],
+    isLoading: loading,
+    error: listError,
+  } = useQuery({
     queryKey: ["treatments-list"],
     placeholderData: (prev) => prev,
     staleTime: 5 * 60_000,
     gcTime: 30 * 60_000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      let list: Treatment[] = [];
-      try {
-        const { data, error } = await supabase
-          .from("treatments")
-          .select("*, patients(name, phone), doctors(name)")
-          .order("created_at", { ascending: false });
-        if (data && !error) {
-          list = data as unknown as Treatment[];
-        }
-      } catch (err) {
-        console.warn("Erro ao carregar tratamentos:", err);
-      }
+      const { data, error } = await supabase
+        .from("treatments")
+        .select("*, patients(name, phone), doctors(name)")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      const list = data as Treatment[];
 
       // Enriquecer com pacientes locais se patients vier null
       const localPats = getStoredLocalPatients();
@@ -150,6 +151,7 @@ function AcompanhamentosPage() {
 
   const load = () => {
     queryClient.invalidateQueries({ queryKey: ["treatments-list"] });
+    queryClient.invalidateQueries({ queryKey: ["treatment-alerts"] });
   };
 
   const filtered = useMemo(() => {
@@ -262,7 +264,7 @@ function AcompanhamentosPage() {
               </span>
             </div>
             <p className="text-[13.5px] text-[#6B7280] mt-1">
-              Fases de tratamento, cronograma de medicamentos, linha do tempo e financeiro.
+              Fases de tratamento, medicações, evolução, fotos e retornos por paciente.
             </p>
           </div>
 
@@ -305,6 +307,13 @@ function AcompanhamentosPage() {
           </div>
         </div>
 
+        {listError && (
+          <p role="alert" className="text-red-700">
+            Erro ao carregar acompanhamentos: {listError.message}
+          </p>
+        )}
+        <TreatmentAlerts scope="clinical" />
+
         {/* KPIs */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
           {[
@@ -312,8 +321,13 @@ function AcompanhamentosPage() {
             { label: "Em andamento", value: kpis.ativos, color: "#10B981", icon: TrendingUp },
             { label: "Finalizados", value: kpis.finalizados, color: "#1E40AF", icon: CheckCircle2 },
             {
-              label: "Valor sob gestão",
-              value: brl(kpis.receita),
+              label: "Retornos necessários",
+              value: rows.filter(
+                (t) =>
+                  t.status === "em_andamento" &&
+                  t.next_return_date &&
+                  t.next_return_date <= localDate(),
+              ).length,
               color: "#F59E0B",
               icon: Sparkles,
             },
@@ -488,10 +502,10 @@ function AcompanhamentosPage() {
                           </div>
                           <div>
                             <div className="text-slate-400 text-[11px] font-semibold uppercase">
-                              Valor
+                              Prazo
                             </div>
                             <div className="text-slate-900 font-bold mt-0.5">
-                              {brl(Number(t.total_value))}
+                              {protocolDeadline(t.status, t.end_date)}
                             </div>
                           </div>
                         </div>
@@ -604,7 +618,7 @@ function AcompanhamentosPage() {
                           <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11.5px]">
                             <div className="flex items-center gap-2">
                               <span className="font-bold text-slate-800">
-                                {brl(Number(t.total_value))}
+                                {protocolDeadline(t.status, t.end_date)}
                               </span>
                               {t.patients?.phone && (
                                 <button
@@ -677,11 +691,6 @@ function TreatmentManageModal({
     start_date: treatment.start_date || new Date().toISOString().slice(0, 10),
     protocol_days: String(totalDays > 0 ? totalDays : 90),
     return_days: String(treatment.return_days || 30),
-    total_value: String(treatment.total_value || "").replace(".", ","),
-    down_payment: String(treatment.down_payment || "").replace(".", ","),
-    discount: String(treatment.discount || "").replace(".", ","),
-    installments_count: String(treatment.installments_count || 1),
-    payment_method: treatment.payment_method || "pix",
     color: treatment.color || COLORS[0],
     notes: treatment.notes || "",
   });
@@ -694,15 +703,7 @@ function TreatmentManageModal({
   }, []);
 
   const handleQuickStatusChange = async (newStatus: Treatment["status"]) => {
-    const { error } = await supabase
-      .from("treatments")
-      .update({ status: newStatus })
-      .eq("id", treatment.id);
-    if (error) {
-      toast.error("Erro ao alterar status");
-      return;
-    }
-    toast.success(`Status alterado para "${STATUS_LABEL[newStatus].label}"`);
+    if (!(await changeTreatmentStatus(treatment.id, newStatus))) return;
     onUpdated();
     onClose();
   };
@@ -727,8 +728,29 @@ function TreatmentManageModal({
   };
 
   const handleSaveEdit = async () => {
+    let statusReason: string | undefined;
+    if (form.status !== treatment.status) {
+      const reason = window.prompt("Informe a justificativa da alteração de status:");
+      if (reason === null) return;
+      if (!reason.trim()) {
+        toast.error("A justificativa é obrigatória.");
+        return;
+      }
+      statusReason = reason.trim();
+    }
     if (!form.title.trim()) {
       toast.error("O título é obrigatório");
+      return;
+    }
+    if (
+      !form.start_date ||
+      !Number.isInteger(Number(form.protocol_days)) ||
+      Number(form.protocol_days) < 1 ||
+      !Number.isInteger(Number(form.return_days)) ||
+      Number(form.return_days) < 1 ||
+      Number(form.return_days) > 365
+    ) {
+      toast.error("Confira início, duração e intervalo de retorno (1 a 365 dias).");
       return;
     }
     setSaving(true);
@@ -742,13 +764,9 @@ function TreatmentManageModal({
       objective: form.objective.trim() || null,
       doctor_id: form.doctor_id || null,
       status: form.status,
+      status_reason: statusReason,
       start_date: form.start_date,
       end_date: endDateStr,
-      total_value: parseBRL(form.total_value),
-      down_payment: parseBRL(form.down_payment),
-      discount: parseBRL(form.discount),
-      installments_count: Math.max(1, Number(form.installments_count) || 1),
-      payment_method: form.payment_method,
       return_days: form.return_days ? Number(form.return_days) : null,
       color: form.color,
       notes: form.notes.trim() || null,
@@ -919,65 +937,9 @@ function TreatmentManageModal({
                 </select>
               </Field>
 
-              <Field label="Valor Total (R$)">
-                <input
-                  inputMode="decimal"
-                  className={inputCls}
-                  value={form.total_value}
-                  onChange={(e) => setForm({ ...form, total_value: onlyDecimal(e.target.value) })}
-                  placeholder="0,00"
-                />
-              </Field>
-
-              <Field label="Entrada (R$)">
-                <input
-                  inputMode="decimal"
-                  className={inputCls}
-                  value={form.down_payment}
-                  onChange={(e) => setForm({ ...form, down_payment: onlyDecimal(e.target.value) })}
-                  placeholder="0,00"
-                />
-              </Field>
-
-              <Field label="Desconto (R$)">
-                <input
-                  inputMode="decimal"
-                  className={inputCls}
-                  value={form.discount}
-                  onChange={(e) => setForm({ ...form, discount: onlyDecimal(e.target.value) })}
-                  placeholder="0,00"
-                />
-              </Field>
-
-              <Field label="Nº de Parcelas">
-                <input
-                  type="number"
-                  min={1}
-                  inputMode="numeric"
-                  className={inputCls}
-                  value={form.installments_count}
-                  onChange={(e) =>
-                    setForm({ ...form, installments_count: e.target.value.replace(/\D/g, "") })
-                  }
-                  placeholder="1"
-                />
-              </Field>
-
-              <Field label="Forma de Pagamento">
-                <select
-                  className={inputCls}
-                  value={form.payment_method}
-                  onChange={(e) => setForm({ ...form, payment_method: e.target.value })}
-                >
-                  <option value="pix">Pix</option>
-                  <option value="dinheiro">Dinheiro</option>
-                  <option value="cartao_credito">Cartão de crédito</option>
-                  <option value="cartao_debito">Cartão de débito</option>
-                  <option value="boleto">Boleto</option>
-                  <option value="transferencia">Transferência</option>
-                </select>
-              </Field>
-
+              <p className="text-sm text-slate-500">
+                Entrada e parcelas são configuradas no Financeiro após salvar o plano.
+              </p>
               <Field label="Cor de Identificação">
                 <div className="flex flex-wrap gap-2 pt-2">
                   {COLORS.map((c) => (
@@ -1084,33 +1046,9 @@ function TreatmentManageModal({
                 </div>
               </div>
 
-              {/* Informações Financeiras */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5">
-                  <div className="text-[11px] font-bold text-slate-400 uppercase">Valor Total</div>
-                  <div className="text-[16px] font-extrabold text-slate-900 mt-1">
-                    {brl(Number(treatment.total_value))}
-                  </div>
-                </div>
-                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5">
-                  <div className="text-[11px] font-bold text-slate-400 uppercase">Entrada</div>
-                  <div className="text-[16px] font-extrabold text-emerald-600 mt-1">
-                    {brl(Number(treatment.down_payment))}
-                  </div>
-                </div>
-                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5">
-                  <div className="text-[11px] font-bold text-slate-400 uppercase">Parcelas</div>
-                  <div className="text-[16px] font-extrabold text-slate-900 mt-1">
-                    {treatment.installments_count || 1}x
-                  </div>
-                </div>
-                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5">
-                  <div className="text-[11px] font-bold text-slate-400 uppercase">Pagamento</div>
-                  <div className="text-[14px] font-bold text-purple-700 mt-1 capitalize">
-                    {treatment.payment_method?.replace("_", " ") || "Pix"}
-                  </div>
-                </div>
-              </div>
+              <Link to="/financeiro" className="text-purple-700 underline">
+                Gerenciar pagamentos no Financeiro
+              </Link>
 
               {/* Objetivo e Notas */}
               {treatment.objective && (
@@ -1245,11 +1183,6 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
     objective: "",
     start_date: new Date().toISOString().slice(0, 10),
     protocol_days: "90",
-    total_value: "",
-    down_payment: "",
-    discount: "",
-    installments_count: "1",
-    payment_method: "pix",
     return_days: "30",
     color: COLORS[0],
     notes: "",
@@ -1341,6 +1274,17 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
       toast.error("Paciente e título são obrigatórios");
       return;
     }
+    if (
+      !form.start_date ||
+      !Number.isInteger(Number(form.protocol_days)) ||
+      Number(form.protocol_days) < 1 ||
+      !Number.isInteger(Number(form.return_days)) ||
+      Number(form.return_days) < 1 ||
+      Number(form.return_days) > 365
+    ) {
+      toast.error("Confira início, duração e intervalo de retorno (1 a 365 dias).");
+      return;
+    }
     setSaving(true);
     const startDateObj = new Date(form.start_date);
     const protocolDaysNum = Number(form.protocol_days) || 90;
@@ -1354,11 +1298,6 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
       objective: form.objective || null,
       start_date: form.start_date,
       end_date: endDateStr,
-      total_value: parseBRL(form.total_value),
-      down_payment: parseBRL(form.down_payment),
-      discount: parseBRL(form.discount),
-      installments_count: Math.max(1, Number(form.installments_count) || 1),
-      payment_method: form.payment_method,
       return_days: form.return_days ? Number(form.return_days) : null,
       color: form.color,
       notes: form.notes || null,
@@ -1368,10 +1307,6 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
       setSaving(false);
       toast.error("Erro ao criar acompanhamento");
       return;
-    }
-    // Gerar parcelas
-    if (payload.installments_count > 0 && payload.total_value > 0) {
-      await supabase.rpc("generate_treatment_installments", { p_treatment_id: data.id });
     }
     setSaving(false);
     toast.success("Acompanhamento criado com sucesso!");
@@ -1601,67 +1536,9 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
                 ))}
               </select>
             </Field>
-            <Field label="Valor total (R$)">
-              <input
-                inputMode="decimal"
-                className={inputCls}
-                value={form.total_value}
-                onChange={(e) => setForm({ ...form, total_value: onlyDecimal(e.target.value) })}
-                placeholder="0,00"
-              />
-            </Field>
-            <Field label="Entrada (R$)">
-              <input
-                inputMode="decimal"
-                className={inputCls}
-                value={form.down_payment}
-                onChange={(e) => setForm({ ...form, down_payment: onlyDecimal(e.target.value) })}
-                placeholder="0,00"
-              />
-            </Field>
-            <Field label="Desconto (R$)">
-              <input
-                inputMode="decimal"
-                className={inputCls}
-                value={form.discount}
-                onChange={(e) => setForm({ ...form, discount: onlyDecimal(e.target.value) })}
-                placeholder="0,00"
-              />
-            </Field>
-            <Field label="Nº de parcelas">
-              <input
-                type="number"
-                min={1}
-                inputMode="numeric"
-                className={inputCls}
-                value={form.installments_count}
-                onChange={(e) =>
-                  setForm({ ...form, installments_count: e.target.value.replace(/\D/g, "") })
-                }
-                onBlur={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    installments_count:
-                      e.target.value === "" ? "1" : String(Math.max(1, Number(e.target.value))),
-                  }))
-                }
-                placeholder="1"
-              />
-            </Field>
-            <Field label="Forma de pagamento">
-              <select
-                className={inputCls}
-                value={form.payment_method}
-                onChange={(e) => setForm({ ...form, payment_method: e.target.value })}
-              >
-                <option value="pix">Pix</option>
-                <option value="dinheiro">Dinheiro</option>
-                <option value="cartao_credito">Cartão de crédito</option>
-                <option value="cartao_debito">Cartão de débito</option>
-                <option value="boleto">Boleto</option>
-                <option value="transferencia">Transferência</option>
-              </select>
-            </Field>
+            <p className="text-sm text-slate-500">
+              Entrada e parcelas são configuradas no Financeiro após salvar o plano.
+            </p>
             <Field label="Cor de identificação">
               <div className="flex flex-wrap gap-2 pt-2">
                 {COLORS.map((c) => (
@@ -1728,17 +1605,6 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
 
 const inputCls =
   "w-full h-10 px-3 rounded-xl bg-slate-50 border border-slate-200 focus:border-[#8B47FF] focus:bg-white outline-none text-[13px] text-slate-800 transition";
-
-function onlyDecimal(v: string) {
-  const s = v.replace(/[^\d.,]/g, "").replace(/\./g, ",");
-  const parts = s.split(",");
-  return parts.length <= 2 ? s : parts[0] + "," + parts.slice(1).join("");
-}
-function parseBRL(v: string) {
-  if (!v) return 0;
-  const n = Number(v.replace(/\./g, "").replace(",", "."));
-  return isFinite(n) ? n : 0;
-}
 
 function Field({
   label,

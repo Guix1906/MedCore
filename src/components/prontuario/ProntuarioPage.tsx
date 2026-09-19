@@ -1,3 +1,4 @@
+import ClinicalPhotos from "@/features/acompanhamentos/ClinicalPhotos";
 import {
   useCallback,
   useEffect,
@@ -498,9 +499,9 @@ export default function ProntuarioPage() {
                   />
                 )}
                 {tab === "fotos" && (
-                  <EmptyTab
-                    title="Fotos e anexos"
-                    description="Envie imagens clínicas, exames e documentos do paciente."
+                  <ClinicalPhotos
+                    key={dbPatient?.id || paramPatientId || "no-patient"}
+                    patientId={dbPatient?.id || paramPatientId || undefined}
                   />
                 )}
                 {tab === "injetaveis" && (

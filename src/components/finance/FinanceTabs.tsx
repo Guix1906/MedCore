@@ -1,5 +1,3 @@
-import type { DbRow, Json, IconType } from "@/lib/types";
-import { Link, useRouterState } from "@tanstack/react-router";
 import {
   List,
   ArrowDownLeft,
@@ -10,38 +8,76 @@ import {
   Wallet,
   FolderTree,
   DoorOpen,
+  CreditCard,
+  UserCheck,
+  CheckCheck,
   FileText,
+  PieChart,
 } from "lucide-react";
 
-type Tab = { to: string; label: string; icon: React.ElementType; exact?: boolean };
-const tabs: Tab[] = [
-  { to: "/financeiro", label: "Lançamentos", icon: List, exact: true },
-  { to: "/financeiro/receber", label: "A Receber", icon: ArrowDownLeft },
-  { to: "/financeiro/pagar", label: "A Pagar", icon: ArrowUpRight },
-  { to: "/financeiro/extrato", label: "Extrato", icon: ScrollText },
-  { to: "/financeiro/fluxo", label: "Fluxo de Caixa", icon: LineChart },
-  { to: "/financeiro/dre", label: "DRE", icon: FileBarChart },
-  { to: "/financeiro/contas", label: "Contas", icon: Wallet },
-  { to: "/financeiro/centros-custo", label: "Centros de Custo", icon: FolderTree },
-  { to: "/financeiro/caixa", label: "Caixa", icon: DoorOpen },
-  { to: "/financeiro/relatorios", label: "Relatórios", icon: FileText },
+export type FinanceTabId =
+  | "lancamentos"
+  | "receber"
+  | "pagar"
+  | "extrato"
+  | "fluxo"
+  | "dre"
+  | "contas"
+  | "centros-custo"
+  | "caixa"
+  | "cartoes"
+  | "repasses"
+  | "conciliacao"
+  | "planos"
+  | "relatorios";
+
+export interface FinanceTabItem {
+  id: FinanceTabId;
+  label: string;
+  icon: React.ElementType;
+}
+
+export const financeTabs: FinanceTabItem[] = [
+  { id: "lancamentos", label: "Lançamentos", icon: List },
+  { id: "receber", label: "A Receber", icon: ArrowDownLeft },
+  { id: "pagar", label: "A Pagar", icon: ArrowUpRight },
+  { id: "extrato", label: "Extrato", icon: ScrollText },
+  { id: "fluxo", label: "Fluxo de Caixa", icon: LineChart },
+  { id: "dre", label: "DRE", icon: FileBarChart },
+  { id: "contas", label: "Contas", icon: Wallet },
+  { id: "centros-custo", label: "Centros de Custo", icon: FolderTree },
+  { id: "caixa", label: "Caixa", icon: DoorOpen },
+  { id: "cartoes", label: "Cartões", icon: CreditCard },
+  { id: "repasses", label: "Repasses", icon: UserCheck },
+  { id: "conciliacao", label: "Conciliação", icon: CheckCheck },
+  { id: "planos", label: "Planos", icon: FileText },
+  { id: "relatorios", label: "Relatórios", icon: PieChart },
 ];
 
-export default function FinanceTabs() {
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
+interface FinanceTabsProps {
+  activeTab: string;
+  onSelectTab: (tabId: FinanceTabId) => void;
+  disabled?: boolean;
+}
+
+export default function FinanceTabs({
+  activeTab,
+  onSelectTab,
+  disabled = false,
+}: FinanceTabsProps) {
   return (
-    <div className="border-b border-[#E5E7EB] bg-white">
+    <div className="border-b border-[#E5E7EB] bg-white -mx-6 -mt-6 mb-6">
       <div className="px-6 flex gap-1 overflow-x-auto no-scrollbar">
-        {tabs.map((t) => {
-          const active = t.exact
-            ? pathname === t.to
-            : pathname === t.to || pathname.startsWith(t.to + "/");
+        {financeTabs.map((t) => {
+          const active = activeTab === t.id;
           const Icon = t.icon;
           return (
-            <Link
-              key={t.to}
-              to={t.to}
-              className={`inline-flex items-center gap-2 px-3 h-11 text-[13px] font-medium whitespace-nowrap border-b-2 transition-colors ${
+            <button
+              key={t.id}
+              type="button"
+              disabled={disabled}
+              onClick={() => onSelectTab(t.id)}
+              className={`inline-flex items-center gap-2 px-3 h-11 text-[13px] font-medium whitespace-nowrap border-b-2 transition-colors disabled:opacity-50 cursor-pointer ${
                 active
                   ? "text-[#8B47FF] border-[#8B47FF]"
                   : "text-[#6B7280] border-transparent hover:text-[#111827] hover:border-[#E5E7EB]"
@@ -49,7 +85,7 @@ export default function FinanceTabs() {
             >
               <Icon size={15} />
               {t.label}
-            </Link>
+            </button>
           );
         })}
       </div>

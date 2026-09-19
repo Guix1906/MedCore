@@ -1,3 +1,5 @@
+import type { FollowupTables, FollowupFunctions } from "@/features/acompanhamentos/followup-schema";
+
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type Database = {
@@ -7,7 +9,7 @@ export type Database = {
     PostgrestVersion: "14.5";
   };
   public: {
-    Tables: {
+    Tables: FollowupTables & {
       activity_log: {
         Row: {
           action: string;
@@ -1398,6 +1400,8 @@ export type Database = {
       };
       transactions: {
         Row: {
+          treatment_id: string | null;
+          installment_id: string | null;
           amount: number;
           appointment_id: string | null;
           category: string | null;
@@ -1427,6 +1431,8 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          treatment_id?: string | null;
+          installment_id?: string | null;
           amount: number;
           appointment_id?: string | null;
           category?: string | null;
@@ -1456,6 +1462,8 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          treatment_id?: string | null;
+          installment_id?: string | null;
           amount?: number;
           appointment_id?: string | null;
           category?: string | null;
@@ -1650,6 +1658,13 @@ export type Database = {
       };
       treatments: {
         Row: {
+          next_return_date: string | null;
+          last_return_date: string | null;
+          status_reason: string | null;
+          payment_type: string;
+          down_payment_method: string | null;
+          down_payment_due_date: string | null;
+          first_due_date: string | null;
           color: string | null;
           created_at: string;
           discount: number;
@@ -1670,6 +1685,13 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          next_return_date?: string | null;
+          last_return_date?: string | null;
+          status_reason?: string | null;
+          payment_type?: string;
+          down_payment_method?: string | null;
+          down_payment_due_date?: string | null;
+          first_due_date?: string | null;
           color?: string | null;
           created_at?: string;
           discount?: number;
@@ -1690,6 +1712,13 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          next_return_date?: string | null;
+          last_return_date?: string | null;
+          status_reason?: string | null;
+          payment_type?: string;
+          down_payment_method?: string | null;
+          down_payment_due_date?: string | null;
+          first_due_date?: string | null;
           color?: string | null;
           created_at?: string;
           discount?: number;
@@ -1819,7 +1848,7 @@ export type Database = {
         Relationships: [];
       };
     };
-    Functions: {
+    Functions: FollowupFunctions & {
       generate_treatment_installments: {
         Args: { p_treatment_id: string };
         Returns: undefined;

@@ -1,3 +1,4 @@
+import PatientFinancialSummary from "@/features/finance/PatientFinancialSummary";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
@@ -480,14 +481,6 @@ function PatientDrawer({
           .order("start_time", { ascending: false })
           .limit(50);
         if (!cancelled) setAppts(data ?? []);
-      } else if (tab === "financeiro" && txs.length === 0) {
-        const { data } = await supabase
-          .from("transactions")
-          .select("id,description,amount,type,status,due_date,paid_at")
-          .eq("patient_id", patient.id)
-          .order("due_date", { ascending: false })
-          .limit(50);
-        if (!cancelled) setTxs(data ?? []);
       } else if (tab === "tratamentos" && treatments.length === 0) {
         const { data } = await supabase
           .from("treatments")
@@ -681,39 +674,7 @@ function PatientDrawer({
             />
           )}
 
-          {tab === "financeiro" && (
-            <TabList
-              loading={loadingTab}
-              empty="Nenhuma movimentação financeira."
-              items={txs}
-              render={(t) => (
-                <div
-                  key={t.id}
-                  className="p-3 rounded-lg border border-[#E5E7EB] flex justify-between items-center"
-                >
-                  <div>
-                    <div className="text-[13px] font-medium text-[#111827]">
-                      {t.description ?? "—"}
-                    </div>
-                    <div className="text-[11px] text-[#6B7280]">
-                      Venc. {fmtDate(t.due_date)}
-                      {t.paid_at && ` • Pago ${fmtDate(t.paid_at)}`}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div
-                      className={`text-[13px] font-bold ${t.type === "receita" || t.type === "income" ? "text-[#16A34A]" : "text-[#DC2626]"}`}
-                    >
-                      {brl(Number(t.amount ?? 0))}
-                    </div>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#F3F4F6] text-[#374151] uppercase">
-                      {t.status}
-                    </span>
-                  </div>
-                </div>
-              )}
-            />
-          )}
+          {tab === "financeiro" && <PatientFinancialSummary patientId={patient.id} />}
 
           {tab === "anexos" && (
             <div className="flex flex-col items-center justify-center py-12 text-center gap-3">

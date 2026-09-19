@@ -1,3 +1,4 @@
+import TreatmentAlerts from "@/features/acompanhamentos/TreatmentAlerts";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { notificationsService } from "@/services/api";
@@ -179,6 +180,7 @@ export default function NotificationCenter({ onClose }: { onClose: () => void })
       </div>
 
       <div className="max-h-[420px] overflow-y-auto">
+        <TreatmentAlerts />
         {loading ? (
           <div className="p-6 text-center text-[13px] text-[#6B7280]">Carregando…</div>
         ) : filtered.length === 0 ? (

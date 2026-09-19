@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus,
   X,
@@ -53,11 +53,15 @@ function EstoquePage() {
   const [edit, setEdit] = useState<Item | null>(null);
   const [move, setMove] = useState<{ item: Item; type: "in" | "out" } | null>(null);
 
-  const { data: rows = [], isLoading: loading } = useQuery({
+  const {
+    data: legacyRows = [],
+    isLoading: loading,
+    error: inventoryError,
+  } = useQuery({
     queryKey: ["inventory-items-list"],
     staleTime: 5 * 60_000,
     gcTime: 30 * 60_000,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
     queryFn: async () => {
       try {
         const phpItems = await inventoryService.getItems();
@@ -79,19 +83,46 @@ function EstoquePage() {
         }
       } catch {}
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("inventory_items")
         .select(
           "id,name,code,category,quantity,unit,min_quantity,expiry_date,supplier,unit_cost,location,active",
         )
         .order("name")
         .limit(500);
-      return (data ?? []) as Item[];
+      if (error) throw error;
+      return data;
     },
   });
 
+  const clinicalStock = useQuery({
+    queryKey: ["inventory-clinical-stock"],
+    refetchOnWindowFocus: true,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("inventory_items")
+        .select(
+          "id,name,code,category,quantity,unit,min_quantity,expiry_date,supplier,unit_cost,location,active",
+        )
+        .order("name")
+        .limit(500);
+      if (error) throw error;
+      return data;
+    },
+  });
+  const rows = useMemo(
+    () => [
+      ...new Map(
+        [...legacyRows, ...(clinicalStock.data || [])].map((item) => [item.id, item]),
+      ).values(),
+    ],
+    [legacyRows, clinicalStock.data],
+  );
+
   const load = () => {
+    queryClient.invalidateQueries({ queryKey: ["inventory-clinical-stock"] });
     queryClient.invalidateQueries({ queryKey: ["inventory-items-list"] });
+    queryClient.invalidateQueries({ queryKey: ["treatment-medication-uses"] });
   };
 
   const deleteItem = async (item: Item) => {
@@ -144,6 +175,16 @@ function EstoquePage() {
 
   return (
     <AppShell title="Estoque">
+      {clinicalStock.error && (
+        <p role="alert" className="p-4 text-red-700">
+          O saldo clínico não pôde ser atualizado: {clinicalStock.error.message}
+        </p>
+      )}
+      {inventoryError && (
+        <p role="alert" className="p-4 text-red-700">
+          Erro ao carregar estoque: {inventoryError.message}
+        </p>
+      )}
       <div className="p-6 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <StatCard
@@ -364,13 +405,19 @@ function NewItemModal({
     "w-full h-10 px-3 rounded-lg border border-[#E5E7EB] text-[13px] focus:outline-none focus:border-[#8B47FF]";
 
   const save = async () => {
-    if (!f.name.trim()) return;
+    if (
+      !f.name.trim() ||
+      (!item && (!Number.isInteger(Number(f.quantity)) || Number(f.quantity) < 0))
+    ) {
+      toast.error("Informe nome e quantidade inteira não negativa.");
+      return;
+    }
     setSaving(true);
     const payload = {
       name: f.name.trim(),
       code: f.code || null,
       category: f.category || null,
-      quantity: parseInt(f.quantity) || 0,
+      ...(item ? {} : { quantity: Number(f.quantity) }),
       unit: f.unit || null,
       min_quantity: parseInt(f.min_quantity) || 0,
       expiry_date: f.expiry_date || null,
@@ -435,6 +482,8 @@ function NewItemModal({
             <label className="text-[12px] text-[#6B7280]">Quantidade</label>
             <input
               type="number"
+              disabled={!!item}
+              title={item ? "Use entrada/saída para alterar o saldo com segurança." : undefined}
               value={f.quantity}
               onChange={(e) => setF({ ...f, quantity: e.target.value })}
               className={inp}
@@ -525,6 +574,7 @@ function MovementModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const requestId = useRef(crypto.randomUUID());
   const [qty, setQty] = useState("1");
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
@@ -532,8 +582,8 @@ function MovementModal({
     "w-full h-10 px-3 rounded-lg border border-[#E5E7EB] text-[13px] focus:outline-none focus:border-[#8B47FF]";
 
   const save = async () => {
-    const q = parseInt(qty);
-    if (!q || q <= 0) {
+    const q = Number(qty);
+    if (!Number.isInteger(q) || q <= 0) {
       toast.error("Informe uma quantidade válida");
       return;
     }
@@ -542,22 +592,27 @@ function MovementModal({
       return;
     }
     setSaving(true);
-    const newQty = type === "in" ? item.quantity + q : item.quantity - q;
-    const [{ error: e1 }, { error: e2 }] = await Promise.all([
-      supabase.from("inventory_movements").insert({
-        item_id: item.id,
-        type,
-        quantity: q,
-        reason: reason || null,
-      }),
-      supabase.from("inventory_items").update({ quantity: newQty }).eq("id", item.id),
-    ]);
-    setSaving(false);
-    if (!e1 && !e2) {
+    try {
+      const { error } = await supabase.rpc("move_inventory_item", {
+        p_id: requestId.current,
+        p_item_id: item.id,
+        p_type: type === "in" ? "entrada" : "saida",
+        p_quantity: q,
+        p_reason: reason.trim() || null,
+      });
+      if (error) throw error;
       toast.success(type === "in" ? "Entrada registrada" : "Saída registrada");
       onSaved();
       onClose();
-    } else toast.error("Erro: " + (e1?.message || e2?.message));
+    } catch (error) {
+      toast.error(
+        error && typeof error === "object" && "message" in error
+          ? String(error.message)
+          : "Falha ao movimentar estoque.",
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (

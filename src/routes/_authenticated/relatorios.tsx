@@ -1,3 +1,5 @@
+import { getFinancialReportingRows } from "@/features/finance/finance-api";
+import { errorMessage, localDate } from "@/features/acompanhamentos/followup-utils";
 import type { DbRow, Json, IconType } from "@/lib/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
@@ -69,8 +71,12 @@ function RelatoriosPage() {
   const period = PERIODS.find((p) => p.id === periodId)!;
   const periodDays = period.days;
 
-  const { data: reportData, isLoading: loading } = useQuery({
-    queryKey: ["reports-data", periodDays],
+  const {
+    data: reportData,
+    isLoading: loading,
+    error: reportError,
+  } = useQuery({
+    queryKey: ["reports-data", periodDays, cat],
     placeholderData: (prev) => prev,
     staleTime: 5 * 60_000,
     gcTime: 30 * 60_000,
@@ -78,10 +84,10 @@ function RelatoriosPage() {
     queryFn: async () => {
       const from = new Date();
       from.setDate(from.getDate() - periodDays);
-      const fromIso = from.toISOString().slice(0, 10);
+      const fromIso = localDate(from);
 
       const [tx, ap, pa, tr, inv, mv] = await Promise.all([
-        supabase.from("transactions").select("*").gte("date", fromIso),
+        cat === "financeiro" ? getFinancialReportingRows() : Promise.resolve([]),
         supabase.from("appointments").select("*").gte("date", fromIso),
         supabase.from("patients").select("id,created_at,gender,birth_date"),
         supabase.from("treatments").select("*"),
@@ -90,7 +96,7 @@ function RelatoriosPage() {
       ]);
 
       return {
-        transactions: tx.data || [],
+        transactions: tx.filter((t) => t.date >= fromIso && t.date <= localDate()),
         appointments: ap.data || [],
         patients: pa.data || [],
         treatments: tr.data || [],
@@ -111,27 +117,31 @@ function RelatoriosPage() {
   const finData = useMemo(() => {
     const byMonth = new Map<string, { month: string; receita: number; despesa: number }>();
     transactions
-      .filter((t) => t.status !== "cancelado")
+      .filter((t) => t.status === "pago")
       .forEach((t) => {
         const k = monthKey(t.date);
         const cur = byMonth.get(k) || { month: k, receita: 0, despesa: 0 };
         const v = Number(t.amount || 0);
-        if (t.type === "receita" || t.type === "income") cur.receita += v;
-        else if (t.type === "despesa" || t.type === "expense") cur.despesa += v;
+        if (t.type === "receita") cur.receita += v;
+        else if (t.type === "despesa") cur.despesa += v;
         byMonth.set(k, cur);
       });
     return Array.from(byMonth.values()).sort((a, b) => a.month.localeCompare(b.month));
   }, [transactions]);
 
   const finKpis = useMemo(() => {
-    const active = transactions.filter((t) => t.status !== "cancelado");
+    const active = transactions;
     const isIncome = (t: { type: string }) => t.type === "receita" || t.type === "income";
     const isExpense = (t: { type: string }) => t.type === "despesa" || t.type === "expense";
     const isPaid = (t: { status: string }) => t.status === "pago" || t.status === "concluido";
     const isPending = (t: { status: string }) => t.status === "pendente" || t.status === "vencido";
 
-    const receita = active.filter(isIncome).reduce((s, t) => s + Number(t.amount || 0), 0);
-    const despesa = active.filter(isExpense).reduce((s, t) => s + Number(t.amount || 0), 0);
+    const receita = active
+      .filter((t) => isIncome(t) && isPaid(t))
+      .reduce((s, t) => s + Number(t.amount || 0), 0);
+    const despesa = active
+      .filter((t) => isExpense(t) && isPaid(t))
+      .reduce((s, t) => s + Number(t.amount || 0), 0);
     const pago = active.filter(isPaid).reduce((s, t) => s + Number(t.amount || 0), 0);
     const pendente = active.filter(isPending).reduce((s, t) => s + Number(t.amount || 0), 0);
     return { receita, despesa, saldo: receita - despesa, pago, pendente };
@@ -139,10 +149,12 @@ function RelatoriosPage() {
 
   const finByCategory = useMemo(() => {
     const map = new Map<string, number>();
-    transactions.forEach((t) => {
-      const k = t.category || "Sem categoria";
-      map.set(k, (map.get(k) || 0) + Number(t.amount || 0));
-    });
+    transactions
+      .filter((t) => t.status === "pago")
+      .forEach((t) => {
+        const k = t.category || "Sem categoria";
+        map.set(k, (map.get(k) || 0) + Number(t.amount || 0));
+      });
     return Array.from(map, ([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 8);
@@ -247,7 +259,7 @@ function RelatoriosPage() {
     const filename = `relatorio-${cat}-${periodId}.csv`;
     if (cat === "financeiro") {
       rows = [
-        "mes,receita,despesa,saldo",
+        "mes,recebido,pago,resultado_caixa",
         ...finData.map((r) => `${r.month},${r.receita},${r.despesa},${r.receita - r.despesa}`),
       ];
     } else if (cat === "clinico") {
@@ -299,6 +311,7 @@ function RelatoriosPage() {
               ))}
             </div>
             <button
+              disabled={loading || !!reportError}
               onClick={exportCSV}
               className="inline-flex items-center gap-2 px-3 py-2 text-xs font-medium bg-white border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-700"
             >
@@ -329,7 +342,11 @@ function RelatoriosPage() {
           })}
         </div>
 
-        {loading ? (
+        {reportError ? (
+          <p role="alert" className="text-red-700">
+            {errorMessage(reportError)}. Relatório indisponível; nenhum total foi estimado.
+          </p>
+        ) : loading ? (
           <div className="text-center py-20 text-slate-400 text-sm">Carregando…</div>
         ) : cat === "financeiro" ? (
           <FinanceiroView data={finData} kpis={finKpis} byCategory={finByCategory} />
@@ -385,14 +402,22 @@ function FinanceiroView({ data, kpis, byCategory }: DbRow) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Kpi label="Receita" value={brl(kpis.receita)} tone="green" icon={TrendingUp} />
-        <Kpi label="Despesa" value={brl(kpis.despesa)} tone="rose" icon={DollarSign} />
-        <Kpi label="Saldo" value={brl(kpis.saldo)} tone="violet" icon={BarChart3} />
-        <Kpi label="Pendente" value={brl(kpis.pendente)} tone="amber" icon={FileText} />
+        <Kpi label="Recebido" value={brl(kpis.receita)} tone="green" icon={TrendingUp} />
+        <Kpi label="Pago" value={brl(kpis.despesa)} tone="rose" icon={DollarSign} />
+        <Kpi label="Resultado de caixa" value={brl(kpis.saldo)} tone="violet" icon={BarChart3} />
+        <Kpi
+          label="Em aberto (entradas + saídas)"
+          value={brl(kpis.pendente)}
+          tone="amber"
+          icon={FileText}
+        />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
-          <Card title="Receita x Despesa" subtitle="Evolução mensal">
+          <Card
+            title="Receita x Despesa"
+            subtitle="Baixas efetivas por mês; não representa lucro ou saldo bancário"
+          >
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={data}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />

@@ -1,0 +1,142 @@
+-- Homologation only, after every 20260919 migration. Use ON_ERROR_STOP.
+BEGIN;
+DO $$
+DECLARE
+  actor uuid:=gen_random_uuid(); doctor uuid:=gen_random_uuid();
+  cash uuid:=gen_random_uuid(); bank uuid:=gen_random_uuid(); cards uuid:=gen_random_uuid();
+  title_id uuid:=gen_random_uuid(); receipt uuid:=gen_random_uuid(); card_receipt uuid:=gen_random_uuid();
+  shift_id uuid:=gen_random_uuid(); transfer_id uuid:=gen_random_uuid(); settlement uuid:=gen_random_uuid();
+  commission uuid:=gen_random_uuid(); match_id uuid:=gen_random_uuid(); line_id uuid;
+  denied boolean; fee_title uuid; fee_payment uuid; report jsonb; expected numeric;
+BEGIN
+  INSERT INTO auth.users(id,email) VALUES(actor,actor::text||'@example.invalid');
+  INSERT INTO public.doctors(id,auth_id,name,email,role,active)
+    VALUES(doctor,actor,'Operations fixture',actor::text||'@example.invalid','admin',true);
+  PERFORM set_config('request.jwt.claim.sub',actor::text,true);
+  PERFORM set_config('request.jwt.claims',jsonb_build_object('sub',actor,'role','authenticated')::text,true);
+  PERFORM public.create_financial_account(cash,'Operations cash','caixa');
+  PERFORM public.create_financial_account(bank,'Operations bank','corrente');
+  PERFORM public.create_financial_account(cards,'Operations cards','corrente');
+  PERFORM public.confirm_financial_opening(cash,50,CURRENT_DATE-1,'available','Confirmed fixture cash');
+  PERFORM public.confirm_financial_opening(bank,0,CURRENT_DATE-1,'available','Confirmed fixture bank');
+  PERFORM public.confirm_financial_opening(cards,0,CURRENT_DATE-1,'receivable','Confirmed fixture cards');
+  PERFORM public.open_financial_shift(shift_id,cash,50,'Opening fixture count');
+  PERFORM public.open_financial_shift(shift_id,cash,50,'Opening fixture count');
+  denied:=false;
+  BEGIN PERFORM public.open_financial_shift(gen_random_uuid(),cash,50,'Duplicate fixture shift');
+  EXCEPTION WHEN raise_exception THEN denied:=true; END;
+  IF NOT denied THEN RAISE EXCEPTION 'Duplicate open shift accepted'; END IF;
+  PERFORM public.create_financial_title(title_id,'receita',300,CURRENT_DATE,'Operations fixture revenue');
+  PERFORM public.classify_financial_title(title_id,CURRENT_DATE,'revenue','operating','Confirmed earned revenue');
+  denied:=false;
+  BEGIN PERFORM public.classify_financial_title(title_id,CURRENT_DATE,'costs','operating','Incompatible classification');
+  EXCEPTION WHEN raise_exception THEN denied:=true; END;
+  IF NOT denied THEN RAISE EXCEPTION 'Income classified as cost'; END IF;
+  denied:=false;
+  BEGIN PERFORM public.record_financial_payment(gen_random_uuid(),title_id,1,CURRENT_DATE,'pix',cash);
+  EXCEPTION WHEN raise_exception THEN denied:=true; END;
+  IF NOT denied THEN RAISE EXCEPTION 'Pix contaminated physical cash'; END IF;
+  PERFORM public.record_financial_payment(receipt,title_id,100,CURRENT_DATE,'dinheiro',cash);
+  PERFORM public.record_account_transfer(transfer_id,cash,bank,20,CURRENT_DATE,'Cash deposit fixture');
+  expected:=public.financial_shift_expected(shift_id);
+  IF expected<>130 THEN RAISE EXCEPTION 'Shift expected %, wanted 130',expected; END IF;
+  PERFORM public.close_financial_shift(shift_id,129,'Difference under investigation');
+  PERFORM public.close_financial_shift(shift_id,129,'Difference under investigation');
+  PERFORM public.open_financial_shift(shift_id,cash,50,'Opening fixture count');
+  IF (SELECT difference FROM public.cash_register_sessions WHERE id=shift_id)<>-1 THEN RAISE EXCEPTION 'Physical difference lost'; END IF;
+  denied:=false;
+  BEGIN PERFORM public.reverse_financial_payment(receipt,'Cannot rewrite closed shift');
+  EXCEPTION WHEN raise_exception THEN denied:=true; END;
+  IF NOT denied THEN RAISE EXCEPTION 'Closed shift payment reversed'; END IF;
+  denied:=false;
+  BEGIN PERFORM public.reverse_account_transfer(transfer_id,'Cannot rewrite closed shift');
+  EXCEPTION WHEN raise_exception THEN denied:=true; END;
+  IF NOT denied THEN RAISE EXCEPTION 'Closed shift transfer reversed'; END IF;
+  denied:=false;
+  BEGIN PERFORM public.record_financial_payment(gen_random_uuid(),title_id,1,CURRENT_DATE,'dinheiro',cash);
+  EXCEPTION WHEN raise_exception THEN denied:=true; END;
+  IF NOT denied THEN RAISE EXCEPTION 'Cash received without open shift'; END IF;
+
+  PERFORM public.record_financial_payment(card_receipt,title_id,100,CURRENT_DATE,'cartao_credito',cards);
+  PERFORM public.settle_financial_card(settlement,card_receipt,bank,3,CURRENT_DATE,'Acquirer fixture reference');
+  PERFORM public.settle_financial_card(settlement,card_receipt,bank,3,CURRENT_DATE,'Acquirer fixture reference');
+  SELECT fee_title_id,fee_payment_id INTO fee_title,fee_payment FROM public.card_settlements WHERE id=settlement;
+  IF (SELECT paid_amount FROM public.transactions WHERE id=title_id)<>200 THEN RAISE EXCEPTION 'Card settlement duplicated patient payment'; END IF;
+  IF (SELECT amount FROM public.financial_bank_entries(NULL) WHERE source_kind='card' AND source_id=settlement)<>97 THEN RAISE EXCEPTION 'Card bank entry not net'; END IF;
+  IF EXISTS (SELECT 1 FROM public.financial_bank_entries(NULL) WHERE source_kind='payment' AND source_id=fee_payment) THEN RAISE EXCEPTION 'Card fee counted twice in reconciliation'; END IF;
+  IF (SELECT paid_amount FROM public.transactions WHERE id=fee_title)<>3 THEN RAISE EXCEPTION 'Fee not recorded as paid expense'; END IF;
+  denied:=false;
+  BEGIN PERFORM public.settle_financial_card(gen_random_uuid(),card_receipt,bank,3,CURRENT_DATE,'Duplicate fixture reference');
+  EXCEPTION WHEN raise_exception THEN denied:=true; END;
+  IF NOT denied THEN RAISE EXCEPTION 'Duplicate settlement accepted'; END IF;
+  denied:=false;
+  BEGIN PERFORM public.reverse_financial_payment(card_receipt,'Has an active card settlement');
+  EXCEPTION WHEN raise_exception THEN denied:=true; END;
+  IF NOT denied THEN RAISE EXCEPTION 'Settled card reversed at source'; END IF;
+  denied:=false;
+  BEGIN PERFORM public.reverse_financial_payment(fee_payment,'Has an active card settlement');
+  EXCEPTION WHEN raise_exception THEN denied:=true; END;
+  IF NOT denied THEN RAISE EXCEPTION 'Card fee independently reversed'; END IF;
+
+  PERFORM public.import_financial_statement(bank,jsonb_build_array(jsonb_build_object('external_id','FIT-FIXTURE','date',CURRENT_DATE,'amount',97,'description','Net card settlement')));
+  IF public.import_financial_statement(bank,jsonb_build_array(jsonb_build_object('external_id','FIT-FIXTURE','date',CURRENT_DATE,'amount',97,'description','Net card settlement')))<>0 THEN RAISE EXCEPTION 'Statement retry duplicated lines'; END IF;
+  SELECT id INTO line_id FROM public.bank_statement_lines WHERE account_id=bank AND external_id='FIT-FIXTURE';
+  denied:=false;
+  BEGIN PERFORM public.import_financial_statement(bank,jsonb_build_array(jsonb_build_object('external_id','FIT-FIXTURE','date',CURRENT_DATE,'amount',98,'description','Net card settlement')));
+  EXCEPTION WHEN raise_exception THEN denied:=true; END;
+  IF NOT denied THEN RAISE EXCEPTION 'Conflicting statement overwritten'; END IF;
+  denied:=false;
+  BEGIN PERFORM public.reconcile_financial_entry(gen_random_uuid(),line_id,'transfer_in',transfer_id,'Wrong amount fixture');
+  EXCEPTION WHEN raise_exception THEN denied:=true; END;
+  IF NOT denied THEN RAISE EXCEPTION 'Mismatched amount reconciled'; END IF;
+  PERFORM public.reconcile_financial_entry(match_id,line_id,'card',settlement,'Confirmed acquirer deposit');
+  PERFORM public.reconcile_financial_entry(match_id,line_id,'card',settlement,'Confirmed acquirer deposit');
+  denied:=false;
+  BEGIN PERFORM public.reconcile_financial_entry(gen_random_uuid(),line_id,'card',settlement,'Second reconciliation attempt');
+  EXCEPTION WHEN unique_violation THEN denied:=true; END;
+  IF NOT denied THEN RAISE EXCEPTION 'Duplicate reconciliation accepted'; END IF;
+  denied:=false;
+  BEGIN PERFORM public.reverse_financial_card(settlement,'Reconciled settlement correction');
+  EXCEPTION WHEN raise_exception THEN denied:=true; END;
+  IF NOT denied THEN RAISE EXCEPTION 'Reconciled settlement reversed'; END IF;
+  PERFORM public.reverse_financial_reconciliation(match_id,'Incorrect reconciliation fixture');
+  PERFORM public.reverse_financial_card(settlement,'Incorrect settlement fixture');
+  PERFORM public.reverse_financial_card(settlement,'Incorrect settlement fixture');
+  IF (SELECT status FROM public.transactions WHERE id=fee_title)<>'cancelado' THEN RAISE EXCEPTION 'Reversed fee left an unpaid expense'; END IF;
+  IF (SELECT reversed_at FROM public.transaction_payments WHERE id=fee_payment) IS NULL THEN RAISE EXCEPTION 'Fee reversal missing'; END IF;
+  IF (SELECT paid_amount FROM public.transactions WHERE id=title_id)<>200 THEN RAISE EXCEPTION 'Settlement reversal changed patient discharge'; END IF;
+
+  PERFORM public.approve_financial_commission(commission,card_receipt,doctor,20,CURRENT_DATE+10,CURRENT_DATE,'Explicit fixture contract approval');
+  PERFORM public.approve_financial_commission(commission,card_receipt,doctor,20,CURRENT_DATE+10,CURRENT_DATE,'Explicit fixture contract approval');
+  IF (SELECT amount FROM public.transactions WHERE id=commission)<>20 OR (SELECT paid_amount FROM public.transactions WHERE id=commission)<>0 THEN RAISE EXCEPTION 'Commission approval not a pending expense'; END IF;
+  denied:=false;
+  BEGIN PERFORM public.approve_financial_commission(gen_random_uuid(),card_receipt,doctor,20,CURRENT_DATE+10,CURRENT_DATE,'Duplicate fixture commission');
+  EXCEPTION WHEN raise_exception THEN denied:=true; END;
+  IF NOT denied THEN RAISE EXCEPTION 'Duplicate professional allocation accepted'; END IF;
+  denied:=false;
+  BEGIN PERFORM public.reverse_financial_payment(card_receipt,'Receipt with active professional obligation');
+  EXCEPTION WHEN raise_exception THEN denied:=true; END;
+  IF NOT denied THEN RAISE EXCEPTION 'Active commission source reversed'; END IF;
+  PERFORM public.cancel_financial_title(commission,'Contract approval was incorrect');
+  IF (SELECT status FROM public.commission_payouts WHERE id=commission)<>'cancelado' THEN RAISE EXCEPTION 'Payout did not follow cancellation'; END IF;
+  PERFORM public.reverse_financial_payment(card_receipt,'Receipt correction after dependencies resolved');
+
+  report:=public.get_financial_operations(NULL);
+  IF jsonb_typeof(report->'entries')<>'array' OR jsonb_typeof(report->'sessions')<>'array' OR (report->>'can_manage')::boolean IS NOT TRUE THEN RAISE EXCEPTION 'Invalid operations snapshot'; END IF;
+  denied:=false;
+  BEGIN PERFORM public.get_financial_operations(gen_random_uuid());
+  EXCEPTION WHEN raise_exception THEN denied:=true; END;
+  IF NOT denied THEN RAISE EXCEPTION 'Cross-clinic operations readable'; END IF;
+  IF has_table_privilege('authenticated','public.bank_reconciliations','INSERT')
+    OR has_table_privilege('authenticated','public.card_settlements','UPDATE')
+    OR has_table_privilege('authenticated','public.cash_register_sessions','UPDATE')
+    OR has_function_privilege('authenticated','public.financial_bank_entries(uuid)','EXECUTE')
+    OR has_function_privilege('anon','public.get_financial_operations(uuid)','EXECUTE') THEN RAISE EXCEPTION 'Direct write or helper execution bypass'; END IF;
+  UPDATE public.doctors SET role='recepcionista' WHERE id=doctor;
+  DELETE FROM public.user_roles WHERE user_id=actor;
+  denied:=false;
+  BEGIN PERFORM public.classify_financial_title(title_id,CURRENT_DATE,'revenue','operating','Unauthorized reclassification');
+  EXCEPTION WHEN raise_exception THEN denied:=true; END;
+  IF NOT denied THEN RAISE EXCEPTION 'Reception reclassified financial result'; END IF;
+END $$;
+ROLLBACK;

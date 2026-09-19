@@ -1,3 +1,9 @@
+import { useQueryClient } from "@tanstack/react-query";
+import ClinicalFollowup, {
+  changeTreatmentStatus,
+} from "@/features/acompanhamentos/ClinicalFollowup";
+import MedicationUsePanel from "@/features/acompanhamentos/MedicationUsePanel";
+import { formatClinicalDate, protocolDeadline } from "@/features/acompanhamentos/followup-utils";
 import type { DbRow, Json, IconType } from "@/lib/types";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -44,25 +50,6 @@ export const Route = createFileRoute("/_authenticated/acompanhamentos/$id")({
 
 type Treatment = DbRow;
 type Medication = DbRow;
-type Installment = DbRow;
-
-type ClinicalEvolution = {
-  id: string;
-  date: string;
-  doctor_name?: string;
-  notes: string;
-  parameters?: string;
-  next_step?: string;
-};
-
-type ComparisonPhoto = {
-  id: string;
-  title: string;
-  beforeUrl: string;
-  beforeDate: string;
-  afterUrl: string;
-  afterDate: string;
-};
 
 const STATUS_LABEL: Record<string, { label: string; bg: string; fg: string }> = {
   em_andamento: { label: "Em andamento", bg: "#DCFCE7", fg: "#166534" },
@@ -71,16 +58,6 @@ const STATUS_LABEL: Record<string, { label: string; bg: string; fg: string }> = 
   cancelado: { label: "Cancelado", bg: "#FEE2E2", fg: "#991B1B" },
 };
 
-const INSTALLMENT_BADGE: Record<string, { label: string; bg: string; fg: string }> = {
-  pago: { label: "Pago", bg: "#DCFCE7", fg: "#166534" },
-  pendente: { label: "Pendente", bg: "#FEF3C7", fg: "#92400E" },
-  atrasado: { label: "Atrasado", bg: "#FEE2E2", fg: "#991B1B" },
-  cancelado: { label: "Cancelado", bg: "#E5E7EB", fg: "#374151" },
-  renegociado: { label: "Renegociado", bg: "#EDE9FE", fg: "#5B21B6" },
-};
-
-const brl = (v: number) =>
-  Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const daysBetween = (a: string | Date, b: string | Date) =>
   Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000);
 
@@ -89,55 +66,47 @@ function TreatmentDetailPage() {
   const navigate = useNavigate();
   const [treatment, setTreatment] = useState<Treatment | null>(null);
   const [meds, setMeds] = useState<Medication[]>([]);
-  const [installments, setInstallments] = useState<Installment[]>([]);
-  const [tab, setTab] = useState<"resumo" | "medicacoes" | "evolucao" | "financeiro">("resumo");
+  const [tab, setTab] = useState<"resumo" | "medicacoes" | "evolucao">("resumo");
   const [loading, setLoading] = useState(true);
 
-  // Evoluções Clínicas & Fotos locais persistidas no acompanhamento
-  const [evolutions, setEvolutions] = useState<ClinicalEvolution[]>([
-    {
-      id: "ev-1",
-      date: new Date().toLocaleDateString("pt-BR"),
-      doctor_name: "Dr. Responsável",
-      notes:
-        "Consulta de início de protocolo. Paciente orientado sobre horários das medicações e hidratação.",
-      parameters: "Pressão: 120/80 mmHg • Peso: 72.4 kg",
-      next_step: "Avaliação de retorno em 30 dias com exames de controle.",
-    },
-  ]);
-
-  const [photos, setPhotos] = useState<ComparisonPhoto[]>([
-    {
-      id: "ph-1",
-      title: "Registro de Evolução Clínica",
-      beforeUrl:
-        "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500&auto=format&fit=crop&q=80",
-      beforeDate: "Dia 1 (Início)",
-      afterUrl:
-        "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=500&auto=format&fit=crop&q=80",
-      afterDate: "Dia 30 (Atual)",
-    },
-  ]);
+  const queryClient = useQueryClient();
+  const [loadError, setLoadError] = useState("");
 
   const cancelledRef = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [t, m, i] = await Promise.all([
-      supabase
-        .from("treatments")
-        .select("*, patients(name, phone), doctors(name)")
-        .eq("id", id)
-        .maybeSingle(),
-      supabase.from("treatment_medications").select("*").eq("treatment_id", id).order("created_at"),
-      supabase.from("treatment_installments").select("*").eq("treatment_id", id).order("number"),
-    ]);
-    if (cancelledRef.current) return;
-    setTreatment(t.data);
-    setMeds((m.data as DbRow[]) ?? []);
-    setInstallments((i.data as DbRow[]) ?? []);
-    setLoading(false);
-  }, [id]);
+    setLoadError("");
+    try {
+      const [t, m] = await Promise.all([
+        supabase
+          .from("treatments")
+          .select("*, patients(name, phone), doctors(name)")
+          .eq("id", id)
+          .maybeSingle(),
+        supabase
+          .from("treatment_medications")
+          .select("*")
+          .eq("treatment_id", id)
+          .order("created_at"),
+      ]);
+      if (cancelledRef.current) return;
+      if (t.error || m.error) {
+        setLoadError((t.error || m.error)!.message);
+        setLoading(false);
+        return;
+      }
+      if (!t.data) setLoadError("Acompanhamento não encontrado.");
+      await queryClient.invalidateQueries({ queryKey: ["treatment-medication-uses", id] });
+      setTreatment(t.data);
+      setMeds((m.data as DbRow[]) ?? []);
+    } catch (error) {
+      if (!cancelledRef.current)
+        setLoadError(error instanceof Error ? error.message : "Erro ao carregar acompanhamento.");
+    } finally {
+      if (!cancelledRef.current) setLoading(false);
+    }
+  }, [id, queryClient]);
 
   useEffect(() => {
     cancelledRef.current = false;
@@ -146,6 +115,18 @@ function TreatmentDetailPage() {
       cancelledRef.current = true;
     };
   }, [load]);
+
+  if (loadError)
+    return (
+      <AppShell>
+        <div role="alert" className="p-8 text-red-700">
+          {loadError}
+          <button className="ml-4 underline" onClick={load}>
+            Tentar novamente
+          </button>
+        </div>
+      </AppShell>
+    );
 
   if (loading || !treatment) {
     return (
@@ -166,22 +147,13 @@ function TreatmentDetailPage() {
   const remainingDays = Math.max(0, totalDays - passedDays);
   const progress = totalDays > 0 ? Math.min(100, Math.round((passedDays / totalDays) * 100)) : 0;
 
-  const paid = installments
-    .filter((p) => p.status === "pago")
-    .reduce((s, p) => s + Number(p.amount), 0);
-  const pending = installments
-    .filter((p) => ["pendente", "atrasado"].includes(p.status))
-    .reduce((s, p) => s + Number(p.amount), 0);
   const activeMeds = meds.filter((m) => m.status === "ativo").length;
-  const pendingInstallments = installments.filter((p) =>
-    ["pendente", "atrasado"].includes(p.status),
-  ).length;
-
   const setStatus = async (status: string) => {
-    const { error } = await supabase.from("treatments").update({ status }).eq("id", id);
-    if (error) return toast.error("Erro ao atualizar status");
-    toast.success("Status atualizado");
-    load();
+    if (await changeTreatmentStatus(id, status)) {
+      await queryClient.invalidateQueries({ queryKey: ["treatment-alerts"] });
+      await queryClient.invalidateQueries({ queryKey: ["treatments-list"] });
+      load();
+    }
   };
 
   // Envio de Cronograma via WhatsApp formatado por turnos
@@ -362,10 +334,9 @@ function TreatmentDetailPage() {
         <div className="flex items-center gap-2 border-b border-slate-200">
           {(
             [
-              { id: "resumo", label: "Resumo & IA", icon: Activity },
+              { id: "resumo", label: "Resumo", icon: Activity },
               { id: "medicacoes", label: "Medicações", icon: Pill },
               { id: "evolucao", label: "Evolução & Fotos", icon: Camera },
-              { id: "financeiro", label: "Financeiro", icon: Wallet },
             ] as const
           ).map((t) => {
             const Icon = t.icon;
@@ -412,33 +383,34 @@ function TreatmentDetailPage() {
                   totalDays,
                   progress,
                   activeMeds,
-                  pendingInstallments,
-                  paid,
-                  pending,
                   nextReturn: treatment.next_return_date,
-                  totalValue: Number(treatment.total_value),
                 }}
               />
             )}
             {tab === "medicacoes" && (
-              <MedicacoesTab
-                treatmentId={id}
-                patientPhone={treatment.patients?.phone}
-                meds={meds}
-                reload={load}
-                onSendWhatsApp={sendWhatsAppSchedule}
-              />
+              <>
+                <MedicacoesTab
+                  treatmentId={id}
+                  patientPhone={treatment.patients?.phone}
+                  meds={meds}
+                  reload={load}
+                  onSendWhatsApp={sendWhatsAppSchedule}
+                />
+                <MedicationUsePanel treatmentId={id} />
+              </>
             )}
             {tab === "evolucao" && (
-              <EvolucaoTab
-                evolutions={evolutions}
-                setEvolutions={setEvolutions}
-                photos={photos}
-                setPhotos={setPhotos}
+              <ClinicalFollowup
+                key={id}
+                treatmentId={id}
+                objective={treatment.objective}
+                startDate={treatment.start_date}
+                status={treatment.status}
+                endDate={treatment.end_date}
+                nextReturn={treatment.next_return_date}
+                returnDays={treatment.return_days}
+                onSaved={load}
               />
-            )}
-            {tab === "financeiro" && (
-              <FinanceiroTab treatment={treatment} installments={installments} reload={load} />
             )}
           </motion.div>
         </AnimatePresence>
@@ -459,11 +431,7 @@ function ResumoTab({
     totalDays: number;
     progress: number;
     activeMeds: number;
-    pendingInstallments: number;
-    paid: number;
-    pending: number;
     nextReturn?: string | null;
-    totalValue: number;
   };
 }) {
   const cards = [
@@ -475,8 +443,8 @@ function ResumoTab({
     },
     {
       label: "Próximo retorno",
-      value: kpis.nextReturn ? new Date(kpis.nextReturn).toLocaleDateString("pt-BR") : "A definir",
-      sub: kpis.nextReturn ? "Retorno agendado" : "Sem data marcada",
+      value: kpis.nextReturn ? formatClinicalDate(kpis.nextReturn) : "A definir",
+      sub: kpis.nextReturn ? "Retorno necessário" : "Sem data marcada",
       color: "#0EA5E9",
     },
     {
@@ -485,28 +453,17 @@ function ResumoTab({
       sub: "No cronograma do paciente",
       color: "#10B981",
     },
-    {
-      label: "Parcelas pendentes",
-      value: `${kpis.pendingInstallments} parcelas`,
-      sub: brl(kpis.pending),
-      color: "#F59E0B",
-    },
-    {
-      label: "Valor recebido",
-      value: brl(kpis.paid),
-      sub: `de ${brl(kpis.totalValue)}`,
-      color: "#059669",
-    },
-    {
-      label: "Saldo a receber",
-      value: brl(kpis.pending),
-      sub: "Fluxo financeiro pendente",
-      color: "#EF4444",
-    },
   ];
 
   return (
     <div className="space-y-5">
+      <p className="text-sm font-semibold">
+        {protocolDeadline(treatment.status, treatment.end_date)} —{" "}
+        {formatClinicalDate(treatment.end_date)}
+      </p>
+      <Link to="/financeiro" className="text-purple-700 underline">
+        Gerenciar entrada e parcelas no Financeiro
+      </Link>
       {/* Card do Copiloto Clínico IA */}
       <div
         className="rounded-3xl p-5 md:p-6 text-slate-900 border border-purple-100 shadow-sm relative overflow-hidden"
@@ -520,17 +477,13 @@ function ResumoTab({
               <Sparkles size={18} />
             </div>
             <div>
-              <h3 className="text-[15px] font-bold text-slate-900">
-                Copiloto de Acompanhamento IA
-              </h3>
-              <p className="text-[12px] text-slate-500">
-                Síntese clínica e status de adesão do paciente
-              </p>
+              <h3 className="text-[15px] font-bold text-slate-900">Resumo do acompanhamento</h3>
+              <p className="text-[12px] text-slate-500">Prazos e medicações cadastradas</p>
             </div>
           </div>
 
           <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-100 text-purple-800">
-            Análise em Tempo Real
+            Dados do plano
           </span>
         </div>
 
@@ -544,23 +497,11 @@ function ResumoTab({
             <b>{kpis.activeMeds} medicação(ões) ativa(s)</b> no cronograma diário.
           </p>
           <p>
-            💳 <b>Adesão Financeira:</b>{" "}
-            {kpis.pendingInstallments === 0 ? (
-              <span className="text-emerald-700 font-bold">100% quitado / sem pendências.</span>
-            ) : (
-              <span>
-                Possui <b>{kpis.pendingInstallments} parcela(s) pendente(s)</b> ({brl(kpis.pending)}{" "}
-                a receber).
-              </span>
-            )}
-          </p>
-          <p>
             🩺 <b>Próximo Passo Clínico:</b>{" "}
             {kpis.nextReturn ? (
               <span>
-                Retorno marcado para <b>{new Date(kpis.nextReturn).toLocaleDateString("pt-BR")}</b>.
-                Recomenda-se avaliar a adesão medicamentosa e registrar fotos de evolução na aba
-                dedicada.
+                Retorno previsto para <b>{formatClinicalDate(kpis.nextReturn)}</b>. Recomenda-se
+                avaliar a adesão medicamentosa e registrar fotos de evolução na aba dedicada.
               </span>
             ) : (
               <span>
@@ -651,7 +592,14 @@ function MedicacoesTab({
 
   const toggle = async (m: DbRow) => {
     const newStatus = m.status === "ativo" ? "suspenso" : "ativo";
-    await supabase.from("treatment_medications").update({ status: newStatus }).eq("id", m.id);
+    const { error } = await supabase
+      .from("treatment_medications")
+      .update({ status: newStatus })
+      .eq("id", m.id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     toast.success(newStatus === "ativo" ? "Medicação reativada" : "Medicação suspensa");
     reload();
   };
@@ -664,7 +612,14 @@ function MedicacoesTab({
       destructive: true,
     });
     if (!ok) return;
-    await supabase.from("treatment_medications").delete().eq("id", m.id);
+    const { error } = await supabase.from("treatment_medications").delete().eq("id", m.id);
+    if (error) {
+      toast.error(
+        "Não foi possível excluir. Medicações com uso registrado devem ser suspensas: " +
+          error.message,
+      );
+      return;
+    }
     toast.success("Medicação removida");
     reload();
   };
@@ -990,343 +945,8 @@ function NewMedicationModal({
   );
 }
 
-// ============== ABA 3: EVOLUÇÃO & FOTOS (NOVA) ==============
-function EvolucaoTab({
-  evolutions,
-  setEvolutions,
-  photos,
-  setPhotos,
-}: {
-  evolutions: ClinicalEvolution[];
-  setEvolutions: React.Dispatch<React.SetStateAction<ClinicalEvolution[]>>;
-  photos: ComparisonPhoto[];
-  setPhotos: React.Dispatch<React.SetStateAction<ComparisonPhoto[]>>;
-}) {
-  const [newNote, setNewNote] = useState("");
-  const [newParams, setNewParams] = useState("");
-  const [newNextStep, setNewNextStep] = useState("");
-  const [openAddNote, setOpenAddNote] = useState(false);
-
-  const handleAddEvolution = () => {
-    if (!newNote.trim()) return toast.error("Preencha as notas da evolução clínica");
-    const item: ClinicalEvolution = {
-      id: `ev-${Date.now()}`,
-      date: new Date().toLocaleDateString("pt-BR"),
-      doctor_name: "Dr. Responsável",
-      notes: newNote,
-      parameters: newParams || undefined,
-      next_step: newNextStep || undefined,
-    };
-    setEvolutions([item, ...evolutions]);
-    setNewNote("");
-    setNewParams("");
-    setNewNextStep("");
-    setOpenAddNote(false);
-    toast.success("Evolução registrada!");
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* 1. Comparador de Fotos Antes & Depois */}
-      <div className="bg-white rounded-3xl border border-slate-200/90 p-5 md:p-6 shadow-sm space-y-4">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div>
-            <h3 className="text-[16px] font-bold text-slate-900 flex items-center gap-2">
-              <Camera className="text-purple-600" size={18} />
-              Galeria de Evolução & Comparador Antes / Depois
-            </h3>
-            <p className="text-[12.5px] text-slate-500">
-              Acompanhamento fotográfico visual do protocolo.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => toast.info("Upload de nova foto de acompanhamento")}
-            className="h-9 px-3.5 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 text-[12.5px] font-bold inline-flex items-center gap-1.5 transition"
-          >
-            <Camera size={14} /> Adicionar Foto
-          </button>
-        </div>
-
-        {/* Display do Comparador */}
-        {photos.map((p) => (
-          <div key={p.id} className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-            <div className="rounded-2xl border border-slate-200 overflow-hidden bg-slate-50 flex flex-col">
-              <div className="px-3.5 py-2 bg-slate-100 border-b border-slate-200 flex items-center justify-between text-[12px] font-bold text-slate-700">
-                <span>Antes (Início)</span>
-                <span className="text-slate-500">{p.beforeDate}</span>
-              </div>
-              <div className="h-64 overflow-hidden relative">
-                <img src={p.beforeUrl} alt="Antes" className="w-full h-full object-cover" />
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-purple-200 overflow-hidden bg-purple-50/50 flex flex-col">
-              <div className="px-3.5 py-2 bg-purple-100 border-b border-purple-200 flex items-center justify-between text-[12px] font-bold text-purple-900">
-                <span>Depois (Atual / Retorno)</span>
-                <span className="text-purple-700">{p.afterDate}</span>
-              </div>
-              <div className="h-64 overflow-hidden relative">
-                <img src={p.afterUrl} alt="Depois" className="w-full h-full object-cover" />
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* 2. Linha do Tempo de Evoluções Clínicas */}
-      <div className="bg-white rounded-3xl border border-slate-200/90 p-5 md:p-6 shadow-sm space-y-4">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div>
-            <h3 className="text-[16px] font-bold text-slate-900 flex items-center gap-2">
-              <FileText className="text-purple-600" size={18} />
-              Registro de Evoluções e Retornos Clínicos
-            </h3>
-            <p className="text-[12.5px] text-slate-500">
-              Histórico de apontamentos médicos em cada consulta de acompanhamento.
-            </p>
-          </div>
-
-          <button
-            onClick={() => setOpenAddNote(!openAddNote)}
-            className="h-9 px-3.5 rounded-xl bg-[#8B47FF] hover:bg-[#7A3AE6] text-white text-[12.5px] font-bold inline-flex items-center gap-1.5 transition"
-          >
-            <Plus size={14} /> Registrar Nova Evolução
-          </button>
-        </div>
-
-        {/* Formulário inline para nova evolução */}
-        {openAddNote && (
-          <div className="p-4.5 rounded-2xl bg-purple-50/70 border border-purple-200 space-y-3 animate-in fade-in">
-            <h4 className="text-[13.5px] font-bold text-purple-900">Nova Nota de Evolução</h4>
-            <textarea
-              rows={3}
-              value={newNote}
-              onChange={(e) => setNewNote(e.target.value)}
-              placeholder="Descreva as queixas do retorno, melhora dos sintomas, tolerância às medicações..."
-              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-[13px] outline-none focus:border-purple-600"
-            />
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <input
-                value={newParams}
-                onChange={(e) => setNewParams(e.target.value)}
-                placeholder="Parâmetros clínicos (ex: Pressão, Peso, Exames)..."
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[13px] outline-none"
-              />
-              <input
-                value={newNextStep}
-                onChange={(e) => setNewNextStep(e.target.value)}
-                placeholder="Conduta para o próximo retorno..."
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[13px] outline-none"
-              />
-            </div>
-            <div className="flex justify-end gap-2 pt-1">
-              <button
-                onClick={() => setOpenAddNote(false)}
-                className="px-3 py-1.5 rounded-lg text-[12px] font-semibold text-slate-600 hover:bg-slate-200"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleAddEvolution}
-                className="px-4 py-1.5 rounded-lg bg-purple-600 text-white text-[12px] font-bold shadow-xs"
-              >
-                Salvar Evolução
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Lista de notas */}
-        <div className="space-y-3 pt-2">
-          {evolutions.map((ev) => (
-            <div
-              key={ev.id}
-              className="p-4 rounded-2xl border border-slate-200/90 bg-slate-50/60 space-y-2"
-            >
-              <div className="flex items-center justify-between text-[12.5px]">
-                <span className="font-bold text-slate-900">
-                  {ev.doctor_name || "Médico Responsável"}
-                </span>
-                <span className="text-purple-600 font-semibold">{ev.date}</span>
-              </div>
-              <p className="text-[13px] text-slate-700 leading-relaxed">{ev.notes}</p>
-              {ev.parameters && (
-                <div className="text-[12px] font-medium text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-lg inline-block">
-                  📊 {ev.parameters}
-                </div>
-              )}
-              {ev.next_step && (
-                <div className="text-[12px] text-slate-600 italic">
-                  👉 Próxima etapa: {ev.next_step}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ============== ABA 4: FINANCEIRO ==============
-function FinanceiroTab({
-  treatment,
-  installments,
-  reload,
-}: {
-  treatment: Json;
-  installments: DbRow[];
-  reload: () => void;
-}) {
-  const [regen, setRegen] = useState(false);
-  const paid = installments
-    .filter((p) => p.status === "pago")
-    .reduce((s, p) => s + Number(p.amount), 0);
-  const pending = installments
-    .filter((p) => ["pendente", "atrasado"].includes(p.status))
-    .reduce((s, p) => s + Number(p.amount), 0);
-
-  const markPaid = async (row: DbRow) => {
-    const { error } = await supabase
-      .from("treatment_installments")
-      .update({
-        status: "pago",
-        paid_date: new Date().toISOString().slice(0, 10),
-      })
-      .eq("id", row.id);
-    if (error) return toast.error("Erro ao registrar pagamento");
-    toast.success("Parcela registrada como PAGA!");
-    reload();
-  };
-
-  const regenerate = async () => {
-    setRegen(true);
-    const { error } = await supabase.rpc("generate_treatment_installments", {
-      p_treatment_id: treatment.id,
-    });
-    setRegen(false);
-    if (error) return toast.error("Erro ao gerar parcelas");
-    toast.success("Parcelas geradas com sucesso!");
-    reload();
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[
-          { label: "Valor total", value: brl(Number(treatment.total_value)), color: "#111827" },
-          { label: "Entrada", value: brl(Number(treatment.down_payment)), color: "#0EA5E9" },
-          { label: "Total recebido", value: brl(paid), color: "#059669" },
-          { label: "Saldo pendente", value: brl(pending), color: "#EF4444" },
-        ].map((c) => (
-          <div
-            key={c.label}
-            className="bg-white rounded-2xl border border-slate-200/80 p-4.5 shadow-sm"
-          >
-            <div className="text-[11.5px] font-bold uppercase tracking-wider text-slate-400">
-              {c.label}
-            </div>
-            <div className="text-[20px] font-bold mt-1.5" style={{ color: c.color }}>
-              {c.value}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-sm">
-        <div className="flex items-center justify-between px-6 py-4.5 border-b border-slate-100">
-          <div>
-            <div className="text-[15px] font-bold text-[#0F172A]">Parcelas do Protocolo</div>
-            <div className="text-[12px] text-slate-500 mt-0.5">
-              Gestão de cobrança e recebimento vinculada ao tratamento.
-            </div>
-          </div>
-          {installments.length === 0 && (
-            <button
-              onClick={regenerate}
-              disabled={regen}
-              className="h-9 px-4 rounded-xl bg-[#8B47FF] text-white text-[12.5px] font-bold shadow-xs disabled:opacity-50"
-            >
-              {regen ? "Gerando…" : "Gerar parcelas"}
-            </button>
-          )}
-        </div>
-
-        {installments.length === 0 ? (
-          <div className="p-12 text-center text-[13px] text-slate-500 font-medium">
-            Nenhuma parcela gerada ainda. Clique em "Gerar parcelas" acima.
-          </div>
-        ) : (
-          <table className="w-full text-[13px]">
-            <thead className="bg-slate-50 text-slate-500 text-left">
-              <tr>
-                <th className="px-5 py-3 font-semibold">#</th>
-                <th className="px-5 py-3 font-semibold">Vencimento</th>
-                <th className="px-5 py-3 font-semibold">Valor</th>
-                <th className="px-5 py-3 font-semibold">Data do Pagamento</th>
-                <th className="px-5 py-3 font-semibold">Situação</th>
-                <th className="text-right px-5 py-3 font-semibold">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {installments.map((row) => {
-                const overdue = row.status === "pendente" && new Date(row.due_date) < new Date();
-                const st = INSTALLMENT_BADGE[overdue ? "atrasado" : row.status];
-                const dias =
-                  row.status === "pendente" && overdue ? daysBetween(row.due_date, new Date()) : 0;
-                return (
-                  <tr
-                    key={row.id}
-                    className="border-t border-slate-100 hover:bg-slate-50/60 transition"
-                  >
-                    <td className="px-5 py-3 font-bold text-slate-800">{row.number}ª</td>
-                    <td className="px-5 py-3 text-slate-700">
-                      {new Date(row.due_date).toLocaleDateString("pt-BR")}
-                    </td>
-                    <td className="px-5 py-3 font-bold text-slate-900">
-                      {brl(Number(row.amount))}
-                    </td>
-                    <td className="px-5 py-3 text-slate-500">
-                      {row.paid_date ? new Date(row.paid_date).toLocaleDateString("pt-BR") : "—"}
-                    </td>
-                    <td className="px-5 py-3">
-                      <span
-                        className="text-[11px] font-bold px-2.5 py-0.5 rounded-full"
-                        style={{ background: st.bg, color: st.fg }}
-                      >
-                        {st.label}
-                      </span>
-                      {dias > 0 && (
-                        <span className="text-[11px] font-bold text-rose-600 ml-2">
-                          {dias}d de atraso
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      {row.status !== "pago" && row.status !== "cancelado" && (
-                        <button
-                          onClick={() => markPaid(row)}
-                          className="h-8 px-3 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-[12px] font-bold transition cursor-pointer"
-                        >
-                          Baixar Parcela
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  );
-}
-
 const inp =
-  "w-full h-10 px-3 rounded-xl bg-slate-50 border border-slate-200 focus:border-[#8B47FF] focus:bg-white outline-none text-[13px] text-slate-800 transition";
+  "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:border-purple-500";
 
 function Lbl({ children }: { children: React.ReactNode }) {
   return <label className="text-[12px] font-bold text-slate-700 block mb-1.5">{children}</label>;

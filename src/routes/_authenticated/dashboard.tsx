@@ -1,3 +1,5 @@
+import { getFinancialReportingRows } from "@/features/finance/finance-api";
+import { errorMessage } from "@/features/acompanhamentos/followup-utils";
 import type { DbRow, Json, IconType } from "@/lib/types";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -20,7 +22,7 @@ import AppShell from "@/components/AppShell";
 import { RevealGroup, RevealItem } from "@/components/motion/Reveal";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { financeService, patientsService, companyService, agendaService } from "@/services/api";
+import { patientsService, companyService, agendaService } from "@/services/api";
 import { StatNumber } from "@/components/ds";
 import { Chart, CHART_COLORS } from "@/components/ds/Chart";
 import type { ApexOptions } from "apexcharts";
@@ -224,33 +226,7 @@ function DashboardPage() {
 
   const txQ = useQuery({
     queryKey: ["dashboard", "transactions"],
-    placeholderData: (prev) => prev,
-    queryFn: async () => {
-      try {
-        const phpTx = await financeService.getTransactions({ limit: 500 });
-        if (phpTx && Array.isArray(phpTx)) {
-          return phpTx.map((r: any) => ({
-            id: r.id,
-            type: r.type === "receita" ? "income" : r.type === "despesa" ? "expense" : r.type,
-            amount: Number(r.amount || 0),
-            date: String(r.date || ""),
-            status: r.status,
-            due_date: r.due_date ?? null,
-          })) as DashboardTx[];
-        }
-      } catch {}
-      const { data } = await supabase
-        .from("transactions")
-        .select("id,type,amount,date,status,due_date");
-      return ((data ?? []) as DbRow[]).map((r) => ({
-        id: r.id,
-        type: r.type === "receita" ? "income" : r.type === "despesa" ? "expense" : r.type,
-        amount: Number(r.amount || 0),
-        date: String(r.date || ""),
-        status: r.status,
-        due_date: r.due_date ?? null,
-      })) as DashboardTx[];
-    },
+    queryFn: getFinancialReportingRows,
     staleTime: 5 * 60_000,
     gcTime: 30 * 60_000,
     refetchOnWindowFocus: false,
@@ -275,7 +251,7 @@ function DashboardPage() {
   });
   const appts = apptsQ.data ?? [];
   const patients = patientsQ.data ?? [];
-  const tx = txQ.data ?? [];
+  const tx: DashboardTx[] = txQ.data ?? [];
   const doctors = doctorsQ.data ?? [];
   const loading = apptsQ.isLoading || patientsQ.isLoading || txQ.isLoading || doctorsQ.isLoading;
 
@@ -338,9 +314,7 @@ function DashboardPage() {
       const total = tx
         .filter(
           (t) =>
-            t.date === iso &&
-            (t.type === "income" || t.type === "receita") &&
-            t.status !== "cancelado",
+            t.date === iso && (t.type === "income" || t.type === "receita") && t.status === "pago",
         )
         .reduce((s, r) => s + Number(r.amount), 0);
       return {
@@ -463,10 +437,10 @@ function DashboardPage() {
   // Relatórios — categorias financeiras
   const perCategory = useMemo(() => {
     const entradas = txInRange
-      .filter((t) => (t.type === "income" || t.type === "receita") && t.status !== "cancelado")
+      .filter((t) => (t.type === "income" || t.type === "receita") && t.status === "pago")
       .reduce((s, r) => s + Number(r.amount), 0);
     const saidas = txInRange
-      .filter((t) => (t.type === "expense" || t.type === "despesa") && t.status !== "cancelado")
+      .filter((t) => (t.type === "expense" || t.type === "despesa") && t.status === "pago")
       .reduce((s, r) => s + Number(r.amount), 0);
     return [
       { name: "Entradas", value: Math.round(entradas) },
@@ -539,306 +513,319 @@ function DashboardPage() {
     <AppShell>
       <RevealGroup className="max-w-7xl mx-auto p-6 space-y-6 pb-16" stagger={0.08} delay={0.05}>
         {/* Fluxo de caixa + Filtros/Balanço */}
-        <RevealItem>
-          <section className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
-            <div
-              className="bg-white"
-              style={{
-                borderRadius: 18,
-                padding: 20,
-                border: "1px solid #EEF2F6",
-                boxShadow: "0 10px 35px rgba(15,23,42,.06)",
-              }}
-            >
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <h2
-                    style={{
-                      fontFamily: "Inter, sans-serif",
-                      fontSize: 19,
-                      fontWeight: 700,
-                      color: "#101828",
-                      letterSpacing: "-0.01em",
-                    }}
-                  >
-                    Fluxo de Caixa
-                  </h2>
-                  <button
-                    type="button"
-                    title="Entradas e saídas ao longo do período selecionado."
-                    className="group inline-flex items-center justify-center h-6 w-6 rounded-full transition-colors"
-                  >
-                    <CircleHelp
-                      size={16}
-                      className="text-[#98A2B3] group-hover:text-[#6941C6] transition-colors"
-                    />
-                  </button>
-                </div>
-                <div className="flex gap-1" style={{ fontFamily: "Inter, sans-serif" }}>
-                  {(["day", "week", "month", "year"] as const).map((p) => {
-                    const active = period === p;
-                    return (
-                      <button
-                        key={p}
-                        onClick={() => setPeriod(p)}
-                        className="relative px-3 pb-2 pt-1 transition-colors duration-[250ms]"
-                        style={{
-                          fontSize: 14,
-                          fontWeight: active ? 600 : 500,
-                          color: active ? "#7C3AED" : "#98A2B3",
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!active)
-                            (e.currentTarget as HTMLButtonElement).style.color = "#6941C6";
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!active)
-                            (e.currentTarget as HTMLButtonElement).style.color = "#98A2B3";
-                        }}
-                      >
-                        {p === "day"
-                          ? "Diária"
-                          : p === "week"
-                            ? "Semanal"
-                            : p === "month"
-                              ? "Mensal"
-                              : "Anual"}
-                        <span
-                          className="absolute left-2 right-2 bottom-0 transition-all duration-[250ms]"
-                          style={{
-                            height: 3,
-                            borderRadius: 2,
-                            background: "#7C3AED",
-                            opacity: active ? 1 : 0,
-                            transform: active ? "scaleX(1)" : "scaleX(0.4)",
-                          }}
-                        />
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="h-[270px] animate-fade-in" key={period}>
-                {loading ? (
-                  <Skeleton />
-                ) : (
-                  <ReactApexChart
-                    key={`${period}-${cashflow.map((d) => d.date).join()}`}
-                    type="line"
-                    height={270}
-                    series={
-                      cashflow.length > 0
-                        ? [
-                            {
-                              name: "Saídas",
-                              type: "column",
-                              data: cashflow.map((d) => -Math.abs(d.saidas)),
-                            },
-                            {
-                              name: "Entradas",
-                              type: "column",
-                              data: cashflow.map((d) => d.entradas),
-                            },
-                            {
-                              name: "Saldo",
-                              type: "line",
-                              data: cashflow.map((d) => d.saldo),
-                            },
-                          ]
-                        : [
-                            { name: "Saídas", type: "column", data: [] },
-                            { name: "Entradas", type: "column", data: [] },
-                            { name: "Saldo", type: "line", data: [] },
-                          ]
-                    }
-                    options={{
-                      chart: {
-                        id: "cashflow",
-                        type: "line",
-                        stacked: true,
-                        toolbar: { show: false },
-                        zoom: { enabled: false },
-                        animations: { enabled: true, easing: "easeinout", speed: 700 },
-                        fontFamily: "Inter, sans-serif",
-                      },
-                      colors: ["#FF355B", "#22C55E", "#2F7DF6"],
-                      stroke: {
-                        width: [0, 0, 3],
-                        curve: "straight",
-                        dashArray: [0, 0, 0],
-                      },
-                      markers: {
-                        size: [0, 0, 6],
-                        strokeWidth: 2,
-                        strokeColors: ["#2f7df6"],
-                        colors: ["#ffffff"],
-                        hover: { size: 8 },
-                      },
-                      plotOptions: {
-                        bar: {
-                          columnWidth: "45%",
-                          borderRadius: 3,
-                          borderRadiusApplication: "around",
-                        },
-                      },
-                      dataLabels: { enabled: false },
-                      grid: {
-                        borderColor: "#E9EDF5",
-                        strokeDashArray: 0,
-                        padding: { left: 15, right: 10 },
-                      },
-                      xaxis: {
-                        categories: cashflow.map((d) => d.label),
-                        axisBorder: { show: false },
-                        axisTicks: { show: false },
-                        labels: {
-                          style: { fontSize: "12px", colors: "#667085" },
-                          offsetY: 6,
-                        },
-                      },
-                      yaxis: {
-                        min: yaxisMin,
-                        max: yaxisMax,
-                        tickAmount: yaxisTickAmount,
-                        labels: {
-                          style: { fontSize: "11px", fontWeight: 500, colors: "#475467" },
-                          offsetX: -12,
-                          formatter: (v: number) => {
-                            if (v <= -1500) return "-R$ 2k";
-                            if (v <= -400) return "-R$ 1k";
-                            if (v <= 600) return "-R$ 100";
-                            if (v <= 1800) return "R$ 1k";
-                            if (v <= 3000) return "R$ 2.5k";
-                            return "R$ 4k";
-                          },
-                        },
-                      },
-                      legend: { show: false },
-                      tooltip: {
-                        shared: true,
-                        intersect: false,
-                        y: {
-                          formatter: (value: number) => BRL(Math.abs(value)),
-                        },
-                      },
-                    }}
-                  />
-                )}
-              </div>
+        {txQ.error ? (
+          <div role="alert" className="rounded-xl bg-red-50 p-4 text-red-700">
+            Financeiro indisponível: {errorMessage(txQ.error)}
+            <p>Indicadores financeiros ocultos; demais áreas permanecem disponíveis.</p>
+            <button onClick={() => txQ.refetch()} className="underline">
+              Tentar novamente
+            </button>
+          </div>
+        ) : (
+          <RevealItem>
+            <section className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
               <div
-                className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 mt-6 pt-4 border-t"
+                className="bg-white"
                 style={{
-                  borderColor: "#F2F4F7",
-                  fontFamily: "Inter, sans-serif",
-                  fontSize: 12,
-                  fontWeight: 500,
-                  color: "#475467",
+                  borderRadius: 18,
+                  padding: 20,
+                  border: "1px solid #EEF2F6",
+                  boxShadow: "0 10px 35px rgba(15,23,42,.06)",
                 }}
               >
-                <LegendDot color="#22C55E" label="Entradas" />
-                <LegendDot color="#FF355B" label="Saídas" />
-                <LegendDot color="#2F7DF6" label="Saldo" line />
-              </div>
-            </div>
-
-            <div className="flex flex-col h-full space-y-5">
-              <div>
-                <SectionTitle>Filtros</SectionTitle>
-                <Card className="mt-3">
-                  <div className="text-[14px] text-[#6B7280] mb-1">Período</div>
-                  <PeriodPicker
-                    range={range}
-                    onChange={(r, p) => {
-                      setRange(r);
-                      if (p) setPeriod(p);
-                    }}
-                    onShift={(dir) => setRange(shiftRange(period, rangeStart, rangeEnd, dir))}
-                    label={rangeLabel}
-                  />
-                </Card>
-              </div>
-
-              <div className="flex-1 flex flex-col">
-                <div className="flex items-center gap-2">
-                  <SectionTitle>Balanço</SectionTitle>
-                  <CircleHelp size={13} className="text-[#9CA3AF]" />
-                </div>
-                <Card className="mt-3 flex-1 flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-start justify-between">
-                      <div className="flex flex-col space-y-1">
-                        <div
-                          className={`text-[26px] font-bold tabular-nums ${balance.saldo < 0 ? "text-[#FF355B]" : "text-[#22C55E]"}`}
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <h2
+                      style={{
+                        fontFamily: "Inter, sans-serif",
+                        fontSize: 19,
+                        fontWeight: 700,
+                        color: "#101828",
+                        letterSpacing: "-0.01em",
+                      }}
+                    >
+                      Fluxo de Caixa
+                    </h2>
+                    <button
+                      type="button"
+                      title="Entradas e saídas ao longo do período selecionado."
+                      className="group inline-flex items-center justify-center h-6 w-6 rounded-full transition-colors"
+                    >
+                      <CircleHelp
+                        size={16}
+                        className="text-[#98A2B3] group-hover:text-[#6941C6] transition-colors"
+                      />
+                    </button>
+                  </div>
+                  <div className="flex gap-1" style={{ fontFamily: "Inter, sans-serif" }}>
+                    {(["day", "week", "month", "year"] as const).map((p) => {
+                      const active = period === p;
+                      return (
+                        <button
+                          key={p}
+                          onClick={() => setPeriod(p)}
+                          className="relative px-3 pb-2 pt-1 transition-colors duration-[250ms]"
+                          style={{
+                            fontSize: 14,
+                            fontWeight: active ? 600 : 500,
+                            color: active ? "#7C3AED" : "#98A2B3",
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!active)
+                              (e.currentTarget as HTMLButtonElement).style.color = "#6941C6";
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!active)
+                              (e.currentTarget as HTMLButtonElement).style.color = "#98A2B3";
+                          }}
                         >
-                          {showBalance ? (
-                            <StatNumber value={balance.saldo} format={BRL} />
-                          ) : (
-                            "R$ ••••••"
-                          )}
-                        </div>
-                        <div className="text-[12px] text-[#6B7280]">
-                          de{" "}
+                          {p === "day"
+                            ? "Diária"
+                            : p === "week"
+                              ? "Semanal"
+                              : p === "month"
+                                ? "Mensal"
+                                : "Anual"}
                           <span
-                            className={`font-semibold ${balance.saldoPrev < 0 ? "text-[#FF355B]" : "text-[#22C55E]"}`}
+                            className="absolute left-2 right-2 bottom-0 transition-all duration-[250ms]"
+                            style={{
+                              height: 3,
+                              borderRadius: 2,
+                              background: "#7C3AED",
+                              opacity: active ? 1 : 0,
+                              transform: active ? "scaleX(1)" : "scaleX(0.4)",
+                            }}
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="h-[270px] animate-fade-in" key={period}>
+                  {loading ? (
+                    <Skeleton />
+                  ) : (
+                    <ReactApexChart
+                      key={`${period}-${cashflow.map((d) => d.date).join()}`}
+                      type="line"
+                      height={270}
+                      series={
+                        cashflow.length > 0
+                          ? [
+                              {
+                                name: "Saídas",
+                                type: "column",
+                                data: cashflow.map((d) => -Math.abs(d.saidas)),
+                              },
+                              {
+                                name: "Entradas",
+                                type: "column",
+                                data: cashflow.map((d) => d.entradas),
+                              },
+                              {
+                                name: "Resultado de caixa",
+                                type: "line",
+                                data: cashflow.map((d) => d.saldo),
+                              },
+                            ]
+                          : [
+                              { name: "Saídas", type: "column", data: [] },
+                              { name: "Entradas", type: "column", data: [] },
+                              { name: "Saldo", type: "line", data: [] },
+                            ]
+                      }
+                      options={{
+                        chart: {
+                          id: "cashflow",
+                          type: "line",
+                          stacked: true,
+                          toolbar: { show: false },
+                          zoom: { enabled: false },
+                          animations: { enabled: true, easing: "easeinout", speed: 700 },
+                          fontFamily: "Inter, sans-serif",
+                        },
+                        colors: ["#FF355B", "#22C55E", "#2F7DF6"],
+                        stroke: {
+                          width: [0, 0, 3],
+                          curve: "straight",
+                          dashArray: [0, 0, 0],
+                        },
+                        markers: {
+                          size: [0, 0, 6],
+                          strokeWidth: 2,
+                          strokeColors: ["#2f7df6"],
+                          colors: ["#ffffff"],
+                          hover: { size: 8 },
+                        },
+                        plotOptions: {
+                          bar: {
+                            columnWidth: "45%",
+                            borderRadius: 3,
+                            borderRadiusApplication: "around",
+                          },
+                        },
+                        dataLabels: { enabled: false },
+                        grid: {
+                          borderColor: "#E9EDF5",
+                          strokeDashArray: 0,
+                          padding: { left: 15, right: 10 },
+                        },
+                        xaxis: {
+                          categories: cashflow.map((d) => d.label),
+                          axisBorder: { show: false },
+                          axisTicks: { show: false },
+                          labels: {
+                            style: { fontSize: "12px", colors: "#667085" },
+                            offsetY: 6,
+                          },
+                        },
+                        yaxis: {
+                          min: yaxisMin,
+                          max: yaxisMax,
+                          tickAmount: yaxisTickAmount,
+                          labels: {
+                            style: { fontSize: "11px", fontWeight: 500, colors: "#475467" },
+                            offsetX: -12,
+                            formatter: (v: number) => {
+                              if (v <= -1500) return "-R$ 2k";
+                              if (v <= -400) return "-R$ 1k";
+                              if (v <= 600) return "-R$ 100";
+                              if (v <= 1800) return "R$ 1k";
+                              if (v <= 3000) return "R$ 2.5k";
+                              return "R$ 4k";
+                            },
+                          },
+                        },
+                        legend: { show: false },
+                        tooltip: {
+                          shared: true,
+                          intersect: false,
+                          y: {
+                            formatter: (value: number) => BRL(Math.abs(value)),
+                          },
+                        },
+                      }}
+                    />
+                  )}
+                </div>
+                <div
+                  className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 mt-6 pt-4 border-t"
+                  style={{
+                    borderColor: "#F2F4F7",
+                    fontFamily: "Inter, sans-serif",
+                    fontSize: 12,
+                    fontWeight: 500,
+                    color: "#475467",
+                  }}
+                >
+                  <LegendDot color="#22C55E" label="Entradas" />
+                  <LegendDot color="#FF355B" label="Saídas" />
+                  <LegendDot color="#2F7DF6" label="Resultado de caixa" line />
+                </div>
+              </div>
+
+              <div className="flex flex-col h-full space-y-5">
+                <div>
+                  <SectionTitle>Filtros</SectionTitle>
+                  <Card className="mt-3">
+                    <div className="text-[14px] text-[#6B7280] mb-1">Período</div>
+                    <PeriodPicker
+                      range={range}
+                      onChange={(r, p) => {
+                        setRange(r);
+                        if (p) setPeriod(p);
+                      }}
+                      onShift={(dir) => setRange(shiftRange(period, rangeStart, rangeEnd, dir))}
+                      label={rangeLabel}
+                    />
+                  </Card>
+                </div>
+
+                <div className="flex-1 flex flex-col">
+                  <div className="flex items-center gap-2">
+                    <SectionTitle>Resultado de caixa</SectionTitle>
+                    <CircleHelp size={13} className="text-[#9CA3AF]" />
+                  </div>
+                  <Card className="mt-3 flex-1 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-start justify-between">
+                        <div className="flex flex-col space-y-1">
+                          <div
+                            className={`text-[26px] font-bold tabular-nums ${balance.saldo < 0 ? "text-[#FF355B]" : "text-[#22C55E]"}`}
                           >
-                            {showBalance ? BRL(balance.saldoPrev) : "R$ ••••••"}
+                            {showBalance ? (
+                              <StatNumber value={balance.saldo} format={BRL} />
+                            ) : (
+                              "R$ ••••••"
+                            )}
+                          </div>
+                          <div className="text-[12px] text-[#6B7280]">
+                            de{" "}
+                            <span
+                              className={`font-semibold ${balance.saldoPrev < 0 ? "text-[#FF355B]" : "text-[#22C55E]"}`}
+                            >
+                              {showBalance ? BRL(balance.saldoPrev) : "R$ ••••••"}
+                            </span>{" "}
+                            previstos
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setShowBalance((v) => !v)}
+                          className="text-[#8B47FF]"
+                        >
+                          <Eye size={16} />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mt-auto pt-4 border-t border-dashed border-[#F3F4F6]">
+                      <div className="flex flex-col space-y-1">
+                        <div className="text-[14px] text-[#6B7280] font-semibold">Entradas:</div>
+                        <div className="text-[18px] font-bold text-[#22C55E] flex items-center gap-1.5 tabular-nums">
+                          {showBalance ? (
+                            <StatNumber value={balance.entradas} format={BRL} />
+                          ) : (
+                            "R$ ••••"
+                          )}
+                          <Link to="/financeiro" className="text-[#8B47FF]">
+                            <ExternalLink size={12} />
+                          </Link>
+                        </div>
+                        <div className="text-[11px] text-[#6B7280]">
+                          de{" "}
+                          <span className="font-semibold text-[#6B7280]">
+                            {showBalance ? BRL(balance.entradasPrev) : "R$ ••••"}
                           </span>{" "}
-                          previstos
+                          previsto
                         </div>
                       </div>
-                      <button onClick={() => setShowBalance((v) => !v)} className="text-[#8B47FF]">
-                        <Eye size={16} />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 mt-auto pt-4 border-t border-dashed border-[#F3F4F6]">
-                    <div className="flex flex-col space-y-1">
-                      <div className="text-[14px] text-[#6B7280] font-semibold">Entradas:</div>
-                      <div className="text-[18px] font-bold text-[#22C55E] flex items-center gap-1.5 tabular-nums">
-                        {showBalance ? (
-                          <StatNumber value={balance.entradas} format={BRL} />
-                        ) : (
-                          "R$ ••••"
-                        )}
-                        <Link to="/financeiro" className="text-[#8B47FF]">
-                          <ExternalLink size={12} />
-                        </Link>
-                      </div>
-                      <div className="text-[11px] text-[#6B7280]">
-                        de{" "}
-                        <span className="font-semibold text-[#6B7280]">
-                          {showBalance ? BRL(balance.entradasPrev) : "R$ ••••"}
-                        </span>{" "}
-                        previsto
+                      <div className="flex flex-col space-y-1">
+                        <div className="text-[14px] text-[#6B7280] font-semibold">Saídas:</div>
+                        <div className="text-[18px] font-bold text-[#FF355B] flex items-center gap-1.5 tabular-nums">
+                          {showBalance ? (
+                            <StatNumber value={balance.saidas} format={(v) => `-${BRL(v)}`} />
+                          ) : (
+                            "R$ ••••"
+                          )}
+                          <Link to="/financeiro" className="text-[#8B47FF]">
+                            <ExternalLink size={12} />
+                          </Link>
+                        </div>
+                        <div className="text-[11px] text-[#6B7280]">
+                          de{" "}
+                          <span className="font-semibold text-[#6B7280]">
+                            {showBalance ? `-${BRL(balance.saidasPrev)}` : "R$ ••••"}
+                          </span>{" "}
+                          previsto
+                        </div>
                       </div>
                     </div>
-                    <div className="flex flex-col space-y-1">
-                      <div className="text-[14px] text-[#6B7280] font-semibold">Saídas:</div>
-                      <div className="text-[18px] font-bold text-[#FF355B] flex items-center gap-1.5 tabular-nums">
-                        {showBalance ? (
-                          <StatNumber value={balance.saidas} format={(v) => `-${BRL(v)}`} />
-                        ) : (
-                          "R$ ••••"
-                        )}
-                        <Link to="/financeiro" className="text-[#8B47FF]">
-                          <ExternalLink size={12} />
-                        </Link>
-                      </div>
-                      <div className="text-[11px] text-[#6B7280]">
-                        de{" "}
-                        <span className="font-semibold text-[#6B7280]">
-                          {showBalance ? `-${BRL(balance.saidasPrev)}` : "R$ ••••"}
-                        </span>{" "}
-                        previsto
-                      </div>
-                    </div>
-                  </div>
-                </Card>
+                  </Card>
+                </div>
               </div>
-            </div>
-          </section>
-        </RevealItem>
+            </section>
+          </RevealItem>
+        )}
 
         {/* Agendamentos das próximas 24h + Faturamento comparado */}
         <RevealItem>
@@ -887,9 +874,13 @@ function DashboardPage() {
             </Card>
 
             <Card>
-              <TitleRow title="Faturamento comparado" />
+              <TitleRow title="Recebimentos no período" />
               <div className="h-[240px]">
-                <ApexRevenueDaily data={revenueDaily} />
+                {txQ.error ? (
+                  <p>Recebimentos indisponíveis.</p>
+                ) : (
+                  <ApexRevenueDaily data={revenueDaily} />
+                )}
               </div>
             </Card>
           </section>
@@ -994,7 +985,9 @@ function DashboardPage() {
                   </div>
                   <TitleRow title={currentReport.title} />
                   <div className="h-[240px] mt-2">
-                    {currentReport.data.length === 0 ? (
+                    {reportTab === "cat" && txQ.error ? (
+                      <p>Dados financeiros indisponíveis.</p>
+                    ) : currentReport.data.length === 0 ? (
                       <EmptyBlock small title="Sem dados" subtitle={currentReport.empty} />
                     ) : (
                       <ApexBar
