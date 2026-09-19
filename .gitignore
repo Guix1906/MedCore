@@ -46,3 +46,4 @@ backend/storage/**
 backend/database/*.sqlite*
 backend/public/database/
 
+.env*
