@@ -34,6 +34,10 @@ import {
   ExternalLink,
   History,
   Copy,
+  Search,
+  Filter,
+  RefreshCw,
+  PlusCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { prontuarioService } from "@/services/api";
@@ -42,6 +46,10 @@ import {
   type AiSectionContext,
 } from "@/components/prontuario/AiRecordAssistantModal";
 import type { StructuredConsultationResult } from "@/lib/gemini";
+import {
+  usePatientClinicalHistory,
+  type ClinicalHistoryItem,
+} from "@/hooks/usePatientClinicalHistory";
 
 export type PatientProfileData = {
   id?: string;
@@ -114,6 +122,8 @@ export function PatientFullProfileView({
   // Estado do Prontuário Clínico & Anamnese Unificada
   const [anamnese, setAnamnese] = useState("");
   const [isSavingRecord, setIsSavingRecord] = useState(false);
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyFilter, setHistoryFilter] = useState<"todos" | "prontuario" | "consulta" | "evolucao">("todos");
 
   // Estado do Assistente IA
   const [aiModalOpen, setAiModalOpen] = useState(false);
@@ -150,101 +160,59 @@ export function PatientFullProfileView({
     };
   }, [patient, isExample]);
 
-  // Carrega histórico de atendimentos e prontuários deste paciente específico no Supabase + LocalStorage fallback
+  // Carrega histórico completo de atendimentos, prontuários e consultas deste paciente específico
   const {
-    data: records = [],
-    isLoading: loadingRecords,
-    refetch: refreshRecords,
-  } = useQuery({
-    queryKey: ["patient-medical-records", data.id, data.name],
-    staleTime: 0,
-    gcTime: 30 * 60_000,
-    queryFn: async () => {
-      let dbRecs: any[] = [];
-      if (data.id && !isExample) {
-        try {
-          const { data: recs, error } = await supabase
-            .from("medical_records")
-            .select("*")
-            .eq("patient_id", data.id)
-            .order("created_at", { ascending: false });
-          if (!error && recs) {
-            dbRecs = recs;
-          }
-        } catch (e) {
-          console.warn("Aviso ao buscar medical_records do banco:", e);
-        }
+    data: clinicalHistory = [],
+    isLoading: loadingHistory,
+    refetch: refreshHistory,
+  } = usePatientClinicalHistory(data.id, data.name);
+
+  const prontuariosCount = useMemo(
+    () => clinicalHistory.filter((i) => i.kind === "prontuario").length,
+    [clinicalHistory],
+  );
+  const consultasCount = useMemo(
+    () => clinicalHistory.filter((i) => i.kind === "consulta").length,
+    [clinicalHistory],
+  );
+  const evolucoesCount = useMemo(
+    () => clinicalHistory.filter((i) => i.kind === "evolucao").length,
+    [clinicalHistory],
+  );
+
+  const filteredHistory = useMemo(() => {
+    return clinicalHistory.filter((item) => {
+      if (historyFilter !== "todos" && item.kind !== historyFilter) return false;
+      if (historySearch.trim()) {
+        const q = historySearch.toLowerCase();
+        const matchTitle = item.title.toLowerCase().includes(q);
+        const matchDoc = (item.doctorName || "").toLowerCase().includes(q);
+        const matchComplaint = (item.complaint || "").toLowerCase().includes(q);
+        const matchConduct = (item.conduct || "").toLowerCase().includes(q);
+        const matchDiag = (item.diagnosis || "").toLowerCase().includes(q);
+        const matchStatus = (item.status || "").toLowerCase().includes(q);
+        return matchTitle || matchDoc || matchComplaint || matchConduct || matchDiag || matchStatus;
       }
+      return true;
+    });
+  }, [clinicalHistory, historyFilter, historySearch]);
 
-      // Lê histórico local
-      let localRecs: any[] = [];
-      try {
-        const storedHistory =
-          (data.id && localStorage.getItem("medcore_prontuario_history_" + data.id)) ||
-          (data.name && localStorage.getItem("medcore_prontuario_history_" + data.name));
-        if (storedHistory) {
-          localRecs = JSON.parse(storedHistory);
-        }
-      } catch {}
-
-      // Mescla e desduplica por id/created_at
-      const all = [...dbRecs];
-      for (const l of localRecs) {
-        if (!all.some((r) => r.id === l.id || (r.created_at && r.created_at === l.created_at))) {
-          all.push(l);
-        }
-      }
-
-      // Se ainda estiver vazio, tenta carregar o último snapshot local
-      if (all.length === 0) {
-        try {
-          const lastSnapshot =
-            (data.id && localStorage.getItem("medcore_prontuario_" + data.id)) ||
-            (data.name && localStorage.getItem("medcore_prontuario_" + data.name));
-          if (lastSnapshot) {
-            const parsed = JSON.parse(lastSnapshot);
-            all.push({
-              id: "local-" + Date.now(),
-              ...parsed,
-              created_at: parsed.created_at || new Date().toISOString(),
-            });
-          }
-        } catch {}
-      }
-
-      all.sort(
-        (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime(),
-      );
-      return all;
-    },
-  });
-
-  // Preenche automaticamente com o último prontuário/evolução salvo
-  useEffect(() => {
-    let latest = records.length > 0 ? records[0] : null;
-    if (!latest) {
-      try {
-        const local =
-          (data.id && localStorage.getItem("medcore_prontuario_" + data.id)) ||
-          (data.name && localStorage.getItem("medcore_prontuario_" + data.name));
-        if (local) latest = JSON.parse(local);
-      } catch {}
-    }
-
-    if (latest && latest.complaint) {
-      setAnamnese(latest.complaint);
-    } else {
-      setAnamnese("");
-    }
-  }, [records, data.id, data.name]);
+  const lastClinicalRecord = useMemo(() => {
+    return clinicalHistory.find((i) => i.kind === "prontuario" && Boolean(i.complaint));
+  }, [clinicalHistory]);
 
   const handleSaveProntuario = async () => {
+    if (!anamnese.trim()) {
+      toast.error("Por favor, preencha as anotações do atendimento antes de salvar.");
+      return;
+    }
+
     setIsSavingRecord(true);
     const newRecord = {
       id: crypto.randomUUID(),
       patient_id: data.id || null,
       patient_name: data.name,
-      complaint: anamnese || null,
+      complaint: anamnese.trim(),
       created_at: new Date().toISOString(),
       finished_at: new Date().toISOString(),
     };
@@ -273,7 +241,7 @@ export function PatientFullProfileView({
       try {
         await supabase.from("medical_records").insert({
           patient_id: data.id,
-          complaint: anamnese || null,
+          complaint: anamnese.trim(),
           finished_at: new Date().toISOString(),
         });
       } catch (err: any) {
@@ -286,16 +254,18 @@ export function PatientFullProfileView({
       prontuarioService
         .createRecord({
           patient_id: data.id,
-          complaint: anamnese || null,
+          complaint: anamnese.trim(),
           finished_at: new Date().toISOString(),
         })
         .catch(() => {});
     }
 
-    toast.success("Prontuário salvo com sucesso!", {
-      description: `Prontuário clínico de ${data.name} gravado.`,
+    toast.success("Atendimento salvo com sucesso!", {
+      description: `Prontuário clínico gravado no histórico de ${data.name}.`,
     });
-    refreshRecords();
+    setAnamnese(""); // Reseta o editor para a próxima consulta começar limpa!
+    refreshHistory();
+    queryClient.invalidateQueries({ queryKey: ["patient-clinical-history"] });
     queryClient.invalidateQueries({ queryKey: ["patient-medical-records"] });
     setIsSavingRecord(false);
   };
@@ -700,19 +670,21 @@ export function PatientFullProfileView({
           )}
 
           {/* ============================================================ */}
-          {/* ABA: PRONTUÁRIO & ANAMNESE COMPLETA COM IA */}
+          {/* ABA: PRONTUÁRIO & ANAMNESE COMPLETA */}
           {/* ============================================================ */}
-          {activeTab === "prontuario" && (
+          {(activeTab === "prontuario" || activeTab === "timeline") && (
             <div className="space-y-6 max-w-4xl">
               <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-slate-100">
                 <div>
                   <h2 className="text-[18px] font-bold text-[#0F172A] flex items-center gap-2">
                     <FileText className="h-5 w-5 text-purple-600" />
-                    Prontuário Clínico & Anamnese
+                    {activeTab === "timeline"
+                      ? "Linha do Tempo de Atendimentos"
+                      : "Prontuário Clínico & Atendimentos"}
                   </h2>
                   <p className="text-[12.5px] text-slate-500 mt-0.5">
-                    Prontuário integrado de <strong className="text-slate-700">{data.name}</strong>.
-                    Os dados salvos aqui e na central de atendimento são 100% sincronizados.
+                    Histórico unificado de atendimentos, consultas e evoluções de{" "}
+                    <strong className="text-slate-700">{data.name}</strong>.
                   </p>
                 </div>
 
@@ -735,136 +707,286 @@ export function PatientFullProfileView({
                     <span>Abrir Prontuário Completo</span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={handleSaveProntuario}
-                    disabled={isSavingRecord}
-                    className="inline-flex items-center gap-1.5 h-10 px-4.5 rounded-xl bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 text-[13px] font-bold shadow-sm transition-all cursor-pointer"
-                  >
-                    <Save size={15} />
-                    <span>{isSavingRecord ? "Salvando..." : "Salvar Prontuário"}</span>
-                  </button>
+                  {activeTab === "prontuario" && (
+                    <button
+                      type="button"
+                      onClick={handleSaveProntuario}
+                      disabled={isSavingRecord || !anamnese.trim()}
+                      className="inline-flex items-center gap-1.5 h-10 px-4.5 rounded-xl bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 text-[13px] font-bold shadow-sm transition-all cursor-pointer"
+                    >
+                      <Save size={15} />
+                      <span>{isSavingRecord ? "Salvando..." : "Salvar Atendimento"}</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
-              {/* Editor de Anamnese e Prontuário Unificado */}
-              <div className="rounded-2xl border border-purple-100 bg-white p-5 shadow-xs space-y-3">
-                <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-100">
-                  <div className="flex items-center gap-2.5">
-                    <div className="h-7 w-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center">
-                      <ClipboardList size={16} />
+              {/* Editor de Novo Atendimento (inicia limpo sem duplicar a ficha ou texto anterior) */}
+              {activeTab === "prontuario" && (
+                <div className="rounded-2xl border border-purple-100 bg-white p-5 shadow-xs space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-100">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-7 w-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center">
+                        <ClipboardList size={16} />
+                      </div>
+                      <div>
+                        <h3 className="text-[14.5px] font-bold text-slate-800">
+                          Novo Atendimento / Evolução Clínica
+                        </h3>
+                        <p className="text-[11.5px] text-slate-400">
+                          Registre queixa, sintomas, exame clínico e conduta terapêutica desta consulta.
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-[14.5px] font-bold text-slate-800">
-                        Anamnese & Evolução Clínica
-                      </h3>
-                      <p className="text-[11.5px] text-slate-400">
-                        Motivo da consulta, sintomas, antecedentes, exame clínico e conduta
-                        terapêutica.
-                      </p>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {lastClinicalRecord?.complaint && !anamnese && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAnamnese(lastClinicalRecord.complaint || "");
+                            toast.info("Anotação da consulta anterior carregada no editor.");
+                          }}
+                          className="text-[11.5px] font-semibold text-purple-600 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                          title="Importar texto da consulta anterior"
+                        >
+                          📋 Importar última consulta
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openAiForSection({
+                            key: "anamnese_geral",
+                            title: "Anamnese & Evolução Clínica",
+                            placeholder: "Descreva a consulta do paciente...",
+                          })
+                        }
+                        className="text-[11.5px] font-semibold text-white bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600 px-3 py-1 rounded-lg flex items-center gap-1.5 shadow-2xs hover:brightness-105 cursor-pointer"
+                      >
+                        <Sparkles size={12} />
+                        <span>Preencher com IA</span>
+                      </button>
+
+                      {anamnese && (
+                        <button
+                          type="button"
+                          onClick={() => setAnamnese("")}
+                          className="text-[11px] text-slate-400 hover:text-rose-600 font-medium px-1 cursor-pointer"
+                          title="Limpar editor"
+                        >
+                          Limpar
+                        </button>
+                      )}
+
+                      <span className="text-[11px] text-slate-400 font-medium ml-1">
+                        {anamnese.length} caracteres
+                      </span>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-slate-400 font-medium">
-                      {anamnese.length} caracteres
-                    </span>
-                  </div>
+                  <textarea
+                    rows={6}
+                    value={anamnese}
+                    onChange={(e) => setAnamnese(e.target.value)}
+                    placeholder="Descreva a anamnese ou evolução da consulta atual (motivo da consulta, sintomas, hipóteses diagnósticas e conduta médica)..."
+                    className="w-full rounded-xl border border-slate-200 p-4 text-[13.5px] text-slate-800 placeholder:text-slate-400 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/15 outline-none transition-all resize-y min-h-[160px] font-sans leading-relaxed"
+                  />
                 </div>
+              )}
 
-                <textarea
-                  rows={8}
-                  value={anamnese}
-                  onChange={(e) => setAnamnese(e.target.value)}
-                  placeholder="Descreva a anamnese geral do paciente (queixa principal, histórico de saúde, observações clínicas, hipóteses e condutas)..."
-                  className="w-full rounded-xl border border-slate-200 p-4 text-[13.5px] text-slate-800 placeholder:text-slate-400 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/15 outline-none transition-all resize-y min-h-[220px] font-sans leading-relaxed"
-                />
-              </div>
-
-              {/* Histórico Completo de Atendimentos Salvos para este paciente */}
+              {/* Histórico Completo de Atendimentos e Consultas do Paciente */}
               <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-5 space-y-4 shadow-2xs">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
                     <History className="h-4.5 w-4.5 text-purple-600" />
-                    <span>Histórico de Atendimentos e Evoluções ({records.length})</span>
-                  </div>
-                  {records.length > 0 && (
-                    <span className="text-xs text-purple-700 font-semibold bg-purple-100/80 px-3 py-1 rounded-full">
-                      Último registro: {new Date(records[0].created_at).toLocaleString("pt-BR")}
+                    <span>
+                      Histórico Completo de Atendimentos ({clinicalHistory.length})
                     </span>
-                  )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => refreshHistory()}
+                    className="text-xs text-slate-500 hover:text-purple-600 flex items-center gap-1 font-medium transition-colors cursor-pointer"
+                    title="Atualizar lista de atendimentos"
+                  >
+                    <RefreshCw size={12} className={loadingHistory ? "animate-spin" : ""} />
+                    <span>Atualizar</span>
+                  </button>
                 </div>
 
-                {records.length > 0 ? (
-                  <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
-                    {records.map((rec: any, idx: number) => (
+                {/* Filtros e Busca Rápida no Histórico */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+                  {/* Pílulas de filtro por tipo */}
+                  <div className="flex items-center gap-1.5 flex-wrap text-[12px]">
+                    <button
+                      type="button"
+                      onClick={() => setHistoryFilter("todos")}
+                      className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                        historyFilter === "todos"
+                          ? "bg-purple-600 text-white shadow-2xs"
+                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      Todos ({clinicalHistory.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHistoryFilter("prontuario")}
+                      className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                        historyFilter === "prontuario"
+                          ? "bg-purple-600 text-white shadow-2xs"
+                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      🩺 Prontuários ({prontuariosCount})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHistoryFilter("consulta")}
+                      className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                        historyFilter === "consulta"
+                          ? "bg-purple-600 text-white shadow-2xs"
+                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      📅 Consultas ({consultasCount})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHistoryFilter("evolucao")}
+                      className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                        historyFilter === "evolucao"
+                          ? "bg-purple-600 text-white shadow-2xs"
+                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      📈 Evoluções ({evolucoesCount})
+                    </button>
+                  </div>
+
+                  {/* Campo de Busca Rápida */}
+                  <div className="relative min-w-[220px]">
+                    <Search
+                      size={14}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                    />
+                    <input
+                      type="text"
+                      value={historySearch}
+                      onChange={(e) => setHistorySearch(e.target.value)}
+                      placeholder="Filtrar histórico..."
+                      className="w-full h-8.5 pl-8.5 pr-3 rounded-lg border border-slate-200 bg-white text-[12.5px] placeholder:text-slate-400 focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 outline-none transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* Lista de Atendimentos */}
+                {filteredHistory.length > 0 ? (
+                  <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
+                    {filteredHistory.map((item) => (
                       <div
-                        key={rec.id || idx}
+                        key={item.id}
                         className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-2.5 transition-all hover:border-purple-200"
                       >
                         <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-100">
-                          <div className="flex items-center gap-2">
-                            <div className="h-2 w-2 rounded-full bg-purple-600" />
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {item.kind === "prontuario" && (
+                              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-md bg-purple-100 text-purple-700">
+                                🩺 Prontuário Clínico
+                              </span>
+                            )}
+                            {item.kind === "consulta" && (
+                              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-md bg-blue-100 text-blue-700">
+                                📅 {item.type || "Consulta"}
+                              </span>
+                            )}
+                            {item.kind === "evolucao" && (
+                              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-md bg-emerald-100 text-emerald-700">
+                                📈 Evolução
+                              </span>
+                            )}
+
                             <span className="font-bold text-slate-800 text-[13px]">
-                              {new Date(rec.created_at).toLocaleDateString("pt-BR", {
-                                weekday: "short",
-                                day: "2-digit",
-                                month: "long",
-                                year: "numeric",
-                              })}{" "}
-                              às{" "}
-                              {new Date(rec.created_at).toLocaleTimeString("pt-BR", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
+                              {item.formattedDate} {item.time ? `às ${item.time}` : ""}
                             </span>
+
+                            {item.doctorName && (
+                              <span className="text-[11.5px] text-slate-500 font-medium">
+                                • {item.doctorName}
+                              </span>
+                            )}
                           </div>
 
                           <div className="flex items-center gap-2">
-                            {rec.duration_seconds ? (
-                              <span className="text-[11.5px] text-slate-600 font-medium bg-slate-100 px-2.5 py-0.5 rounded-md">
-                                ⏱️ {Math.round(rec.duration_seconds / 60)} min
+                            {item.status && (
+                              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                                {item.status}
+                              </span>
+                            )}
+
+                            {item.durationSeconds ? (
+                              <span className="text-[11.5px] text-slate-600 font-medium bg-slate-100 px-2 py-0.5 rounded-md">
+                                ⏱️ {Math.round(item.durationSeconds / 60)} min
                               </span>
                             ) : null}
 
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (rec.complaint) {
-                                  setAnamnese(rec.complaint);
-                                  toast.success("Conteúdo carregado no editor");
-                                }
-                              }}
-                              className="text-[11.5px] font-semibold text-purple-600 hover:text-purple-800 hover:underline cursor-pointer"
-                              title="Carregar este texto no editor acima"
-                            >
-                              Carregar no editor
-                            </button>
+                            {activeTab === "prontuario" && item.complaint && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAnamnese(item.complaint || "");
+                                  toast.success("Conteúdo carregado no editor de atendimento.");
+                                  window.scrollTo({ top: 0, behavior: "smooth" });
+                                }}
+                                className="text-[11.5px] font-semibold text-purple-600 hover:text-purple-800 hover:underline cursor-pointer"
+                                title="Carregar este atendimento no editor acima"
+                              >
+                                Carregar no editor
+                              </button>
+                            )}
 
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (rec.complaint) {
-                                  navigator.clipboard.writeText(rec.complaint);
-                                  toast.success("Texto do prontuário copiado");
-                                }
-                              }}
-                              className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-100 cursor-pointer"
-                              title="Copiar texto"
-                            >
-                              <Copy size={13} />
-                            </button>
+                            {item.complaint && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(item.complaint || "");
+                                  toast.success("Texto do atendimento copiado.");
+                                }}
+                                className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-100 cursor-pointer"
+                                title="Copiar texto"
+                              >
+                                <Copy size={13} />
+                              </button>
+                            )}
                           </div>
                         </div>
 
-                        {rec.complaint ? (
+                        {/* Conteúdo Clínico */}
+                        {item.complaint ? (
                           <div className="text-[13px] text-slate-700 whitespace-pre-wrap leading-relaxed bg-slate-50/70 p-3 rounded-lg border border-slate-100">
-                            {rec.complaint}
+                            {item.complaint}
                           </div>
                         ) : (
                           <p className="text-[12px] text-slate-400 italic">
-                            Nenhum texto registrado nesta consulta.
+                            Consulta registrada sem anotações adicionais.
                           </p>
+                        )}
+
+                        {/* Conduta se cadastrada separadamente */}
+                        {item.conduct && (
+                          <div className="text-[12px] text-purple-900 bg-purple-50/60 p-2.5 rounded-lg border border-purple-100">
+                            <strong>Conduta terapêutica:</strong> {item.conduct}
+                          </div>
+                        )}
+
+                        {/* Diagnóstico se cadastrado */}
+                        {item.diagnosis && (
+                          <div className="text-[12px] text-slate-600">
+                            <strong>Diagnóstico:</strong> {item.diagnosis}
+                          </div>
                         )}
                       </div>
                     ))}
@@ -873,11 +995,14 @@ export function PatientFullProfileView({
                   <div className="py-8 text-center space-y-2">
                     <FileText className="h-8 w-8 text-slate-300 mx-auto" />
                     <p className="text-[13px] font-medium text-slate-600">
-                      Nenhum atendimento finalizado registrado ainda para {data.name}.
+                      {historySearch
+                        ? `Nenhum registro encontrado para "${historySearch}".`
+                        : `Nenhum atendimento registrado ainda para ${data.name}.`}
                     </p>
                     <p className="text-[12px] text-slate-400 max-w-sm mx-auto">
-                      Você pode escrever a anamnese no campo acima ou clicar em "Atendimento com IA"
-                      para gerar anotações clínicas automáticas.
+                      {activeTab === "prontuario"
+                        ? 'Você pode registrar o primeiro atendimento deste paciente utilizando o campo de Anamnese acima ou clicando em "Abrir Prontuário Completo".'
+                        : "Os atendimentos e consultas aparecerão aqui conforme forem realizados."}
                     </p>
                   </div>
                 )}
@@ -886,12 +1011,14 @@ export function PatientFullProfileView({
           )}
 
           {/* OUTRAS ABAS */}
-          {activeTab !== "informacoes" && activeTab !== "prontuario" && (
-            <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
-              <div className="h-14 w-14 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center">
-                <FolderOpen className="h-7 w-7" />
-              </div>
-              <h3 className="text-[16px] font-bold text-[#0F172A]">{activeTabLabel}</h3>
+          {activeTab !== "informacoes" &&
+            activeTab !== "prontuario" &&
+            activeTab !== "timeline" && (
+              <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
+                <div className="h-14 w-14 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center">
+                  <FolderOpen className="h-7 w-7" />
+                </div>
+                <h3 className="text-[16px] font-bold text-[#0F172A]">{activeTabLabel}</h3>
               <p className="text-[13px] text-[#64748B]">
                 Nenhum registro encontrado para este paciente nesta seção no momento.
               </p>

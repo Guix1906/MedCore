@@ -52,6 +52,10 @@ import {
   AlertTriangle,
   FileDigit,
   ArrowLeft,
+  History,
+  Search,
+  Copy,
+  Calendar,
 } from "lucide-react";
 import { DUR, EASE_OUT, fadeUp, staggerContainer, dropdownVariants } from "@/lib/motion";
 import { createContext, useContext } from "react";
@@ -61,6 +65,7 @@ import {
   type AiSectionContext,
 } from "@/components/prontuario/AiRecordAssistantModal";
 import type { StructuredConsultationResult } from "@/lib/gemini";
+import { usePatientClinicalHistory } from "@/hooks/usePatientClinicalHistory";
 
 export interface RichEditorHandle {
   insertText: (text: string) => void;
@@ -163,38 +168,28 @@ export default function ProntuarioPage() {
   // Ref de controle do editor Anamnese Geral (sempre inicia limpo para novos atendimentos)
   const queixaRef = useRef<RichEditorHandle>(null);
 
-  // Busca o último prontuário gravado desse paciente apenas para consulta/histórico
-  const { data: previousRecord } = useQuery({
-    queryKey: ["prontuario-previous-record", patient.id, patient.name],
-    queryFn: async () => {
-      if (patient.id) {
-        try {
-          const { data, error } = await supabase
-            .from("medical_records")
-            .select("*")
-            .eq("patient_id", patient.id)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          if (!error && data) return data;
-        } catch (e) {
-          console.warn("Aviso ao buscar medical_records:", e);
-        }
-      }
+  // Busca o histórico completo de atendimentos clínicos e consultas desse paciente
+  const {
+    data: clinicalHistory = [],
+    isLoading: loadingClinicalHistory,
+  } = usePatientClinicalHistory(patient.id, patient.name);
 
-      // Fallback para LocalStorage
-      try {
-        const local =
-          (patient.id && localStorage.getItem("medcore_prontuario_" + patient.id)) ||
-          (patient.name && localStorage.getItem("medcore_prontuario_" + patient.name));
-        if (local) return JSON.parse(local);
-      } catch {}
+  const [historySearch, setHistorySearch] = useState("");
+  const [showHistoryTimeline, setShowHistoryTimeline] = useState(true);
 
-      return null;
-    },
-  });
-
-  const [showPreviousHistory, setShowPreviousHistory] = useState(false);
+  const filteredHistory = useMemo(() => {
+    if (!historySearch.trim()) return clinicalHistory;
+    const q = historySearch.toLowerCase();
+    return clinicalHistory.filter((item) => {
+      return (
+        item.title.toLowerCase().includes(q) ||
+        (item.doctorName || "").toLowerCase().includes(q) ||
+        (item.complaint || "").toLowerCase().includes(q) ||
+        (item.conduct || "").toLowerCase().includes(q) ||
+        (item.diagnosis || "").toLowerCase().includes(q)
+      );
+    });
+  }, [clinicalHistory, historySearch]);
 
   // Estado do modal de Assistente IA
   const [aiModalOpen, setAiModalOpen] = useState(false);
@@ -435,39 +430,10 @@ export default function ProntuarioPage() {
                     initial="hidden"
                     animate="show"
                   >
-                    {previousRecord?.complaint && (
-                      <motion.div
-                        variants={fadeUp}
-                        className="rounded-xl border border-purple-100 bg-purple-50/50 p-3 flex flex-col gap-2"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold text-purple-900 flex items-center gap-1.5">
-                            <FileText className="h-3.5 w-3.5 text-purple-600" />
-                            Registro da consulta anterior (
-                            {new Date(
-                              previousRecord.created_at || previousRecord.finished_at || Date.now(),
-                            ).toLocaleDateString("pt-BR")}
-                            )
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setShowPreviousHistory(!showPreviousHistory)}
-                            className="text-xs font-bold text-purple-700 hover:text-purple-900 hover:underline cursor-pointer"
-                          >
-                            {showPreviousHistory ? "Ocultar histórico" : "Ver anotações anteriores"}
-                          </button>
-                        </div>
-                        {showPreviousHistory && (
-                          <div className="mt-1 p-2.5 rounded-lg bg-white border border-purple-200 text-xs text-slate-700 whitespace-pre-wrap max-h-48 overflow-y-auto">
-                            {previousRecord.complaint}
-                          </div>
-                        )}
-                      </motion.div>
-                    )}
-
+                    {/* 1. Editor do Atendimento Atual */}
                     <motion.div variants={fadeUp}>
                       <Section
-                        title="Anamnese Geral"
+                        title="Anamnese & Atendimento Atual"
                         onAiFill={() =>
                           openAiModal({
                             key: "anamnese_geral",
@@ -478,10 +444,179 @@ export default function ProntuarioPage() {
                       >
                         <RichEditor
                           ref={queixaRef}
-                          placeholder="Descreva a anamnese geral do paciente (queixa principal, histórico de saúde, observações clínicas e conduta)..."
-                          minHeight={380}
+                          placeholder="Descreva a anamnese geral do paciente (queixa principal, histórico de saúde, exame clínico, hipóteses e conduta médica)..."
+                          minHeight={340}
                         />
                       </Section>
+                    </motion.div>
+
+                    {/* 2. Histórico Completo de Atendimentos Anteriores do Paciente */}
+                    <motion.div variants={fadeUp}>
+                      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+                        <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-100">
+                          <div className="flex items-center gap-2">
+                            <History className="h-5 w-5 text-purple-600" />
+                            <div>
+                              <h3 className="text-[15px] font-bold text-slate-800">
+                                Histórico de Atendimentos do Paciente ({clinicalHistory.length})
+                              </h3>
+                              <p className="text-[12px] text-slate-500">
+                                Todos os prontuários, consultas e evoluções anteriores de{" "}
+                                <strong className="text-slate-700">{patient.name}</strong>.
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setShowHistoryTimeline(!showHistoryTimeline)}
+                              className="text-[12px] font-semibold text-purple-600 hover:text-purple-800 hover:underline cursor-pointer"
+                            >
+                              {showHistoryTimeline ? "Ocultar histórico" : "Exibir histórico"}
+                            </button>
+                          </div>
+                        </div>
+
+                        {showHistoryTimeline && (
+                          <div className="space-y-3.5">
+                            {/* Busca rápida dentro do histórico */}
+                            {clinicalHistory.length > 1 && (
+                              <div className="relative">
+                                <Search
+                                  size={14}
+                                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                                />
+                                <input
+                                  type="text"
+                                  value={historySearch}
+                                  onChange={(e) => setHistorySearch(e.target.value)}
+                                  placeholder="Filtrar por queixa, conduta, médico ou diagnóstico..."
+                                  className="w-full h-8.5 pl-8.5 pr-3 rounded-lg border border-slate-200 bg-slate-50/50 text-[12.5px] placeholder:text-slate-400 focus:bg-white focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 outline-none transition-all"
+                                />
+                              </div>
+                            )}
+
+                            {filteredHistory.length > 0 ? (
+                              <div className="space-y-3 max-h-[460px] overflow-y-auto pr-1">
+                                {filteredHistory.map((rec) => (
+                                  <div
+                                    key={rec.id}
+                                    className="p-4 rounded-xl bg-slate-50/60 border border-slate-200/90 shadow-2xs space-y-2.5 transition-all hover:border-purple-200 hover:bg-slate-50"
+                                  >
+                                    <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-200/70">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        {rec.kind === "prontuario" && (
+                                          <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-md bg-purple-100 text-purple-700">
+                                            🩺 Prontuário
+                                          </span>
+                                        )}
+                                        {rec.kind === "consulta" && (
+                                          <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-md bg-blue-100 text-blue-700">
+                                            📅 {rec.type || "Consulta"}
+                                          </span>
+                                        )}
+                                        {rec.kind === "evolucao" && (
+                                          <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-md bg-emerald-100 text-emerald-700">
+                                            📈 Evolução
+                                          </span>
+                                        )}
+
+                                        <span className="font-bold text-slate-800 text-[13px]">
+                                          {rec.formattedDate} {rec.time ? `às ${rec.time}` : ""}
+                                        </span>
+
+                                        {rec.doctorName && (
+                                          <span className="text-[11.5px] text-slate-500 font-medium">
+                                            • {rec.doctorName}
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      <div className="flex items-center gap-2">
+                                        {rec.status && (
+                                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
+                                            {rec.status}
+                                          </span>
+                                        )}
+
+                                        {rec.durationSeconds ? (
+                                          <span className="text-[11.5px] text-slate-600 font-medium bg-white border border-slate-200 px-2 py-0.5 rounded-md">
+                                            ⏱️ {Math.round(rec.durationSeconds / 60)} min
+                                          </span>
+                                        ) : null}
+
+                                        {rec.complaint && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              queixaRef.current?.insertText(
+                                                `\n[Histórico de ${rec.formattedDate}]:\n${rec.complaint}\n`,
+                                              );
+                                              toast.success(
+                                                "Texto importado para o atendimento atual!",
+                                              );
+                                            }}
+                                            className="text-[11.5px] font-semibold text-purple-600 hover:text-purple-800 hover:underline cursor-pointer"
+                                            title="Inserir este texto nas anotações do atendimento atual"
+                                          >
+                                            Inserir no editor
+                                          </button>
+                                        )}
+
+                                        {rec.complaint && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              navigator.clipboard.writeText(rec.complaint || "");
+                                              toast.success("Texto copiado para a área de transferência");
+                                            }}
+                                            className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-200/60 cursor-pointer"
+                                            title="Copiar texto"
+                                          >
+                                            <Copy size={13} />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {rec.complaint ? (
+                                      <div className="text-[13px] text-slate-700 whitespace-pre-wrap leading-relaxed bg-white p-3 rounded-lg border border-slate-200/80">
+                                        {rec.complaint}
+                                      </div>
+                                    ) : (
+                                      <p className="text-[12px] text-slate-400 italic">
+                                        Consulta registrada sem texto de anotações.
+                                      </p>
+                                    )}
+
+                                    {rec.conduct && (
+                                      <div className="text-[12px] text-purple-900 bg-purple-50/70 p-2.5 rounded-lg border border-purple-100">
+                                        <strong>Conduta:</strong> {rec.conduct}
+                                      </div>
+                                    )}
+
+                                    {rec.diagnosis && (
+                                      <div className="text-[12px] text-slate-600">
+                                        <strong>Diagnóstico:</strong> {rec.diagnosis}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="py-6 text-center space-y-1">
+                                <FileText className="h-7 w-7 text-slate-300 mx-auto" />
+                                <p className="text-[13px] font-medium text-slate-600">
+                                  {historySearch
+                                    ? `Nenhum atendimento corresponde a "${historySearch}".`
+                                    : `Nenhum atendimento anterior registrado para ${patient.name}.`}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </motion.div>
                   </motion.div>
                 )}
