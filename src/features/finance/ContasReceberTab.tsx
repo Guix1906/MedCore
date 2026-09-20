@@ -235,10 +235,11 @@ export function ContasReceberTab({
       }
 
       // Filtro de status: Todos / Pendente / Vencido
-      if (statusFilter === "pendente") {
+      if (statusFilter === "todos") {
+        if (isPaid) return false;
+      } else if (statusFilter === "pendente") {
         if (isPaid || isVencido) return false;
-      }
-      if (statusFilter === "vencido") {
+      } else if (statusFilter === "vencido") {
         if (isPaid || !isVencido) return false;
       }
 

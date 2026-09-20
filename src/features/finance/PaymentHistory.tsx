@@ -49,10 +49,12 @@ export default function PaymentHistory({
   const cardPayment = method === "cartao_credito" || method === "cartao_debito";
   const accounts = data.accounts.filter(
     (a) =>
-      a.company_id === title.company_id &&
       a.active &&
+      (!title.company_id || !a.company_id || a.company_id === title.company_id) &&
       (!a.balance_kind || a.balance_kind === (cardPayment ? "receivable" : "available")),
   );
+  const fallbackAccounts = data.accounts.filter((a) => a.active);
+  const selectableAccounts = accounts.length > 0 ? accounts : fallbackAccounts;
   const receive = async (event: React.FormEvent) => {
     event.preventDefault();
     if (busy) return;
@@ -187,7 +189,7 @@ export default function PaymentHistory({
                       onChange={(e) => setAccount(e.target.value)}
                     >
                       <option value="">Selecione</option>
-                      {accounts.map((a) => (
+                      {selectableAccounts.map((a) => (
                         <option key={a.id} value={a.id}>
                           {a.name}
                           {!a.balance_kind ? " (classificar em Configurações)" : ""}

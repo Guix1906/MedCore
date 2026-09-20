@@ -68,8 +68,21 @@ const MONTH_NAMES = [
 
 export function DreTab({ finance, onRefresh, refreshing, onSelectTitle }: DreTabProps) {
   const today = new Date();
-  const [selectedYear, setSelectedYear] = useState<number>(today.getFullYear());
-  const [selectedMonthIndex, setSelectedMonthIndex] = useState<number>(today.getMonth()); // 0-11
+  const currentYM = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+  const [selectedYear, setSelectedYear] = useState<number>(() => {
+    const hasCurrentMonth = (finance.titles || []).some((t) =>
+      (t.competence_date || t.date || "").startsWith(currentYM),
+    );
+    if (hasCurrentMonth) return today.getFullYear();
+    return 2026;
+  });
+  const [selectedMonthIndex, setSelectedMonthIndex] = useState<number>(() => {
+    const hasCurrentMonth = (finance.titles || []).some((t) =>
+      (t.competence_date || t.date || "").startsWith(currentYM),
+    );
+    if (hasCurrentMonth) return today.getMonth();
+    return 8; // Setembro (0-indexed)
+  });
   const [dataSource, setDataSource] = useState<"sistema" | "simulacao">("sistema");
   const [activeSubTab, setActiveSubTab] = useState<"cascata" | "12m" | "margens" | "diagnostico">("cascata");
   const [showAv, setShowAv] = useState(true);
