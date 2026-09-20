@@ -54,7 +54,7 @@ GRANT EXECUTE ON FUNCTION public.finance_allowed(uuid, text) TO authenticated;
 
 -- ============================================================================
 -- 2. CORRIGIR public.create_financial_title:
--- Trata pacientes sem company_id como compatíveis e tolera IDs locais sem crash.
+-- Valida o paciente sem referenciar a coluna inexistente company_id em patients.
 -- ============================================================================
 CREATE OR REPLACE FUNCTION public.create_financial_title(
   p_id uuid,
@@ -70,7 +70,6 @@ CREATE OR REPLACE FUNCTION public.create_financial_title(
 ) RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   previous public.transactions%ROWTYPE;
-  patient_company uuid;
   resolved_patient_id uuid := p_patient_id;
   v_created_by uuid := NULL;
   v_target_table text;
@@ -100,21 +99,10 @@ BEGIN
     RETURN p_id;
   END IF;
 
-  -- Validação resiliente de paciente
+  -- Validação segura de paciente (a tabela patients é global e não possui company_id)
   IF resolved_patient_id IS NOT NULL THEN
-    SELECT (to_jsonb(p)->>'company_id')::uuid INTO patient_company FROM public.patients p WHERE p.id = resolved_patient_id;
-    IF FOUND THEN
-      -- Se o paciente pertence explicitamente a outra clínica diferente, bloqueia
-      IF patient_company IS NOT NULL AND p_company_id IS NOT NULL AND patient_company <> p_company_id THEN
-        RAISE EXCEPTION 'Paciente pertence a outra clinica';
-      END IF;
-      -- Se o paciente não tiver clínica associada, vincula à clínica atual
-      IF patient_company IS NULL AND p_company_id IS NOT NULL THEN
-        UPDATE public.patients SET company_id = p_company_id WHERE id = resolved_patient_id AND company_id IS NULL;
-      END IF;
-    ELSE
-      -- ID de paciente não existe em public.patients (ex: ID local ou PHP offline)
-      -- Mantém o lançamento financeiro com patient_id nulo para não abortar o agendamento
+    IF NOT EXISTS (SELECT 1 FROM public.patients WHERE id = resolved_patient_id) THEN
+      -- Se o ID do paciente não existe em public.patients (ex: ID temporário local), mantém o lançamento com paciente nulo
       resolved_patient_id := NULL;
     END IF;
   END IF;
@@ -162,6 +150,7 @@ GRANT EXECUTE ON FUNCTION public.create_financial_title TO authenticated;
 
 -- ============================================================================
 -- 3. CORRIGIR public.create_event_financial_title:
+-- Vincula o título à empresa do evento e ao paciente de forma consistente.
 -- ============================================================================
 CREATE OR REPLACE FUNCTION public.create_event_financial_title(
   p_event_id uuid,
@@ -172,16 +161,16 @@ DECLARE
   e public.events%ROWTYPE;
   t public.transactions%ROWTYPE;
   result uuid;
-  finance_company uuid;
-  patient_comp uuid;
   resolved_patient_id uuid;
   patient_name_text text := NULL;
 BEGIN
+  -- 1. Busca o evento
   SELECT * INTO e FROM public.events WHERE id = p_event_id FOR UPDATE;
   IF NOT FOUND OR NOT public.finance_allowed(e.company_id, 'create') THEN
     RAISE EXCEPTION 'Evento inexistente ou sem permissao financeira';
   END IF;
 
+  -- 2. Idempotência
   SELECT * INTO t FROM public.transactions WHERE origin_key = 'event:' || p_event_id;
   IF FOUND THEN
     IF ROW(t.amount, t.due_date) IS DISTINCT FROM ROW(p_amount, p_due_date) THEN
@@ -190,23 +179,15 @@ BEGIN
     RETURN t.id;
   END IF;
 
-  finance_company := e.company_id;
   resolved_patient_id := e.patient_id;
-
   IF e.patient_id IS NOT NULL THEN
-    SELECT (to_jsonb(p)->>'company_id')::uuid, p.name 
-      INTO patient_comp, patient_name_text 
-      FROM public.patients p WHERE p.id = e.patient_id;
-    IF FOUND THEN
-      IF patient_comp IS NOT NULL AND e.company_id IS NOT NULL AND patient_comp <> e.company_id THEN
-        RAISE EXCEPTION 'Paciente do evento pertence a outra clinica';
-      END IF;
-      finance_company := COALESCE(e.company_id, patient_comp);
-    ELSE
+    SELECT p.name INTO patient_name_text FROM public.patients p WHERE p.id = e.patient_id;
+    IF NOT FOUND THEN
       resolved_patient_id := NULL;
     END IF;
   END IF;
 
+  -- 3. Cria o título financeiro vinculado à empresa do evento
   result := public.create_financial_title(
     gen_random_uuid(),
     'receita',
@@ -217,7 +198,7 @@ BEGIN
     patient_name_text,
     'Atendimentos',
     NULL,
-    finance_company
+    e.company_id
   );
 
   UPDATE public.transactions SET origin_key = 'event:' || p_event_id WHERE id = result;
