@@ -31,8 +31,20 @@ import {
   EyeOff,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
-import { format, parseISO, isToday, startOfDay, differenceInDays } from "date-fns";
+import {
+  format,
+  parseISO,
+  isToday,
+  startOfDay,
+  differenceInDays,
+  startOfMonth,
+  endOfMonth,
+  addMonths,
+  subMonths,
+} from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -98,10 +110,25 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
   const [selectedAccount, setSelectedAccount] = useState<string>("todas");
   const [showChart, setShowChart] = useState<boolean>(true);
 
-  // Período (Default: Início do mês atual até hoje)
-  const [start, setStart] = useState(() => `${localDate().slice(0, 7)}-01`);
-  const [end, setEnd] = useState(localDate());
-  const [periodPreset, setPeriodPreset] = useState<string>("month");
+  // Período (Navegação mensal pelo Stepper do cabeçalho)
+  const [currentMonthDate, setCurrentMonthDate] = useState(() => new Date());
+
+  const start = useMemo(
+    () => format(startOfMonth(currentMonthDate), "yyyy-MM-dd"),
+    [currentMonthDate],
+  );
+  const end = useMemo(
+    () => format(endOfMonth(currentMonthDate), "yyyy-MM-dd"),
+    [currentMonthDate],
+  );
+
+  const handlePrevMonth = () => {
+    setCurrentMonthDate((prev) => subMonths(prev, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCurrentMonthDate((prev) => addMonths(prev, 1));
+  };
 
   // Sub-abas (Lançamentos / Excluídos)
   const [activeSubTab, setActiveSubTab] = useState<"lancamentos" | "excluidos">("lancamentos");
@@ -160,36 +187,6 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       setTransferFrom((cur) => (cur ? cur : availableAccounts[0]?.id || ""));
     }
   }, [availableAccounts]);
-
-  // Aplicação de atalhos rápidos de período
-  const handleSelectPreset = (preset: string) => {
-    setPeriodPreset(preset);
-    const today = localDate();
-    if (preset === "today") {
-      setStart(today);
-      setEnd(today);
-    } else if (preset === "week") {
-      const d = new Date();
-      d.setDate(d.getDate() - 7);
-      setStart(d.toISOString().slice(0, 10));
-      setEnd(today);
-    } else if (preset === "month") {
-      setStart(`${today.slice(0, 7)}-01`);
-      setEnd(today);
-    } else if (preset === "last_month") {
-      const now = new Date();
-      const firstPrev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const lastPrev = new Date(now.getFullYear(), now.getMonth(), 0);
-      setStart(firstPrev.toISOString().slice(0, 10));
-      setEnd(lastPrev.toISOString().slice(0, 10));
-    } else if (preset === "year") {
-      setStart(`${today.slice(0, 4)}-01-01`);
-      setEnd(today);
-    } else if (preset === "all") {
-      setStart("");
-      setEnd("");
-    }
-  };
 
   // 1. Mapeamento de todas as movimentações realizadas (entradas e saídas reais)
   const allRealizedEntries = useMemo(() => {
@@ -550,15 +547,15 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       </div>
 
       {/* ========================================================================= */}
-      {/* BARRA DE CONTROLES: CLÍNICA, CONTAS BANCÁRIAS, PERÍODO E GRÁFICO           */}
+      {/* BARRA DE CONTROLES: CONTAS BANCÁRIAS, NAVEGAÇÃO DE MÊS E EXIBIR/OCULTAR GRÁFICO */}
       {/* ========================================================================= */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Seletor de Clínica */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Seletor de Clínica (se houver múltiplas) */}
           {finance.scopes.length > 1 && (
             <Select value={scope} onValueChange={(v) => { setScope(v); setSelectedAccount("todas"); }}>
-              <SelectTrigger className="h-9 w-[190px] bg-background text-sm font-medium">
-                <Building2 className="h-3.5 w-3.5 mr-2 text-muted-foreground shrink-0" />
+              <SelectTrigger className="h-9 w-auto min-w-[170px] bg-white border-slate-200 text-xs font-medium text-slate-700 shadow-2xs rounded-lg">
+                <Building2 className="h-3.5 w-3.5 mr-2 text-slate-400 shrink-0" />
                 <SelectValue placeholder="Clínica" />
               </SelectTrigger>
               <SelectContent>
@@ -576,10 +573,10 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
           <Select value={selectedAccount} onValueChange={setSelectedAccount}>
             <SelectTrigger
               aria-label="Conta bancária do fluxo de caixa"
-              className="h-9 w-[210px] bg-background text-sm font-medium"
+              className="h-9 w-auto min-w-[190px] bg-white border-slate-200 text-xs font-medium text-slate-700 shadow-2xs rounded-lg"
             >
-              <Wallet className="h-3.5 w-3.5 mr-2 text-muted-foreground shrink-0" />
-              <SelectValue placeholder="Conta bancária" />
+              <Landmark className="h-3.5 w-3.5 mr-2 text-slate-400 shrink-0" />
+              <SelectValue placeholder="Todas as contas" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="todas">Todas as contas</SelectItem>
@@ -591,61 +588,44 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
             </SelectContent>
           </Select>
 
-          {/* Seletor Rápido de Período */}
-          <Select value={periodPreset} onValueChange={handleSelectPreset}>
-            <SelectTrigger className="h-9 w-[150px] bg-background text-sm font-medium">
-              <CalendarIcon className="h-3.5 w-3.5 mr-2 text-muted-foreground shrink-0" />
-              <SelectValue placeholder="Período" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="today">Hoje</SelectItem>
-              <SelectItem value="week">Últimos 7 dias</SelectItem>
-              <SelectItem value="month">Este Mês</SelectItem>
-              <SelectItem value="last_month">Mês Anterior</SelectItem>
-              <SelectItem value="year">Ano Atual</SelectItem>
-              <SelectItem value="all">Todos os registros</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {/* Datas Início e Fim Personalizadas */}
-          <div className="flex items-center gap-1.5 bg-background border rounded-lg px-2.5 py-1">
-            <span className="text-xs text-muted-foreground">De</span>
-            <input
-              type="date"
-              value={start}
-              onChange={(e) => {
-                setStart(e.target.value);
-                setPeriodPreset("custom");
-              }}
-              className="text-xs bg-transparent border-0 focus:outline-hidden font-medium text-foreground cursor-pointer"
-            />
-            <span className="text-xs text-muted-foreground">Até</span>
-            <input
-              type="date"
-              value={end}
-              onChange={(e) => {
-                setEnd(e.target.value);
-                setPeriodPreset("custom");
-              }}
-              className="text-xs bg-transparent border-0 focus:outline-hidden font-medium text-foreground cursor-pointer"
-            />
+          {/* Stepper de Mês: [ <   01/09/2026 - 30/09/2026   > ] */}
+          <div className="flex items-center bg-white border border-slate-200 rounded-lg h-9 px-1 shadow-2xs">
+            <button
+              type="button"
+              onClick={handlePrevMonth}
+              className="h-7 w-7 inline-flex items-center justify-center rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              title="Mês anterior"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="px-3 text-xs font-semibold text-slate-700 tracking-wide select-none">
+              {format(startOfMonth(currentMonthDate), "dd/MM/yyyy")} - {format(endOfMonth(currentMonthDate), "dd/MM/yyyy")}
+            </span>
+            <button
+              type="button"
+              onClick={handleNextMonth}
+              className="h-7 w-7 inline-flex items-center justify-center rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              title="Próximo mês"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
           </div>
-        </div>
 
-        {/* Botão Alternar Exibição do Gráfico */}
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-9 text-xs font-semibold gap-1.5 border-border bg-background hover:bg-muted text-foreground cursor-pointer"
-          onClick={() => setShowChart((v) => !v)}
-        >
-          {showChart ? (
-            <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
-          ) : (
-            <Eye className="h-3.5 w-3.5 text-muted-foreground" />
-          )}
-          {showChart ? "Ocultar Gráfico" : "Exibir Gráfico"}
-        </Button>
+          {/* Botão Alternar Exibição do Gráfico */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 bg-white border-slate-200 text-slate-700 text-xs font-medium gap-1.5 shadow-2xs hover:bg-slate-50 rounded-lg cursor-pointer"
+            onClick={() => setShowChart((v) => !v)}
+          >
+            {showChart ? (
+              <EyeOff className="h-3.5 w-3.5 text-slate-400" />
+            ) : (
+              <Eye className="h-3.5 w-3.5 text-slate-400" />
+            )}
+            {showChart ? "Ocultar Gráfico" : "Exibir Gráfico"}
+          </Button>
+        </div>
       </div>
 
       {/* ========================================================================= */}
@@ -653,68 +633,56 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       {/* ========================================================================= */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* CARD 1: ENTRADAS */}
-        <div className="kpi-card rounded-xl border border-slate-200/80 bg-white p-5 flex items-center justify-between shadow-xs">
-          <div>
-            <span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-              Entradas
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs flex items-center justify-between">
+          <div className="space-y-1">
+            <span className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
+              ENTRADAS
             </span>
-            <p className="text-2xl font-bold text-foreground mt-0.5">
+            <p className="text-2xl font-bold text-slate-900 tracking-tight">
               <CountUp value={totalEntradas} format={(v) => currency(v)} />
             </p>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-xs text-slate-400">
               Total liquidado no período
             </p>
           </div>
-          <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
-            <ArrowUpRight className="h-5 w-5" strokeWidth={2.5} />
+          <div className="h-8 w-8 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center shrink-0">
+            <ArrowUpRight className="h-4 w-4" strokeWidth={2.5} />
           </div>
         </div>
 
         {/* CARD 2: DESPESAS */}
-        <div className="kpi-card rounded-xl border border-slate-200/80 bg-white p-5 flex items-center justify-between shadow-xs">
-          <div>
-            <span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-              Despesas
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs flex items-center justify-between">
+          <div className="space-y-1">
+            <span className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
+              DESPESAS
             </span>
-            <p className="text-2xl font-bold text-foreground mt-0.5">
+            <p className="text-2xl font-bold text-slate-900 tracking-tight">
               <CountUp value={totalDespesas} format={(v) => currency(v)} />
             </p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Custo da clínica no período
+            <p className="text-xs text-slate-400">
+              Custo do escritório no período
             </p>
           </div>
-          <div className="h-10 w-10 rounded-xl bg-rose-500/10 text-rose-600 flex items-center justify-center shrink-0">
-            <ArrowDownLeft className="h-5 w-5" strokeWidth={2.5} />
+          <div className="h-8 w-8 rounded-full bg-rose-50 text-rose-400 flex items-center justify-center shrink-0">
+            <ArrowDownLeft className="h-4 w-4" strokeWidth={2.5} />
           </div>
         </div>
 
         {/* CARD 3: RESULTADO DO PERÍODO */}
-        <div className="kpi-card rounded-xl border border-slate-200/80 bg-white p-5 flex items-center justify-between shadow-xs">
-          <div>
-            <span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-              Resultado do Período
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs flex items-center justify-between">
+          <div className="space-y-1">
+            <span className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
+              RESULTADO DO PERÍODO
             </span>
-            <p
-              className={cn(
-                "text-2xl font-bold mt-0.5",
-                saldoFinal >= 0 ? "text-slate-900" : "text-rose-600",
-              )}
-            >
+            <p className="text-2xl font-bold text-slate-900 tracking-tight">
               <CountUp value={saldoFinal} format={(v) => currency(v)} />
             </p>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-xs text-slate-400">
               Entradas menos despesas (não inclui saldo inicial)
             </p>
           </div>
-          <div
-            className={cn(
-              "h-10 w-10 rounded-xl flex items-center justify-center shrink-0",
-              saldoFinal >= 0
-                ? "bg-blue-500/10 text-blue-600"
-                : "bg-rose-500/10 text-rose-600",
-            )}
-          >
-            <ArrowLeftRight className="h-5 w-5" strokeWidth={2.5} />
+          <div className="h-8 w-8 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center shrink-0">
+            <ArrowLeftRight className="h-4 w-4" strokeWidth={2.5} />
           </div>
         </div>
       </div>
@@ -731,12 +699,12 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
         {/* Cabeçalho da Seção de Lançamentos com Botões: Planilha, Transferência, + Novo Lançamento */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-blue-600 flex items-center justify-center text-white shadow-xs">
-              <Landmark className="h-5 w-5" />
+            <div className="h-9 w-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-2xs">
+              <Landmark className="h-4 w-4" />
             </div>
             <div>
-              <h2 className="text-xl font-bold tracking-tight text-foreground">Lançamentos</h2>
-              <p className="text-xs text-muted-foreground">
+              <h2 className="text-base font-bold text-slate-900">Lançamentos</h2>
+              <p className="text-xs text-slate-400">
                 Receitas, despesas e movimentações financeiras
               </p>
             </div>
@@ -747,7 +715,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
             <Button
               variant="outline"
               size="sm"
-              className="h-9 text-xs font-semibold gap-1.5 cursor-pointer"
+              className="h-8 bg-white border-slate-200 text-slate-700 text-xs font-medium gap-1.5 rounded-lg shadow-2xs hover:bg-slate-50 cursor-pointer"
               onClick={handleExportCsv}
             >
               <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
@@ -757,7 +725,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
             <Button
               variant="outline"
               size="sm"
-              className="h-9 text-xs font-semibold gap-1.5 cursor-pointer"
+              className="h-8 bg-white border-slate-200 text-slate-700 text-xs font-medium gap-1.5 rounded-lg shadow-2xs hover:bg-slate-50 cursor-pointer"
               onClick={() => setTransferOpen(true)}
             >
               <ArrowLeftRight className="h-3.5 w-3.5 text-blue-600" />
@@ -766,8 +734,8 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
 
             <Button
               size="sm"
-              className="h-9 bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs gap-1.5 shadow-xs cursor-pointer"
-              onClick={() => onOpenNew ? onOpenNew("receita") : (window.location.href = "/financeiro?novo=1")}
+              className="h-8 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium gap-1.5 rounded-lg shadow-2xs cursor-pointer"
+              onClick={() => (onOpenNew ? onOpenNew("receita") : (window.location.href = "/financeiro?novo=1"))}
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={2.5} /> Novo Lançamento
             </Button>
@@ -775,25 +743,27 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
         </div>
 
         {/* Sub-abas (Lançamentos | Excluídos) */}
-        <div className="flex items-center gap-2 border-b">
+        <div className="flex items-center gap-4 border-b border-slate-200 text-xs font-semibold">
           <button
             type="button"
-            className={`px-4 py-2.5 text-xs font-bold transition-all flex items-center gap-1.5 border-b-2 cursor-pointer ${
+            className={cn(
+              "pb-2.5 pt-1 border-b-2 flex items-center gap-1.5 cursor-pointer transition-colors",
               activeSubTab === "lancamentos"
-                ? "border-blue-600 text-blue-600 bg-blue-50/40"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-slate-500 hover:text-slate-700"
+            )}
             onClick={() => setActiveSubTab("lancamentos")}
           >
             <Tag className="h-3.5 w-3.5" /> Lançamentos
           </button>
           <button
             type="button"
-            className={`px-4 py-2.5 text-xs font-bold transition-all flex items-center gap-1.5 border-b-2 cursor-pointer ${
+            className={cn(
+              "pb-2.5 pt-1 border-b-2 flex items-center gap-1.5 cursor-pointer transition-colors",
               activeSubTab === "excluidos"
-                ? "border-blue-600 text-blue-600 bg-blue-50/40"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-slate-500 hover:text-slate-700"
+            )}
             onClick={() => setActiveSubTab("excluidos")}
           >
             <Trash2 className="h-3.5 w-3.5" /> Excluídos
@@ -801,149 +771,152 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
         </div>
 
         {/* Barra de Filtros */}
-        <div className="bg-card rounded-xl border border-slate-200 p-4 shadow-xs flex flex-wrap items-center gap-3">
-          {/* Busca por descrição ou paciente */}
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por descrição, paciente, conta..."
-              className="pl-9 h-10 text-sm bg-background"
-            />
+        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-2xs space-y-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Busca por descrição ou paciente */}
+            <div className="relative flex-1 min-w-[200px] max-w-xs">
+              <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar por desc..."
+                className="pl-8 h-8 text-xs bg-white border-slate-200 rounded-lg placeholder:text-slate-400"
+              />
+            </div>
+
+            {/* Segmented Buttons (Todos, Receitas, Despesas) */}
+            <div className="inline-flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200/50">
+              <button
+                type="button"
+                className={cn(
+                  "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
+                  typeFilter === "todos"
+                    ? "bg-blue-600 text-white shadow-2xs"
+                    : "text-slate-600 hover:text-slate-900"
+                )}
+                onClick={() => setTypeFilter("todos")}
+              >
+                Todos
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
+                  typeFilter === "receitas"
+                    ? "bg-blue-600 text-white shadow-2xs"
+                    : "text-slate-600 hover:text-slate-900"
+                )}
+                onClick={() => setTypeFilter("receitas")}
+              >
+                Receitas
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
+                  typeFilter === "despesas"
+                    ? "bg-blue-600 text-white shadow-2xs"
+                    : "text-slate-600 hover:text-slate-900"
+                )}
+                onClick={() => setTypeFilter("despesas")}
+              >
+                Despesas
+              </button>
+            </div>
+
+            {/* Filtro por Natureza de Liquidação */}
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger
+                aria-label="Natureza da movimentação realizada"
+                className="h-8 w-auto min-w-[130px] text-xs bg-white border-slate-200 rounded-lg text-slate-700"
+              >
+                <SelectValue placeholder="Todas Realizadas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todas Realizadas</SelectItem>
+                <SelectItem value="recebimento">Entradas Realizadas</SelectItem>
+                <SelectItem value="pagamento">Saídas Realizadas</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Filtro por Forma de Pagamento */}
+            <Select value={formaFilter} onValueChange={setFormaFilter}>
+              <SelectTrigger aria-label="Forma de pagamento" className="h-8 w-auto min-w-[115px] text-xs bg-white border-slate-200 rounded-lg text-slate-700">
+                <SelectValue placeholder="Todas formas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">Todas formas</SelectItem>
+                <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                <SelectItem value="debito">Débito</SelectItem>
+                <SelectItem value="credito">Crédito</SelectItem>
+                <SelectItem value="pix">PIX</SelectItem>
+                <SelectItem value="boleto">Boleto</SelectItem>
+                <SelectItem value="transferencia">Transferência</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Filtro por Origem / Conta */}
+            <Select value={origemFilter} onValueChange={setOrigemFilter}>
+              <SelectTrigger aria-label="Conta de origem" className="h-8 w-auto min-w-[125px] text-xs bg-white border-slate-200 rounded-lg text-slate-700">
+                <SelectValue placeholder="Todas as contas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">Todas as contas</SelectItem>
+                {availableAccounts.map((acc) => (
+                  <SelectItem key={acc.id} value={acc.name}>
+                    {acc.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Filtro por Categoria / Área Médica */}
+            <Select value={areaFilter} onValueChange={setAreaFilter}>
+              <SelectTrigger aria-label="Categoria / Procedimento" className="h-8 w-auto min-w-[120px] text-xs bg-white border-slate-200 rounded-lg text-slate-700">
+                <SelectValue placeholder="Todas as áreas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">Todas as áreas</SelectItem>
+                <SelectItem value="atendiment">Atendimentos / Consultas</SelectItem>
+                <SelectItem value="procediment">Procedimentos</SelectItem>
+                <SelectItem value="plano">Planos de Tratamento</SelectItem>
+                <SelectItem value="insumo">Insumos & Medicamentos</SelectItem>
+                <SelectItem value="administrativ">Despesas Administrativas</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          {/* Segmented Buttons (Todos, Receitas, Despesas) */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl">
-            <button
-              type="button"
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-                typeFilter === "todos"
-                  ? "bg-blue-600 text-white shadow-xs"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-              onClick={() => setTypeFilter("todos")}
-            >
-              Todos
-            </button>
-            <button
-              type="button"
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-                typeFilter === "receitas"
-                  ? "bg-blue-600 text-white shadow-xs"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-              onClick={() => setTypeFilter("receitas")}
-            >
-              Receitas
-            </button>
-            <button
-              type="button"
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-                typeFilter === "despesas"
-                  ? "bg-blue-600 text-white shadow-xs"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-              onClick={() => setTypeFilter("despesas")}
-            >
-              Despesas
-            </button>
-          </div>
-
-          {/* Filtro por Natureza de Liquidação */}
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger
-              aria-label="Natureza da movimentação realizada"
-              className="h-10 w-[160px] text-sm bg-background"
-            >
-              <SelectValue placeholder="Todas Realizadas" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todas Realizadas</SelectItem>
-              <SelectItem value="recebimento">Entradas Realizadas</SelectItem>
-              <SelectItem value="pagamento">Saídas Realizadas</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {/* Filtro por Forma de Pagamento */}
-          <Select value={formaFilter} onValueChange={setFormaFilter}>
-            <SelectTrigger aria-label="Forma de pagamento" className="h-10 w-[140px] text-sm bg-background">
-              <SelectValue placeholder="Todas formas" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todas">Todas formas</SelectItem>
-              <SelectItem value="dinheiro">Dinheiro</SelectItem>
-              <SelectItem value="debito">Débito</SelectItem>
-              <SelectItem value="credito">Crédito</SelectItem>
-              <SelectItem value="pix">PIX</SelectItem>
-              <SelectItem value="boleto">Boleto</SelectItem>
-              <SelectItem value="transferencia">Transferência</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {/* Filtro por Origem / Conta */}
-          <Select value={origemFilter} onValueChange={setOrigemFilter}>
-            <SelectTrigger aria-label="Conta de origem" className="h-10 w-[160px] text-sm bg-background">
-              <SelectValue placeholder="Todas as contas" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todas">Todas as contas</SelectItem>
-              {availableAccounts.map((acc) => (
-                <SelectItem key={acc.id} value={acc.name}>
-                  {acc.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {/* Filtro por Categoria / Área Médica */}
-          <Select value={areaFilter} onValueChange={setAreaFilter}>
-            <SelectTrigger aria-label="Categoria / Procedimento" className="h-10 w-[160px] text-sm bg-background">
-              <SelectValue placeholder="Todas categorias" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todas">Todas categorias</SelectItem>
-              <SelectItem value="atendiment">Atendimentos / Consultas</SelectItem>
-              <SelectItem value="procediment">Procedimentos</SelectItem>
-              <SelectItem value="plano">Planos de Tratamento</SelectItem>
-              <SelectItem value="insumo">Insumos & Medicamentos</SelectItem>
-              <SelectItem value="administrativ">Despesas Administrativas</SelectItem>
-            </SelectContent>
-          </Select>
+          <p className="text-[11px] text-slate-400">
+            Período aplicado: {format(startOfMonth(currentMonthDate), "dd/MM/yyyy")} - {format(endOfMonth(currentMonthDate), "dd/MM/yyyy")}. Exportação desta lista respeita os filtros.
+          </p>
         </div>
 
         {/* Banner Informativo da Regra de Ouro */}
-        <div className="rounded-xl border border-blue-200/80 bg-gradient-to-r from-blue-50/80 to-indigo-50/50 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+        <div className="rounded-xl border border-blue-200/80 bg-blue-50/40 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
           <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="h-5 w-5 text-blue-600 shrink-0" />
-            <p className="text-xs text-blue-950 font-medium">
-              <strong>Fluxo de Caixa Realizado:</strong> Esta tela apresenta <u>exclusivamente</u>{" "}
-              entradas e saídas que realmente se efetivaram no caixa e nas contas bancárias da
-              clínica. Títulos previstos e pendentes são geridos nas abas <strong>A Receber</strong>{" "}
-              e <strong>A Pagar</strong>.
+            <CheckCircle2 className="h-4 w-4 text-blue-500 shrink-0" />
+            <p className="text-xs text-slate-700 leading-relaxed">
+              <strong className="text-slate-900 font-semibold">Fluxo de Caixa Realizado:</strong> Esta tela apresenta <strong className="font-semibold text-slate-900">exclusivamente</strong> entradas e saídas que realmente se efetivaram no caixa e nas contas bancárias do escritório. Contas a receber e a pagar previstas/pendentes são geridas em suas respectivas abas.
             </p>
           </div>
-          <Badge
-            variant="outline"
-            className="bg-blue-100/70 text-blue-800 border-blue-300 shrink-0 text-xs font-semibold"
-          >
+          <span className="inline-flex items-center rounded-full border border-blue-200 bg-white px-3 py-1 text-[11px] font-medium text-blue-600 shrink-0 shadow-2xs whitespace-nowrap">
             Movimentações realizadas
-          </Badge>
+          </span>
         </div>
 
         {/* Tabela de Movimentações Financeiras */}
-        <div className="bg-card rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="bg-slate-50/80 text-xs font-bold uppercase tracking-wider text-slate-700">
-                  <TableHead className="w-[110px]">Data</TableHead>
-                  <TableHead>Descrição / Paciente</TableHead>
-                  <TableHead className="w-[120px]">Forma</TableHead>
-                  <TableHead className="w-[160px]">Conta / Caixa</TableHead>
-                  <TableHead className="w-[110px] text-center">Status</TableHead>
-                  <TableHead className="w-[130px] text-right">Valor</TableHead>
-                  <TableHead className="w-[100px] text-right">Ações</TableHead>
+                <TableRow className="bg-white hover:bg-white border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  <TableHead className="w-[100px] text-slate-400">DATA</TableHead>
+                  <TableHead className="text-slate-400">DESCRIÇÃO</TableHead>
+                  <TableHead className="w-[110px] text-slate-400">FORMA</TableHead>
+                  <TableHead className="w-[150px] text-slate-400">CONTA/CARTÃO</TableHead>
+                  <TableHead className="w-[110px] text-center text-slate-400">STATUS</TableHead>
+                  <TableHead className="w-[130px] text-right text-slate-400">VALOR</TableHead>
+                  <TableHead className="w-[80px] text-right text-slate-400">AÇÕES</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -951,7 +924,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                   <TableRow>
                     <TableCell
                       colSpan={7}
-                      className="text-center py-12 text-sm text-muted-foreground"
+                      className="text-center py-12 text-sm text-slate-400"
                     >
                       Nenhuma movimentação encontrada para os filtros selecionados.
                     </TableCell>
@@ -974,74 +947,81 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
 
                     const contaCartao = (e.payment_account || "—").toUpperCase();
                     const forma = e.payment_method || "—";
+                    const categoryTag = e.category
+                      ? `◆ ${e.category.toUpperCase()}`
+                      : isDespesa
+                        ? "◆ DESPESA"
+                        : "◆ HONORÁRIO";
 
                     return (
-                      <TableRow key={e.id} className="hover:bg-slate-50/60 text-xs">
+                      <TableRow key={e.id} className="hover:bg-slate-50/70 border-b border-slate-100 text-xs">
                         {/* DATA */}
-                        <TableCell>
-                          <span className="font-semibold text-foreground block">{displayDate}</span>
-                          <span className="text-xs text-emerald-600 font-medium block">
+                        <TableCell className="align-middle py-3">
+                          <span className="font-bold text-slate-800 block text-xs">{displayDate}</span>
+                          <span className="text-[11px] text-emerald-600 font-medium block">
                             {isCurrentDay ? "Hoje" : "Realizado"}
                           </span>
                         </TableCell>
 
                         {/* DESCRIÇÃO */}
-                        <TableCell>
-                          <div className="flex items-start gap-2.5">
+                        <TableCell className="align-middle py-3">
+                          <div className="flex items-start gap-2">
                             <div
-                              className={`mt-0.5 h-6 w-6 rounded-lg flex items-center justify-center shrink-0 ${
+                              className={cn(
+                                "h-5 w-5 rounded-full flex items-center justify-center shrink-0 mt-0.5",
                                 isDespesa
-                                  ? "bg-rose-50 text-rose-600"
+                                  ? "bg-rose-50 text-rose-500"
                                   : "bg-emerald-50 text-emerald-600"
-                              }`}
+                              )}
                             >
                               {isDespesa ? (
-                                <ArrowDownLeft className="h-3.5 w-3.5" />
+                                <ArrowDownLeft className="h-3 w-3" strokeWidth={2.5} />
                               ) : (
-                                <ArrowUpRight className="h-3.5 w-3.5" />
+                                <ArrowUpRight className="h-3 w-3" strokeWidth={2.5} />
                               )}
                             </div>
 
                             <div className="space-y-0.5 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="inline-flex items-center gap-1 text-[10.5px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 tracking-wider uppercase">
-                                  <Zap className="h-2.5 w-2.5 text-amber-500" />
-                                  {e.badgeLabel}
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="inline-flex items-center text-[10px] font-bold px-1 py-0.5 rounded bg-slate-100 text-slate-600 uppercase tracking-wider">
+                                  {categoryTag}
                                 </span>
 
-                                <span className="font-bold text-foreground text-xs truncate">
-                                  {e.client_name && e.client_name !== "Avulso" ? `${e.client_name} · ` : ""}
+                                <span className="font-bold text-slate-800 text-xs truncate">
                                   {e.description}
                                 </span>
                               </div>
 
-                              <p className="text-[11px] uppercase tracking-wider text-muted-foreground truncate">
-                                {e.category}
+                              <p className="text-[10px] uppercase tracking-wider text-slate-400 truncate">
+                                {e.client_name && e.client_name !== "Avulso"
+                                  ? e.client_name.toUpperCase()
+                                  : e.badgeLabel}
                               </p>
                             </div>
                           </div>
                         </TableCell>
 
                         {/* FORMA DE PAGAMENTO */}
-                        <TableCell className="text-muted-foreground font-medium uppercase text-[11px]">
+                        <TableCell className="align-middle py-3 text-xs text-slate-600">
                           {forma}
                         </TableCell>
 
                         {/* CONTA / CAIXA */}
-                        <TableCell className="font-semibold text-foreground text-xs tracking-wider uppercase">
+                        <TableCell className="align-middle py-3 font-bold text-slate-700 text-xs tracking-wider uppercase">
                           {contaCartao}
                         </TableCell>
 
                         {/* STATUS */}
-                        <TableCell className="text-center">
+                        <TableCell className="align-middle py-3 text-center">
                           <span
-                            className={`inline-block px-2.5 py-0.5 rounded-full text-[10.5px] font-bold uppercase tracking-wider ${
+                            className={cn(
+                              "inline-block px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider",
                               e.status === "cancelado"
-                                ? "bg-slate-100 text-slate-700"
+                                ? "bg-slate-100 text-slate-600 border border-slate-200"
                                 : isDespesa
-                                  ? "bg-rose-100 text-rose-800"
-                                  : "bg-emerald-100 text-emerald-800"
-                            }`}
+                                  ? "bg-rose-50 text-rose-700 border border-rose-200"
+                                  : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            )}
                           >
                             {e.status === "cancelado" ? "CANCELADO" : isDespesa ? "PAGO" : "RECEBIDO"}
                           </span>
@@ -1049,21 +1029,22 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
 
                         {/* VALOR */}
                         <TableCell
-                          className={`text-right font-bold tabular-nums text-sm ${
+                          className={cn(
+                            "align-middle py-3 text-right font-bold tabular-nums text-xs",
                             isDespesa ? "text-rose-600" : "text-emerald-600"
-                          }`}
+                          )}
                         >
                           {isDespesa ? "- " : "+ "}
                           {currency(e.amount)}
                         </TableCell>
 
                         {/* AÇÕES */}
-                        <TableCell className="text-right">
+                        <TableCell className="align-middle py-3 text-right">
                           <div className="flex items-center justify-end gap-1">
                             <Button
                               size="icon"
                               variant="ghost"
-                              className="h-8 w-8 text-muted-foreground hover:text-foreground cursor-pointer"
+                              className="h-7 w-7 text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
                               title="Ver histórico / Baixa"
                               onClick={() => handleOpenEditOrHistory(e)}
                               aria-label="Ver histórico"
@@ -1075,7 +1056,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-8 w-8 text-blue-600 hover:text-blue-700 cursor-pointer"
+                                className="h-7 w-7 text-blue-500 hover:text-blue-700 hover:bg-blue-50 cursor-pointer"
                                 title="Recibo / Histórico"
                                 onClick={() => handleOpenEditOrHistory(e)}
                                 aria-label="Recibo"
