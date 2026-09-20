@@ -14,6 +14,7 @@ import { ContasPagarTab } from "@/features/finance/ContasPagarTab";
 import { ContasReceberTab } from "@/features/finance/ContasReceberTab";
 import BankReconciliation from "@/features/finance/BankReconciliation";
 import { DfcTab } from "@/features/finance/DfcTab";
+import { DreTab } from "@/features/finance/DreTab";
 import FinanceOperations from "@/features/finance/FinanceOperations";
 import NewTitle from "@/features/finance/NewTitle";
 import PaymentHistory from "@/features/finance/PaymentHistory";
@@ -115,6 +116,13 @@ function FinanceiroPage() {
                     />
                   ) : search.tab === "dfc" ? (
                     <DfcTab
+                      finance={data}
+                      onRefresh={() => void query.refetch()}
+                      refreshing={query.isFetching}
+                      onSelectTitle={(id) => setSelected(id)}
+                    />
+                  ) : search.tab === "dre" ? (
+                    <DreTab
                       finance={data}
                       onRefresh={() => void query.refetch()}
                       refreshing={query.isFetching}

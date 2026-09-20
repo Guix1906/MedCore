@@ -8,6 +8,7 @@ import { OperationLock, fieldClass } from "./OperationForm";
 import ManagementReports from "./ManagementReports";
 import BankReconciliation from "./BankReconciliation";
 import { DfcTab } from "./DfcTab";
+import { DreTab } from "./DreTab";
 import CashFlow from "./CashFlow";
 import FinancialAccounts from "./FinancialAccounts";
 
@@ -130,13 +131,7 @@ export default function FinanceOperations({
               <DfcTab finance={scoped} onSelectTitle={onSelectTitle} />
             )}
             {mode === "dre" && (
-              <ManagementReports
-                finance={scoped}
-                ops={ops}
-                cash={cash}
-                mode={mode}
-                onSelectTitle={onSelectTitle}
-              />
+              <DreTab finance={scoped} onSelectTitle={onSelectTitle} />
             )}
             {mode === "contas" && <FinancialAccounts finance={scoped} cash={cash} ops={ops} />}
           </div>
