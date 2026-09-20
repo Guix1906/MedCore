@@ -52,6 +52,8 @@ import {
   usePatientClinicalHistory,
   type ClinicalHistoryItem,
 } from "@/hooks/usePatientClinicalHistory";
+import { PatientFinanceTab } from "@/components/pacientes/PatientFinanceTab";
+import { PatientPackagesTab } from "@/components/pacientes/PatientPackagesTab";
 
 export type PatientProfileData = {
   id?: string;
@@ -1206,20 +1208,38 @@ export function PatientFullProfileView({
             </div>
           )}
 
+          {/* ABA FINANCEIRO */}
+          {activeTab === "financeiro" && (
+            <PatientFinanceTab
+              patientId={data.id || ""}
+              patientName={data.name}
+            />
+          )}
+
+          {/* ABA PACOTES */}
+          {activeTab === "pacotes" && (
+            <PatientPackagesTab
+              patientId={data.id || ""}
+              patientName={data.name}
+            />
+          )}
+
           {/* OUTRAS ABAS */}
           {activeTab !== "informacoes" &&
             activeTab !== "prontuario" &&
-            activeTab !== "timeline" && (
+            activeTab !== "timeline" &&
+            activeTab !== "financeiro" &&
+            activeTab !== "pacotes" && (
               <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
                 <div className="h-14 w-14 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center">
                   <FolderOpen className="h-7 w-7" />
                 </div>
                 <h3 className="text-[16px] font-bold text-[#0F172A]">{activeTabLabel}</h3>
-              <p className="text-[13px] text-[#64748B]">
-                Nenhum registro encontrado para este paciente nesta seção no momento.
-              </p>
-            </div>
-          )}
+                <p className="text-[13px] text-[#64748B]">
+                  Nenhum registro encontrado para este paciente nesta seção no momento.
+                </p>
+              </div>
+            )}
         </main>
       </div>
 
