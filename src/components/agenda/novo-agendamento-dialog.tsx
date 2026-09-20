@@ -21,6 +21,7 @@ import {
   Download,
   Upload,
   User,
+  CheckCircle2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Activity } from "@/components/agenda/agenda-types";
@@ -395,6 +396,8 @@ export function NovoAgendamentoDialog({
   const [city, setCity] = useState(availableCities[0] ?? "");
   const [consultationType, setConsultationType] = useState("nova_consulta");
   const [quickPatientOpen, setQuickPatientOpen] = useState(false);
+  const [planCoverage, setPlanCoverage] = useState<"incluso" | "avulso" | "extra">("avulso");
+  const [linkedTreatmentId, setLinkedTreatmentId] = useState<string>("");
 
   useEffect(() => {
     if (!open) return;
@@ -436,6 +439,8 @@ export function NovoAgendamentoDialog({
     setDownPaymentMethod("pix");
     setCity(availableCities[0] ?? "");
     setConsultationType("nova_consulta");
+    setPlanCoverage("avulso");
+    setLinkedTreatmentId("");
   }, [open]);
   // ------ Queries com Cache Imediato e Prioridade PHP ------
   const { data: clients = [] } = useQuery({
@@ -610,6 +615,33 @@ export function NovoAgendamentoDialog({
       }
     }
   }, [clientId, isHistoryLoading, patientHistory]);
+
+  // Consulta tratamentos/planos ativos do paciente para vincular agendamento
+  const { data: patientTreatments = [] } = useQuery({
+    queryKey: ["patient-active-treatments", clientId],
+    enabled: !!clientId && isUuid(clientId),
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("treatments")
+        .select("id, title, status, start_date, end_date")
+        .eq("patient_id", clientId)
+        .in("status", ["active", "in_progress", "scheduled"])
+        .order("start_date", { ascending: false });
+      if (error) return [];
+      return data || [];
+    },
+  });
+
+  useEffect(() => {
+    if (patientTreatments.length > 0) {
+      setPlanCoverage("incluso");
+      setLinkedTreatmentId(patientTreatments[0].id);
+    } else {
+      setPlanCoverage("avulso");
+      setLinkedTreatmentId("");
+    }
+  }, [patientTreatments]);
 
   // Set default procedure list options grouped by category
   const DEFAULT_AGENDA_PROCEDURES = useMemo(
@@ -861,8 +893,9 @@ export function NovoAgendamentoDialog({
         return isNaN(parsed) ? 0 : parsed;
       };
 
-      const totalAmt = parseMoney(procedurePrice);
-      const sinalAmt = parseMoney(downPayment);
+      const isIncludedInPlan = type === "atendimento" && planCoverage === "incluso";
+      const totalAmt = isIncludedInPlan ? 0 : parseMoney(procedurePrice);
+      const sinalAmt = isIncludedInPlan ? 0 : parseMoney(downPayment);
       const restanteAmt = Math.max(0, totalAmt - sinalAmt);
       const todayStr = new Date().toISOString().slice(0, 10);
       const patientNameStr = selectedClient?.name ? ` - Paciente: ${selectedClient.name}` : "";
@@ -894,16 +927,23 @@ export function NovoAgendamentoDialog({
           type === "evento" || type === "atendimento" ? selectedProcedure || undefined : undefined,
         allowOtherProcedures: type === "evento" ? allowOtherProcedures : undefined,
         isNewPatient: type === "atendimento" ? isNewPatient : undefined,
+        planCoverage: type === "atendimento" ? planCoverage : undefined,
+        linkedTreatmentId:
+          type === "atendimento" && planCoverage === "incluso"
+            ? linkedTreatmentId || patientTreatments[0]?.id || undefined
+            : undefined,
         procedurePrice:
-          type === "atendimento" && (totalAmt > 0 || sinalAmt > 0)
+          type === "atendimento" && !isIncludedInPlan && (totalAmt > 0 || sinalAmt > 0)
             ? totalAmt > 0
               ? totalAmt
               : sinalAmt
             : undefined,
-        downPayment: type === "atendimento" && sinalAmt > 0 ? sinalAmt : 0,
+        downPayment: type === "atendimento" && !isIncludedInPlan && sinalAmt > 0 ? sinalAmt : 0,
         remainingValue:
-          type === "atendimento" ? Math.max(0, (totalAmt > 0 ? totalAmt : sinalAmt) - sinalAmt) : 0,
-        downPaymentMethod: type === "atendimento" ? downPaymentMethod : undefined,
+          type === "atendimento" && !isIncludedInPlan
+            ? Math.max(0, (totalAmt > 0 ? totalAmt : sinalAmt) - sinalAmt)
+            : 0,
+        downPaymentMethod: type === "atendimento" && !isIncludedInPlan ? downPaymentMethod : undefined,
         city: type === "atendimento" ? city : undefined,
         consultationType: type === "atendimento" ? consultationType : undefined,
       };
@@ -996,7 +1036,7 @@ export function NovoAgendamentoDialog({
           })
           .catch(() => {});
 
-        if (type === "atendimento" && (totalAmt > 0 || sinalAmt > 0)) {
+        if (type === "atendimento" && !isIncludedInPlan && (totalAmt > 0 || sinalAmt > 0)) {
           try {
             const { error } = await supabase.rpc("create_event_financial_title", {
               p_event_id: insertedId,
@@ -1014,6 +1054,8 @@ export function NovoAgendamentoDialog({
               { duration: 15000 },
             );
           }
+        } else if (isIncludedInPlan) {
+          toast.success("Agendamento salvo e vinculado ao plano de tratamento do paciente (sem cobrança duplicada).");
         }
       })();
 
@@ -2079,10 +2121,85 @@ export function NovoAgendamentoDialog({
                       </div>
                     </div>
 
+                    {/* Cobertura de Plano de Tratamento */}
+                    {patientTreatments.length > 0 && (
+                      <div className="p-3.5 rounded-xl border border-sky-300/80 bg-sky-500/10 space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 font-bold text-xs text-sky-800 dark:text-sky-300 uppercase tracking-wider">
+                            <TagIcon className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+                            <span>Plano / Pacote Ativo do Paciente</span>
+                          </div>
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-sky-200/80 dark:bg-sky-950 text-sky-800 dark:text-sky-200">
+                            {patientTreatments.length === 1
+                              ? "1 plano ativo"
+                              : `${patientTreatments.length} planos ativos`}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          O paciente está sob protocolo contínuo. Escolha se esta consulta é uma etapa coberta pelo plano ou um atendimento com cobrança avulsa.
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                          <div className="space-y-1">
+                            <FieldLabel>Enquadramento da Consulta</FieldLabel>
+                            <Select
+                              value={planCoverage}
+                              onValueChange={(v: "incluso" | "avulso" | "extra") => setPlanCoverage(v)}
+                            >
+                              <SelectTrigger className="h-10 rounded-xl bg-background font-medium border-sky-400/50">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="incluso">✨ Incluso no Plano (Sem débito avulso)</SelectItem>
+                                <SelectItem value="avulso">💵 Consulta Avulsa (Gera cobrança)</SelectItem>
+                                <SelectItem value="extra">➕ Procedimento Extra (Gera cobrança)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          {patientTreatments.length > 1 ? (
+                            <div className="space-y-1">
+                              <FieldLabel>Vincular ao Tratamento</FieldLabel>
+                              <Select value={linkedTreatmentId} onValueChange={setLinkedTreatmentId}>
+                                <SelectTrigger className="h-10 rounded-xl bg-background font-medium border-sky-400/50">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {patientTreatments.map((t) => (
+                                    <SelectItem key={t.id} value={t.id}>
+                                      {t.title}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          ) : (
+                            <div className="space-y-1">
+                              <FieldLabel>Plano Vinculado</FieldLabel>
+                              <div className="h-10 px-3 rounded-xl bg-background/80 border border-sky-300/40 text-xs font-semibold flex items-center text-foreground truncate">
+                                {patientTreatments[0]?.title}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        {planCoverage === "incluso" && (
+                          <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2 font-medium">
+                            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                            <span>Consulta inclusa no pacote do paciente. Nenhuma cobrança financeira adicional será gerada.</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Procedimento e Valores / Sinal */}
                     <div className="space-y-3 p-4 rounded-xl border border-border/70 bg-muted/20">
-                      <div className="text-xs font-bold text-foreground uppercase tracking-wider">
-                        Procedimento & Financeiro (Sinal / Restante)
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-bold text-foreground uppercase tracking-wider">
+                          Procedimento & Financeiro {planCoverage === "incluso" ? "(Coberto pelo Plano)" : "(Sinal / Restante)"}
+                        </div>
+                        {planCoverage === "incluso" && (
+                          <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                            Sem cobrança avulsa
+                          </span>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2093,7 +2210,7 @@ export function NovoAgendamentoDialog({
                             onValueChange={(v) => {
                               const val = v === "__none" ? "" : v;
                               setSelectedProcedure(val);
-                              if (val) {
+                              if (val && planCoverage !== "incluso") {
                                 const found =
                                   procedures.find((p) => p.id === val) ||
                                   (allProceduresList.find((p) => p.id === val) as any);
@@ -2130,64 +2247,75 @@ export function NovoAgendamentoDialog({
 
                         <div className="space-y-1.5">
                           <FieldLabel>Valor Total (R$)</FieldLabel>
-                          <FinancialNumberInput
-                            placeholder="0,00"
-                            value={procedurePrice}
-                            onChange={setProcedurePrice}
-                            className="h-11 rounded-xl bg-background font-semibold"
-                          />
+                          {planCoverage === "incluso" ? (
+                            <Input
+                              type="text"
+                              disabled
+                              value="Incluso no Pacote (R$ 0,00)"
+                              className="h-11 rounded-xl bg-muted text-muted-foreground font-semibold cursor-not-allowed"
+                            />
+                          ) : (
+                            <FinancialNumberInput
+                              placeholder="0,00"
+                              value={procedurePrice}
+                              onChange={setProcedurePrice}
+                              className="h-11 rounded-xl bg-background font-semibold"
+                            />
+                          )}
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
-                        <div className="space-y-1.5">
-                          <FieldLabel>Sinal Pago (R$)</FieldLabel>
-                          <FinancialNumberInput
-                            placeholder="0,00"
-                            value={downPayment}
-                            onChange={setDownPayment}
-                            className="h-11 rounded-xl bg-background border-emerald-500/50 text-emerald-700 font-semibold"
-                          />
-                        </div>
+                      {planCoverage !== "incluso" && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+                          <div className="space-y-1.5">
+                            <FieldLabel>Sinal Pago (R$)</FieldLabel>
+                            <FinancialNumberInput
+                              placeholder="0,00"
+                              value={downPayment}
+                              onChange={setDownPayment}
+                              className="h-11 rounded-xl bg-background border-emerald-500/50 text-emerald-700 font-semibold"
+                            />
+                          </div>
 
-                        <div className="space-y-1.5">
-                          <FieldLabel>Forma do Sinal</FieldLabel>
-                          <Select value={downPaymentMethod} onValueChange={setDownPaymentMethod}>
-                            <SelectTrigger className="h-11 rounded-xl bg-background">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="pix">Pix</SelectItem>
-                              <SelectItem value="cartao_credito">Cartão de Crédito</SelectItem>
-                              <SelectItem value="cartao_debito">Cartão de Débito</SelectItem>
-                              <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                              <SelectItem value="boleto">Boleto Bancário</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
+                          <div className="space-y-1.5">
+                            <FieldLabel>Forma do Sinal</FieldLabel>
+                            <Select value={downPaymentMethod} onValueChange={setDownPaymentMethod}>
+                              <SelectTrigger className="h-11 rounded-xl bg-background">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="pix">Pix</SelectItem>
+                                <SelectItem value="cartao_credito">Cartão de Crédito</SelectItem>
+                                <SelectItem value="cartao_debito">Cartão de Débito</SelectItem>
+                                <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                                <SelectItem value="boleto">Boleto Bancário</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
 
-                        <div className="space-y-1.5">
-                          <FieldLabel>Restante A Cobrar (R$)</FieldLabel>
-                          <Input
-                            type="text"
-                            readOnly
-                            value={
-                              (Number(procedurePrice) || 0) > 0 || (Number(downPayment) || 0) > 0
-                                ? new Intl.NumberFormat("pt-BR", {
-                                    style: "currency",
-                                    currency: "BRL",
-                                  }).format(
-                                    Math.max(
-                                      0,
-                                      (Number(procedurePrice) || 0) - (Number(downPayment) || 0),
-                                    ),
-                                  )
-                                : "R$ 0,00"
-                            }
-                            className="h-11 rounded-xl bg-amber-500/10 border-amber-500/50 text-amber-900 font-bold cursor-not-allowed"
-                          />
+                          <div className="space-y-1.5">
+                            <FieldLabel>Restante A Cobrar (R$)</FieldLabel>
+                            <Input
+                              type="text"
+                              readOnly
+                              value={
+                                (Number(procedurePrice) || 0) > 0 || (Number(downPayment) || 0) > 0
+                                  ? new Intl.NumberFormat("pt-BR", {
+                                      style: "currency",
+                                      currency: "BRL",
+                                    }).format(
+                                      Math.max(
+                                        0,
+                                        (Number(procedurePrice) || 0) - (Number(downPayment) || 0),
+                                      ),
+                                    )
+                                  : "R$ 0,00"
+                              }
+                              className="h-11 rounded-xl bg-amber-500/10 border-amber-500/50 text-amber-900 font-bold cursor-not-allowed"
+                            />
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
 
                     {/* Observações */}

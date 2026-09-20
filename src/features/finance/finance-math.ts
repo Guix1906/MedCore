@@ -9,11 +9,25 @@ export const cents = (value: number) => {
 export const remaining = (title: FinancialTitle) =>
   title.status === "cancelado" ? 0 : (cents(title.amount) - cents(title.paid_amount)) / 100;
 
+export function isFreeBalance(title: FinancialTitle): boolean {
+  const desc = (title.description || "").toLowerCase();
+  const cat = (title.category || "").toLowerCase();
+  return (
+    desc.includes("saldo livre") ||
+    desc.includes("sem vencimento") ||
+    desc.includes("[saldo_livre]") ||
+    cat.includes("saldo livre")
+  );
+}
+
 export function titleStatus(title: FinancialTitle, today: string) {
   if (title.status === "cancelado") return "Cancelado";
   if (remaining(title) === 0) return "Quitado";
+  if (isFreeBalance(title)) {
+    return title.paid_amount > 0 ? "Parcial (sem vencimento)" : "Em aberto sem vencimento";
+  }
   if (title.due_date < today) return title.paid_amount > 0 ? "Parcial / vencido" : "Vencido";
-  return title.paid_amount > 0 ? "Parcial" : "Pendente";
+  return title.paid_amount > 0 ? "Parcial" : "A vencer";
 }
 
 export function financialSummary(
@@ -37,6 +51,13 @@ export function financialSummary(
     else expense += cents(p.amount);
   }
   for (const t of titles) {
+    if (isFreeBalance(t)) {
+      // Saldo livre compõe o total a receber da clínica, mas não é projetado em um mês específico quando há filtro de período (start/end)
+      if (start || end) continue;
+      if (t.type === "receita") receivable += cents(remaining(t));
+      else payable += cents(remaining(t));
+      continue;
+    }
     if (!within(t.due_date)) continue;
     if (t.type === "receita") receivable += cents(remaining(t));
     else payable += cents(remaining(t));

@@ -19,6 +19,7 @@ import {
   X,
   Stethoscope,
   Sparkles,
+  Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -28,6 +29,7 @@ import {
   localDate,
   PAYMENT_METHODS,
 } from "@/features/acompanhamentos/followup-utils";
+import { getFinancialSnapshot, refreshFinance } from "@/features/finance/finance-api";
 import { cn } from "@/lib/utils";
 
 interface PatientPackagesTabProps {
@@ -124,15 +126,28 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
     },
   });
 
+  // Query financial snapshot for accounts list
+  const { data: financeData } = useQuery({
+    queryKey: ["financial-snapshot"],
+    queryFn: getFinancialSnapshot,
+    staleTime: 60_000,
+  });
+
   // Form state for New Treatment / Package
   const [title, setTitle] = useState("");
   const [doctorId, setDoctorId] = useState("");
   const [startDate, setStartDate] = useState(localDate());
-  const [protocolDays, setProtocolDays] = useState("90");
+  const [protocolDays, setProtocolDays] = useState("months_3");
+  const [customEndDate, setCustomEndDate] = useState("");
   const [totalValue, setTotalValue] = useState("");
   const [downPayment, setDownPayment] = useState("");
-  const [installmentsCount, setInstallmentsCount] = useState("1");
-  const [paymentMethod, setPaymentMethod] = useState("pix");
+  const [downStatus, setDownStatus] = useState<"received_now" | "pending">("received_now");
+  const [downMethod, setDownMethod] = useState("pix");
+  const [downAccountId, setDownAccountId] = useState("");
+  const [remainingModality, setRemainingModality] = useState<"parcelado" | "livre">("livre");
+  const [installmentsCount, setInstallmentsCount] = useState("3");
+  const [firstDueDate, setFirstDueDate] = useState("");
+  const [remainingMethod, setRemainingMethod] = useState("pix");
   const [objective, setObjective] = useState("");
   const [notes, setNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -155,12 +170,19 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
   const handleOpenModal = () => {
     setTitle("");
     setDoctorId(doctors[0]?.id || "");
-    setStartDate(localDate());
-    setProtocolDays("90");
+    const today = localDate();
+    setStartDate(today);
+    setProtocolDays("months_3");
+    setCustomEndDate("");
     setTotalValue("");
     setDownPayment("");
-    setInstallmentsCount("1");
-    setPaymentMethod("pix");
+    setDownStatus("received_now");
+    setDownMethod("pix");
+    setDownAccountId(financeData?.accounts?.find((a) => a.active)?.id || "");
+    setRemainingModality("livre");
+    setInstallmentsCount("3");
+    setFirstDueDate(today);
+    setRemainingMethod("pix");
     setObjective("");
     setNotes("");
     setModalOpen(true);
@@ -175,13 +197,27 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
 
     setIsSaving(true);
     try {
-      const startD = new Date(startDate);
-      const days = Number(protocolDays) || 90;
-      const endD = new Date(startD.getTime() + days * 86400000);
-      const endDateStr = endD.toISOString().slice(0, 10);
+      const [y, m, d] = startDate.split("-").map(Number);
+      let endDateStr: string;
+      if (protocolDays.startsWith("months_")) {
+        const months = Number(protocolDays.replace("months_", ""));
+        const targetDate = new Date(y, m - 1 + months, d);
+        endDateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, "0")}-${String(targetDate.getDate()).padStart(2, "0")}`;
+      } else if (protocolDays === "custom" && customEndDate) {
+        endDateStr = customEndDate;
+      } else {
+        const days = Number(protocolDays) || 90;
+        const targetDate = new Date(y, m - 1, d);
+        targetDate.setDate(targetDate.getDate() + days);
+        endDateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, "0")}-${String(targetDate.getDate()).padStart(2, "0")}`;
+      }
 
       const val = parseFloat(totalValue.replace(/\./g, "").replace(",", ".")) || 0;
       const down = parseFloat(downPayment.replace(/\./g, "").replace(",", ".")) || 0;
+      const balance = Math.max(0, val - down);
+      const isLivre = remainingModality === "livre";
+      const count = isLivre ? 1 : Number(installmentsCount) || 1;
+      const mainMethod = down > 0 ? downMethod : balance > 0 ? remainingMethod : "pix";
 
       const payload = {
         patient_id: patientId,
@@ -194,11 +230,13 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
         total_value: val,
         down_payment: down,
         discount: 0,
-        installments_count: Number(installmentsCount) || 1,
-        payment_method: paymentMethod,
+        installments_count: count,
+        payment_method: mainMethod,
         color: "#8B47FF",
         status: "em_andamento",
-        notes: notes.trim() || null,
+        notes:
+          (notes.trim() ? notes.trim() + "\n" : "") +
+          (isLivre ? "[modalidade:saldo_livre]" : "[modalidade:parcelado]"),
       };
 
       const { data, error } = await supabase
@@ -209,11 +247,106 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
 
       if (error) throw error;
 
+      // Se houver valor financeiro informado, gera as cobranças oficiais no Financeiro
+      if (val > 0 && data?.id) {
+        let pType: "a_vista" | "parcelado" = "parcelado";
+        let pCount = count;
+        let pFirstDue = startDate;
+
+        if (balance <= 0) {
+          pType = "a_vista";
+          pCount = 1;
+          pFirstDue = startDate;
+        } else if (isLivre) {
+          pType = "parcelado";
+          pCount = 1;
+          pFirstDue = endDateStr;
+        } else {
+          pType = count > 1 ? "parcelado" : down > 0 ? "parcelado" : "a_vista";
+          pCount = count;
+          pFirstDue = firstDueDate || startDate;
+        }
+
+        try {
+          const { error: finError } = await supabase.rpc("configure_treatment_payment", {
+            p_treatment_id: data.id,
+            p_total: val,
+            p_discount: 0,
+            p_down: down,
+            p_type: pType,
+            p_down_method: down > 0 ? downMethod : null,
+            p_method: balance > 0 ? remainingMethod : downMethod,
+            p_count: pCount,
+            p_down_due: down > 0 ? startDate : null,
+            p_first_due: pFirstDue,
+          });
+
+          if (finError) {
+            console.warn("Aviso ao gerar parcelas financeiras:", finError);
+            toast.info("Plano criado. As condições financeiras podem ser conferidas na aba Financeiro.");
+          } else {
+            // Ajustar títulos gerados: Saldo Livre e Baixa imediata de Entrada recebida
+            const { data: createdTxs } = await supabase
+              .from("transactions")
+              .select("id, installment_id, description, installments:installment_id(number)")
+              .eq("treatment_id", data.id);
+
+            if (createdTxs) {
+              // 1. Se for modalidade de Saldo Livre, identificar o título do saldo e marcá-lo como Saldo Livre
+              if (isLivre && balance > 0) {
+                const balanceTx = createdTxs.find(
+                  (tx: any) => tx.installments?.number !== 0 && !tx.description?.includes("Entrada"),
+                );
+                if (balanceTx) {
+                  await supabase
+                    .from("transactions")
+                    .update({
+                      description: `Acompanhamento: ${title.trim()} - Saldo Livre (Sem vencimento definido)`,
+                      category: "Saldo Livre",
+                    })
+                    .eq("id", balanceTx.id);
+                }
+              }
+
+              // 2. Se a entrada foi marcada como "Recebido agora", registrar a baixa oficial
+              if (down > 0 && downStatus === "received_now") {
+                const downTx = createdTxs.find(
+                  (tx: any) => tx.installments?.number === 0 || tx.description?.includes("Entrada"),
+                );
+                if (downTx && downAccountId) {
+                  const { error: payErr } = await supabase.rpc("record_financial_payment", {
+                    p_id: crypto.randomUUID(),
+                    p_transaction_id: downTx.id,
+                    p_amount: down,
+                    p_paid_on: startDate,
+                    p_method: downMethod,
+                    p_account_id: downAccountId,
+                    p_payer_name: patientName || null,
+                  });
+                  if (payErr) {
+                    console.warn("Aviso ao liquidar entrada recebida:", payErr);
+                  }
+                }
+              }
+            }
+
+            await refreshFinance(qc);
+          }
+        } catch (rpcErr) {
+          console.warn("Falha na chamada da RPC de parcelamento:", rpcErr);
+        }
+      }
+
       await refetch();
       await qc.invalidateQueries({ queryKey: ["patient-clinical-history"] });
       await qc.invalidateQueries({ queryKey: ["treatments-list"] });
+      await qc.invalidateQueries({ queryKey: ["financial-snapshot"] });
 
-      toast.success("Pacote/Tratamento adicionado com sucesso!");
+      toast.success(
+        val > 0
+          ? "Plano contratado e cobranças geradas no Financeiro!"
+          : "Plano de tratamento registrado com sucesso!",
+      );
       setModalOpen(false);
     } catch (err: any) {
       toast.error(err.message || "Erro ao criar pacote de tratamento");
@@ -478,8 +611,21 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
                 />
               </div>
 
-              {/* Médico Responsável & Duração */}
+              {/* Data de Início e Profissional */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="space-y-1.5">
+                  <label className="text-[12px] font-bold text-slate-700">
+                    Data de Início <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-[13px] text-slate-800 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/15 outline-none transition-all"
+                  />
+                </div>
+
                 <div className="space-y-1.5">
                   <label className="text-[12px] font-bold text-slate-700">
                     Profissional / Médico
@@ -497,61 +643,324 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
                     ))}
                   </select>
                 </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[12px] font-bold text-slate-700">
-                    Duração do Protocolo (dias)
-                  </label>
-                  <select
-                    value={protocolDays}
-                    onChange={(e) => setProtocolDays(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-[13px] text-slate-800 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/15 outline-none transition-all"
-                  >
-                    <option value="30">30 dias (1 mês)</option>
-                    <option value="60">60 dias (2 meses)</option>
-                    <option value="90">90 dias (3 meses)</option>
-                    <option value="180">180 dias (6 meses)</option>
-                    <option value="365">365 dias (1 ano)</option>
-                  </select>
-                </div>
               </div>
 
-              {/* Valores & Parcelas */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-                <div className="space-y-1.5">
-                  <label className="text-[12px] font-bold text-slate-700">Valor Total (R$)</label>
-                  <input
-                    placeholder="0,00"
-                    value={totalValue}
-                    onChange={(e) => setTotalValue(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-[13px] text-slate-800 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/15 outline-none transition-all"
-                  />
+              {/* Vigência / Duração do Plano */}
+              <div className="space-y-1.5">
+                <label className="text-[12px] font-bold text-slate-700">
+                  Vigência do Plano de Acompanhamento
+                </label>
+                <select
+                  value={protocolDays}
+                  onChange={(e) => setProtocolDays(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-[13px] text-slate-800 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/15 outline-none transition-all"
+                >
+                  <option value="months_1">1 mês de calendário</option>
+                  <option value="months_2">2 meses de calendário</option>
+                  <option value="months_3">3 meses de calendário (ex: 16/06 a 16/09)</option>
+                  <option value="months_6">6 meses de calendário</option>
+                  <option value="months_12">12 meses (1 ano)</option>
+                  <option value="30">30 dias corridos</option>
+                  <option value="60">60 dias corridos</option>
+                  <option value="90">90 dias corridos</option>
+                  <option value="custom">Data de término personalizada…</option>
+                </select>
+
+                {protocolDays === "custom" && (
+                  <div className="pt-2">
+                    <label className="text-[12px] font-bold text-purple-700">
+                      Data Final Acordada <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={customEndDate}
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      className="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-purple-300 bg-purple-50/40 text-[13px] text-slate-800 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/15 outline-none transition-all"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Condições Financeiras: Valores, Entrada, Parcelas e Forma */}
+              <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11.5px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <Wallet size={14} className="text-purple-600" />
+                    Condições Financeiras do Contrato
+                  </span>
+                  {(() => {
+                    const v = parseFloat(totalValue.replace(/\./g, "").replace(",", ".")) || 0;
+                    const d = parseFloat(downPayment.replace(/\./g, "").replace(",", ".")) || 0;
+                    const b = Math.max(0, v - d);
+                    return v > 0 ? (
+                      <span className="text-[12px] font-bold text-slate-600">
+                        Saldo a receber:{" "}
+                        <strong className={b > 0 ? "text-purple-700" : "text-emerald-600"}>
+                          {currency(b)}
+                        </strong>
+                      </span>
+                    ) : null;
+                  })()}
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-[12px] font-bold text-slate-700">Entrada (R$)</label>
-                  <input
-                    placeholder="0,00"
-                    value={downPayment}
-                    onChange={(e) => setDownPayment(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-[13px] text-slate-800 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/15 outline-none transition-all"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-1">
+                    <label className="text-[12px] font-bold text-slate-700">
+                      Valor Total Contratado (R$) <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      placeholder="0,00"
+                      value={totalValue}
+                      onChange={(e) => setTotalValue(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-[13px] text-slate-800 font-semibold focus:border-purple-600 focus:ring-2 focus:ring-purple-600/15 outline-none transition-all"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[12px] font-bold text-slate-700">
+                      Entrada / Pagamento Inicial (R$)
+                    </label>
+                    <input
+                      placeholder="0,00 (opcional)"
+                      value={downPayment}
+                      onChange={(e) => setDownPayment(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-[13px] text-slate-800 font-semibold focus:border-purple-600 focus:ring-2 focus:ring-purple-600/15 outline-none transition-all"
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-[12px] font-bold text-slate-700">Parcelas</label>
-                  <select
-                    value={installmentsCount}
-                    onChange={(e) => setInstallmentsCount(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-[13px] text-slate-800 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/15 outline-none transition-all"
-                  >
-                    {[1, 2, 3, 4, 5, 6, 10, 12].map((n) => (
-                      <option key={n} value={n}>
-                        {n}x
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {/* Bloco de Entrada detalhada quando informada */}
+                {(() => {
+                  const d = parseFloat(downPayment.replace(/\./g, "").replace(",", ".")) || 0;
+                  if (d <= 0) return null;
+
+                  return (
+                    <div className="p-3.5 bg-white rounded-xl border border-purple-100 shadow-xs space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <label className="text-[12px] font-bold text-purple-900">
+                          Situação da Entrada ({currency(d)})
+                        </label>
+                        <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
+                          <button
+                            type="button"
+                            onClick={() => setDownStatus("received_now")}
+                            className={cn(
+                              "px-2.5 py-1 text-[11.5px] font-bold rounded-md transition-all cursor-pointer",
+                              downStatus === "received_now"
+                                ? "bg-emerald-600 text-white shadow-xs"
+                                : "text-slate-600 hover:text-slate-900",
+                            )}
+                          >
+                            ✓ Pagamento recebido agora
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDownStatus("pending")}
+                            className={cn(
+                              "px-2.5 py-1 text-[11.5px] font-bold rounded-md transition-all cursor-pointer",
+                              downStatus === "pending"
+                                ? "bg-amber-600 text-white shadow-xs"
+                                : "text-slate-600 hover:text-slate-900",
+                            )}
+                          >
+                            ⏳ Entrada prevista
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[11.5px] font-bold text-slate-600">
+                            Forma de Pagamento da Entrada
+                          </label>
+                          <select
+                            value={downMethod}
+                            onChange={(e) => setDownMethod(e.target.value)}
+                            className="w-full px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-[12.5px] text-slate-800 outline-none focus:border-purple-600"
+                          >
+                            <option value="pix">Pix</option>
+                            <option value="dinheiro">Dinheiro</option>
+                            <option value="cartao_credito">Cartão de Crédito</option>
+                            <option value="cartao_debito">Cartão de Débito</option>
+                            <option value="transferencia">Transferência Bancária</option>
+                            <option value="boleto">Boleto</option>
+                          </select>
+                        </div>
+
+                        {downStatus === "received_now" ? (
+                          <div className="space-y-1">
+                            <label className="text-[11.5px] font-bold text-slate-600">
+                              Conta de Destino da Baixa
+                            </label>
+                            <select
+                              value={downAccountId}
+                              onChange={(e) => setDownAccountId(e.target.value)}
+                              className="w-full px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-[12.5px] text-slate-800 outline-none focus:border-purple-600"
+                            >
+                              {(financeData?.accounts || [])
+                                .filter((a) => a.active)
+                                .map((acc) => (
+                                  <option key={acc.id} value={acc.id}>
+                                    {acc.name} ({acc.bank_name || "Caixa"})
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <label className="text-[11.5px] font-bold text-slate-600">
+                              Previsão de Recebimento
+                            </label>
+                            <p className="text-[12px] text-slate-500 py-1.5">
+                              Ficará pendente com vencimento na data inicial ({formatClinicalDate(startDate)}).
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Modalidade do Saldo Restante */}
+                {(() => {
+                  const v = parseFloat(totalValue.replace(/\./g, "").replace(",", ".")) || 0;
+                  const d = parseFloat(downPayment.replace(/\./g, "").replace(",", ".")) || 0;
+                  const b = Math.max(0, v - d);
+
+                  if (v <= 0) return null;
+                  if (b <= 0) {
+                    return (
+                      <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-800 text-[12.5px]">
+                        ✓ <strong>Plano 100% coberto pela entrada.</strong> O valor total será baixado/quitado na contratação.
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-2.5 pt-1">
+                      <label className="text-[12px] font-bold text-slate-700 block">
+                        Como será pago o saldo restante ({currency(b)})?
+                      </label>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* Opção B: Pagamentos livres */}
+                        <div
+                          onClick={() => setRemainingModality("livre")}
+                          className={cn(
+                            "p-3 rounded-xl border-2 cursor-pointer transition-all space-y-1.5",
+                            remainingModality === "livre"
+                              ? "border-purple-600 bg-purple-50/50 shadow-xs"
+                              : "border-slate-200 bg-white hover:border-slate-300",
+                          )}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-[12.5px] font-bold text-slate-900 flex items-center gap-1.5">
+                              Pagamentos livres
+                            </span>
+                            <span
+                              className={cn(
+                                "h-4 w-4 rounded-full border-2 flex items-center justify-center text-[10px]",
+                                remainingModality === "livre"
+                                  ? "border-purple-600 bg-purple-600 text-white"
+                                  : "border-slate-300",
+                              )}
+                            >
+                              {remainingModality === "livre" && "✓"}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 leading-tight">
+                            Sem datas fixas. Paciente paga aos poucos nas visitas. Não gera cobranças
+                            vencidas nem parcelas artificiais.
+                          </p>
+                        </div>
+
+                        {/* Opção A: Parcelado com vencimentos */}
+                        <div
+                          onClick={() => setRemainingModality("parcelado")}
+                          className={cn(
+                            "p-3 rounded-xl border-2 cursor-pointer transition-all space-y-1.5",
+                            remainingModality === "parcelado"
+                              ? "border-purple-600 bg-purple-50/50 shadow-xs"
+                              : "border-slate-200 bg-white hover:border-slate-300",
+                          )}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-[12.5px] font-bold text-slate-900 flex items-center gap-1.5">
+                              Parcelas com vencimento
+                            </span>
+                            <span
+                              className={cn(
+                                "h-4 w-4 rounded-full border-2 flex items-center justify-center text-[10px]",
+                                remainingModality === "parcelado"
+                                  ? "border-purple-600 bg-purple-600 text-white"
+                                  : "border-slate-300",
+                              )}
+                            >
+                              {remainingModality === "parcelado" && "✓"}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 leading-tight">
+                            Datas e valores pré-definidos no calendário financeiro da clínica.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Campos específicos da modalidade Parcelada */}
+                      {remainingModality === "parcelado" && (
+                        <div className="p-3 bg-white rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-[11.5px] font-bold text-slate-600">
+                              Nº de Parcelas
+                            </label>
+                            <select
+                              value={installmentsCount}
+                              onChange={(e) => setInstallmentsCount(e.target.value)}
+                              className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-[12.5px] text-slate-800 outline-none focus:border-purple-600"
+                            >
+                              {[1, 2, 3, 4, 5, 6, 10, 12].map((n) => (
+                                <option key={n} value={n}>
+                                  {n}x de {currency(b / n)}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[11.5px] font-bold text-slate-600">
+                              1º Vencimento
+                            </label>
+                            <input
+                              type="date"
+                              required
+                              value={firstDueDate}
+                              onChange={(e) => setFirstDueDate(e.target.value)}
+                              className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-[12.5px] text-slate-800 outline-none focus:border-purple-600"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[11.5px] font-bold text-slate-600">
+                              Forma Prevista
+                            </label>
+                            <select
+                              value={remainingMethod}
+                              onChange={(e) => setRemainingMethod(e.target.value)}
+                              className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-[12.5px] text-slate-800 outline-none focus:border-purple-600"
+                            >
+                              <option value="pix">Pix</option>
+                              <option value="cartao_credito">Cartão de Crédito</option>
+                              <option value="cartao_debito">Cartão de Débito</option>
+                              <option value="boleto">Boleto Bancário</option>
+                              <option value="dinheiro">Dinheiro</option>
+                              <option value="transferencia">Transferência</option>
+                            </select>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Objetivo Clínico */}

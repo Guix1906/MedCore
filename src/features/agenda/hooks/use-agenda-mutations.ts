@@ -42,18 +42,14 @@ export function useAgendaMutations(onDone: (a: Activity | null) => void) {
       if (a.source === "event") {
         deleteStoredLocalEvent(id);
       }
-      try {
-        const { error } = await supabase.from(tbl).delete().eq("id", id);
-        if (error) console.warn("Supabase delete warning:", error);
-      } catch (err) {
-        console.warn("Delete error caught:", err);
-      }
+      const { error } = await supabase.from(tbl).delete().eq("id", id);
+      if (error) throw error;
     },
     onSuccess: (_v, a) => {
-      toast.success("Atividade excluída");
+      toast.success("Atividade excluída com sucesso");
       onDone(a);
     },
-    onError: (e: Error) => toast.error("Erro", { description: e.message }),
+    onError: (e: Error) => toast.error("Erro ao excluir atividade", { description: e.message }),
   });
 
   const reschedule = useMutation({
@@ -93,32 +89,26 @@ export function useAgendaMutations(onDone: (a: Activity | null) => void) {
         : new Date(newStart.getTime() + 60 * 60 * 1000);
 
       if (a.source === "task") {
-        try {
-          await supabase
-            .from("tasks")
-            .update({ due_date: newStart.toISOString() })
-            .eq("id", targetId);
-        } catch {}
+        const { error } = await supabase
+          .from("tasks")
+          .update({ due_date: newStart.toISOString() })
+          .eq("id", targetId);
+        if (error) throw error;
       } else if (a.source === "event") {
-        // Garante persistência local
         updateStoredLocalEventTimes(targetId, newStart.toISOString(), newEnd.toISOString());
 
-        try {
-          await supabase
-            .from("events")
-            .update({
-              starts_at: newStart.toISOString(),
-              ends_at: newEnd.toISOString(),
-            })
-            .eq("id", targetId);
-        } catch (e) {
-          console.warn("Supabase update error:", e);
-        }
+        const { error } = await supabase
+          .from("events")
+          .update({
+            starts_at: newStart.toISOString(),
+            ends_at: newEnd.toISOString(),
+          })
+          .eq("id", targetId);
+        if (error) throw error;
       } else {
         const d = `${newStart.getFullYear()}-${pad2(newStart.getMonth() + 1)}-${pad2(newStart.getDate())}`;
-        try {
-          await supabase.from("deadlines").update({ due_date: d }).eq("id", targetId);
-        } catch {}
+        const { error } = await supabase.from("deadlines").update({ due_date: d }).eq("id", targetId);
+        if (error) throw error;
       }
     },
     onSuccess: () => {
@@ -179,35 +169,31 @@ export function useAgendaMutations(onDone: (a: Activity | null) => void) {
 
       const targetId = a.id && a.id.includes(":") ? a.id.split(":")[1] : a.id || "";
 
-      try {
-        if (a.source === "event") {
-          updateStoredLocalEventTimes(targetId, validStart.toISOString(), validEnd.toISOString());
+      if (a.source === "event") {
+        updateStoredLocalEventTimes(targetId, validStart.toISOString(), validEnd.toISOString());
 
-          const { error } = await supabase
-            .from("events")
-            .update({
-              starts_at: validStart.toISOString(),
-              ends_at: validEnd.toISOString(),
-            })
-            .eq("id", targetId);
-          if (error) console.warn("Supabase event update:", error);
-        } else if (a.source === "task") {
-          const { error } = await supabase
-            .from("tasks")
-            .update({ due_date: validStart.toISOString() })
-            .eq("id", targetId);
-          if (error) console.warn("Supabase task update:", error);
-        } else {
-          const pad2 = (n: number) => String(n).padStart(2, "0");
-          const d = `${validStart.getFullYear()}-${pad2(validStart.getMonth() + 1)}-${pad2(validStart.getDate())}`;
-          const { error } = await supabase
-            .from("deadlines")
-            .update({ due_date: d })
-            .eq("id", targetId);
-          if (error) console.warn("Supabase deadline update:", error);
-        }
-      } catch (err) {
-        console.warn("Resize error caught safely:", err);
+        const { error } = await supabase
+          .from("events")
+          .update({
+            starts_at: validStart.toISOString(),
+            ends_at: validEnd.toISOString(),
+          })
+          .eq("id", targetId);
+        if (error) throw error;
+      } else if (a.source === "task") {
+        const { error } = await supabase
+          .from("tasks")
+          .update({ due_date: validStart.toISOString() })
+          .eq("id", targetId);
+        if (error) throw error;
+      } else {
+        const pad2 = (n: number) => String(n).padStart(2, "0");
+        const d = `${validStart.getFullYear()}-${pad2(validStart.getMonth() + 1)}-${pad2(validStart.getDate())}`;
+        const { error } = await supabase
+          .from("deadlines")
+          .update({ due_date: d })
+          .eq("id", targetId);
+        if (error) throw error;
       }
     },
     onSuccess: () => {

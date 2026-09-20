@@ -235,10 +235,6 @@ export default function ProntuarioPage() {
 
   const markDirty = useCallback(() => {
     setSaveState("dirty");
-    if (saveTimer.current) window.clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(() => {
-      setSaveState("saved");
-    }, 1200);
   }, []);
 
   const copyPatient = async () => {
@@ -263,6 +259,8 @@ export default function ProntuarioPage() {
     const anamneseText = queixaRef.current?.getText() || "";
 
     setIsFinalizing(true);
+    setSaveState("saving");
+
     const newRecord = {
       id: crypto.randomUUID(),
       patient_id: targetPatientId || null,
@@ -273,30 +271,10 @@ export default function ProntuarioPage() {
       finished_at: new Date().toISOString(),
     };
 
-    // 1. Salva no LocalStorage com chave do ID e com chave do Nome
-    try {
-      if (targetPatientId)
-        localStorage.setItem("medcore_prontuario_" + targetPatientId, JSON.stringify(newRecord));
-      if (patientName)
-        localStorage.setItem("medcore_prontuario_" + patientName, JSON.stringify(newRecord));
+    let persisted = false;
+    let persistenceError: any = null;
 
-      const histKey = targetPatientId
-        ? "medcore_prontuario_history_" + targetPatientId
-        : "medcore_prontuario_history_" + patientName;
-      const prevHist = JSON.parse(localStorage.getItem(histKey) || "[]");
-      const nextHist = [newRecord, ...prevHist.filter((h: any) => h.id !== newRecord.id)];
-      if (targetPatientId)
-        localStorage.setItem(
-          "medcore_prontuario_history_" + targetPatientId,
-          JSON.stringify(nextHist),
-        );
-      if (patientName)
-        localStorage.setItem("medcore_prontuario_history_" + patientName, JSON.stringify(nextHist));
-    } catch (e) {
-      console.warn("Aviso ao salvar localmente:", e);
-    }
-
-    // 2. Salva no banco de dados PHP / Supabase se ID presente
+    // 1. Persistência no banco de dados (PHP / Supabase)
     if (targetPatientId) {
       try {
         await prontuarioService.createRecord({
@@ -305,21 +283,50 @@ export default function ProntuarioPage() {
           duration_seconds: secondsRef.current,
           finished_at: new Date().toISOString(),
         });
+        persisted = true;
       } catch (phpErr) {
         try {
-          await supabase.from("medical_records").insert({
+          const { error: sbError } = await supabase.from("medical_records").insert({
             patient_id: targetPatientId,
             complaint: anamneseText || null,
             duration_seconds: secondsRef.current,
             finished_at: new Date().toISOString(),
           });
-        } catch (e) {
-          console.warn("Medical records insert fallback to local:", e);
+          if (sbError) throw sbError;
+          persisted = true;
+        } catch (e: any) {
+          persistenceError = e;
+          console.error("Falha na gravação do prontuário:", e);
         }
+      }
+    } else {
+      persistenceError = new Error("Paciente sem identificador cadastrado.");
+    }
+
+    // 2. Backup isolado por ID do paciente (sem chaves abertas por nome)
+    if (targetPatientId) {
+      try {
+        const histKey = "medcore_prontuario_history_" + targetPatientId;
+        const prevHist = JSON.parse(localStorage.getItem(histKey) || "[]");
+        const nextHist = [newRecord, ...prevHist.filter((h: any) => h.id !== newRecord.id)];
+        localStorage.setItem(histKey, JSON.stringify(nextHist));
+      } catch (e) {
+        console.warn("Aviso ao atualizar cache local:", e);
       }
     }
 
+    if (!persisted) {
+      setIsFinalizing(false);
+      setSaveState("dirty");
+      toast.error("Não foi possível salvar o prontuário no servidor", {
+        description: persistenceError?.message || "Verifique sua conexão e tente novamente.",
+      });
+      return;
+    }
+
+    setSaveState("saved");
     queryClient.invalidateQueries({ queryKey: ["patient-medical-records"] });
+    queryClient.invalidateQueries({ queryKey: ["patient-clinical-history"] });
 
     toast.success("Atendimento finalizado com sucesso!", {
       description: `Duração: ${formatTime(secondsRef.current)}. Prontuário clínico gravado para ${patientName}.`,
@@ -807,14 +814,14 @@ export default function ProntuarioPage() {
 function SaveIndicator({ state }: { state: SaveState }) {
   const cfg =
     state === "saved"
-      ? { label: "Salvo", icon: Check, cls: "text-emerald-600 bg-emerald-50 border-emerald-100" }
+      ? { label: "Salvo no banco", icon: Check, cls: "text-emerald-600 bg-emerald-50 border-emerald-100" }
       : state === "saving"
         ? {
-            label: "Salvando…",
+            label: "Gravando…",
             icon: CloudUpload,
             cls: "text-primary bg-primary/10 border-primary/20",
           }
-        : { label: "Editado", icon: CircleDot, cls: "text-amber-600 bg-amber-50 border-amber-100" };
+        : { label: "Em edição (não gravado)", icon: CircleDot, cls: "text-amber-600 bg-amber-50 border-amber-100" };
   const Icon = cfg.icon;
   return (
     <AnimatePresence mode="wait">

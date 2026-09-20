@@ -12,7 +12,7 @@ import {
   moneyCents,
 } from "@/features/acompanhamentos/followup-utils";
 import { getFinancialSnapshot, refreshFinance } from "@/features/finance/finance-api";
-import { financialSummary, remaining, titleStatus } from "@/features/finance/finance-math";
+import { financialSummary, isFreeBalance, remaining, titleStatus } from "@/features/finance/finance-math";
 import type { FinanceSnapshot } from "@/features/finance/finance-schema";
 import CashFlow from "@/features/finance/CashFlow";
 import FinanceOperations from "@/features/finance/FinanceOperations";
@@ -139,8 +139,17 @@ function FinanceiroPage() {
         if (tab === "receber" && t.type !== "receita") return false;
         if (tab === "pagar" && t.type !== "despesa") return false;
         if (status === "open" && remaining(t) <= 0) return false;
+        if (
+          status === "free_balance" &&
+          (remaining(t) <= 0 || !isFreeBalance(t) || t.status === "cancelado")
+        )
+          return false;
         if (status === "paid" && (remaining(t) !== 0 || t.status === "cancelado")) return false;
-        if (status === "overdue" && (remaining(t) <= 0 || t.due_date >= localDate())) return false;
+        if (
+          status === "overdue" &&
+          (remaining(t) <= 0 || isFreeBalance(t) || t.due_date >= localDate())
+        )
+          return false;
         if (status === "cancelled" && t.status !== "cancelado") return false;
         return (
           !search ||
@@ -152,9 +161,14 @@ function FinanceiroPage() {
     [data, scope, tab, status, search],
   );
   const titleIds = new Set(baseTitles.map((t) => t.id));
-  const filteredTitles = baseTitles.filter(
-    (t) => (!start || t.due_date >= start) && (!end || t.due_date <= end),
-  );
+  const filteredTitles = baseTitles.filter((t) => {
+    if (isFreeBalance(t)) {
+      if (status === "free_balance") return true;
+      // Saldo livre não é projetado em um mês específico de calendário (quando filtros de início e fim estiverem ativos)
+      return !start && !end;
+    }
+    return (!start || t.due_date >= start) && (!end || t.due_date <= end);
+  });
   const payments =
     data?.payments.filter(
       (p) =>
@@ -286,6 +300,7 @@ function FinanceiroPage() {
                       >
                         <option value="all">Todas</option>
                         <option value="open">Em aberto / parcial</option>
+                        <option value="free_balance">Saldos sem vencimento definido</option>
                         <option value="overdue">Vencidos</option>
                         <option value="paid">Quitados</option>
                         <option value="cancelled">Cancelados</option>
@@ -403,52 +418,99 @@ function FinanceiroPage() {
                                     </tr>
                                   );
                                 })
-                              : filteredTitles.map((t) => (
-                                  <tr key={t.id} className="border-t">
-                                    <td className="p-3">{formatClinicalDate(t.due_date)}</td>
-                                    <td className="p-3">
-                                      <strong>{t.patient_name || "Avulso"}</strong>
-                                      <p>{t.payer_name && `Pagador: ${t.payer_name}`}</p>
-                                      <p>
-                                        {t.type} · {t.description}
-                                      </p>
-                                      <p className="text-xs text-slate-500">
-                                        {t.treatment_id
-                                          ? "Plano de tratamento"
-                                          : "Lançamento / atendimento"}
-                                      </p>
-                                    </td>
-                                    <td className="p-3">{currency(t.amount)}</td>
-                                    <td className="p-3">
-                                      {currency(t.paid_amount)} / {currency(remaining(t))}
-                                    </td>
-                                    <td className="p-3">{titleStatus(t, localDate())}</td>
-                                    <td className="p-3 space-x-3">
-                                      <button
-                                        className="text-purple-700 underline"
-                                        onClick={() => setSelected(t.id)}
-                                      >
-                                        {remaining(t) > 0 && t.can_settle
-                                          ? "Baixar / histórico"
-                                          : "Histórico"}
-                                      </button>
-                                      {t.can_cancel &&
-                                        !t.treatment_id &&
-                                        t.status !== "cancelado" &&
-                                        !data.payments.some((p) => p.transaction_id === t.id) && (
-                                          <button
-                                            className="text-red-700 underline"
-                                            onClick={() => {
-                                              setCancelId(t.id);
-                                              setReason("");
-                                            }}
-                                          >
-                                            Cancelar
-                                          </button>
+                              : filteredTitles.map((t) => {
+                                  const isFree = isFreeBalance(t);
+                                  const titlePayments = (data?.payments || []).filter(
+                                    (p) => p.transaction_id === t.id && !p.reversed_at,
+                                  );
+                                  const lastPayment =
+                                    titlePayments.length > 0
+                                      ? titlePayments.reduce(
+                                          (latest, p) => (p.paid_on > latest.paid_on ? p : latest),
+                                          titlePayments[0],
+                                        )
+                                      : null;
+                                  return (
+                                    <tr key={t.id} className="border-t hover:bg-slate-50/50">
+                                      <td className="p-3">
+                                        {isFree ? (
+                                          <div>
+                                            <span className="inline-flex items-center gap-1 text-[11.5px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700">
+                                              Sem vencimento fixo
+                                            </span>
+                                            {lastPayment ? (
+                                              <p className="text-[11px] text-slate-500 mt-1">
+                                                Última baixa: {formatClinicalDate(lastPayment.paid_on)}
+                                              </p>
+                                            ) : (
+                                              <p className="text-[11px] text-slate-400 mt-1">
+                                                Nenhuma baixa
+                                              </p>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          formatClinicalDate(t.due_date)
                                         )}
-                                    </td>
-                                  </tr>
-                                ))}
+                                      </td>
+                                      <td className="p-3">
+                                        <strong>{t.patient_name || "Avulso"}</strong>
+                                        <p>{t.payer_name && `Pagador: ${t.payer_name}`}</p>
+                                        <p>
+                                          {t.type} · {t.description}
+                                        </p>
+                                        <p className="text-xs text-slate-500">
+                                          {t.treatment_id
+                                            ? "Plano de tratamento"
+                                            : "Lançamento / atendimento"}
+                                        </p>
+                                      </td>
+                                      <td className="p-3">{currency(t.amount)}</td>
+                                      <td className="p-3">
+                                        {currency(t.paid_amount)} / {currency(remaining(t))}
+                                      </td>
+                                      <td className="p-3">
+                                        <span
+                                          className={cn(
+                                            "px-2 py-0.5 rounded-md text-xs font-semibold",
+                                            titleStatus(t, localDate()).includes("Quitado")
+                                              ? "bg-emerald-50 text-emerald-700"
+                                              : isFree
+                                                ? "bg-purple-50 text-purple-700"
+                                                : titleStatus(t, localDate()).includes("Vencido")
+                                                  ? "bg-rose-50 text-rose-700"
+                                                  : "bg-slate-100 text-slate-700",
+                                          )}
+                                        >
+                                          {titleStatus(t, localDate())}
+                                        </span>
+                                      </td>
+                                      <td className="p-3 space-x-3">
+                                        <button
+                                          className="text-purple-700 underline font-medium"
+                                          onClick={() => setSelected(t.id)}
+                                        >
+                                          {remaining(t) > 0 && t.can_settle
+                                            ? "Baixar / histórico"
+                                            : "Histórico"}
+                                        </button>
+                                        {t.can_cancel &&
+                                          !t.treatment_id &&
+                                          t.status !== "cancelado" &&
+                                          !data.payments.some((p) => p.transaction_id === t.id) && (
+                                            <button
+                                              className="text-red-700 underline"
+                                              onClick={() => {
+                                                setCancelId(t.id);
+                                                setReason("");
+                                              }}
+                                            >
+                                              Cancelar
+                                            </button>
+                                          )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
                           </tbody>
                         </table>
                         {(tab === "extrato" ? payments : filteredTitles).length === 0 && (

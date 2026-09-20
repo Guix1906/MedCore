@@ -177,58 +177,57 @@ function AcompanhamentosPage() {
     return { total, ativos, finalizados, receita };
   }, [rows]);
 
-  // Agrupamento para Visão Kanban por fases clínicas
+  // Agrupamento para Visão Kanban por situação operacional e prazo transcorrido
   const kanbanColumns = useMemo(() => {
-    const f1: Treatment[] = [];
-    const f2: Treatment[] = [];
-    const f3: Treatment[] = [];
-    const f4: Treatment[] = [];
+    const c1: Treatment[] = [];
+    const c2: Treatment[] = [];
+    const c3: Treatment[] = [];
+    const c4: Treatment[] = [];
 
     filtered.forEach((t) => {
       if (t.status === "finalizado") {
-        f4.push(t);
+        c4.push(t);
       } else if (t.status === "pausado") {
-        f3.push(t);
+        c3.push(t);
       } else {
         const prog = computeProgress(t);
-        if (prog <= 25) f1.push(t);
-        else if (prog <= 70) f2.push(t);
-        else f3.push(t);
+        if (prog <= 50) c1.push(t);
+        else c2.push(t);
       }
     });
 
     return [
       {
-        id: "fase1",
-        title: "1. Diagnóstico & Início",
-        subtitle: "Até 25% do protocolo",
-        badge: `${f1.length}`,
+        id: "em_andamento_inicial",
+        title: "Em Andamento (1ª metade)",
+        subtitle: "Até 50% do prazo do plano",
+        badge: `${c1.length}`,
         color: "#8B47FF",
-        items: f1,
+        items: c1,
       },
       {
-        id: "fase2",
-        title: "2. Intervenção Ativa",
-        subtitle: "25% a 70% do protocolo",
-        badge: `${f2.length}`,
+        id: "em_andamento_avancado",
+        title: "Em Andamento (Reta final)",
+        subtitle: "Mais de 50% do prazo do plano",
+        badge: `${c2.length}`,
         color: "#0EA5E9",
-        items: f2,
+        items: c2,
       },
       {
-        id: "fase3",
-        title: "3. Manutenção & Retornos",
-        subtitle: "Fase final ou pausado",
-        badge: `${f3.length}`,
+        id: "pausados",
+        title: "Pausados & Em Espera",
+        subtitle: "Pausado ou aguardando paciente",
+        badge: `${c3.length}`,
         color: "#F59E0B",
-        items: f3,
+        items: c3,
       },
       {
-        id: "fase4",
-        title: "4. Concluído / Alta",
+        id: "concluidos",
+        title: "Concluídos & Alta",
         subtitle: "Protocolos finalizados",
-        badge: `${f4.length}`,
+        badge: `${c4.length}`,
         color: "#10B981",
-        items: f4,
+        items: c4,
       },
     ];
   }, [filtered]);
@@ -478,7 +477,7 @@ function AcompanhamentosPage() {
                         {/* Barra de Progresso com label */}
                         <div className="mt-4 pt-1">
                           <div className="flex items-center justify-between text-[11.5px] font-semibold text-slate-600 mb-1.5">
-                            <span>Progresso do protocolo</span>
+                            <span>Prazo transcorrido</span>
                             <span className="font-bold text-slate-900">{prog}%</span>
                           </div>
                           <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
@@ -719,28 +718,19 @@ function TreatmentManageModal({
 
     setSaving(true);
     try {
-      // 1. Tenta exclusão segura via RPC delete_treatment
+      // Exclusão segura via RPC delete_treatment que protege histórico de pagamentos e registros clínicos
       const { error: rpcError } = await (supabase.rpc as any)("delete_treatment", {
         p_id: treatment.id,
       });
-      if (!rpcError) {
-        toast.success("Acompanhamento excluído com sucesso!");
-        onUpdated();
-        onClose();
+      if (rpcError) {
+        toast.error("Não foi possível excluir o acompanhamento", {
+          description:
+            rpcError.message ||
+            "Se houver atendimentos ou títulos financeiros vinculados, cancele ou finalize o plano para preservar o histórico.",
+        });
         return;
       }
 
-      // 2. Se a RPC ainda não foi aplicada, limpa registros dependentes e tenta exclusão direta
-      await supabase.from("treatment_status_history").delete().eq("treatment_id", treatment.id);
-      await supabase.from("treatment_evolutions").delete().eq("treatment_id", treatment.id);
-      await supabase.from("treatment_photos").delete().eq("treatment_id", treatment.id);
-      await supabase.from("treatment_medication_uses").delete().eq("treatment_id", treatment.id);
-
-      const { error } = await supabase.from("treatments").delete().eq("id", treatment.id);
-      if (error) {
-        toast.error(`Não foi possível excluir: ${error.message || "Verifique se há títulos financeiros quitados."}`);
-        return;
-      }
       toast.success("Acompanhamento excluído com sucesso!");
       onUpdated();
       onClose();

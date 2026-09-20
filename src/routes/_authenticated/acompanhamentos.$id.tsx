@@ -1,9 +1,16 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import ClinicalFollowup, {
   changeTreatmentStatus,
 } from "@/features/acompanhamentos/ClinicalFollowup";
 import MedicationUsePanel from "@/features/acompanhamentos/MedicationUsePanel";
-import { formatClinicalDate, protocolDeadline } from "@/features/acompanhamentos/followup-utils";
+import { PlanPayments } from "@/features/acompanhamentos/TreatmentFinance";
+import { getFinancialSnapshot } from "@/features/finance/finance-api";
+import { isFreeBalance } from "@/features/finance/finance-math";
+import {
+  currency,
+  formatClinicalDate,
+  protocolDeadline,
+} from "@/features/acompanhamentos/followup-utils";
 import type { DbRow, Json, IconType } from "@/lib/types";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -66,11 +73,57 @@ function TreatmentDetailPage() {
   const navigate = useNavigate();
   const [treatment, setTreatment] = useState<Treatment | null>(null);
   const [meds, setMeds] = useState<Medication[]>([]);
-  const [tab, setTab] = useState<"resumo" | "medicacoes" | "evolucao">("resumo");
+  const [tab, setTab] = useState<"resumo" | "medicacoes" | "evolucao" | "financeiro">("resumo");
   const [loading, setLoading] = useState(true);
 
   const queryClient = useQueryClient();
   const [loadError, setLoadError] = useState("");
+
+  const { data: financialPlans = [] } = useQuery({
+    queryKey: ["treatment-finance-plans"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_financial_plans");
+      if (error) return [];
+      return (data as unknown as any[]) || [];
+    },
+  });
+  const currentPlan = financialPlans.find((p) => p.id === id);
+
+  const financeSnapshot = useQuery({
+    queryKey: ["financial-snapshot"],
+    queryFn: getFinancialSnapshot,
+  });
+
+  const planTitles = useMemo(() => {
+    if (!financeSnapshot.data?.titles) return [];
+    return financeSnapshot.data.titles.filter((t) => t.treatment_id === id);
+  }, [financeSnapshot.data?.titles, id]);
+
+  const planFinancials = useMemo(() => {
+    const total = treatment ? Number(treatment.total_value || 0) : 0;
+    const paid = planTitles.reduce((acc, t) => acc + Number(t.paid_amount || 0), 0);
+    const open = Math.max(0, total - paid);
+    const hasFreeBalance = planTitles.some(
+      (t) => isFreeBalance(t) && Number(t.paid_amount || 0) < Number(t.amount || 0),
+    );
+    const nextPending = planTitles
+      .filter(
+        (t) =>
+          t.status !== "cancelado" &&
+          Number(t.paid_amount || 0) < Number(t.amount || 0) &&
+          !isFreeBalance(t),
+      )
+      .sort((a, b) => a.due_date.localeCompare(b.due_date))[0];
+
+    return {
+      total,
+      paid,
+      open,
+      hasFreeBalance,
+      nextDueDate: nextPending?.due_date || null,
+      hasPlan: Boolean(currentPlan || total > 0 || planTitles.length > 0),
+    };
+  }, [treatment, planTitles, currentPlan]);
 
   const cancelledRef = useRef(false);
 
@@ -211,7 +264,7 @@ function TreatmentDetailPage() {
     }
 
     if (treatment.next_return_date) {
-      msg += `🗓️ *Próximo Retorno Agendado:* ${new Date(treatment.next_return_date).toLocaleDateString("pt-BR")}\n\n`;
+      msg += `🗓️ *Previsão do Próximo Retorno:* ${new Date(treatment.next_return_date).toLocaleDateString("pt-BR")} (estimativa do plano — consulte a recepção para agendar o horário)\n\n`;
     }
     msg += `Qualquer dúvida ou reação, entre em contato conosco. Tenha um excelente tratamento! 🩺✨`;
 
@@ -337,6 +390,7 @@ function TreatmentDetailPage() {
               { id: "resumo", label: "Resumo", icon: Activity },
               { id: "medicacoes", label: "Medicações", icon: Pill },
               { id: "evolucao", label: "Evolução & Fotos", icon: Camera },
+              { id: "financeiro", label: "Financeiro do Plano", icon: Wallet },
             ] as const
           ).map((t) => {
             const Icon = t.icon;
@@ -385,6 +439,8 @@ function TreatmentDetailPage() {
                   activeMeds,
                   nextReturn: treatment.next_return_date,
                 }}
+                financials={planFinancials}
+                onOpenFinance={() => setTab("financeiro")}
               />
             )}
             {tab === "medicacoes" && (
@@ -412,6 +468,57 @@ function TreatmentDetailPage() {
                 onSaved={load}
               />
             )}
+            {tab === "financeiro" && (
+              <div className="bg-white rounded-3xl border border-slate-200/90 p-5 md:p-6 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                  <div>
+                    <h2 className="text-[17px] font-bold text-slate-900 flex items-center gap-2">
+                      <Wallet className="h-5 w-5 text-purple-600" />
+                      Financeiro do Acompanhamento
+                    </h2>
+                    <p className="text-[13px] text-slate-500">
+                      Entrada, parcelas e histórico de recebimentos vinculados a este plano.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[12px] font-semibold text-slate-500">
+                      Contratado: <strong className="text-slate-900">{currency(planFinancials.total)}</strong>
+                    </span>
+                    <span className="text-slate-300">•</span>
+                    <span className="text-[12px] font-semibold text-emerald-600">
+                      Recebido: <strong>{currency(planFinancials.paid)}</strong>
+                    </span>
+                    <span className="text-slate-300">•</span>
+                    <span className="text-[12px] font-semibold text-amber-600">
+                      Saldo: <strong>{currency(planFinancials.open)}</strong>
+                    </span>
+                  </div>
+                </div>
+
+                {currentPlan ? (
+                  <PlanPayments plan={currentPlan} />
+                ) : (
+                  <div className="py-12 text-center space-y-3">
+                    <div className="h-12 w-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mx-auto">
+                      <Wallet size={24} />
+                    </div>
+                    <h3 className="text-[16px] font-bold text-slate-900">
+                      Condições financeiras não configuradas
+                    </h3>
+                    <p className="text-[13px] text-slate-500 max-w-md mx-auto">
+                      Este plano ainda não possui parcelas ou entrada configuradas no Financeiro.
+                    </p>
+                    <Link
+                      to="/financeiro"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 text-white text-[13px] font-bold hover:bg-purple-700 transition cursor-pointer"
+                    >
+                      <span>Configurar no Financeiro Geral</span>
+                      <ChevronRight size={15} />
+                    </Link>
+                  </div>
+                )}
+              </div>
+            )}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -423,6 +530,8 @@ function TreatmentDetailPage() {
 function ResumoTab({
   treatment,
   kpis,
+  financials,
+  onOpenFinance,
 }: {
   treatment: DbRow;
   kpis: {
@@ -433,18 +542,27 @@ function ResumoTab({
     activeMeds: number;
     nextReturn?: string | null;
   };
+  financials: {
+    total: number;
+    paid: number;
+    open: number;
+    hasFreeBalance?: boolean;
+    nextDueDate: string | null;
+    hasPlan: boolean;
+  };
+  onOpenFinance: () => void;
 }) {
   const cards = [
     {
       label: "Dias restantes",
       value: `${kpis.remainingDays} dias`,
-      sub: `${kpis.progress}% do ciclo concluído (${kpis.passedDays} de ${kpis.totalDays} dias)`,
+      sub: `${kpis.progress}% do prazo (${kpis.passedDays} de ${kpis.totalDays} dias)`,
       color: "#8B47FF",
     },
     {
-      label: "Próximo retorno",
+      label: "Próximo retorno previsto",
       value: kpis.nextReturn ? formatClinicalDate(kpis.nextReturn) : "A definir",
-      sub: kpis.nextReturn ? "Retorno necessário" : "Sem data marcada",
+      sub: kpis.nextReturn ? "Previsão clínica" : "Sem data marcada",
       color: "#0EA5E9",
     },
     {
@@ -457,13 +575,70 @@ function ResumoTab({
 
   return (
     <div className="space-y-5">
+      {/* Resumo Financeiro Direto no Plano */}
+      <div className="bg-white rounded-3xl p-5 md:p-6 border border-slate-200/90 shadow-xs space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2.5">
+            <div className="h-9 w-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center">
+              <Wallet size={18} />
+            </div>
+            <div>
+              <h3 className="text-[15px] font-bold text-slate-900">Financeiro do Acompanhamento</h3>
+              <p className="text-[12px] text-slate-500">Condições contratadas e saldos deste plano</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {financials.open > 0 && (
+              <button
+                type="button"
+                onClick={onOpenFinance}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-[12px] font-bold shadow-xs transition cursor-pointer"
+              >
+                <span>Receber Pagamento</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onOpenFinance}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-[12px] font-bold transition cursor-pointer self-start sm:self-auto"
+            >
+              <span>Gerenciar Condições</span>
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+            <span className="text-[11px] font-bold text-slate-400 uppercase block">Contratado</span>
+            <span className="text-[16px] font-black text-slate-900">{currency(financials.total)}</span>
+          </div>
+          <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-100/80">
+            <span className="text-[11px] font-bold text-emerald-600 uppercase block">Total Recebido</span>
+            <span className="text-[16px] font-black text-emerald-700">{currency(financials.paid)}</span>
+          </div>
+          <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-100/80">
+            <span className="text-[11px] font-bold text-amber-600 uppercase block">Saldo em Aberto</span>
+            <span className="text-[16px] font-black text-amber-700">{currency(financials.open)}</span>
+          </div>
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+            <span className="text-[11px] font-bold text-slate-400 uppercase block">Vencimento / Modalidade</span>
+            <span className="text-[13px] font-bold text-slate-800">
+              {financials.hasFreeBalance
+                ? "Pagamentos Livres (Sem vencimento)"
+                : financials.nextDueDate
+                  ? formatClinicalDate(financials.nextDueDate)
+                  : "Em dia / Sem pendências"}
+            </span>
+          </div>
+        </div>
+      </div>
+
       <p className="text-sm font-semibold">
         {protocolDeadline(treatment.status, treatment.end_date)} —{" "}
         {formatClinicalDate(treatment.end_date)}
       </p>
-      <Link to="/financeiro" className="text-purple-700 underline">
-        Gerenciar entrada e parcelas no Financeiro
-      </Link>
+
       {/* Card do Copiloto Clínico IA */}
       <div
         className="rounded-3xl p-5 md:p-6 text-slate-900 border border-purple-100 shadow-sm relative overflow-hidden"
@@ -493,20 +668,19 @@ function ResumoTab({
             <b>
               dia {kpis.passedDays} de {kpis.totalDays}
             </b>{" "}
-            ({kpis.progress}% da meta atingida). Possui{" "}
+            ({kpis.progress}% do prazo transcorrido). Possui{" "}
             <b>{kpis.activeMeds} medicação(ões) ativa(s)</b> no cronograma diário.
           </p>
           <p>
             🩺 <b>Próximo Passo Clínico:</b>{" "}
             {kpis.nextReturn ? (
               <span>
-                Retorno previsto para <b>{formatClinicalDate(kpis.nextReturn)}</b>. Recomenda-se
+                Retorno previsto para <b>{formatClinicalDate(kpis.nextReturn)}</b> (estimativa clínica). Recomenda-se
                 avaliar a adesão medicamentosa e registrar fotos de evolução na aba dedicada.
               </span>
             ) : (
               <span>
-                Não há retorno agendado. Recomenda-se definir uma data de retorno para o checkpoint
-                dos 30 dias.
+                Sem retorno previsto cadastrado. Recomenda-se definir uma data estimada de retorno para o checkpoint clínico.
               </span>
             )}
           </p>

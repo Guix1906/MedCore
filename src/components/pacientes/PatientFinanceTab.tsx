@@ -21,7 +21,7 @@ import {
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { getFinancialSnapshot, refreshFinance } from "@/features/finance/finance-api";
-import { remaining, titleStatus } from "@/features/finance/finance-math";
+import { isFreeBalance, remaining, titleStatus } from "@/features/finance/finance-math";
 import type { FinancialTitle } from "@/features/finance/finance-schema";
 import PaymentHistory from "@/features/finance/PaymentHistory";
 import {
@@ -68,16 +68,18 @@ export function PatientFinanceTab({ patientId, patientName }: PatientFinanceTabP
   // Set default scope
   const activeScope = scope || (scopes[0]?.id || "legacy");
 
-  // Filter titles for this patient
+  // Filter titles for this patient (estritamente por patientId para evitar homônimos)
   const patientTitles = useMemo(() => {
     if (!data?.titles) return [];
     return data.titles.filter((t) => {
-      const matchId = patientId && t.patient_id === patientId;
-      const matchName =
-        patientName &&
-        t.patient_name &&
-        t.patient_name.trim().toLowerCase() === patientName.trim().toLowerCase();
-      return matchId || matchName;
+      if (patientId) {
+        return t.patient_id === patientId;
+      }
+      return (
+        Boolean(patientName) &&
+        Boolean(t.patient_name) &&
+        t.patient_name!.trim().toLowerCase() === patientName.trim().toLowerCase()
+      );
     });
   }, [data?.titles, patientId, patientName]);
 
@@ -113,13 +115,16 @@ export function PatientFinanceTab({ patientId, patientName }: PatientFinanceTabP
 
       // Status
       if (statusFilter === "aberto") {
-        return remaining(t) > 0 && t.status !== "cancelado" && t.due_date >= today;
+        return remaining(t) > 0 && t.status !== "cancelado" && (isFreeBalance(t) || t.due_date >= today);
+      }
+      if (statusFilter === "saldo_livre") {
+        return remaining(t) > 0 && t.status !== "cancelado" && isFreeBalance(t);
       }
       if (statusFilter === "pago") {
         return remaining(t) <= 0 && t.status !== "cancelado";
       }
       if (statusFilter === "vencido") {
-        return remaining(t) > 0 && t.status !== "cancelado" && t.due_date < today;
+        return remaining(t) > 0 && t.status !== "cancelado" && !isFreeBalance(t) && t.due_date < today;
       }
 
       return true;
@@ -280,6 +285,7 @@ export function PatientFinanceTab({ patientId, patientName }: PatientFinanceTabP
             [
               { id: "todos", label: "Todos" },
               { id: "aberto", label: "Em aberto" },
+              { id: "saldo_livre", label: "Saldos sem vencimento" },
               { id: "pago", label: "Pagos" },
               { id: "vencido", label: "Vencidos" },
             ] as const
@@ -327,7 +333,8 @@ export function PatientFinanceTab({ patientId, patientName }: PatientFinanceTabP
           filteredTitles.map((t) => {
             const isPaid = remaining(t) <= 0 && t.status !== "cancelado";
             const isCancelled = t.status === "cancelado";
-            const isOverdue = !isPaid && !isCancelled && t.due_date < localDate();
+            const isFree = isFreeBalance(t);
+            const isOverdue = !isPaid && !isCancelled && !isFree && t.due_date < localDate();
             const isOpen = !isPaid && !isCancelled && !isOverdue;
 
             return (
@@ -341,15 +348,19 @@ export function PatientFinanceTab({ patientId, patientName }: PatientFinanceTabP
                       "h-10 w-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5",
                       isPaid
                         ? "bg-emerald-50 text-emerald-600"
-                        : isOverdue
-                          ? "bg-rose-50 text-rose-600"
-                          : isCancelled
-                            ? "bg-slate-100 text-slate-400"
-                            : "bg-purple-50 text-purple-600",
+                        : isFree
+                          ? "bg-purple-100 text-purple-700"
+                          : isOverdue
+                            ? "bg-rose-50 text-rose-600"
+                            : isCancelled
+                              ? "bg-slate-100 text-slate-400"
+                              : "bg-purple-50 text-purple-600",
                     )}
                   >
                     {isPaid ? (
                       <CheckCircle2 size={18} />
+                    ) : isFree ? (
+                      <Clock size={18} />
                     ) : isOverdue ? (
                       <AlertCircle size={18} />
                     ) : isCancelled ? (
@@ -368,22 +379,31 @@ export function PatientFinanceTab({ patientId, patientName }: PatientFinanceTabP
                         className={cn(
                           "px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider",
                           isPaid && "bg-emerald-100/70 text-emerald-700",
-                          isOpen && "bg-blue-100/70 text-blue-700",
+                          isFree && !isPaid && "bg-purple-100/70 text-purple-700",
+                          isOpen && !isFree && "bg-blue-100/70 text-blue-700",
                           isOverdue && "bg-rose-100/70 text-rose-700",
                           isCancelled && "bg-slate-200 text-slate-600",
                         )}
                       >
                         {isPaid
                           ? "Pago"
-                          : isOverdue
-                            ? "Vencido"
-                            : isCancelled
-                              ? "Cancelado"
-                              : "Em aberto"}
+                          : isFree
+                            ? "Saldo sem vencimento"
+                            : isOverdue
+                              ? "Vencido"
+                              : isCancelled
+                                ? "Cancelado"
+                                : "Em aberto"}
                       </span>
                     </div>
                     <div className="flex items-center gap-3 text-[12px] text-slate-500 mt-1 flex-wrap">
-                      <span>Vencimento: {formatClinicalDate(t.due_date)}</span>
+                      <span>
+                        {isFree ? (
+                          <strong className="text-purple-700 font-semibold">Sem vencimento fixo</strong>
+                        ) : (
+                          `Vencimento: ${formatClinicalDate(t.due_date)}`
+                        )}
+                      </span>
                       {t.competence_date && (
                         <span>• Competência: {formatClinicalDate(t.competence_date)}</span>
                       )}
@@ -412,10 +432,15 @@ export function PatientFinanceTab({ patientId, patientName }: PatientFinanceTabP
                   <button
                     type="button"
                     onClick={() => setSelectedTitle(t)}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-[12.5px] font-bold transition-all cursor-pointer"
+                    className={cn(
+                      "inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[12.5px] font-bold transition-all cursor-pointer",
+                      isFree && remaining(t) > 0
+                        ? "bg-purple-600 hover:bg-purple-700 text-white shadow-xs"
+                        : "bg-purple-50 hover:bg-purple-100 text-purple-700",
+                    )}
                   >
                     <Receipt size={14} />
-                    <span>Baixas e Histórico</span>
+                    <span>{isFree && remaining(t) > 0 ? "Receber Pagamento" : "Baixas e Histórico"}</span>
                   </button>
                 </div>
               </div>
@@ -427,7 +452,7 @@ export function PatientFinanceTab({ patientId, patientName }: PatientFinanceTabP
       {/* Modal de Baixas & Histórico */}
       {selectedTitle && data && (
         <PaymentHistory
-          title={selectedTitle}
+          title={data.titles.find((t) => t.id === selectedTitle.id) || selectedTitle}
           data={data}
           onClose={() => setSelectedTitle(null)}
         />

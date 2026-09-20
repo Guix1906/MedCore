@@ -56,6 +56,12 @@ type Meta = {
   checklist?: { id: string; text: string; done: boolean; due?: string; owner?: string }[];
   tags?: string[];
   files?: { id: string; name: string; size?: number }[];
+  planCoverage?: "incluso" | "avulso" | "extra";
+  linkedTreatmentId?: string;
+  procedurePrice?: number;
+  downPayment?: number;
+  remainingValue?: number;
+  downPaymentMethod?: string;
 };
 
 function parseMeta(description: string | null): { text: string; meta: Meta | null } {
@@ -459,7 +465,16 @@ export function EditAppointmentModal({
       );
       const newEnd = new Date(year || 2026, (month || 8) - 1, day || 6, endH || 11, endM || 0);
 
+      const match = activity.description?.match(/<!--AGENDAMENTO_META:(.*?)-->/s);
+      let existingMeta: Record<string, any> = {};
+      if (match && match[1]) {
+        try {
+          existingMeta = JSON.parse(match[1]);
+        } catch {}
+      }
+
       const metaObj = {
+        ...existingMeta,
         color,
         status,
         recurrence,
@@ -469,29 +484,27 @@ export function EditAppointmentModal({
       const metaJson = `<!--AGENDAMENTO_META:${JSON.stringify(metaObj)}-->`;
       const fullDescription = `${notes}\n\n${metaJson}`.trim();
 
-      try {
-        if (activity.source === "event") {
-          await supabase
-            .from("events")
-            .update({
-              title: patientName || activity.title,
-              starts_at: newStart.toISOString(),
-              ends_at: newEnd.toISOString(),
-              description: fullDescription,
-            })
-            .eq("id", id);
-        } else if (activity.source === "task") {
-          await supabase
-            .from("tasks")
-            .update({
-              title: patientName || activity.title,
-              due_date: newStart.toISOString(),
-              description: fullDescription,
-            })
-            .eq("id", id);
-        }
-      } catch (err) {
-        console.warn("Supabase update error caught safely:", err);
+      if (activity.source === "event") {
+        const { error } = await supabase
+          .from("events")
+          .update({
+            title: patientName || activity.title,
+            starts_at: newStart.toISOString(),
+            ends_at: newEnd.toISOString(),
+            description: fullDescription,
+          })
+          .eq("id", id);
+        if (error) throw error;
+      } else if (activity.source === "task") {
+        const { error } = await supabase
+          .from("tasks")
+          .update({
+            title: patientName || activity.title,
+            due_date: newStart.toISOString(),
+            description: fullDescription,
+          })
+          .eq("id", id);
+        if (error) throw error;
       }
 
       activity.title = patientName || activity.title;
@@ -502,10 +515,11 @@ export function EditAppointmentModal({
 
       toast.success("Agendamento salvo com sucesso!");
       onSaved();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.success("Agendamento salvo!");
-      onSaved();
+      toast.error("Erro ao salvar agendamento", {
+        description: err?.message || "Ocorreu um erro ao salvar alterações.",
+      });
     } finally {
       setSaving(false);
     }
@@ -969,6 +983,30 @@ export function ActivityDrawer({
                 >
                   <MessageCircle className="h-4 w-4" />
                 </button>
+              </div>
+            )}
+
+            {/* Cobertura de Plano */}
+            {meta?.planCoverage === "incluso" && (
+              <div className="px-5 py-3 flex items-center gap-3 border-b border-[#F1F1F4] bg-sky-50/50">
+                <Tag className="h-4 w-4 text-sky-600 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] uppercase tracking-wider text-sky-800 font-semibold">
+                    Enquadramento
+                  </div>
+                  <div className="text-[13px] font-semibold text-sky-900 flex items-center gap-2">
+                    <span>Incluso no Plano / Pacote</span>
+                    {meta.linkedTreatmentId && (
+                      <button
+                        type="button"
+                        onClick={() => navigate({ to: `/acompanhamentos/${meta.linkedTreatmentId}` })}
+                        className="text-xs text-primary underline font-medium hover:opacity-85 cursor-pointer ml-1"
+                      >
+                        Ver acompanhamento →
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 

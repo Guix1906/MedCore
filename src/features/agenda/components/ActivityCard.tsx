@@ -51,6 +51,8 @@ function parseMeta(desc: string | null | undefined): {
   downPayment?: number;
   remainingValue?: number;
   procedurePrice?: number;
+  planCoverage?: "incluso" | "avulso" | "extra";
+  linkedTreatmentId?: string;
 } | null {
   if (!desc) return null;
   const m = desc.match(/<!--AGENDAMENTO_META:(.*?)-->/s);
@@ -672,7 +674,9 @@ export function ActivityCard({
   const hasSinal = meta?.downPayment && meta.downPayment > 0;
   const hasRemaining = meta?.remainingValue && meta.remainingValue > 0;
   let payBadge: { label: string; bg: string; fg: string } | null = null;
-  if (hasSinal && hasRemaining) {
+  if (meta?.planCoverage === "incluso") {
+    payBadge = { label: "No Plano", bg: "#E0F2FE", fg: "#0369A1" };
+  } else if (hasSinal && hasRemaining) {
     payBadge = { label: "Sinal Pago", bg: "#FEF3C7", fg: "#92400E" };
   } else if (hasSinal && !hasRemaining) {
     payBadge = { label: "Pago Total", bg: "#DCFCE7", fg: "#166534" };
