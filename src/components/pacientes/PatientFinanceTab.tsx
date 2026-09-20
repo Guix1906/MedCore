@@ -46,7 +46,7 @@ export function PatientFinanceTab({ patientId, patientName }: PatientFinanceTabP
   });
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"todos" | "aberto" | "pago" | "vencido">("todos");
+  const [statusFilter, setStatusFilter] = useState<"todos" | "aberto" | "pago" | "vencido" | "saldo_livre">("todos");
   const [selectedTitle, setSelectedTitle] = useState<FinancialTitle | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
 

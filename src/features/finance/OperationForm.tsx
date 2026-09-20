@@ -73,9 +73,11 @@ export default function OperationForm({
   title,
   children,
   execute,
+  onSuccess,
 }: {
   title: string;
   children: ReactNode;
+  onSuccess?: () => void;
   execute: (
     data: FormData,
     id: string,
@@ -104,7 +106,9 @@ export default function OperationForm({
         try {
           const result = await execute(request.current.data, request.current.id);
           if (result.error) {
-            if (/^(P0001|22|23|42501)/.test(result.error.code ?? "")) {
+            if (
+              /^(P0001|22|23|42501|PGRST202$|PGRST203$|PGRST301$)/.test(result.error.code ?? "")
+            ) {
               request.current = null;
               setSubmitted(false);
               lock.setActive(null);
@@ -116,6 +120,7 @@ export default function OperationForm({
           lock.setActive(null);
           setGeneration((g) => g + 1);
           await refreshFinance(qc);
+          onSuccess?.();
           toast.success("Operacao registrada. Nenhuma transacao bancaria foi executada.");
         } catch (error) {
           if (error instanceof OperationInputError) {

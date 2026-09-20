@@ -9,6 +9,9 @@ import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { companyService, financeService } from "@/services/api";
+import FinanceOperations from "@/features/finance/FinanceOperations";
+import { getFinancialSnapshot } from "@/features/finance/finance-api";
+import { errorMessage } from "@/features/acompanhamentos/followup-utils";
 
 export const Route = createFileRoute("/_authenticated/configuracoes")({
   head: () => ({
@@ -20,10 +23,11 @@ export const Route = createFileRoute("/_authenticated/configuracoes")({
   component: ConfiguracoesPage,
 });
 
-type Tab = "clinica" | "servicos" | "categorias" | "cidades";
+type Tab = "clinica" | "servicos" | "categorias" | "cidades" | "contas";
 
 function ConfiguracoesPage() {
   const [tab, setTab] = useState<Tab>("clinica");
+  const [financeLocked, setFinanceLocked] = useState(false);
   return (
     <AppShell title="Configurações">
       <div className="p-6 space-y-4">
@@ -33,11 +37,13 @@ function ConfiguracoesPage() {
               ["clinica", "Dados da clínica"],
               ["servicos", "Serviços & preços"],
               ["categorias", "Categorias financeiras"],
+              ["contas", "Contas financeiras"],
               ["cidades", "Cidades de atendimento"],
             ] as const
           ).map(([k, label]) => (
             <button
               key={k}
+              disabled={financeLocked}
               onClick={() => setTab(k as Tab)}
               className={`px-4 h-10 text-[13px] font-medium border-b-2 -mb-px transition-colors ${
                 tab === k
@@ -52,6 +58,7 @@ function ConfiguracoesPage() {
         {tab === "clinica" && <ClinicSettings />}
         {tab === "servicos" && <ServiceTypes />}
         {tab === "categorias" && <FinanceCategories />}
+        {tab === "contas" && <FinancialAccountSettings onLockChange={setFinanceLocked} />}
         {tab === "cidades" && <CitySettings />}
       </div>
     </AppShell>
@@ -658,5 +665,25 @@ function CitySettings() {
         )}
       </div>
     </div>
+  );
+}
+
+function FinancialAccountSettings({ onLockChange }: { onLockChange: (locked: boolean) => void }) {
+  const query = useQuery({ queryKey: ["financial-snapshot"], queryFn: getFinancialSnapshot });
+  return (
+    <>
+      {query.isPending && <p>Carregando contas...</p>}
+      {query.error && (
+        <p role="alert" className="text-red-700">
+          {errorMessage(query.error)}{" "}
+          <button className="underline" onClick={() => query.refetch()}>
+            Tentar novamente
+          </button>
+        </p>
+      )}
+      {query.data && !query.error && (
+        <FinanceOperations finance={query.data} mode="contas" onLockChange={onLockChange} />
+      )}
+    </>
   );
 }

@@ -48,6 +48,20 @@ export function managementReports(
     taxes: 0,
     excluded: 0,
   };
+  const dreDetails: {
+    id: string;
+    date: string;
+    description: string | null;
+    group: DreGroup;
+    amount: number;
+  }[] = [];
+  const dfcDetails: {
+    titleId: string | null;
+    date: string;
+    entryId: string;
+    group: DfcGroup | "unclassified";
+    amount: number;
+  }[] = [];
   const missingCompetence: string[] = [],
     missingClassification: string[] = [];
   for (const t of finance.titles) {
@@ -62,14 +76,35 @@ export function managementReports(
       missingClassification.push(t.id);
       continue;
     }
-    dre[c.dre_group] += cents(t.amount) * (t.type === "receita" ? 1 : -1);
+    const amount = cents(t.amount) * (t.type === "receita" ? 1 : -1);
+    dre[c.dre_group] += amount;
+    dreDetails.push({
+      id: t.id,
+      date: t.competence_date,
+      description: t.description,
+      group: c.dre_group,
+      amount,
+    });
   }
   const dfc: Record<DfcGroup, number> = { operating: 0, investing: 0, financing: 0 };
   let unclassifiedCash = 0,
     internalTransfers = 0;
   const missingCash: string[] = [];
-  const addCash = (titleId: string | null, amount: number, entryId: string) => {
+  const addCash = (
+    titleId: string | null,
+    amount: number,
+    entryId: string,
+    date: string,
+    movementId = entryId,
+  ) => {
     const classification = titleId && classes.get(titleId);
+    dfcDetails.push({
+      titleId,
+      entryId: movementId,
+      date,
+      amount,
+      group: classification && titles.has(titleId!) ? classification.dfc_group : "unclassified",
+    });
     if (classification && titles.has(titleId!)) dfc[classification.dfc_group] += amount;
     else {
       unclassifiedCash += amount;
@@ -89,7 +124,7 @@ export function managementReports(
         internalTransfers += cents(e.amount);
         continue;
       }
-      addCash(null, cents(e.amount), e.source_id);
+      addCash(null, cents(e.amount), e.source_id, e.date);
       continue;
     }
     const card = e.source_kind === "card" ? ops.cards.find((c) => c.id === e.source_id) : null;
@@ -98,10 +133,16 @@ export function managementReports(
       if (cents(payment.amount) - cents(card.fee) !== cents(e.amount))
         throw new Error("Liquidacao de cartao divergente do credito liquido.");
       // Split the net deposit into gross and fee, honoring both titles' classifications.
-      addCash(payment.transaction_id, cents(payment.amount), e.source_id);
+      addCash(payment.transaction_id, cents(payment.amount), e.source_id, e.date);
       if (card.fee > 0)
-        addCash(card.fee_title_id, -cents(card.fee), card.fee_payment_id ?? e.source_id);
-    } else addCash(payment?.transaction_id ?? null, cents(e.amount), e.source_id);
+        addCash(
+          card.fee_title_id,
+          -cents(card.fee),
+          card.fee_payment_id ?? e.source_id,
+          e.date,
+          e.source_id,
+        );
+    } else addCash(payment?.transaction_id ?? null, cents(e.amount), e.source_id, e.date);
   }
   const unassigned = finance.payments.filter(
     (p) =>
@@ -116,6 +157,8 @@ export function managementReports(
   return {
     dre,
     dfc,
+    dreDetails,
+    dfcDetails,
     netRevenue,
     grossResult,
     operatingResult,

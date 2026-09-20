@@ -94,6 +94,10 @@ export type StatementLine = {
   description: string;
 };
 export type OperationsFunctions = {
+  retire_financial_shift_control: {
+    Args: { p_account: string; p_amount: number; p_reason: string };
+    Returns: undefined;
+  };
   get_financial_operations: { Args: { p_company: string | null }; Returns: OperationsSnapshot };
   classify_financial_title: {
     Args: { p_id: string; p_competence: string; p_dre: string; p_dfc: string; p_reason: string };

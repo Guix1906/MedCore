@@ -114,33 +114,37 @@ Transferencias usam a tabela existente, sem criar receitas/despesas, com duas co
 
 Recebiveis de cartao sao exibidos separadamente da disponibilidade. Contas classificadas rejeitam baixas de natureza incompativel e transferencias internas comuns nao liquidam adquirentes. Contas ainda nao classificadas podem continuar recebendo baixas, mas nao tem saldo oficial exibido; classifique e confira antes de usar os saldos. A abertura recusa historico posterior a sua data que misture cartoes com outros meios. Baixas legadas/sem conta sao sinalizadas, sem atribuir uma conta por suposicao.
 
-### Operacoes: caixa, cartoes, repasses, conciliacao e demonstrativos
+### Financeiro operacional
 
-A aba **Financeiro > Operacoes** complementa os mesmos titulos, baixas e contas. Aplique, nesta ordem, apos as tres migracoes anteriores:
+A navegacao possui somente **Fluxo de Caixa, Contas a Pagar, Contas a Receber, Conciliacao OFX, DRE e DFC**. A abertura padrao e o Fluxo de Caixa. Nao existem grupos, Visao Geral ou submenus operacionais redundantes. Links antigos de extrato/lancamentos abrem o fluxo; planos levam a receber; repasses levam a pagar; relatorios levam a DRE. Em telas pequenas, um seletor substitui a barra de secoes.
+
+Pagar e Receber compartilham busca, situacao, vencimentos, resumo compacto e tabela. Abrem com todos os saldos pendentes, sem recorte mensal. O resumo considera a busca e a clinica, independente do periodo/situacao da lista, conforme indicado na tela. Parcelas de um mesmo plano sao agrupadas e expansiveis; os pagamentos continuam no mesmo historico usado na ficha do paciente. Recebimentos parciais e saldos livres existentes sao preservados. Valores sem vencimento ficam fora do atraso e da previsao mensal. O cadastro avulso pede competencia, categoria cadastrada e pagador/fornecedor. Criar uma conta nao confirma um pagamento.
+
+Contas financeiras e confirmacao de abertura ficam em **Configuracoes > Contas financeiras**. Categorias continuam no cadastro ja existente. Nao ha aba independente de cartoes: os depositos da operadora ficam em um bloco recolhido no Fluxo de Caixa, preservando bruto, taxa, liquido e quitacao do paciente. Planos continuam em Acompanhamentos. O historico de pagamentos abre em painel lateral, sem perder a lista.
+
+Fluxo, exportacao, conciliacao e DFC usam os movimentos efetivos de disponibilidade: pagamentos de caixa/banco, transferencias e depositos liquidos de cartao. Transferencias internas nao inflam entradas/saidas consolidadas. A abertura e conferida no historico das contas; uma divergencia entre movimentos e saldos bloqueia a exibicao do saldo como definitivo. Busca e filtros adicionais nao transformam o recorte em saldo bancario. Contas sem abertura ou classificacao geram pendencia explicita.
+
+**OFX nativo:** arquivos SGML/OFX 1 e XML/OFX 2 em UTF-8 ou Windows-1252, ate 2 MB e 1.000 movimentos, uma unica conta em BRL. A importacao mostra conta bancaria do arquivo, periodo e quantidade para conferencia antes de gravar. O identificador FITID e preservado; o banco rejeita reimportacoes divergentes e nao duplica identicas. Importar nao cria pagamentos nem titulos. Sugestoes exigem conta/data/valor iguais e confirmacao humana; multiplos candidatos nunca sao escolhidos automaticamente. Desfazer vinculo fica no detalhe com justificativa e historico. Datas sao as datas de lancamento declaradas pelo banco, sem deslocamento automatico de fuso.
+
+**DRE e DFC:** abas separadas, tabela em primeiro plano, exportacao CSV e composicao consultavel por valor. A DRE usa competencia e apresenta subtotais na ordem do demonstrativo. A DFC mostra abertura, atividades, variacao e fechamento no mesmo escopo do Fluxo. Classificacoes pendentes ficam em aviso e formulario recolhido; resultados incompletos sao explicitamente parciais. Os demonstrativos sao gerenciais e nao substituem escrituracao contabil.
+
+As migracoes financeiras anteriores continuam necessarias, inclusive as estruturas historicas de operacoes:
 
 1. `20260919200000_financial_operations.sql`
 2. `20260919201000_financial_shifts.sql`
 3. `20260919202000_financial_cards_commissions.sql`
 4. `20260919203000_financial_reconciliation.sql`
 5. `20260919204000_financial_operation_guards.sql`
+6. `20260920220000_retire_financial_shift_control.sql`
 
-Publique o frontend somente depois de aplicar e homologar a serie completa. Escritas nas novas estruturas e nos cadastros de caixa/repasse ficam restritas a RPCs autorizadas. As operacoes registram autoria, escopo da clinica e auditoria. Falhas de resposta preservam o identificador da solicitacao para repetir sem duplicar; nao inicie outro registro para compensar um timeout.
+A ultima migracao disponibiliza a desativacao administrativa de turnos antigos em Configuracoes. Nao desativa contas automaticamente. Exige permissao, contagem e motivo; encerra o turno estruturado aberto na mesma transacao, preserva auditoria e nao modifica pagamentos ou saldos. Sessoes antigas nao estruturadas exigem conferencia administrativa. Novas contas de caixa nao precisam de turno. Homologue as migracoes antes de publicar; arquivos locais nao comprovam aplicacao no banco.
 
-**Caixa por turno:** reutiliza cash_register_sessions e vincula pagamentos/transferencias ao turno. A primeira abertura por administrador ativa o controle obrigatorio daquela conta do tipo caixa, com abertura financeira previamente confirmada. Depois, o operador pode abrir/fechar seu turno. A data operacional e CURRENT_DATE do banco, exibida na tela; nao e inferida pelo navegador. Somente dinheiro do operador/data do turno e aceito nessa conta. Pix e outros meios usam contas proprias. Sangria e suprimento usam transferencias entre contas, incorporadas ao turno automaticamente. Fundo inicial e contagem final nao criam movimentos financeiros. Diferencas sao registradas para apuracao, nao ajustadas automaticamente. Turnos fechados nao aceitam estorno de seus movimentos. Sessoes legadas abertas exigem conferencia administrativa antes de ativar novo turno.
-
-**Cartoes:** liquidacao manual integral de uma baixa por vez, apos conferencia com a adquirente. O bruto e transferido de recebiveis para banco; a taxa confirmada gera uma unica despesa paga e classificada, resultando no credito liquido. Nao ha nova receita nem nova baixa do paciente. A correcao justificada da liquidacao estorna transferencia e taxa atomicamente; preserva a quitacao original do paciente. A taxa gerada e cancelada com seu historico estornado para nao deixar uma despesa ficticia a pagar. Desfaca a conciliacao antes de corrigir uma liquidacao. Contas de recebiveis nao representam cartoes corporativos/faturas a pagar: despesas exigem registro da saida bancaria efetiva.
-
-**Repasses:** aprovacao explicita de percentual sobre um recebimento bruto, com profissional da mesma clinica, competencia, vencimento e justificativa da regra contratual. Nao se usa automaticamente o percentual de service_types. Reutiliza commission_payouts e gera titulo pendente em A pagar, onde ocorrem baixas parciais e comprovantes. A soma aprovada nao ultrapassa o recebimento. Um profissional nao tem dois repasses ativos da mesma baixa. Cancelar um repasse sem pagamentos preserva o historico e permite nova aprovacao corrigida. Titulos com apuracao legada exigem conciliacao antes de nova aprovacao. Nao estorne a origem enquanto houver repasse ativo. Repasses com pagamentos exigem resolucao administrativa da obrigacao; nao sao apagados automaticamente.
-
-**Conciliacao:** importa CSV UTF-8 de ate 2 MB e 1000 linhas, cabecalho exato `external_id,date,amount,description`. Data ISO AAAA-MM-DD, decimal com ponto, sinal negativo para saida; campos com virgulas usam aspas duplas. Utilize o identificador estavel do extrato bancario. Reimportacao identica nao duplica; referencia reutilizada com outros valores gera erro e desfaz o lote inteiro. Importar nao cria baixas. O vinculo manual exige conta, data e valor exatos, um movimento por linha, sem conciliacao automatica por aproximacao. Depositos de cartao usam o liquido, nao o bruto e a taxa novamente. Desfazer vinculo exige motivo e preserva historico. Linhas e movimentos sem correspondencia permanecem visiveis. OFX e arquivos de outros layouts precisam ser convertidos para o CSV documentado; nao ha importador OFX nativo nesta entrega.
-
-**DRE/DFC gerenciais:** DRE usa valor do titulo por competencia, nao pagamentos ou vencimentos. Grupos estruturados distinguem receitas, deducoes, custos, despesas operacionais, resultado financeiro, tributos e movimentos patrimoniais fora da DRE. A DFC direta separa atividades operacionais, investimento e financiamento, considerando contas de disponibilidade, liquidacao de cartao e taxas sem duplicidade. Transferencias entre contas disponiveis se anulam. Competencia e classificacao ausentes geram pendencias explicitas; o resultado liquido definitivo da DRE nao e exibido enquanto houver pendencias. Sao demonstrativos gerenciais, nao escrituracao ou declaracoes fiscais. Competencias de parcelas e regras contratuais devem ser conferidas pelo responsavel financeiro, nao presumidas pelo sistema.
-
-Fora desta entrega: integracao automatica bancaria/adquirente/fiscal, convenios, antecipacoes, liquidacoes parciais em lote e chargebacks de cartao, importador OFX nativo, automacao contratual de repasses, devolucoes/cancelamentos de planos com pagamentos e entidade cadastral completa de responsavel financeiro. Essas operacoes nao sao simuladas nem tratadas como estornos de erros.
+Limites preservados: conciliacao de uma linha com um movimento, liquidacao integral de um recebimento de cartao por vez, sem integracao automatica bancaria/adquirente. Depositos agrupados, chargebacks e devolucoes reais nao sao simulados. O cadastro de categorias ainda nao automatiza a classificacao DRE/DFC; use a revisao dos demonstrativos. A estruturacao contratual de saldo livre e sua repactuacao atomica ainda dependem da evolucao do modelo de planos; esta reorganizacao nao altera contratos existentes nem promete corrigi-los por edicoes de descricao.
 
 ### Verificacao e homologacao financeira
 
 ```bash
+node scripts/test-financial-layout.mjs
 node scripts/test-financial-operations.mjs
 node scripts/test-cash-flow.mjs
 node scripts/test-financial-ledger.mjs
@@ -149,7 +153,7 @@ npx tsc --noEmit
 npm run build
 ```
 
-Os cenarios `supabase/tests/financial_operations.sql`, `financial_cash_flow.sql` e `financial_settlements.sql` exigem PostgreSQL/Supabase de homologacao, com ON_ERROR_STOP; usam transacao e ROLLBACK. Nao apontar a producao. Exercite tambem concorrencia em duas sessoes: recebimento versus fechamento de turno, liquidacao versus estorno da baixa, duas aprovacoes do mesmo recebimento, conciliacao versus correcao. Verifique perfis somente-leitura, recepcao, administrador, usuario anonimo e isolamento entre duas clinicas. O build e os testes JavaScript locais nao comprovam execucao das migracoes nem validacao do banco remoto.
+O cenario `supabase/tests/financial_simplified_cash.sql` verifica a desativacao de turnos legados, auditoria, contagem e pagamentos sem turno. Os cenarios `supabase/tests/financial_operations.sql`, `financial_cash_flow.sql` e `financial_settlements.sql` exigem PostgreSQL/Supabase de homologacao, com ON_ERROR_STOP; usam transacao e ROLLBACK. Nao apontar a producao. Exercite tambem concorrencia em duas sessoes: recebimento versus fechamento de turno, liquidacao versus estorno da baixa, duas aprovacoes do mesmo recebimento, conciliacao versus correcao. Verifique perfis somente-leitura, recepcao, administrador, usuario anonimo e isolamento entre duas clinicas. O build e os testes JavaScript locais nao comprovam execucao das migracoes nem validacao do banco remoto.
 
 ## ?? Build de Produ��o
 
