@@ -13,6 +13,7 @@ import CashFlow from "@/features/finance/CashFlow";
 import { ContasPagarTab } from "@/features/finance/ContasPagarTab";
 import { ContasReceberTab } from "@/features/finance/ContasReceberTab";
 import BankReconciliation from "@/features/finance/BankReconciliation";
+import { DfcTab } from "@/features/finance/DfcTab";
 import FinanceOperations from "@/features/finance/FinanceOperations";
 import NewTitle from "@/features/finance/NewTitle";
 import PaymentHistory from "@/features/finance/PaymentHistory";
@@ -111,6 +112,13 @@ function FinanceiroPage() {
                       onRefresh={() => void query.refetch()}
                       refreshing={query.isFetching}
                       onOpenTitles={(type) => changeTab(type === "receita" ? "receber" : "pagar")}
+                    />
+                  ) : search.tab === "dfc" ? (
+                    <DfcTab
+                      finance={data}
+                      onRefresh={() => void query.refetch()}
+                      refreshing={query.isFetching}
+                      onSelectTitle={(id) => setSelected(id)}
                     />
                   ) : (
                     <FinanceOperations

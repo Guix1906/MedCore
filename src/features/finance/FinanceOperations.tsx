@@ -7,6 +7,7 @@ import type { FinanceSnapshot, FinancialTitle } from "./finance-schema";
 import { OperationLock, fieldClass } from "./OperationForm";
 import ManagementReports from "./ManagementReports";
 import BankReconciliation from "./BankReconciliation";
+import { DfcTab } from "./DfcTab";
 import CashFlow from "./CashFlow";
 import FinancialAccounts from "./FinancialAccounts";
 
@@ -125,7 +126,10 @@ export default function FinanceOperations({
             {mode === "conciliacao" && (
               <BankReconciliation finance={scoped} ops={ops} onOpenTitles={onOpenTitles} />
             )}
-            {(mode === "dre" || mode === "dfc") && (
+            {mode === "dfc" && (
+              <DfcTab finance={scoped} onSelectTitle={onSelectTitle} />
+            )}
+            {mode === "dre" && (
               <ManagementReports
                 finance={scoped}
                 ops={ops}
