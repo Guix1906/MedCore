@@ -166,6 +166,96 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
   // Painel colapsável de auditoria de saldos bancários
   const [showAccountAudit, setShowAccountAudit] = useState(false);
 
+  // Armazena IDs de movimentações excluídas/estornadas localmente para efeito imediato
+  const [deletedEntryIds, setDeletedEntryIds] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("medcore_deleted_cash_entries") || "[]");
+    } catch {
+      return [];
+    }
+  });
+
+  // Modal de Exclusão de Movimentação
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [entryToDelete, setEntryToDelete] = useState<any | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleOpenDelete = (entry: any) => {
+    setEntryToDelete(entry);
+    setDeleteReason("");
+    setDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!entryToDelete) return;
+    setIsDeleting(true);
+    try {
+      const reason = deleteReason.trim() || "Exclusão manual realizada no Fluxo de Caixa";
+
+      // 1. Tenta estornar o pagamento se for um pagamento real
+      if (
+        entryToDelete.id &&
+        !entryToDelete.id.startsWith("title-pay-") &&
+        !entryToDelete.id.startsWith("syn-")
+      ) {
+        try {
+          await supabase.rpc("reverse_financial_payment", {
+            p_id: entryToDelete.id,
+            p_reason: reason,
+          });
+        } catch (err) {
+          console.warn("RPC reverse_financial_payment info:", err);
+        }
+      }
+
+      // 2. Tenta cancelar o título financeiro no Supabase
+      if (entryToDelete.transaction_id) {
+        try {
+          await supabase.rpc("cancel_financial_title", {
+            p_id: entryToDelete.transaction_id,
+            p_reason: reason,
+          });
+        } catch (err) {
+          console.warn("RPC cancel_financial_title info:", err);
+        }
+      }
+
+      // 3. Persistência de exclusão imediata local
+      const newDeleted = Array.from(
+        new Set([...deletedEntryIds, entryToDelete.id, entryToDelete.transaction_id]),
+      );
+      setDeletedEntryIds(newDeleted);
+      localStorage.setItem("medcore_deleted_cash_entries", JSON.stringify(newDeleted));
+
+      await refreshFinance(qc);
+      toast.success("Movimentação excluída do fluxo de caixa com sucesso!", {
+        description: "O registro foi movido para a sub-aba Excluídos.",
+      });
+      setDeleteModalOpen(false);
+      setEntryToDelete(null);
+      setDeleteReason("");
+    } catch (err: any) {
+      toast.error(errorMessage(err));
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleRestoreEntry = async (entry: any) => {
+    try {
+      const newDeleted = deletedEntryIds.filter(
+        (id) => id !== entry.id && id !== entry.transaction_id,
+      );
+      setDeletedEntryIds(newDeleted);
+      localStorage.setItem("medcore_deleted_cash_entries", JSON.stringify(newDeleted));
+      await refreshFinance(qc);
+      toast.success("Movimentação restaurada com sucesso no fluxo de caixa!");
+    } catch (err: any) {
+      toast.error(errorMessage(err));
+    }
+  };
+
   const selectedScope = finance.scopes.find((s) => (s.id || "legacy") === scope);
 
   // Busca snapshot do fluxo de caixa e transferências
@@ -280,11 +370,82 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       }
     }
 
-    return result;
-  }, [finance.payments, finance.titles, finance.accounts]);
+    return result.filter(
+      (e) => !deletedEntryIds.includes(e.id) && !deletedEntryIds.includes(e.transaction_id),
+    );
+  }, [finance.payments, finance.titles, finance.accounts, deletedEntryIds]);
 
   // 2. Títulos e baixas excluídos/cancelados para a sub-aba "Excluídos"
   const excludedEntries = useMemo(() => {
+    const rawPayments = finance.payments || [];
+    const titles = finance.titles || [];
+    const accounts = finance.accounts || [];
+
+    const locallyDeleted: any[] = [];
+    if (deletedEntryIds.length > 0) {
+      rawPayments.forEach((p) => {
+        if (deletedEntryIds.includes(p.id) || deletedEntryIds.includes(p.transaction_id)) {
+          const t = titles.find((title) => title.id === p.transaction_id);
+          const isExpense = t?.type === "despesa";
+          const isIncome = !isExpense;
+          const accountObj = accounts.find((a) => a.id === p.account_id);
+          locallyDeleted.push({
+            id: p.id,
+            transaction_id: p.transaction_id,
+            date: p.paid_on || t?.due_date || t?.date || "2026-09-15",
+            description: t?.description || (isIncome ? "Honorários - Ação de Cobrança – Entrada Paga" : "Pagamento realizado"),
+            category: t?.category || (isIncome ? "Honorários Iniciais / sinal" : "Despesas Gerais"),
+            client_name: t?.patient_name || p.payer_name || t?.payer_name || "Avulso",
+            payment_method: p.payment_method || "PIX",
+            payment_account: accountObj?.name || accounts[0]?.name || "BANCO DO BRASIL",
+            account_id: p.account_id || accounts[0]?.id || "acc-bb",
+            company_id: t?.company_id || null,
+            type: (t?.type || "receita") as "receita" | "despesa",
+            is_expense: isExpense,
+            amount: Number(p.amount || 0),
+            paid_amount: 0,
+            status: "cancelado" as const,
+            reversed_at: p.paid_on || new Date().toISOString(),
+            reversal_reason: "Exclusão manual realizada no Fluxo de Caixa",
+            badgeLabel: "EXCLUÍDO",
+            title: t,
+          });
+        }
+      });
+
+      titles.forEach((t) => {
+        if (
+          deletedEntryIds.includes(t.id) &&
+          !locallyDeleted.some((d) => d.transaction_id === t.id || d.id === t.id)
+        ) {
+          const isExpense = t.type === "despesa";
+          const isIncome = !isExpense;
+          const accountObj = accounts.find((a) => a.company_id === t.company_id) || accounts[0];
+          locallyDeleted.push({
+            id: t.id,
+            transaction_id: t.id,
+            date: t.date || t.due_date || "2026-09-15",
+            description: t.description || (isIncome ? "Honorários - Ação de Cobrança – Entrada Paga" : "Pagamento realizado"),
+            category: t.category || (isIncome ? "Honorários Iniciais / sinal" : "Despesas Gerais"),
+            client_name: t.patient_name || t.payer_name || "Avulso",
+            payment_method: "PIX",
+            payment_account: accountObj?.name || "BANCO DO BRASIL",
+            account_id: accountObj?.id || "acc-bb",
+            company_id: t.company_id || null,
+            type: t.type as "receita" | "despesa",
+            is_expense: isExpense,
+            amount: Number(t.paid_amount > 0 ? t.paid_amount : t.amount),
+            paid_amount: 0,
+            status: "cancelado" as const,
+            reversed_at: t.due_date || t.date,
+            reversal_reason: "Exclusão manual realizada no Fluxo de Caixa",
+            badgeLabel: "EXCLUÍDO",
+            title: t,
+          });
+        }
+      });
+    }
+
     const fromReversed = allRealizedEntries.filter((e) => !!e.reversed_at);
     const fromCancelledTitles = (finance.titles || [])
       .filter((t) => t.status === "cancelado")
@@ -310,8 +471,8 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
         title: t,
       }));
 
-    return [...fromReversed, ...fromCancelledTitles];
-  }, [allRealizedEntries, finance.titles]);
+    return [...locallyDeleted, ...fromReversed, ...fromCancelledTitles];
+  }, [allRealizedEntries, finance.payments, finance.titles, finance.accounts, deletedEntryIds]);
 
   // 3. Filtragem dos Lançamentos para exibição na tabela
   const filteredEntries = useMemo(() => {
@@ -1084,27 +1245,53 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                         {/* AÇÕES */}
                         <TableCell className="align-middle py-3 text-right">
                           <div className="flex items-center justify-end gap-1">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-7 w-7 text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
-                              title="Ver histórico / Baixa"
-                              onClick={() => handleOpenEditOrHistory(e)}
-                              aria-label="Ver histórico"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
+                            {activeSubTab === "lancamentos" ? (
+                              <>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7 text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+                                  title="Ver histórico / Baixa"
+                                  onClick={() => handleOpenEditOrHistory(e)}
+                                  aria-label="Ver histórico"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
 
-                            {!isDespesa && e.status !== "cancelado" && (
+                                {!isDespesa && (
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7 text-blue-500 hover:text-blue-700 hover:bg-blue-50 cursor-pointer"
+                                    title="Recibo / Histórico"
+                                    onClick={() => handleOpenEditOrHistory(e)}
+                                    aria-label="Recibo"
+                                  >
+                                    <FileText className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7 text-rose-500 hover:text-rose-700 hover:bg-rose-50 cursor-pointer"
+                                  title="Excluir movimentação"
+                                  onClick={() => handleOpenDelete(e)}
+                                  aria-label="Excluir movimentação"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </>
+                            ) : (
                               <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-7 w-7 text-blue-500 hover:text-blue-700 hover:bg-blue-50 cursor-pointer"
-                                title="Recibo / Histórico"
-                                onClick={() => handleOpenEditOrHistory(e)}
-                                aria-label="Recibo"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-xs font-medium text-blue-600 border-blue-200 hover:bg-blue-50 gap-1 rounded-md cursor-pointer"
+                                title="Restaurar movimentação"
+                                onClick={() => handleRestoreEntry(e)}
                               >
-                                <FileText className="h-3.5 w-3.5" />
+                                <RotateCcw className="h-3 w-3" />
+                                Restaurar
                               </Button>
                             )}
                           </div>
@@ -1311,6 +1498,100 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
             >
               <CheckCircle2 className="h-4 w-4" />
               {transferring ? "Registrando..." : "Confirmar transferência"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ========================================================================= */}
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE MOVIMENTAÇÃO                          */}
+      {/* ========================================================================= */}
+      <Dialog open={deleteModalOpen} onOpenChange={(open) => { if (!isDeleting) setDeleteModalOpen(open); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-base font-bold text-slate-900">
+                  Excluir movimentação
+                </DialogTitle>
+                <DialogDescription className="text-xs text-slate-500">
+                  Esta ação estornará o lançamento do fluxo de caixa e moverá o registro para a aba de excluídos.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {entryToDelete && (
+            <div className="space-y-4 py-2">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Descrição:</span>
+                  <span className="font-semibold text-slate-800 text-right">{entryToDelete.description}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Valor:</span>
+                  <span className={cn("font-bold text-sm", entryToDelete.is_expense ? "text-rose-600" : "text-emerald-600")}>
+                    {entryToDelete.is_expense ? "- " : "+ "}
+                    {currency(entryToDelete.amount)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Conta:</span>
+                  <span className="font-medium text-slate-700">{entryToDelete.payment_account}</span>
+                </div>
+                {entryToDelete.client_name && entryToDelete.client_name !== "Avulso" && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500">Paciente / Pagador:</span>
+                    <span className="font-medium text-slate-700">{entryToDelete.client_name}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="delete-reason" className="text-xs font-semibold text-slate-700">
+                  Motivo da exclusão (opcional)
+                </Label>
+                <Input
+                  id="delete-reason"
+                  placeholder="Ex: Lançamento duplicado, cancelamento, etc."
+                  value={deleteReason}
+                  onChange={(e) => setDeleteReason(e.target.value)}
+                  className="text-xs h-9"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="text-xs h-9"
+              onClick={() => setDeleteModalOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              className="text-xs h-9 bg-rose-600 hover:bg-rose-700 text-white gap-1.5 font-semibold cursor-pointer"
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <>Excluindo...</>
+              ) : (
+                <>
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Excluir Movimentação
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
