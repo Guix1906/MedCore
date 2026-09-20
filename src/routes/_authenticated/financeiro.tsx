@@ -521,7 +521,13 @@ function FinanceiroPage() {
                   )}
                 </>
               )}
-            {tab === "fluxo" && <CashFlow finance={data} />}
+            {tab === "fluxo" && (
+              <CashFlow
+                finance={data}
+                onOpenNew={() => handleOpenCreating()}
+                onSelectTitle={(id) => setSelected(id)}
+              />
+            )}
             {tab === "contas" && <Accounts data={data} />}
             {tab === "planos" && <TreatmentFinance />}
             {tab === "centros-custo" && <CostCenters data={data} />}
