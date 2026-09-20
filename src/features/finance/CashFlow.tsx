@@ -523,9 +523,9 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
   return (
     <div className="space-y-6 pb-12">
       {/* ========================================================================= */}
-      {/* CABEÇALHO DA TELA COM SELETORES DE CLÍNICA, CONTAS E PERÍODO              */}
+      {/* CABEÇALHO DA TELA COM TÍTULO E BOTÃO NOVO LANÇAMENTO (CANTO SUPERIOR DIREITO) */}
       {/* ========================================================================= */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
             Fluxo de Caixa
@@ -536,7 +536,23 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
           </p>
         </div>
 
-        {/* Controles de Clínica, Contas Bancárias e Período */}
+        {/* Botão Novo Lançamento no Canto Superior Direito */}
+        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+          <Button
+            size="sm"
+            className="h-10 px-4 bg-purple-600 hover:bg-purple-700 text-white font-semibold text-sm gap-2 shadow-xs cursor-pointer rounded-xl"
+            onClick={() => (onOpenNew ? onOpenNew("receita") : (window.location.href = "/financeiro?novo=1"))}
+          >
+            <Plus className="h-4 w-4" strokeWidth={2.5} />
+            Novo lançamento
+          </Button>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* BARRA DE CONTROLES: CLÍNICA, CONTAS BANCÁRIAS, PERÍODO E GRÁFICO           */}
+      {/* ========================================================================= */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
         <div className="flex flex-wrap items-center gap-2">
           {/* Seletor de Clínica */}
           {finance.scopes.length > 1 && (
@@ -614,22 +630,22 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
               className="text-xs bg-transparent border-0 focus:outline-hidden font-medium text-foreground cursor-pointer"
             />
           </div>
-
-          {/* Botão Alternar Exibição do Gráfico */}
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 text-xs font-semibold gap-1.5 border-border bg-background hover:bg-muted text-foreground cursor-pointer"
-            onClick={() => setShowChart((v) => !v)}
-          >
-            {showChart ? (
-              <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
-            ) : (
-              <Eye className="h-3.5 w-3.5 text-muted-foreground" />
-            )}
-            {showChart ? "Ocultar Gráfico" : "Exibir Gráfico"}
-          </Button>
         </div>
+
+        {/* Botão Alternar Exibição do Gráfico */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9 text-xs font-semibold gap-1.5 border-border bg-background hover:bg-muted text-foreground cursor-pointer"
+          onClick={() => setShowChart((v) => !v)}
+        >
+          {showChart ? (
+            <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
+          ) : (
+            <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+          )}
+          {showChart ? "Ocultar Gráfico" : "Exibir Gráfico"}
+        </Button>
       </div>
 
       {/* ========================================================================= */}
