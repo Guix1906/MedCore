@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,6 +13,7 @@ import { refreshFinance } from "./finance-api";
 import { cashFlow } from "./cash-flow-math";
 import type { CashAccount, CashFlowSnapshot } from "./cash-flow-schema";
 import type { FinanceSnapshot } from "./finance-schema";
+import { GraficoFluxoDeCaixa, type LancamentoFluxo } from "@/components/finance/GraficoFluxoDeCaixa";
 
 const input = "w-full rounded-lg border border-slate-200 p-2 text-sm";
 const button = "rounded-lg bg-purple-600 px-3 py-2 text-white disabled:opacity-50";
@@ -46,6 +47,28 @@ export default function CashFlow({ finance }: { finance: FinanceSnapshot }) {
       calculationError = errorMessage(error);
     }
   }
+
+  const chartEntries: LancamentoFluxo[] = useMemo(() => {
+    if (!query.data?.payments) return [];
+    return query.data.payments
+      .filter(
+        (p) =>
+          (!start || p.date >= start) &&
+          (!end || p.date <= end) &&
+          (!account || p.account_id === account) &&
+          !p.reversed_at,
+      )
+      .map((p) => ({
+        id: p.id,
+        amount: p.amount,
+        paid_amount: p.amount,
+        entry_type: p.type,
+        status: "pago" as const,
+        paid_at: p.date,
+        due_date: p.date,
+      }));
+  }, [query.data?.payments, start, end, account]);
+
   return (
     <section className="space-y-4">
       <h2 className="font-bold">Fluxo de caixa por conta</h2>
@@ -147,6 +170,10 @@ export default function CashFlow({ finance }: { finance: FinanceSnapshot }) {
               saldos como posição bancária conciliada.
             </p>
           )}
+
+          {/* Gráfico de Fluxo de Caixa Diário */}
+          <GraficoFluxoDeCaixa entries={chartEntries} />
+
           <div className="overflow-x-auto rounded-xl border bg-white">
             <table className="w-full text-left text-sm">
               <thead>

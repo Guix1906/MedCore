@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { refreshFinance } from "@/features/finance/finance-api";
+import { currency } from "@/features/acompanhamentos/followup-utils";
 import {
   Trash2,
   X,
@@ -857,6 +860,53 @@ export function ActivityDrawer({
     return activity.title?.split("-")[0]?.trim() || activity.title || "Paciente";
   }, [activity]);
 
+  const qc = useQueryClient();
+  const [generatingFinance, setGeneratingFinance] = useState(false);
+  const eventRawId =
+    activity?.id && activity.id.includes(":") ? activity.id.split(":")[1] : activity?.id;
+  const isEvent = activity?.source === "event" || activity?.kind === "evento";
+
+  const { data: linkedTitle, refetch: refetchTitle } = useQuery({
+    queryKey: ["event-financial-title", eventRawId],
+    enabled: !!eventRawId && !!isEvent,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("transactions")
+        .select("id, amount, paid_amount, status, due_date, description")
+        .eq("origin_key", `event:${eventRawId}`)
+        .maybeSingle();
+      if (error) return null;
+      return data;
+    },
+  });
+
+  const handleGenerateFinance = async () => {
+    if (!eventRawId) return;
+    setGeneratingFinance(true);
+    try {
+      const amt =
+        (Number(meta?.procedurePrice) || 0) > 0
+          ? Number(meta?.procedurePrice)
+          : (Number(meta?.downPayment) || 0);
+      const dateStr = activity.start
+        ? activity.start.toISOString().slice(0, 10)
+        : new Date().toISOString().slice(0, 10);
+      const { error } = await supabase.rpc("create_event_financial_title", {
+        p_event_id: eventRawId,
+        p_amount: amt > 0 ? amt : 100,
+        p_due_date: dateStr,
+      });
+      if (error) throw error;
+      await refreshFinance(qc);
+      await refetchTitle();
+      toast.success("Cobrança gerada com sucesso no Financeiro!");
+    } catch (err: any) {
+      toast.error("Erro ao gerar cobrança: " + (err.message || String(err)));
+    } finally {
+      setGeneratingFinance(false);
+    }
+  };
+
   const handleStartAttendance = () => {
     if (!activity) return;
     const clientId = meta?.clientId || null;
@@ -1007,6 +1057,102 @@ export function ActivityDrawer({
                     )}
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Seção Financeira / Sinal */}
+            {(isEvent || (Number(meta?.procedurePrice) || 0) > 0 || (Number(meta?.downPayment) || 0) > 0 || linkedTitle) && (
+              <div className="px-5 py-3.5 border-b border-[#F1F1F4] bg-emerald-50/20 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="h-4 w-4 text-emerald-600" />
+                    <span className="text-[11px] uppercase tracking-wider text-emerald-800 font-bold">
+                      Cobrança & Sinal
+                    </span>
+                  </div>
+                  {linkedTitle ? (
+                    <span
+                      className={cn(
+                        "px-2 py-0.5 rounded-full text-[11px] font-semibold",
+                        linkedTitle.status === "pago"
+                          ? "bg-emerald-100 text-emerald-800"
+                          : Number(linkedTitle.paid_amount || 0) > 0
+                            ? "bg-amber-100 text-amber-800"
+                            : "bg-blue-100 text-blue-800",
+                      )}
+                    >
+                      {linkedTitle.status === "pago"
+                        ? "Quitado"
+                        : Number(linkedTitle.paid_amount || 0) > 0
+                          ? "Sinal Recebido (Parcial)"
+                          : "Pendente"}
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">
+                      Não gerado
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-lg bg-white p-2 border border-emerald-100">
+                    <span className="text-slate-500 block text-[10.5px]">Valor Total</span>
+                    <strong className="text-slate-800 text-sm font-bold">
+                      {currency(linkedTitle?.amount ?? Number(meta?.procedurePrice) ?? 0)}
+                    </strong>
+                  </div>
+                  <div className="rounded-lg bg-white p-2 border border-emerald-100">
+                    <span className="text-slate-500 block text-[10.5px]">Sinal / Pago</span>
+                    <strong className="text-emerald-700 text-sm font-bold">
+                      {currency(
+                        linkedTitle ? (linkedTitle.paid_amount ?? 0) : (Number(meta?.downPayment) ?? 0),
+                      )}
+                    </strong>
+                  </div>
+                </div>
+
+                {linkedTitle ? (
+                  <div className="pt-1 flex items-center justify-between gap-2 flex-wrap">
+                    <p className="text-[11.5px] text-slate-600">
+                      Saldo restante:{" "}
+                      <strong className="text-slate-900">
+                        {currency(
+                          Math.max(
+                            0,
+                            (linkedTitle.amount || 0) - (linkedTitle.paid_amount || 0),
+                          ),
+                        )}
+                      </strong>
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        navigate({
+                          to: "/financeiro",
+                          search: { tab: "receber" } as any,
+                        });
+                      }}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Dar baixa no sinal / Financeiro →
+                    </button>
+                  </div>
+                ) : (
+                  <div className="pt-1 flex items-center justify-between gap-2 flex-wrap">
+                    <p className="text-[11.5px] text-amber-800">
+                      Título pendente de geração.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={generatingFinance}
+                      onClick={handleGenerateFinance}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50 px-2.5 py-1.5 rounded-lg shadow-2xs transition-colors cursor-pointer"
+                    >
+                      {generatingFinance ? "Gerando..." : "Gerar cobrança no Financeiro"}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
