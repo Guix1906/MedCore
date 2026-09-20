@@ -170,13 +170,27 @@ export function calcCashFlow(
         current.setDate(current.getDate() + 1);
       }
     } else if (period === "week") {
-      const current = new Date(end);
+      const current = new Date(start);
       current.setDate(current.getDate() - current.getDay());
-      keys.push(localYMD(current));
+      const limitDate = new Date(end);
+      while (current <= limitDate) {
+        keys.push(localYMD(current));
+        current.setDate(current.getDate() + 7);
+      }
     } else if (period === "month") {
-      keys.push(`${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}`);
+      const current = new Date(start.getFullYear(), start.getMonth(), 1);
+      const limitDate = new Date(end.getFullYear(), end.getMonth(), 1);
+      while (current <= limitDate) {
+        keys.push(`${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}`);
+        current.setMonth(current.getMonth() + 1);
+      }
     } else {
-      keys.push(String(end.getFullYear()));
+      let curY = start.getFullYear();
+      const limitY = end.getFullYear();
+      while (curY <= limitY) {
+        keys.push(String(curY));
+        curY++;
+      }
     }
     return keys;
   };
@@ -187,8 +201,6 @@ export function calcCashFlow(
       ? generateRecentKeys()
       : [];
 
-  const isSingleSummary = customRange && period !== "day" && baseKeys.length > 0;
-  const singleKey = isSingleSummary ? baseKeys[0] : null;
   const startStr = customRange ? localYMD(customRange[0]) : "";
   const endStr = customRange ? localYMD(customRange[1]) : "";
 
@@ -199,16 +211,12 @@ export function calcCashFlow(
   rows
     .filter((r) => r.status !== "cancelado")
     .forEach((r) => {
-      let key = bucketKey(r.date);
-      if (isSingleSummary) {
-        const rDate = r.date.slice(0, 10);
-        if (rDate >= startStr && rDate <= endStr) {
-          key = singleKey!;
-        } else {
-          return; // Skip transactions outside selection
-        }
+      const rDate = r.date.slice(0, 10);
+      if (customRange) {
+        if (rDate < startStr || rDate > endStr) return;
       }
 
+      const key = bucketKey(r.date);
       const isIncome = r.type === "receita" || r.type === "income";
       if (paid(r)) {
         if (!activeData[key]) activeData[key] = { entradas: 0, saidas: 0 };

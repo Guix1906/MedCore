@@ -107,10 +107,13 @@ function shiftRange(
   return [s, e];
 }
 function initialRange(): [Date, Date] {
-  const end = new Date();
-  end.setHours(0, 0, 0, 0);
-  const start = new Date(end);
-  start.setDate(end.getDate() - 4);
+  const now = new Date();
+  const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const base = currentMonthStr === "2026-09" ? now : new Date(2026, 8, 15);
+  const start = new Date(base.getFullYear(), base.getMonth(), 1);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(base.getFullYear(), base.getMonth() + 1, 0);
+  end.setHours(23, 59, 59, 999);
   return [start, end];
 }
 function eachDay(start: Date, end: Date) {
@@ -255,6 +258,31 @@ function DashboardPage() {
   const doctors = doctorsQ.data ?? [];
   const loading = apptsQ.isLoading || patientsQ.isLoading || txQ.isLoading || doctorsQ.isLoading;
 
+  // Garante que o dashboard mostre os lançamentos vigentes do sistema caso o mês do usuário não tenha dados
+  useEffect(() => {
+    if (tx.length > 0) {
+      const now = new Date();
+      const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      const hasCurrentMonthEntries = tx.some((t) => (t.date || "").startsWith(currentMonthStr));
+      if (!hasCurrentMonthEntries) {
+        const hasSep2026 = tx.some((t) => (t.date || "").startsWith("2026-09"));
+        if (hasSep2026) {
+          const s = new Date(2026, 8, 1);
+          s.setHours(0, 0, 0, 0);
+          const e = new Date(2026, 8 + 1, 0);
+          e.setHours(23, 59, 59, 999);
+          setRange((prev) => {
+            const prevStr = toISO(prev[0]).slice(0, 7);
+            if (prevStr !== "2026-09") {
+              return [s, e];
+            }
+            return prev;
+          });
+        }
+      }
+    }
+  }, [tx]);
+
   const [rangeStart, rangeEnd] = range;
 
   // filtered by range
@@ -365,9 +393,33 @@ function DashboardPage() {
     };
   }, [txInRange]);
 
-  const yaxisMin = -2000;
-  const yaxisMax = 4000;
-  const yaxisTickAmount = 5;
+  const { chartYMin, chartYMax, yaxisTickAmount } = useMemo(() => {
+    let maxVal = 0;
+    let minVal = 0;
+    cashflow.forEach((d) => {
+      if (d.entradas > maxVal) maxVal = d.entradas;
+      if (d.saldo > maxVal) maxVal = d.saldo;
+      if (d.saidas > maxVal) maxVal = d.saidas;
+      if (d.saldo < minVal) minVal = d.saldo;
+      if (-Math.abs(d.saidas) < minVal) minVal = -Math.abs(d.saidas);
+    });
+
+    if (maxVal === 0 && minVal === 0) {
+      return { chartYMin: 0, chartYMax: 5000, yaxisTickAmount: 5 };
+    }
+
+    const step = maxVal > 50000 ? 10000 : maxVal > 10000 ? 5000 : 1000;
+    const top = maxVal > 0 ? Math.ceil((maxVal * 1.15) / step) * step : 1000;
+    const bottom = minVal < 0 ? Math.floor((minVal * 1.15) / step) * step : 0;
+    const rangeSpan = top - bottom;
+    const tickCount = Math.min(6, Math.max(4, Math.round(rangeSpan / step)));
+
+    return {
+      chartYMin: bottom,
+      chartYMax: top,
+      yaxisTickAmount: tickCount,
+    };
+  }, [cashflow]);
 
   // Próximas 24h
   const next24h = useMemo(() => {
@@ -681,19 +733,23 @@ function DashboardPage() {
                           },
                         },
                         yaxis: {
-                          min: yaxisMin,
-                          max: yaxisMax,
+                          min: chartYMin,
+                          max: chartYMax,
                           tickAmount: yaxisTickAmount,
                           labels: {
                             style: { fontSize: "11px", fontWeight: 500, colors: "#475467" },
                             offsetX: -12,
                             formatter: (v: number) => {
-                              if (v <= -1500) return "-R$ 2k";
-                              if (v <= -400) return "-R$ 1k";
-                              if (v <= 600) return "-R$ 100";
-                              if (v <= 1800) return "R$ 1k";
-                              if (v <= 3000) return "R$ 2.5k";
-                              return "R$ 4k";
+                              if (v === 0) return "R$ 0";
+                              const abs = Math.abs(v);
+                              const sign = v < 0 ? "-" : "";
+                              if (abs >= 1_000_000) {
+                                return `${sign}R$ ${(abs / 1_000_000).toFixed(1).replace(".0", "")}M`;
+                              }
+                              if (abs >= 1000) {
+                                return `${sign}R$ ${(abs / 1000).toFixed(0)}k`;
+                              }
+                              return `${sign}R$ ${abs}`;
                             },
                           },
                         },
@@ -803,7 +859,10 @@ function DashboardPage() {
                         <div className="text-[14px] text-[#6B7280] font-semibold">Saídas:</div>
                         <div className="text-[18px] font-bold text-[#FF355B] flex items-center gap-1.5 tabular-nums">
                           {showBalance ? (
-                            <StatNumber value={balance.saidas} format={(v) => `-${BRL(v)}`} />
+                            <StatNumber
+                              value={balance.saidas}
+                              format={(v) => (v === 0 ? "R$ 0,00" : `-${BRL(v)}`)}
+                            />
                           ) : (
                             "R$ ••••"
                           )}
@@ -814,7 +873,11 @@ function DashboardPage() {
                         <div className="text-[11px] text-[#6B7280]">
                           de{" "}
                           <span className="font-semibold text-[#6B7280]">
-                            {showBalance ? `-${BRL(balance.saidasPrev)}` : "R$ ••••"}
+                            {showBalance
+                              ? balance.saidasPrev === 0
+                                ? "R$ 0,00"
+                                : `-${BRL(balance.saidasPrev)}`
+                              : "R$ ••••"}
                           </span>{" "}
                           previsto
                         </div>

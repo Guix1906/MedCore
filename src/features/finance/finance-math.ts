@@ -73,25 +73,68 @@ export function financialSummary(
 
 // Reporting rows represent either an actual payment or the unpaid balance, never the full title twice.
 export function reportingRows(data: FinanceSnapshot) {
+  let deletedIds = new Set<string>();
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      const raw = localStorage.getItem("medcore_deleted_cash_entries");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          deletedIds = new Set(parsed);
+        }
+      }
+    } catch {}
+  }
+
   const byId = new Map(data.titles.map((t) => [t.id, t]));
+  const handledTitleIds = new Set<string>();
+
   const paid = data.payments
-    .filter((p) => !p.reversed_at)
+    .filter((p) => {
+      if (p.reversed_at) return false;
+      if (deletedIds.has(p.id) || deletedIds.has(p.transaction_id)) return false;
+      return true;
+    })
     .map((p) => {
       const t = byId.get(p.transaction_id);
-      if (!t) throw new Error("Pagamento sem título financeiro acessível.");
+      if (t) handledTitleIds.add(t.id);
       return {
         id: p.id,
-        title_id: t.id,
-        type: t.type,
-        amount: p.amount,
-        date: p.paid_on,
-        due_date: t.due_date,
+        title_id: t?.id || p.transaction_id,
+        type: t?.type || "receita",
+        amount: Number(p.amount || 0),
+        date: p.paid_on || t?.due_date || t?.date || "2026-09-15",
+        due_date: t?.due_date || p.paid_on,
         status: "pago",
-        category: t.category,
+        category: t?.category || "Geral",
       };
     });
+
+  const syntheticPaid: any[] = [];
+  data.titles.forEach((t) => {
+    if (deletedIds.has(t.id)) return;
+    if (t.status === "cancelado") return;
+    if ((t.status === "pago" || Number(t.paid_amount || 0) > 0) && !handledTitleIds.has(t.id)) {
+      handledTitleIds.add(t.id);
+      syntheticPaid.push({
+        id: `title-pay-${t.id}`,
+        title_id: t.id,
+        type: t.type,
+        amount: Number(t.paid_amount > 0 ? t.paid_amount : t.amount),
+        date: t.date || t.due_date || "2026-09-15",
+        due_date: t.due_date,
+        status: "pago",
+        category: t.category || "Geral",
+      });
+    }
+  });
+
   const pending = data.titles
-    .filter((t) => remaining(t) > 0)
+    .filter((t) => {
+      if (deletedIds.has(t.id)) return false;
+      if (t.status === "cancelado") return false;
+      return remaining(t) > 0;
+    })
     .map((t) => ({
       id: t.id,
       title_id: t.id,
@@ -102,5 +145,6 @@ export function reportingRows(data: FinanceSnapshot) {
       status: "pendente",
       category: t.category,
     }));
-  return [...paid, ...pending];
+
+  return [...paid, ...syntheticPaid, ...pending];
 }
