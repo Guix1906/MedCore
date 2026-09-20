@@ -1,18 +1,17 @@
 import React, { useState, useMemo } from "react";
 import {
-  ArrowDownLeft as ArrowDownLeftIcon,
-  Calendar as CalendarIcon,
-  Clock as ClockIcon,
-  AlertTriangle as AlertTriangleIcon,
-  CheckCircle2 as CheckCircle2Icon,
-  Search as SearchIcon,
-  RotateCw as RotateCwIcon,
-  Plus as PlusIcon,
-  TrendingDown as TrendingDownIcon,
-  Receipt as ReceiptIcon,
-  Pencil as PencilIcon,
-  Trash2 as Trash2Icon,
-  Layers as LayersIcon,
+  ArrowDownLeft,
+  Clock,
+  AlertTriangle,
+  CheckCircle2,
+  Search,
+  RotateCw,
+  Plus,
+  TrendingDown,
+  Receipt,
+  Pencil,
+  Trash2,
+  Layers,
 } from "lucide-react";
 import { parseISO, startOfDay } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -22,6 +21,7 @@ import { CountUp } from "@/components/finance/CountUp";
 import { currency, formatClinicalDate } from "@/features/acompanhamentos/followup-utils";
 import { remaining } from "./finance-math";
 import type { FinanceSnapshot, FinancialTitle } from "./finance-schema";
+import { cn } from "@/lib/utils";
 
 export interface ContasPagarTabProps {
   finance: FinanceSnapshot;
@@ -146,6 +146,7 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
       vencidoCount,
       pagoTotal,
       pagoCount,
+      totalAcumulado: aVencerTotal + vencidoTotal + pagoTotal,
       faixas: {
         aVencer: [
           { label: "0-15 dias", count: av_0_15_count, val: av_0_15_val },
@@ -166,7 +167,8 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
     const today = startOfDay(new Date());
 
     return despesas.filter((e) => {
-      const isPaid = e.status === "pago" || remaining(e) <= 0;
+      const rem = remaining(e);
+      const isPaid = e.status === "pago" || rem <= 0;
       const isVencido = !isPaid && !!e.due_date && startOfDay(parseISO(e.due_date)) < today;
 
       // 1. Filtro de Sub-abas
@@ -201,25 +203,24 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
   }, [despesas, subTab, statusFilter, search]);
 
   return (
-    <div className="space-y-6">
-      {/* Header com Ícone e Ações */}
+    <div className="space-y-6 pb-12">
+      {/* ========================================================================= */}
+      {/* 1. CABEÇALHO COM ÍCONE VERMELHO, TÍTULO, BADGE E BOTÕES DE AÇÃO           */}
+      {/* ========================================================================= */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-start gap-3.5">
-          <div className="h-12 w-12 rounded-2xl bg-rose-600 text-white flex items-center justify-center shadow-xs shrink-0 mt-0.5">
-            <ArrowDownLeftIcon className="h-6 w-6" />
+        <div className="flex items-center gap-3.5">
+          <div className="h-11 w-11 rounded-2xl bg-rose-600 text-white flex items-center justify-center shadow-xs shrink-0">
+            <ArrowDownLeft className="h-6 w-6" strokeWidth={2.5} />
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
               Contas a Pagar
-              <Badge
-                variant="outline"
-                className="text-xs font-semibold text-rose-600 border-rose-200 bg-rose-50/50"
-              >
+              <span className="text-[11px] font-semibold text-rose-600 border border-rose-200 bg-rose-50/60 px-2.5 py-0.5 rounded-full">
                 {despesas.length} despesas
-              </Badge>
+              </span>
             </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Custas processuais, despesas do consultório, fornecedores, repasses e faturas.
+            <p className="text-xs text-slate-500 mt-0.5">
+              Custas processuais, despesas do escritório, fornecedores, repasses e faturas.
             </p>
           </div>
         </div>
@@ -228,282 +229,308 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
           <Button
             size="sm"
             onClick={() => onOpenNew("despesa")}
-            className="h-9 text-sm font-semibold gap-1.5 bg-rose-600 hover:bg-rose-700 text-white shadow-xs"
+            className="h-9 px-4 text-xs font-semibold gap-1.5 bg-[#5046e5] hover:bg-[#4338ca] text-white shadow-xs rounded-xl cursor-pointer"
           >
-            <PlusIcon className="h-3.5 w-3.5" /> Nova Despesa
+            <Plus className="h-3.5 w-3.5" strokeWidth={2.5} /> Nova Despesa
           </Button>
 
           <Button
             variant="outline"
             size="icon"
-            className="h-9 w-9 text-muted-foreground hover:text-foreground"
+            className="h-9 w-9 border-slate-200 bg-white text-slate-600 hover:bg-slate-50 shadow-xs cursor-pointer rounded-xl"
             onClick={() => void onRefresh?.()}
             disabled={refreshing || !onRefresh}
             title="Atualizar"
             aria-label="Atualizar"
           >
-            <RotateCwIcon className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            <RotateCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
           </Button>
         </div>
       </div>
 
-      {/* Sub-abas Pills */}
-      <div className="flex items-center gap-1.5 border-b pb-3">
+      {/* ========================================================================= */}
+      {/* 2. SUB-ABAS / PILLS (A Pagar, Histórico, Todas)                            */}
+      {/* ========================================================================= */}
+      <div className="flex items-center gap-2 flex-wrap">
         <button
+          type="button"
           onClick={() => setSubTab("a-pagar")}
-          className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors cursor-pointer ${
+          className={cn(
+            "rounded-full px-4 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer",
             subTab === "a-pagar"
               ? "bg-rose-600 text-white shadow-xs"
-              : "bg-muted/50 text-muted-foreground hover:bg-muted"
-          }`}
+              : "text-slate-600 hover:text-slate-900"
+          )}
         >
-          <ClockIcon className="h-3.5 w-3.5" /> A Pagar (
-          {metrics.aVencerCount + metrics.vencidoCount})
+          <Clock className="h-3.5 w-3.5" />
+          A Pagar ({metrics.aVencerCount + metrics.vencidoCount})
         </button>
+
         <button
+          type="button"
           onClick={() => setSubTab("historico")}
-          className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors cursor-pointer ${
+          className={cn(
+            "rounded-full px-4 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer",
             subTab === "historico"
-              ? "bg-rose-600 text-white shadow-xs"
-              : "bg-muted/50 text-muted-foreground hover:bg-muted"
-          }`}
+              ? "bg-rose-600 text-white shadow-xs font-semibold"
+              : "text-slate-600 hover:text-slate-900"
+          )}
         >
-          <ReceiptIcon className="h-3.5 w-3.5" /> Histórico ({metrics.pagoCount} pagas)
+          <Receipt className="h-3.5 w-3.5" />
+          Histórico ({metrics.pagoCount} pagas)
         </button>
+
         <button
+          type="button"
           onClick={() => setSubTab("todas")}
-          className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors cursor-pointer ${
+          className={cn(
+            "rounded-full px-4 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer",
             subTab === "todas"
-              ? "bg-rose-600 text-white shadow-xs"
-              : "bg-muted/50 text-muted-foreground hover:bg-muted"
-          }`}
+              ? "bg-rose-600 text-white shadow-xs font-semibold"
+              : "text-slate-600 hover:text-slate-900"
+          )}
         >
-          <LayersIcon className="h-3.5 w-3.5" /> Todas ({despesas.length})
+          <Layers className="h-3.5 w-3.5" />
+          Todas ({despesas.length})
         </button>
       </div>
 
-      {/* Barra de Filtros */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="relative flex-1 min-w-[220px] max-w-sm">
-          <SearchIcon className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+      {/* ========================================================================= */}
+      {/* 3. BARRA DE FILTROS (POSICIONADA ACIMA DOS CARDS DE KPIS CONFORME IMAGEM) */}
+      {/* ========================================================================= */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+        <div className="relative w-full sm:w-[320px] md:w-[360px]">
+          <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <Input
-            placeholder="Buscar por descrição, categoria, fornecedor ou pagador..."
+            placeholder="Buscar por descrição, categoria, cliente ou conta..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-9 pl-9 text-sm"
+            className="h-9 pl-8 text-xs bg-white border-slate-200 rounded-lg placeholder:text-slate-400 shadow-2xs"
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Pills de Status */}
-          <div className="inline-flex items-center bg-muted/60 p-0.5 rounded-lg text-xs font-medium border">
-            <button
-              onClick={() => setStatusFilter("todos")}
-              className={`px-3 py-1 rounded-md transition-colors cursor-pointer ${
-                statusFilter === "todos"
-                  ? "bg-background text-foreground shadow-xs font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Todos
-            </button>
-            <button
-              onClick={() => setStatusFilter("pendente")}
-              className={`px-3 py-1 rounded-md transition-colors cursor-pointer ${
-                statusFilter === "pendente"
-                  ? "bg-background text-foreground shadow-xs font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              A Vencer ({metrics.aVencerCount})
-            </button>
-            <button
-              onClick={() => setStatusFilter("vencido")}
-              className={`px-3 py-1 rounded-md transition-colors cursor-pointer ${
-                statusFilter === "vencido"
-                  ? "bg-background text-foreground shadow-xs font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Vencidas ({metrics.vencidoCount})
-            </button>
-          </div>
+        <div className="inline-flex items-center bg-slate-50 p-0.5 rounded-lg border border-slate-200 shadow-2xs">
+          <button
+            type="button"
+            onClick={() => setStatusFilter("todos")}
+            className={cn(
+              "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
+              statusFilter === "todos"
+                ? "bg-white text-slate-900 shadow-2xs"
+                : "text-slate-500 hover:text-slate-800"
+            )}
+          >
+            Todos
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter("pendente")}
+            className={cn(
+              "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
+              statusFilter === "pendente"
+                ? "bg-white text-slate-900 shadow-2xs"
+                : "text-slate-500 hover:text-slate-800"
+            )}
+          >
+            A Vencer ({metrics.aVencerCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter("vencido")}
+            className={cn(
+              "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
+              statusFilter === "vencido"
+                ? "bg-white text-slate-900 shadow-2xs"
+                : "text-slate-500 hover:text-slate-800"
+            )}
+          >
+            Vencidas ({metrics.vencidoCount})
+          </button>
         </div>
       </div>
 
-      {/* Cards de Métricas (KPIs) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* ========================================================================= */}
+      {/* 4. CARDS DE MÉTRICAS (A VENCER, VENCIDO, PAGO / LIQUIDADO)                 */}
+      {/* ========================================================================= */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* A VENCER */}
-        <div className="rounded-xl border bg-card p-4 flex items-center justify-between shadow-xs">
-          <div>
-            <span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-              A Vencer
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs flex items-center justify-between">
+          <div className="space-y-1">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+              A VENCER
             </span>
-            <p className="text-2xl font-bold text-foreground mt-0.5">
-              <CountUp value={metrics.aVencerTotal} format={currency} />
+            <p className="text-2xl font-bold text-slate-900 tracking-tight">
+              <CountUp value={metrics.aVencerTotal} format={(v) => currency(v)} />
             </p>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-xs text-slate-400">
               {metrics.aVencerCount} lançamentos pendentes
             </p>
           </div>
-          <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
-            <ClockIcon className="h-5 w-5" />
+          <div className="h-9 w-9 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+            <Clock className="h-4 w-4" />
           </div>
         </div>
 
         {/* VENCIDO */}
-        <div className="rounded-xl border bg-card p-4 flex items-center justify-between shadow-xs">
-          <div>
-            <span className="text-xs font-semibold tracking-wider text-rose-600 uppercase">
-              Vencido
+        <div
+          className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs flex items-center justify-between cursor-pointer hover:border-rose-300 transition-colors"
+          onClick={() => setStatusFilter("vencido")}
+        >
+          <div className="space-y-1">
+            <span className="text-[11px] font-semibold text-rose-500 uppercase tracking-wider">
+              VENCIDO
             </span>
-            <p className="text-2xl font-bold text-rose-600 mt-0.5">
-              <CountUp value={metrics.vencidoTotal} format={currency} />
+            <p className="text-2xl font-bold text-rose-600 tracking-tight">
+              <CountUp value={metrics.vencidoTotal} format={(v) => currency(v)} />
             </p>
-            <p className="text-xs text-muted-foreground mt-0.5">{metrics.vencidoCount} em atraso</p>
+            <p className="text-xs text-slate-400">{metrics.vencidoCount} em atraso</p>
           </div>
-          <div className="h-10 w-10 rounded-xl bg-rose-500/10 text-rose-600 flex items-center justify-center shrink-0">
-            <AlertTriangleIcon className="h-5 w-5" />
+          <div className="h-9 w-9 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center shrink-0">
+            <AlertTriangle className="h-4 w-4" />
           </div>
         </div>
 
-        {/* PAGO (LIQUIDADO) */}
-        <div className="rounded-xl border bg-card p-4 flex items-center justify-between shadow-xs">
-          <div>
-            <span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-              Pago / Liquidado
+        {/* PAGO / LIQUIDADO */}
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs flex items-center justify-between">
+          <div className="space-y-1">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+              PAGO / LIQUIDADO
             </span>
-            <p className="text-2xl font-bold text-foreground mt-0.5">
-              <CountUp value={metrics.pagoTotal} format={currency} />
+            <p className="text-2xl font-bold text-slate-900 tracking-tight">
+              <CountUp value={metrics.pagoTotal} format={(v) => currency(v)} />
             </p>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-xs text-slate-400">
               {metrics.pagoCount} lançamentos liquidados
             </p>
           </div>
-          <div className="h-10 w-10 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center shrink-0">
-            <CheckCircle2Icon className="h-5 w-5" />
+          <div className="h-9 w-9 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center shrink-0">
+            <CheckCircle2 className="h-4 w-4" />
           </div>
         </div>
       </div>
 
-      {/* Seção 2 Colunas: Análise de Vencimento e Previsão */}
+      {/* ========================================================================= */}
+      {/* 5. SEÇÃO 2 COLUNAS: ANÁLISE DE VENCIMENTO & CONTROLE DE SAÍDAS             */}
+      {/* ========================================================================= */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Coluna Esquerda: Análise de Vencimento */}
-        <div className="rounded-xl border bg-card p-5 shadow-xs space-y-4">
-          <h2 className="text-xs font-bold tracking-wider text-muted-foreground uppercase">
-            Análise de Vencimento
+        {/* COLUNA ESQUERDA: ANÁLISE DE VENCIMENTO */}
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+            ANÁLISE DE VENCIMENTO
           </h2>
 
-          <div className="space-y-4">
-            {/* Bloco A Vencer */}
-            <div className="space-y-2">
-              <span className="text-xs font-bold tracking-wider text-amber-600 uppercase">
-                A Vencer
-              </span>
-              <div className="divide-y text-xs">
-                {metrics.faixas.aVencer.map((f) => (
-                  <div key={f.label} className="py-2 flex items-center justify-between">
-                    <span className="text-muted-foreground">{f.label}</span>
-                    <div className="space-x-3">
-                      <span className="text-muted-foreground">{f.count} itens</span>
-                      <span className="font-semibold text-foreground">{currency(f.val)}</span>
-                    </div>
+          <div className="space-y-2">
+            <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider block">
+              A VENCER
+            </span>
+            <div className="divide-y divide-slate-100">
+              {metrics.faixas.aVencer.map((f) => (
+                <div key={f.label} className="py-2 flex items-center justify-between text-xs">
+                  <span className="text-slate-600">{f.label}</span>
+                  <div className="flex items-center gap-4">
+                    <span className="text-slate-400">{f.count} itens</span>
+                    <strong className="font-bold text-slate-800 tabular-nums min-w-[85px] text-right">
+                      {currency(f.val)}
+                    </strong>
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
+          </div>
 
-            {/* Bloco Vencido */}
-            <div className="space-y-2 pt-2 border-t">
-              <span className="text-xs font-bold tracking-wider text-rose-600 uppercase">
-                Vencido
-              </span>
-              <div className="divide-y text-xs">
-                {metrics.faixas.vencido.map((f) => (
-                  <div key={f.label} className="py-2 flex items-center justify-between">
-                    <span className="text-muted-foreground">{f.label}</span>
-                    <div className="space-x-3">
-                      <span className="text-muted-foreground">{f.count} itens</span>
-                      <span className="font-semibold text-rose-600">{currency(f.val)}</span>
-                    </div>
+          <div className="space-y-2 pt-1">
+            <span className="text-[11px] font-bold text-rose-600 uppercase tracking-wider block">
+              VENCIDO
+            </span>
+            <div className="divide-y divide-slate-100">
+              {metrics.faixas.vencido.map((f) => (
+                <div key={f.label} className="py-2 flex items-center justify-between text-xs">
+                  <span className="text-slate-600">{f.label}</span>
+                  <div className="flex items-center gap-4">
+                    <span className="text-slate-400">{f.count} itens</span>
+                    <strong className="font-bold text-rose-600 tabular-nums min-w-[85px] text-right">
+                      {currency(f.val)}
+                    </strong>
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
 
-        {/* Coluna Direita: Previsão & Controle */}
-        <div className="rounded-xl border bg-card p-5 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-rose-500/10 text-rose-600 flex items-center justify-center shrink-0">
-              <TrendingDownIcon className="h-4 w-4" />
+        {/* COLUNA DIREITA: CONTROLE DE SAÍDAS */}
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center gap-2">
+            <div className="h-6 w-6 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center shrink-0">
+              <TrendingDown className="h-3.5 w-3.5" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-foreground">Controle de Saídas</h2>
-              <p className="text-xs text-muted-foreground">
+              <h2 className="font-bold text-sm text-slate-900">Controle de Saídas</h2>
+              <p className="text-xs text-slate-400">
                 Total acumulado de despesas cadastradas
               </p>
             </div>
           </div>
 
-          <div className="py-8 text-center space-y-2">
-            <p className="text-3xl font-black text-rose-600">
-              {currency(metrics.aVencerTotal + metrics.vencidoTotal + metrics.pagoTotal)}
+          <div className="py-10 text-center space-y-1">
+            <p className="text-3xl font-bold text-rose-600 tracking-tight">
+              {currency(metrics.totalAcumulado)}
             </p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-slate-400">
               {despesas.length} despesas registradas no total
             </p>
           </div>
 
-          <div className="text-right text-xs text-muted-foreground border-t pt-2.5">
-            Atualizado em tempo real com todos os lançamentos
+          <div className="border-t border-slate-100 pt-3 text-center">
+            <p className="text-[11px] text-slate-400">
+              Atualizado em tempo real com todos os lançamentos
+            </p>
           </div>
         </div>
       </div>
 
-      {/* Lista de Contas a Pagar */}
-      <div className="rounded-xl border bg-card p-5 shadow-xs space-y-3">
+      {/* ========================================================================= */}
+      {/* 6. LISTA PRINCIPAL: LANÇAMENTOS DE DESPESAS                               */}
+      {/* ========================================================================= */}
+      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold text-foreground">
+          <h2 className="text-sm font-bold text-slate-900">
             Lançamentos de Despesas ({filteredList.length})
           </h2>
 
           <Button
             size="sm"
             variant="outline"
-            className="h-9 text-sm font-semibold gap-1 text-rose-600 border-rose-200 hover:bg-rose-50 cursor-pointer"
+            className="h-8 border-rose-200 bg-white text-rose-600 hover:bg-rose-50 text-xs font-semibold px-3 rounded-lg flex items-center gap-1.5 shadow-2xs cursor-pointer"
             onClick={() => onOpenNew("despesa")}
           >
-            <PlusIcon className="h-3.5 w-3.5" /> Adicionar Despesa
+            <Plus className="h-3.5 w-3.5" /> Adicionar Despesa
           </Button>
         </div>
 
         {filteredList.length === 0 ? (
           <div className="py-12 text-center space-y-3">
-            <div className="h-12 w-12 rounded-2xl bg-muted/60 text-muted-foreground mx-auto flex items-center justify-center">
-              <ArrowDownLeftIcon className="h-6 w-6" />
+            <div className="h-10 w-10 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center">
+              <ArrowDownLeft className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-foreground">
+              <p className="text-xs font-semibold text-slate-700">
                 Nenhuma despesa encontrada nesta visualização.
               </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {subTab === "a-pagar" && metrics.pagoCount > 0
-                  ? `Existem ${metrics.pagoCount} despesa(s) já liquidadas na aba "Histórico" ou "Todas".`
-                  : "Cadastre uma nova despesa ou ajuste os filtros de pesquisa."}
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Cadastre uma nova despesa ou ajuste os filtros de pesquisa.
               </p>
             </div>
             <Button
               size="sm"
               onClick={() => onOpenNew("despesa")}
-              className="h-9 text-sm font-semibold gap-1.5 bg-rose-600 hover:bg-rose-700 text-white cursor-pointer"
+              className="h-9 px-4 text-xs font-semibold gap-1.5 bg-[#5046e5] hover:bg-[#4338ca] text-white shadow-xs rounded-xl cursor-pointer mx-auto"
             >
-              <PlusIcon className="h-3.5 w-3.5" /> Cadastrar Despesa Agora
+              <Plus className="h-3.5 w-3.5" strokeWidth={2.5} /> Cadastrar Despesa Agora
             </Button>
           </div>
         ) : (
-          <div className="divide-y">
+          <div className="divide-y divide-slate-100">
             {filteredList.map((item) => {
               const rem = remaining(item);
               const isPaid = item.status === "pago" || rem <= 0;
@@ -514,47 +541,47 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
               return (
                 <div
                   key={item.id}
-                  className="py-3 flex items-center justify-between gap-3 flex-wrap hover:bg-muted/30 px-2 rounded-xl transition-colors"
+                  className="py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-slate-50/50 rounded-lg px-2 transition-colors"
                 >
-                  <div className="min-w-0 flex-1">
+                  <div className="space-y-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-sm text-foreground truncate">
+                      <span className="font-bold text-sm text-slate-900 truncate">
                         {item.description || "Despesa sem descrição"}
                       </span>
                       {item.category && (
-                        <Badge variant="secondary" className="text-xs py-0 h-4">
+                        <span className="inline-flex items-center text-[10.5px] font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
                           {item.category}
-                        </Badge>
+                        </span>
                       )}
-                      <Badge
-                        variant="outline"
-                        className={`text-xs py-0 h-4 font-semibold ${
+                      <span
+                        className={cn(
+                          "inline-flex items-center text-[10.5px] font-semibold px-2.5 py-0.5 rounded-full",
                           isPaid
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                             : isOverdue
-                              ? "bg-rose-50 text-rose-700 border-rose-200"
-                              : "bg-amber-50 text-amber-700 border-amber-200"
-                        }`}
+                              ? "bg-rose-50 text-rose-700 border border-rose-200"
+                              : "bg-amber-50 text-amber-700 border border-amber-200"
+                        )}
                       >
                         {isPaid ? "Pago" : isOverdue ? "Vencido" : "Pendente"}
-                      </Badge>
+                      </span>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Vencimento:{" "}
-                      {item.due_date ? formatClinicalDate(item.due_date) : "Sem vencimento fixo"}
-                      {displayName && ` · Beneficiário / Fornecedor: ${displayName}`}
+                    <p className="text-xs text-slate-400 truncate">
+                      Vencimento: {item.due_date ? formatClinicalDate(item.due_date) : "Sem vencimento fixo"}
+                      {displayName && ` · Favorecido: ${displayName}`}
                       {item.paid_amount > 0 && !isPaid && ` · Pago parcial: ${currency(item.paid_amount)}`}
                       {!isPaid && rem !== item.amount && ` · Restante: ${currency(rem)}`}
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span className="font-bold text-sm text-rose-600">{currency(item.amount)}</span>
+                  <div className="flex items-center gap-3 shrink-0 self-end md:self-auto">
+                    <strong className="font-bold text-sm text-rose-600 tabular-nums">
+                      {currency(item.amount)}
+                    </strong>
                     {!isPaid && (
                       <Button
                         size="sm"
-                        variant="outline"
-                        className="h-9 text-sm text-emerald-600 border-emerald-200 hover:bg-emerald-50 cursor-pointer font-medium"
+                        className="h-8 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold px-4 rounded-lg shadow-2xs cursor-pointer"
                         onClick={() => onPay(item)}
                       >
                         Liquidar
@@ -563,23 +590,23 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="h-9 w-9 text-muted-foreground hover:text-foreground cursor-pointer"
+                      className="h-8 w-8 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer"
                       onClick={() => onEdit(item)}
-                      title="Editar / Ver detalhes"
-                      aria-label="Editar / Ver detalhes"
+                      title="Editar título"
+                      aria-label="Editar título"
                     >
-                      <PencilIcon className="h-3.5 w-3.5" />
+                      <Pencil className="h-3.5 w-3.5" />
                     </Button>
                     {item.can_cancel && (
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="h-9 w-9 text-rose-600 hover:bg-rose-50 cursor-pointer"
+                        className="h-8 w-8 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
                         onClick={() => onDelete(item.id)}
                         title="Excluir / Cancelar"
                         aria-label="Excluir / Cancelar"
                       >
-                        <Trash2Icon className="h-3.5 w-3.5" />
+                        <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     )}
                   </div>
@@ -592,3 +619,5 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
     </div>
   );
 });
+
+export default ContasPagarTab;
