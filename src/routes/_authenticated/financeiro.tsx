@@ -12,6 +12,7 @@ import TitleList from "@/features/finance/TitleList";
 import CashFlow from "@/features/finance/CashFlow";
 import { ContasPagarTab } from "@/features/finance/ContasPagarTab";
 import { ContasReceberTab } from "@/features/finance/ContasReceberTab";
+import BankReconciliation from "@/features/finance/BankReconciliation";
 import FinanceOperations from "@/features/finance/FinanceOperations";
 import NewTitle from "@/features/finance/NewTitle";
 import PaymentHistory from "@/features/finance/PaymentHistory";
@@ -103,6 +104,13 @@ function FinanceiroPage() {
                       onEdit={(item) => setSelected(item.id)}
                       onReceive={(item) => setSelected(item.id)}
                       onDelete={(id) => setCancelId(id)}
+                    />
+                  ) : search.tab === "conciliacao" ? (
+                    <BankReconciliation
+                      finance={data}
+                      onRefresh={() => void query.refetch()}
+                      refreshing={query.isFetching}
+                      onOpenTitles={(type) => changeTab(type === "receita" ? "receber" : "pagar")}
                     />
                   ) : (
                     <FinanceOperations
