@@ -9,6 +9,8 @@ import FinanceTabs, {
 import { errorMessage } from "@/features/acompanhamentos/followup-utils";
 import { getFinancialSnapshot } from "@/features/finance/finance-api";
 import TitleList from "@/features/finance/TitleList";
+import CashFlow from "@/features/finance/CashFlow";
+import { ContasPagarTab } from "@/features/finance/ContasPagarTab";
 import FinanceOperations from "@/features/finance/FinanceOperations";
 import NewTitle from "@/features/finance/NewTitle";
 import PaymentHistory from "@/features/finance/PaymentHistory";
@@ -75,12 +77,28 @@ function FinanceiroPage() {
                 </p>
               ) : (
                 <>
-                  {search.tab === "receber" || search.tab === "pagar" ? (
-                    <TitleList
-                      key={search.tab}
+                  {search.tab === "fluxo" ? (
+                    <CashFlow
                       finance={data}
-                      type={search.tab === "receber" ? "receita" : "despesa"}
-                      onNew={() => setCreating(search.tab === "receber" ? "receita" : "despesa")}
+                      onOpenNew={(type) => setCreating(type || "receita")}
+                      onSelectTitle={(id) => setSelected(id)}
+                    />
+                  ) : search.tab === "pagar" ? (
+                    <ContasPagarTab
+                      finance={data}
+                      onRefresh={() => void query.refetch()}
+                      refreshing={query.isFetching}
+                      onOpenNew={(type) => setCreating(type || "despesa")}
+                      onEdit={(item) => setSelected(item.id)}
+                      onPay={(item) => setSelected(item.id)}
+                      onDelete={(id) => setCancelId(id)}
+                    />
+                  ) : search.tab === "receber" ? (
+                    <TitleList
+                      key="receber"
+                      finance={data}
+                      type="receita"
+                      onNew={() => setCreating("receita")}
                       onSelect={setSelected}
                       onCancel={setCancelId}
                     />
