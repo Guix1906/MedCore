@@ -15,6 +15,7 @@ import { getFinancialSnapshot, refreshFinance } from "@/features/finance/finance
 import { financialSummary, isFreeBalance, remaining, titleStatus } from "@/features/finance/finance-math";
 import type { FinanceSnapshot } from "@/features/finance/finance-schema";
 import CashFlow from "@/features/finance/CashFlow";
+import { ContasPagarTab } from "@/features/finance/ContasPagarTab";
 import FinanceOperations from "@/features/finance/FinanceOperations";
 import PaymentHistory from "@/features/finance/PaymentHistory";
 import FinanceTabs, { FinanceTabId } from "@/components/finance/FinanceTabs";
@@ -83,6 +84,7 @@ function FinanceiroPage() {
   const [status, setStatus] = useState("all");
   const [account, setAccount] = useState("");
   const [selected, setSelected] = useState("");
+  const [creatingType, setCreatingType] = useState<"receita" | "despesa">("receita");
   const [creating, setCreating] = useState(() => {
     if (typeof window !== "undefined") {
       const p = new URLSearchParams(window.location.search);
@@ -91,7 +93,8 @@ function FinanceiroPage() {
     return false;
   });
 
-  const handleOpenCreating = () => {
+  const handleOpenCreating = (initialType: "receita" | "despesa" = "receita") => {
+    setCreatingType(initialType);
     setCreating(true);
   };
 
@@ -245,7 +248,7 @@ function FinanceiroPage() {
                 Seu perfil não possui acesso financeiro. Solicite autorização ao administrador.
               </p>
             )}
-            {["lancamentos", "receber", "pagar", "extrato"].includes(tab) && (
+            {["lancamentos", "receber", "extrato"].includes(tab) && (
                 <>
                   <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
                     <label className="text-sm">
@@ -521,6 +524,20 @@ function FinanceiroPage() {
                   )}
                 </>
               )}
+            {tab === "pagar" && (
+              <ContasPagarTab
+                finance={data}
+                onRefresh={() => refreshFinance(qc)}
+                refreshing={query.isFetching}
+                onOpenNew={(type) => handleOpenCreating(type || "despesa")}
+                onEdit={(item) => setSelected(item.id)}
+                onPay={(item) => setSelected(item.id)}
+                onDelete={(id) => {
+                  setCancelId(id);
+                  setReason("");
+                }}
+              />
+            )}
             {tab === "fluxo" && (
               <CashFlow
                 finance={data}
@@ -548,7 +565,14 @@ function FinanceiroPage() {
                 }
               />
             )}
-            {creating && <NewTitle data={data} open={creating} onClose={handleCloseCreating} />}
+            {creating && (
+              <NewTitle
+                data={data}
+                open={creating}
+                onClose={handleCloseCreating}
+                initialType={creatingType}
+              />
+            )}
             {currentTitle && (
               <PaymentHistory
                 key={currentTitle.id}
@@ -593,10 +617,12 @@ function NewTitle({
   data,
   open = true,
   onClose,
+  initialType = "receita",
 }: {
   data?: FinanceSnapshot;
   open?: boolean;
   onClose: () => void;
+  initialType?: "receita" | "despesa";
 }) {
   const qc = useQueryClient();
   const scopes = (data?.scopes || []).filter((s) => s.can_create);
@@ -604,7 +630,13 @@ function NewTitle({
   const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [scope, setScope] = useState(() => scopes[0]?.id || "legacy");
-  const [type, setType] = useState<"receita" | "despesa">("receita");
+  const [type, setType] = useState<"receita" | "despesa">(initialType);
+
+  useEffect(() => {
+    if (initialType) {
+      setType(initialType);
+    }
+  }, [initialType]);
   const [amount, setAmount] = useState("");
   const [due, setDue] = useState(localDate());
   const [competence, setCompetence] = useState("");
