@@ -11,6 +11,7 @@ import { getFinancialSnapshot } from "@/features/finance/finance-api";
 import TitleList from "@/features/finance/TitleList";
 import CashFlow from "@/features/finance/CashFlow";
 import { ContasPagarTab } from "@/features/finance/ContasPagarTab";
+import { ContasReceberTab } from "@/features/finance/ContasReceberTab";
 import FinanceOperations from "@/features/finance/FinanceOperations";
 import NewTitle from "@/features/finance/NewTitle";
 import PaymentHistory from "@/features/finance/PaymentHistory";
@@ -94,13 +95,14 @@ function FinanceiroPage() {
                       onDelete={(id) => setCancelId(id)}
                     />
                   ) : search.tab === "receber" ? (
-                    <TitleList
-                      key="receber"
+                    <ContasReceberTab
                       finance={data}
-                      type="receita"
-                      onNew={() => setCreating("receita")}
-                      onSelect={setSelected}
-                      onCancel={setCancelId}
+                      onRefresh={() => void query.refetch()}
+                      refreshing={query.isFetching}
+                      onOpenNew={(type) => setCreating(type || "receita")}
+                      onEdit={(item) => setSelected(item.id)}
+                      onReceive={(item) => setSelected(item.id)}
+                      onDelete={(id) => setCancelId(id)}
                     />
                   ) : (
                     <FinanceOperations
