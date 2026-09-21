@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { refreshFinance } from "@/features/finance/finance-api";
+import type { FinanceSnapshot } from "@/features/finance/finance-schema";
 import { currency } from "@/features/acompanhamentos/followup-utils";
 import {
   Trash2,
@@ -870,13 +871,40 @@ export function ActivityDrawer({
     queryKey: ["event-financial-title", eventRawId],
     enabled: !!eventRawId && !!isEvent,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("transactions")
-        .select("id, amount, paid_amount, status, due_date, description")
-        .eq("origin_key", `event:${eventRawId}`)
-        .maybeSingle();
-      if (error) return null;
-      return data;
+      if (!eventRawId) return null;
+      try {
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(eventRawId);
+        if (isUuid) {
+          const { data, error } = await supabase
+            .from("transactions")
+            .select("id, amount, paid_amount, status, due_date, description")
+            .eq("origin_key", `event:${eventRawId}`)
+            .maybeSingle();
+          if (data) return data;
+        }
+      } catch {}
+
+      // Fallback para o snapshot financeiro normalizado (local + remoto)
+      const snap = qc.getQueryData<FinanceSnapshot>(["financial-snapshot"]);
+      if (snap?.titles) {
+        const found = snap.titles.find(
+          (t) =>
+            t.origin_key === `event:${eventRawId}` ||
+            t.id === `evt-${eventRawId}` ||
+            t.id === eventRawId,
+        );
+        if (found) {
+          return {
+            id: found.id,
+            amount: found.amount,
+            paid_amount: found.paid_amount,
+            status: found.status,
+            due_date: found.due_date,
+            description: found.description,
+          };
+        }
+      }
+      return null;
     },
   });
 

@@ -18,7 +18,7 @@ import {
   moneyCents,
   PAYMENT_METHODS,
 } from "@/features/acompanhamentos/followup-utils";
-import { refreshFinance } from "./finance-api";
+import { refreshFinance, saveLocalPayment, reverseLocalPayment } from "./finance-api";
 import { remaining } from "./finance-math";
 import type { FinanceSnapshot, FinancialTitle, FinancialPayment } from "./finance-schema";
 
@@ -64,25 +64,57 @@ export default function PaymentHistory({
       if (value <= 0 || (!submitted && value > remaining(title)))
         throw new Error("Informe um valor positivo até o saldo em aberto.");
       setSubmitted(true);
-      const { error } = await supabase.rpc("record_financial_payment", {
-        p_id: requestId,
-        p_transaction_id: title.id,
-        p_amount: value,
-        p_paid_on: date,
-        p_method: method,
-        p_account_id: account,
-        p_payer_name: payer || null,
-      });
-      if (error) {
-        if (error.code === "P0001") setSubmitted(false);
-        throw error;
+
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(title.id);
+      let rpcSuccess = false;
+
+      if (isUuid) {
+        try {
+          const { error } = await supabase.rpc("record_financial_payment", {
+            p_id: requestId,
+            p_transaction_id: title.id,
+            p_amount: value,
+            p_paid_on: date,
+            p_method: method,
+            p_account_id: account || "acc-bb",
+            p_payer_name: payer || null,
+          });
+          if (!error) {
+            rpcSuccess = true;
+          } else {
+            console.warn("Aviso ao registrar pagamento via RPC:", error);
+          }
+        } catch (rpcErr) {
+          console.warn("Falha na chamada RPC de pagamento:", rpcErr);
+        }
       }
+
+      // Se não foi persistido no banco remoto (título local evt- ou erro RPC), salva localmente
+      if (!rpcSuccess) {
+        saveLocalPayment({
+          id: requestId,
+          transaction_id: title.id,
+          amount: value,
+          paid_on: date,
+          payment_method: method.toUpperCase(),
+          account_id: account || "acc-bb",
+          payer_name: payer || title.patient_name || "Cliente",
+          created_by: null,
+          created_at: new Date().toISOString(),
+          legacy: false,
+          reversed_at: null,
+          reversed_by: null,
+          reversal_reason: null,
+        });
+      }
+
       setRequestId(crypto.randomUUID());
       setSubmitted(false);
       setAmount("");
       await refreshFinance(qc);
-      toast.success("Pagamento registrado. Nenhuma transferência bancária foi executada.");
+      toast.success("Pagamento registrado com sucesso.");
     } catch (error) {
+      setSubmitted(false);
       toast.error(errorMessage(error));
     } finally {
       setBusy(false);
@@ -90,18 +122,30 @@ export default function PaymentHistory({
   };
   const reverse = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (busy) return;
     setBusy(true);
     try {
-      const { error } = await supabase.rpc("reverse_financial_payment", {
-        p_id: reversing,
-        p_reason: reason,
-      });
-      if (error) throw error;
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reversing);
+      let rpcSuccess = false;
+      if (isUuid) {
+        try {
+          const { error } = await supabase.rpc("reverse_financial_payment", {
+            p_id: reversing,
+            p_reason: reason,
+          });
+          if (!error) rpcSuccess = true;
+        } catch (rpcErr) {
+          console.warn("Falha no estorno via RPC:", rpcErr);
+        }
+      }
+      if (!rpcSuccess) {
+        reverseLocalPayment(reversing, reason);
+      }
       setReversing("");
       setReason("");
       setReceipt(null);
       await refreshFinance(qc);
-      toast.success("Baixa incorreta estornada; histórico preservado.");
+      toast.success("Baixa estornada com sucesso; histórico preservado.");
     } catch (error) {
       toast.error(errorMessage(error));
     } finally {

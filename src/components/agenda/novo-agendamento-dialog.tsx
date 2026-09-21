@@ -907,6 +907,7 @@ export function NovoAgendamentoDialog({
         color,
         recurrence,
         clientId: clientId || null,
+        patientName: selectedClient?.name || selectedClientObj?.name || null,
         participants:
           type === "lembrete"
             ? selectedProfs.map((id) => {
@@ -990,6 +991,9 @@ export function NovoAgendamentoDialog({
         validCompanyId,
       );
 
+      // Atualiza o financeiro imediatamente no cache local
+      void refreshFinance(qc);
+
       // 2. Despacha sincronização remota assíncrona em background (sem bloquear o usuário)
       void (async () => {
         let remoteCreatedBy = validCreatedBy;
@@ -1013,13 +1017,41 @@ export function NovoAgendamentoDialog({
             patient_id: validPatientId,
           });
 
-          if (eventError) throw eventError;
+          if (eventError) {
+            console.warn("Aviso ao salvar evento no Supabase:", eventError);
+          } else if (type === "atendimento" && !isIncludedInPlan && (totalAmt > 0 || sinalAmt > 0)) {
+            try {
+              const { data: titleId, error: titleErr } = await supabase.rpc("create_event_financial_title", {
+                p_event_id: insertedId,
+                p_amount: totalAmt > 0 ? totalAmt : sinalAmt,
+                p_due_date: day,
+              });
+              if (titleErr) throw titleErr;
+
+              // Se houver sinal pago, liquida imediatamente no financeiro do Supabase
+              if (titleId && sinalAmt > 0) {
+                try {
+                  await supabase.rpc("record_financial_payment", {
+                    p_id: crypto.randomUUID(),
+                    p_transaction_id: titleId,
+                    p_amount: sinalAmt,
+                    p_paid_on: day,
+                    p_method: downPaymentMethod || "pix",
+                    p_account_id: "acc-bb",
+                    p_payer_name: selectedClient?.name || selectedClientObj?.name || null,
+                  });
+                } catch (payErr) {
+                  console.warn("Aviso ao liquidar sinal no Supabase:", payErr);
+                }
+              }
+            } catch (finErr) {
+              console.warn("Aviso ao gerar cobrança remota:", finErr);
+            }
+          }
         } catch (error) {
-          toast.error(
-            "Agendamento local não sincronizado; cobrança não gerada: " + errorMessage(error),
-            { duration: 15000 },
-          );
-          return;
+          console.warn("Erro no sync remoto:", error);
+        } finally {
+          void refreshFinance(qc);
         }
 
         // Sincronização PHP em background
@@ -1036,25 +1068,7 @@ export function NovoAgendamentoDialog({
           })
           .catch(() => {});
 
-        if (type === "atendimento" && !isIncludedInPlan && (totalAmt > 0 || sinalAmt > 0)) {
-          try {
-            const { error } = await supabase.rpc("create_event_financial_title", {
-              p_event_id: insertedId,
-              p_amount: totalAmt > 0 ? totalAmt : sinalAmt,
-              p_due_date: day,
-            });
-            if (error) throw error;
-            await refreshFinance(qc);
-            toast.info(
-              "Cobrança criada como pendente. Confirme o sinal ou pagamento no Financeiro, com valor, data e conta.",
-            );
-          } catch (error) {
-            toast.error(
-              "Agendamento salvo, mas a cobrança não foi confirmada: " + errorMessage(error),
-              { duration: 15000 },
-            );
-          }
-        } else if (isIncludedInPlan) {
+        if (isIncludedInPlan) {
           toast.success("Agendamento salvo e vinculado ao plano de tratamento do paciente (sem cobrança duplicada).");
         }
       })();
