@@ -8,7 +8,6 @@ import {
   Filter,
   UserCheck,
   ChevronDown,
-  Plus,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
@@ -337,10 +336,9 @@ export function AgendaToolbar({
           <button
             type="button"
             onClick={onNewAppointment}
-            className="h-9 px-3.5 rounded-lg bg-[#7C3AED] hover:bg-[#6D28D9] text-white text-[13px] font-bold inline-flex items-center gap-1.5 shadow-sm hover:shadow-md transition-all shrink-0 cursor-pointer"
+            className="h-9 px-3.5 rounded-lg bg-[#7C3AED] hover:bg-[#6D28D9] text-white text-[13px] font-bold inline-flex items-center shadow-sm hover:shadow-md transition-all shrink-0 cursor-pointer"
           >
-            <Plus size={15} strokeWidth={2.5} />
-            <span>+ Novo Agendamento</span>
+            <span>Novo Agendamento</span>
           </button>
         )}
       </div>

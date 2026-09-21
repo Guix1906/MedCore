@@ -746,10 +746,9 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
         <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
           <Button
             size="sm"
-            className="h-10 px-4 bg-purple-600 hover:bg-purple-700 text-white font-semibold text-sm gap-2 shadow-xs cursor-pointer rounded-xl"
+            className="h-10 px-4 bg-purple-600 hover:bg-purple-700 text-white font-semibold text-sm shadow-xs cursor-pointer rounded-xl"
             onClick={() => (onOpenNew ? onOpenNew("receita") : (window.location.href = "/financeiro?novo=1"))}
           >
-            <Plus className="h-4 w-4" strokeWidth={2.5} />
             Novo lançamento
           </Button>
         </div>
@@ -943,10 +942,10 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
 
             <Button
               size="sm"
-              className="h-8 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium gap-1.5 rounded-lg shadow-2xs cursor-pointer"
+              className="h-8 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg shadow-2xs cursor-pointer px-3"
               onClick={() => (onOpenNew ? onOpenNew("receita") : (window.location.href = "/financeiro?novo=1"))}
             >
-              <Plus className="h-3.5 w-3.5" strokeWidth={2.5} /> Novo Lançamento
+              Novo Lançamento
             </Button>
           </div>
         </div>

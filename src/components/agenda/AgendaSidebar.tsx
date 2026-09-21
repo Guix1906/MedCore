@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, ChevronDown, Check, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, Check } from "lucide-react";
 import { toast } from "sonner";
 import { getBrazilianHolidays } from "@/lib/holidays";
 
@@ -219,10 +219,9 @@ export default function AgendaSidebar({
           <button
             type="button"
             onClick={onNewAppointment}
-            className="w-full h-11 rounded-xl bg-[#7C3AED] hover:bg-[#6D28D9] text-white text-[14px] font-bold flex items-center justify-center gap-2 shadow-sm hover:shadow-md transition-all cursor-pointer select-none"
+            className="w-full h-11 rounded-xl bg-[#7C3AED] hover:bg-[#6D28D9] text-white text-[14px] font-bold flex items-center justify-center shadow-sm hover:shadow-md transition-all cursor-pointer select-none"
           >
-            <Plus size={18} strokeWidth={2.5} />
-            <span>+ Novo Agendamento</span>
+            <span>Novo Agendamento</span>
           </button>
         </div>
       )}

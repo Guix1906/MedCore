@@ -218,9 +218,8 @@ export function PatientFinanceTab({ patientId, patientName }: PatientFinanceTabP
         <button
           type="button"
           onClick={handleOpenModal}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-[13px] font-bold shadow-xs hover:shadow transition-all cursor-pointer shrink-0"
+          className="inline-flex items-center justify-center px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-[13px] font-bold shadow-xs hover:shadow transition-all cursor-pointer shrink-0"
         >
-          <Plus size={16} />
           <span>Novo Lançamento</span>
         </button>
       </div>
