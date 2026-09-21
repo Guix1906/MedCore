@@ -95,8 +95,17 @@ export function ContasReceberTab({
 
   // Filtra todas as receitas ativas
   const receitas = useMemo(() => {
+    let deleted = new Set<string>();
+    if (typeof window !== "undefined" && window.localStorage) {
+      try {
+        const d1 = JSON.parse(localStorage.getItem("medcore_deleted_titles") || "[]");
+        const d2 = JSON.parse(localStorage.getItem("medcore_deleted_cash_entries") || "[]");
+        if (Array.isArray(d1)) d1.forEach((id) => deleted.add(id));
+        if (Array.isArray(d2)) d2.forEach((id) => deleted.add(id));
+      } catch {}
+    }
     return (finance?.titles || []).filter((t) => {
-      if (t.status === "cancelado") return false;
+      if (t.status === "cancelado" || deleted.has(t.id)) return false;
       return t.type === "receita";
     });
   }, [finance?.titles]);

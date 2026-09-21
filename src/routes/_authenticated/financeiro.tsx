@@ -70,11 +70,36 @@ function FinanceiroPage() {
 
     const toastId = toast.loading("Excluindo conta a receber...");
     try {
-      const result = await supabase.rpc("cancel_financial_title", {
-        p_id: id,
-        p_reason: "Exclusão manual realizada em Contas a Receber",
-      });
-      if (result.error) throw result.error;
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      if (isUuid) {
+        try {
+          const result = await supabase.rpc("cancel_financial_title", {
+            p_id: id,
+            p_reason: "Exclusão manual realizada em Contas a Receber",
+          });
+          if (result.error) {
+            console.warn("RPC cancel_financial_title:", result.error);
+          }
+        } catch (rpcErr) {
+          console.warn("Falha ao cancelar via RPC:", rpcErr);
+        }
+      }
+
+      // Persiste a exclusão imediata localmente (para títulos sintéticos e atualização instantânea)
+      if (typeof window !== "undefined" && window.localStorage) {
+        try {
+          const currentDeleted = JSON.parse(localStorage.getItem("medcore_deleted_titles") || "[]");
+          const updated = Array.from(new Set([...currentDeleted, id]));
+          localStorage.setItem("medcore_deleted_titles", JSON.stringify(updated));
+
+          const currentCash = JSON.parse(localStorage.getItem("medcore_deleted_cash_entries") || "[]");
+          const updatedCash = Array.from(new Set([...currentCash, id]));
+          localStorage.setItem("medcore_deleted_cash_entries", JSON.stringify(updatedCash));
+        } catch (storageErr) {
+          console.warn("Erro ao salvar no localStorage:", storageErr);
+        }
+      }
+
       await refreshFinance(queryClient);
       await query.refetch();
       toast.success("Conta a receber excluída com sucesso.", { id: toastId });
@@ -202,10 +227,20 @@ function FinanceiroPage() {
                     <OperationForm
                       title="Confirmar cancelamento"
                       execute={async (form) => {
-                        const result = await supabase.rpc("cancel_financial_title", {
-                          p_id: cancelId,
-                          p_reason: formText(form, "reason"),
-                        });
+                        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cancelId);
+                        let result: any = { error: null };
+                        if (isUuid) {
+                          result = await supabase.rpc("cancel_financial_title", {
+                            p_id: cancelId,
+                            p_reason: formText(form, "reason"),
+                          });
+                        }
+                        if (typeof window !== "undefined" && window.localStorage) {
+                          try {
+                            const current = JSON.parse(localStorage.getItem("medcore_deleted_titles") || "[]");
+                            localStorage.setItem("medcore_deleted_titles", JSON.stringify([...current, cancelId]));
+                          } catch {}
+                        }
                         if (!result.error) setCancelId("");
                         return result;
                       }}

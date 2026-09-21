@@ -246,23 +246,45 @@ const DEFAULT_ACCOUNTS: FinancialAccount[] = [
 ];
 
 function normalizeFinancialSnapshot(raw: FinanceSnapshot): FinanceSnapshot {
+  let deletedTitleIds = new Set<string>();
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      const rawTitles = localStorage.getItem("medcore_deleted_titles");
+      if (rawTitles) {
+        const parsed = JSON.parse(rawTitles);
+        if (Array.isArray(parsed)) parsed.forEach((id) => deletedTitleIds.add(id));
+      }
+      const rawCash = localStorage.getItem("medcore_deleted_cash_entries");
+      if (rawCash) {
+        const parsed = JSON.parse(rawCash);
+        if (Array.isArray(parsed)) parsed.forEach((id) => deletedTitleIds.add(id));
+      }
+    } catch {}
+  }
+
   const existingTitleIds = new Set(raw.titles.map((t) => t.id));
   const existingPaymentIds = new Set(raw.payments.map((p) => p.id));
   const existingTxPaymentIds = new Set(raw.payments.map((p) => p.transaction_id));
 
-  // 1. Merge baseline titles if database doesn't have them
-  const mergedTitles = [...raw.titles];
+  // 1. Merge baseline titles if database doesn't have them and they haven't been deleted
+  const mergedTitles = raw.titles.filter((t) => !deletedTitleIds.has(t.id));
   BASELINE_TITLES.forEach((bt) => {
-    if (!existingTitleIds.has(bt.id)) {
+    if (!existingTitleIds.has(bt.id) && !deletedTitleIds.has(bt.id)) {
       mergedTitles.push(bt);
       existingTitleIds.add(bt.id);
     }
   });
 
-  // 2. Merge baseline payments and generate payments for paid titles
-  const mergedPayments = [...raw.payments];
+  // 2. Merge baseline payments and generate payments for paid titles (excluding deleted)
+  const mergedPayments = raw.payments.filter(
+    (p) => !deletedTitleIds.has(p.id) && !deletedTitleIds.has(p.transaction_id)
+  );
   BASELINE_PAYMENTS.forEach((bp) => {
-    if (!existingPaymentIds.has(bp.id)) {
+    if (
+      !existingPaymentIds.has(bp.id) &&
+      !deletedTitleIds.has(bp.id) &&
+      !deletedTitleIds.has(bp.transaction_id)
+    ) {
       mergedPayments.push(bp);
       existingPaymentIds.add(bp.id);
       existingTxPaymentIds.add(bp.transaction_id);
