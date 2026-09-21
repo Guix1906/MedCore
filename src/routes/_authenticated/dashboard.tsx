@@ -1,4 +1,5 @@
-import { getFinancialReportingRows } from "@/features/finance/finance-api";
+import { getFinancialSnapshot, refreshFinance } from "@/features/finance/finance-api";
+import { reportingRows } from "@/features/finance/finance-math";
 import { errorMessage } from "@/features/acompanhamentos/followup-utils";
 import type { DbRow, Json, IconType } from "@/lib/types";
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -20,7 +21,7 @@ import {
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { RevealGroup, RevealItem } from "@/components/motion/Reveal";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { patientsService, companyService, agendaService } from "@/services/api";
 import { StatNumber } from "@/components/ds";
@@ -127,10 +128,42 @@ function eachDay(start: Date, end: Date) {
 }
 
 function DashboardPage() {
+  const qc = useQueryClient();
   const [period, setPeriod] = useState<"day" | "week" | "month" | "year">("day");
   const [range, setRange] = useState<[Date, Date]>(initialRange());
   const [showBalance, setShowBalance] = useState(true);
   const [reportTab, setReportTab] = useState<"prof" | "type" | "insurance" | "cat">("prof");
+
+  // Sincronização em tempo real do financeiro com o fluxo de caixa
+  useEffect(() => {
+    // 1. Escuta alterações no localStorage (exclusão, estorno ou novo pagamento em outras abas ou telas)
+    const handleStorage = (e: StorageEvent) => {
+      if (
+        e.key === "medcore_deleted_cash_entries" ||
+        e.key === "medcore_deleted_titles" ||
+        e.key === "medcore_local_payments"
+      ) {
+        void qc.invalidateQueries({ queryKey: ["financial-snapshot"] });
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+
+    // 2. Realtime do Supabase para alterações nas tabelas de títulos e baixas financeiras
+    const ch = supabase
+      .channel("dashboard-financial-sync")
+      .on("postgres_changes", { event: "*", schema: "public", table: "financial_titles" }, () => {
+        void refreshFinance(qc);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "financial_payments" }, () => {
+        void refreshFinance(qc);
+      })
+      .subscribe();
+
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      void supabase.removeChannel(ch);
+    };
+  }, [qc]);
 
   const apptsQ = useQuery({
     queryKey: ["dashboard", "events-appointments"],
@@ -227,12 +260,11 @@ function DashboardPage() {
     refetchOnWindowFocus: false,
   });
 
-  const txQ = useQuery({
-    queryKey: ["dashboard", "transactions"],
-    queryFn: getFinancialReportingRows,
-    staleTime: 5 * 60_000,
-    gcTime: 30 * 60_000,
-    refetchOnWindowFocus: false,
+  const financeQ = useQuery({
+    queryKey: ["financial-snapshot"],
+    queryFn: getFinancialSnapshot,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 
   const doctorsQ = useQuery({
@@ -254,9 +286,13 @@ function DashboardPage() {
   });
   const appts = apptsQ.data ?? [];
   const patients = patientsQ.data ?? [];
-  const tx: DashboardTx[] = txQ.data ?? [];
+  const tx: DashboardTx[] = useMemo(() => {
+    if (!financeQ.data || !financeQ.data.scopes?.length) return [];
+    return reportingRows(financeQ.data);
+  }, [financeQ.data]);
   const doctors = doctorsQ.data ?? [];
-  const loading = apptsQ.isLoading || patientsQ.isLoading || txQ.isLoading || doctorsQ.isLoading;
+  const loading =
+    apptsQ.isLoading || patientsQ.isLoading || financeQ.isLoading || doctorsQ.isLoading;
 
   // Garante que o dashboard mostre os lançamentos vigentes do sistema caso o mês do usuário não tenha dados
   useEffect(() => {
@@ -291,7 +327,11 @@ function DashboardPage() {
     [appts, rangeStart, rangeEnd],
   );
   const txInRange = useMemo(
-    () => tx.filter((x) => x.date >= toISO(rangeStart) && x.date <= toISO(rangeEnd)),
+    () =>
+      tx.filter((x) => {
+        const dStr = (x.date || "").slice(0, 10);
+        return dStr >= toISO(rangeStart) && dStr <= toISO(rangeEnd);
+      }),
     [tx, rangeStart, rangeEnd],
   );
 
@@ -342,7 +382,9 @@ function DashboardPage() {
       const total = tx
         .filter(
           (t) =>
-            t.date === iso && (t.type === "income" || t.type === "receita") && t.status === "pago",
+            (t.date || "").slice(0, 10) === iso &&
+            (t.type === "income" || t.type === "receita") &&
+            t.status === "pago",
         )
         .reduce((s, r) => s + Number(r.amount), 0);
       return {
@@ -565,11 +607,11 @@ function DashboardPage() {
     <AppShell>
       <RevealGroup className="max-w-7xl mx-auto p-6 space-y-6 pb-16" stagger={0.08} delay={0.05}>
         {/* Fluxo de caixa + Filtros/Balanço */}
-        {txQ.error ? (
+        {financeQ.error ? (
           <div role="alert" className="rounded-xl bg-red-50 p-4 text-red-700">
-            Financeiro indisponível: {errorMessage(txQ.error)}
+            Financeiro indisponível: {errorMessage(financeQ.error)}
             <p>Indicadores financeiros ocultos; demais áreas permanecem disponíveis.</p>
-            <button onClick={() => txQ.refetch()} className="underline">
+            <button onClick={() => financeQ.refetch()} className="underline">
               Tentar novamente
             </button>
           </div>
@@ -939,7 +981,7 @@ function DashboardPage() {
             <Card>
               <TitleRow title="Recebimentos no período" />
               <div className="h-[240px]">
-                {txQ.error ? (
+                {financeQ.error ? (
                   <p>Recebimentos indisponíveis.</p>
                 ) : (
                   <ApexRevenueDaily data={revenueDaily} />
@@ -1048,7 +1090,7 @@ function DashboardPage() {
                   </div>
                   <TitleRow title={currentReport.title} />
                   <div className="h-[240px] mt-2">
-                    {reportTab === "cat" && txQ.error ? (
+                    {reportTab === "cat" && financeQ.error ? (
                       <p>Dados financeiros indisponíveis.</p>
                     ) : currentReport.data.length === 0 ? (
                       <EmptyBlock small title="Sem dados" subtitle={currentReport.empty} />

@@ -76,11 +76,18 @@ export function reportingRows(data: FinanceSnapshot) {
   let deletedIds = new Set<string>();
   if (typeof window !== "undefined" && window.localStorage) {
     try {
-      const raw = localStorage.getItem("medcore_deleted_cash_entries");
-      if (raw) {
-        const parsed = JSON.parse(raw);
+      const rawCash = localStorage.getItem("medcore_deleted_cash_entries");
+      if (rawCash) {
+        const parsed = JSON.parse(rawCash);
         if (Array.isArray(parsed)) {
-          deletedIds = new Set(parsed);
+          parsed.forEach((id) => deletedIds.add(id));
+        }
+      }
+      const rawTitles = localStorage.getItem("medcore_deleted_titles");
+      if (rawTitles) {
+        const parsed = JSON.parse(rawTitles);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((id) => deletedIds.add(id));
         }
       }
     } catch {}
@@ -112,7 +119,7 @@ export function reportingRows(data: FinanceSnapshot) {
 
   const syntheticPaid: any[] = [];
   data.titles.forEach((t) => {
-    if (deletedIds.has(t.id)) return;
+    if (deletedIds.has(t.id) || deletedIds.has(`title-pay-${t.id}`)) return;
     if (t.status === "cancelado") return;
     if ((t.status === "pago" || Number(t.paid_amount || 0) > 0) && !handledTitleIds.has(t.id)) {
       handledTitleIds.add(t.id);
@@ -131,7 +138,7 @@ export function reportingRows(data: FinanceSnapshot) {
 
   const pending = data.titles
     .filter((t) => {
-      if (deletedIds.has(t.id)) return false;
+      if (deletedIds.has(t.id) || deletedIds.has(`title-pay-${t.id}`)) return false;
       if (t.status === "cancelado") return false;
       return remaining(t) > 0;
     })

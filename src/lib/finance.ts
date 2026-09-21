@@ -64,26 +64,8 @@ export function calcKPIs(rows: Transaction[]): KPIs {
 const fmtLabel = (
   key: string,
   period: "day" | "week" | "month" | "year",
-  customRange?: [Date, Date],
+  _customRange?: [Date, Date],
 ) => {
-  if (customRange && period !== "day") {
-    const fmt = (x: Date) => {
-      const day = String(x.getDate()).padStart(2, "0");
-      const month = String(x.getMonth() + 1).padStart(2, "0");
-      const year = x.getFullYear();
-      return `${day}/${month}/${year}`;
-    };
-    if (period === "week") {
-      return `${fmt(customRange[0])} - ${fmt(customRange[1])}`;
-    } else if (period === "month") {
-      return customRange[0]
-        .toLocaleDateString("pt-BR", { month: "short", year: "numeric" })
-        .replace(".", "");
-    } else {
-      return String(customRange[0].getFullYear());
-    }
-  }
-
   if (period === "day") {
     const d = new Date(key + "T00:00:00");
     return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", "");
@@ -240,11 +222,13 @@ export function calcCashFlow(
           ]),
         ).sort();
 
+  let running = 0;
   return finalKeys.map((key) => {
     const a = activeData[key] ?? { entradas: 0, saidas: 0 };
     const pr = pendingRData[key] || 0;
     const pd = pendingDData[key] || 0;
-    const saldo = a.entradas - a.saidas;
+    running += a.entradas - a.saidas;
+    const saldo = running;
     return {
       date: key,
       label: fmtLabel(key, period, customRange),

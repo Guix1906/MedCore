@@ -1121,6 +1121,7 @@ export function NovoAgendamentoDialog({
       qc.invalidateQueries({ queryKey: qk.agendaLists.events(companyId) });
       qc.invalidateQueries({ queryKey: ["agenda-events"] });
       qc.invalidateQueries({ queryKey: qk.dashboard.all() });
+      qc.invalidateQueries({ queryKey: ["financial-snapshot"] });
       qc.invalidateQueries({ queryKey: ["dashboard", "transactions"] });
       qc.invalidateQueries({ queryKey: ["finance-dashboard", "transactions"] });
       qc.invalidateQueries({ queryKey: ["transactions"] });

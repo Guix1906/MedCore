@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { isSameDay, type Activity } from "@/components/agenda/agenda-types";
 import { SkeletonRows } from "@/components/ui-app";
 import { pad2 } from "@/lib/date-utils";
@@ -62,12 +62,39 @@ export function WeeklyGrid({
   const todayIdx = week.findIndex((d) => isSameDay(d, now));
   const nowOffset = (now.getHours() + now.getMinutes() / 60) * HOUR_H;
 
+  const initialScrollDoneRef = useRef(false);
+
+  // Scroll para o horário comercial/atual ao montar ou mudar de data
+  const performScroll = useCallback(() => {
+    const c = containerRef.current;
+    if (!c) return false;
+    if (c.clientHeight === 0) return false;
+
+    const n = new Date();
+    const weekStart = startOfWeek(date);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 7);
+    const weekHasToday = n >= weekStart && n < weekEnd;
+    const currentOffset = (n.getHours() + n.getMinutes() / 60) * HOUR_H;
+    // Posiciona a linha atual no terço superior da visualização
+    const target = weekHasToday
+      ? Math.max(0, currentOffset - Math.min(c.clientHeight / 3, 220))
+      : 8 * HOUR_H;
+
+    c.scrollTop = target;
+    return true;
+  }, [date]);
+
   useEffect(() => {
     const measureScrollbar = () => {
       const el = containerRef.current;
       if (!el) return;
       setScrollbarWidth(Math.max(0, el.offsetWidth - el.clientWidth));
       setGridContentWidth(el.clientWidth);
+      if (!initialScrollDoneRef.current && el.clientHeight > 0) {
+        performScroll();
+        initialScrollDoneRef.current = true;
+      }
     };
 
     measureScrollbar();
@@ -79,26 +106,24 @@ export function WeeklyGrid({
       resizeObserver.disconnect();
       window.removeEventListener("resize", measureScrollbar);
     };
-  }, []);
+  }, [performScroll]);
 
-  // Scroll para o horário comercial/atual ao montar ou mudar de data
-  const hasScrolledRef = useRef(false);
   useEffect(() => {
-    const c = containerRef.current;
-    if (!c) return;
-    const n = new Date();
-    const weekStart = startOfWeek(date);
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 7);
-    const weekHasToday = n >= weekStart && n < weekEnd;
-    const currentOffset = (n.getHours() + n.getMinutes() / 60) * HOUR_H;
-    const target = weekHasToday ? Math.max(0, currentOffset - c.clientHeight / 2) : 8 * HOUR_H;
+    performScroll();
+    const rafId = requestAnimationFrame(() => {
+      performScroll();
+    });
+    const t1 = setTimeout(performScroll, 50);
+    const t2 = setTimeout(performScroll, 150);
+    const t3 = setTimeout(performScroll, 350);
 
-    if (!hasScrolledRef.current) {
-      c.scrollTop = target;
-      hasScrolledRef.current = true;
-    }
-  }, [date]);
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [performScroll]);
 
   const allDay = activities.filter((a) => a.allDay);
   const timed = activities.filter((a) => !a.allDay);
@@ -409,7 +434,7 @@ export function WeeklyGrid({
             );
           })}
 
-          {/* Now indicator (linha vermelha esticada de ponta a ponta atravessando toda a grade com triângulo no canto esquerdo) */}
+          {/* Now indicator (linha vermelha esticada de ponta a ponta atravessando toda a grade com triângulo no canto esquerdo e badge de horário) */}
           {todayIdx >= 0 && (
             <div
               className="pointer-events-none absolute left-0 right-0 z-30"
@@ -425,6 +450,13 @@ export function WeeklyGrid({
                 className="absolute left-0 w-0 h-0 border-y-[6px] border-y-transparent border-l-[10px] border-l-[#FF2D55] z-40 drop-shadow-sm"
                 style={{ top: -5 }}
               />
+              {/* Badge com horário atual na coluna de horários */}
+              <div
+                className="absolute left-2.5 -top-[10px] px-1.5 py-0.5 rounded-full bg-[#FF2D55] text-white text-[10px] font-bold tabular-nums shadow-sm flex items-center justify-center z-40 leading-tight"
+                style={{ minWidth: 42 }}
+              >
+                {nowLabel}
+              </div>
             </div>
           )}
         </div>

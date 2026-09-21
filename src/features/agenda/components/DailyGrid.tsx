@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MutableRefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { isSameDay, type Activity } from "@/components/agenda/agenda-types";
 import { SkeletonRows } from "@/components/ui-app";
 import { ActivityCard, ActivityChip } from "./ActivityCard";
@@ -30,11 +30,12 @@ export function DailyGrid({
 }) {
   const allDay = activities.filter((a) => a.allDay);
   const timed = activities.filter((a) => !a.allDay);
-  const isToday = isSameDay(date, new Date());
   const containerRef = useRef<HTMLDivElement>(null);
 
   // linha do "agora"
   const [now, setNow] = useState(() => new Date());
+  const isToday = isSameDay(date, now);
+
   useEffect(() => {
     if (!isToday) return;
     const t = setInterval(() => setNow(new Date()), 30_000);
@@ -44,21 +45,39 @@ export function DailyGrid({
   const nowOffset = isToday ? (now.getHours() + now.getMinutes() / 60) * HOUR_H : -1;
 
   // Scroll para o horário comercial/atual ao montar ou mudar de data
-  const hasScrolledRef = useRef(false);
-  useEffect(() => {
+  const performScroll = useCallback(() => {
     const c = containerRef.current;
-    if (!c) return;
-    const target = isToday
-      ? Math.max(
-          0,
-          (new Date().getHours() + new Date().getMinutes() / 60) * HOUR_H - c.clientHeight / 2,
-        )
+    if (!c) return false;
+    if (c.clientHeight === 0) return false;
+
+    const n = new Date();
+    const isDateToday = isSameDay(date, n);
+    const currentOffset = (n.getHours() + n.getMinutes() / 60) * HOUR_H;
+    // Posiciona a linha atual no terço superior da visualização
+    const target = isDateToday
+      ? Math.max(0, currentOffset - Math.min(c.clientHeight / 3, 220))
       : 8 * HOUR_H;
-    if (!hasScrolledRef.current) {
-      c.scrollTop = target;
-      hasScrolledRef.current = true;
-    }
-  }, [date, isToday]);
+
+    c.scrollTop = target;
+    return true;
+  }, [date]);
+
+  useEffect(() => {
+    performScroll();
+    const rafId = requestAnimationFrame(() => {
+      performScroll();
+    });
+    const t1 = setTimeout(performScroll, 50);
+    const t2 = setTimeout(performScroll, 150);
+    const t3 = setTimeout(performScroll, 350);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [performScroll]);
 
   const dow = date.getDay();
   let workStart = 0;
@@ -166,6 +185,13 @@ export function DailyGrid({
                 className="absolute left-0 w-0 h-0 border-y-[6px] border-y-transparent border-l-[10px] border-l-[#FF2D55] z-40 drop-shadow-sm"
                 style={{ top: -5 }}
               />
+              {/* Badge com horário atual */}
+              <div
+                className="absolute left-2.5 -top-[10px] px-1.5 py-0.5 rounded-full bg-[#FF2D55] text-white text-[10px] font-bold tabular-nums shadow-sm flex items-center justify-center z-40 leading-tight"
+                style={{ minWidth: 42 }}
+              >
+                {nowLabel}
+              </div>
             </div>
           )}
 
