@@ -54,7 +54,7 @@ export interface ContasReceberTabProps {
   onOpenNew?: (type?: "receita" | "despesa") => void;
   onEdit: (entry: FinancialTitle) => void;
   onReceive: (entry: FinancialTitle) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => void | Promise<void>;
 }
 
 export function ContasReceberTab({
@@ -736,12 +736,13 @@ export function ContasReceberTab({
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
 
-                    {/* Botão Cancelar / Excluir */}
+                    {/* Botão Excluir */}
                     <Button
                       size="icon"
                       variant="ghost"
                       className="h-8 w-8 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
-                      title="Excluir / Cancelar título"
+                      title="Excluir título"
+                      aria-label="Excluir título"
                       onClick={() => onDelete(t.id)}
                     >
                       <Trash2 className="h-3.5 w-3.5" />

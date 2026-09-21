@@ -1,13 +1,15 @@
 import { createFileRoute, useBlocker, type SearchSchemaInput } from "@tanstack/react-router";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
 import FinanceTabs, {
   resolveFinanceTab,
   type FinanceTabId,
 } from "@/components/finance/FinanceTabs";
 import { errorMessage } from "@/features/acompanhamentos/followup-utils";
-import { getFinancialSnapshot } from "@/features/finance/finance-api";
+import { getFinancialSnapshot, refreshFinance } from "@/features/finance/finance-api";
+import { confirmDialog } from "@/components/app/confirm-dialog";
 import TitleList from "@/features/finance/TitleList";
 import CashFlow from "@/features/finance/CashFlow";
 import { ContasPagarTab } from "@/features/finance/ContasPagarTab";
@@ -40,6 +42,7 @@ export const Route = createFileRoute("/_authenticated/financeiro")({
 function FinanceiroPage() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
+  const queryClient = useQueryClient();
   const query = useQuery({ queryKey: ["financial-snapshot"], queryFn: getFinancialSnapshot });
   const [selected, setSelected] = useState("");
   const [creatingType, setCreating] = useState<"receita" | "despesa" | null>(null);
@@ -54,6 +57,30 @@ function FinanceiroPage() {
   const currentTitle = data?.titles.find((t) => t.id === selected);
   const changeTab = (tab: FinanceTabId) => {
     void navigate({ search: { tab, novo: false }, replace: true });
+  };
+
+  const handleDeleteReceber = async (id: string) => {
+    const ok = await confirmDialog({
+      title: "Excluir conta a receber",
+      description: "Tem certeza que deseja excluir esta conta a receber?",
+      confirmText: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
+
+    const toastId = toast.loading("Excluindo conta a receber...");
+    try {
+      const result = await supabase.rpc("cancel_financial_title", {
+        p_id: id,
+        p_reason: "Exclusão manual realizada em Contas a Receber",
+      });
+      if (result.error) throw result.error;
+      await refreshFinance(queryClient);
+      await query.refetch();
+      toast.success("Conta a receber excluída com sucesso.", { id: toastId });
+    } catch (err: any) {
+      toast.error(errorMessage(err), { id: toastId });
+    }
   };
   return (
     <AppShell>
@@ -105,7 +132,7 @@ function FinanceiroPage() {
                       onOpenNew={(type) => setCreating(type || "receita")}
                       onEdit={(item) => setSelected(item.id)}
                       onReceive={(item) => setSelected(item.id)}
-                      onDelete={(id) => setCancelId(id)}
+                      onDelete={handleDeleteReceber}
                     />
                   ) : search.tab === "conciliacao" ? (
                     <BankReconciliation
