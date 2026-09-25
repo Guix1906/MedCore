@@ -67,6 +67,10 @@ export type FollowupTables = {
   };
 };
 export type FollowupFunctions = FinanceFunctions & {
+  delete_treatment: {
+    Args: { p_id: string };
+    Returns: boolean;
+  };
   move_inventory_item: {
     Args: {
       p_id: string;

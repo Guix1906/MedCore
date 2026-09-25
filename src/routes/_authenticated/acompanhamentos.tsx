@@ -719,7 +719,7 @@ function TreatmentManageModal({
     setSaving(true);
     try {
       // Exclusão segura via RPC delete_treatment que protege histórico de pagamentos e registros clínicos
-      const { error: rpcError } = await (supabase.rpc as any)("delete_treatment", {
+      const { error: rpcError } = await supabase.rpc("delete_treatment", {
         p_id: treatment.id,
       });
       if (rpcError) {

@@ -155,6 +155,58 @@ npm run build
 
 O cenario `supabase/tests/financial_simplified_cash.sql` verifica a desativacao de turnos legados, auditoria, contagem e pagamentos sem turno. Os cenarios `supabase/tests/financial_operations.sql`, `financial_cash_flow.sql` e `financial_settlements.sql` exigem PostgreSQL/Supabase de homologacao, com ON_ERROR_STOP; usam transacao e ROLLBACK. Nao apontar a producao. Exercite tambem concorrencia em duas sessoes: recebimento versus fechamento de turno, liquidacao versus estorno da baixa, duas aprovacoes do mesmo recebimento, conciliacao versus correcao. Verifique perfis somente-leitura, recepcao, administrador, usuario anonimo e isolamento entre duas clinicas. O build e os testes JavaScript locais nao comprovam execucao das migracoes nem validacao do banco remoto.
 
+## Usuarios e permissoes (/admin)
+
+A tela `/admin` (`src/routes/_authenticated/admin.tsx`, codigo em `src/features/admin/`) administra quem acessa a clinica e o que cada pessoa pode fazer. Em producao: `https://meedcore.vercel.app/admin`, com as abas Usuarios (`/admin`), Perfis e permissoes (`/admin?aba=perfis`) e Auditoria (`/admin?aba=auditoria`). O item "Administracao" aparece no menu para quem tem `users.view`, `roles.manage` ou `audit.view`; quem entra deslogado volta para o mesmo endereco apos o login. A URL nao e secreta: o controle fica no banco (RPCs e RLS).
+
+### Implantacao
+
+1. Faca backup e aplique `supabase/migrations/20260925120000_user_permissions.sql` em homologacao. Rode `supabase/tests/user_permissions.sql` com `psql -v ON_ERROR_STOP=1` (usa transacao e termina em ROLLBACK). Depois aplique em producao. Arquivos locais nao comprovam aplicacao no banco publicado.
+2. A migracao aborta sem alterar nada se encontrar o esquema legado (`user_roles` sem `company_id` ou com enum) ou papeis/funcoes de profissionais nao mapeados.
+3. No SQL Editor, rode o arquivo inteiro de uma vez. Ao final aparece a tabela com a situacao e o perfil de cada pessoa; o antes/depois fica em Auditoria > Migracao. A migracao e reaplicavel: se for interrompida, rode o arquivo inteiro de novo para completar o que faltou.
+4. Supabase Auth > URL Configuration: Site URL `https://meedcore.vercel.app` e Redirect URL `https://meedcore.vercel.app/**` (convites voltam para `/auth?modo=convite`; redefinicao de senha, para `/auth?modo=nova-senha`). Configure SMTP proprio: o SMTP padrao do Supabase tem limite baixo e so entrega para e-mails da equipe do projeto. Os textos dos e-mails ficam em Authentication > Email Templates (Confirm signup e Magic Link).
+5. Publique o frontend. Sem a migracao o sistema continua como antes, sem restricao por perfil, e `/admin` mostra "Migracao do banco pendente".
+
+### Mapeamento inicial
+
+- `user_roles` owner -> Proprietario; admin, ou profissional ativo com funcao admin -> Administrador.
+- Profissional ativo medico/enfermeiro -> Profissional de saude, com ajuste individual "Consultar financeiro" e "Cobrar e receber" (usados no sinal da agenda).
+- recepcionista/secretaria/atendente -> Recepcao. finance_admin/finance_edit/finance_view -> Financeiro com as remocoes equivalentes (ou ajuste individual quando a pessoa tambem e profissional).
+- Demais contas (sem papel administrativo nem profissional ativo, em geral cadastros publicos) -> Aguardando aprovacao.
+- Normalizacao intencional, conforme as regras do Financeiro acima: recepcao deixa de ver o prontuario e de pagar despesas/estornar; profissionais deixam de pagar despesas, estornar e administrar contas (acesso amplo criado em 20260920120000). Ajuste individualmente em /admin quando necessario.
+
+### Regras aplicadas pelo banco
+
+- Vinculo ativo obrigatorio: `is_company_member`, `is_clinic_member` e `finance_allowed` so valem para vinculos ativos. Suspensao, remocao e cadastros pendentes perdem o acesso; a interface reconsulta as permissoes a cada 60 s e ao voltar para a aba.
+- `is_clinic_member` passa a depender das permissoes (agenda, pacientes, prontuario, acompanhamentos, estoque, financeiro ou configuracoes), e nao mais do cadastro em `doctors`. `finance_allowed` usa `finance.*`; agendar com valor (`agenda.manage`) pode gerar a cobranca pendente, sem receber.
+- Guardas RLS restritivas: escrita de eventos, tarefas, prazos, consultas e lista de espera (`agenda.manage`), pacientes (`patients.manage`), estoque e `move_inventory_item` (`inventory.manage`), dados da clinica, servicos e categorias (`settings.manage`; categorias tambem `finance.accounts`), leitura e escrita do prontuario (`records.view`/`records.edit`).
+- Permissoes marcadas como "navegacao" (paineis, ver agenda, pacientes e estoque, acompanhamentos e relatorios) controlam menus e telas; os dados seguem o vinculo ativo e as permissoes do modulo de origem.
+- Anti-escalonamento: ninguem altera o proprio acesso (exceto sair da clinica); cada pessoa so concede o que possui e so edita quem tem permissoes contidas nas suas; apenas proprietarios gerenciam proprietarios e a clinica sempre mantem um proprietario ativo. Cada registro tem versao (edicoes concorrentes sao recusadas). Suspender, remover, recusar e transferir propriedade exigem motivo. Prontuario liberado fora de um perfil clinico exige confirmacao. A auditoria e somente-insercao e a remocao e logica (conta e historico preservados).
+
+### Convites e cadastros
+
+- O convite fica registrado no banco por 7 dias e o link e enviado pelo Supabase Auth (a conta e criada se nao existir). O acesso so e liberado quando a pessoa entra com o mesmo e-mail, ja confirmado, e aceita o convite. Nao usa chave service role.
+- Cadastros publicos entram como "Aguardando aprovacao" e sao aprovados em /admin, com sugestao de perfil quando o e-mail coincide com um profissional.
+- A tela de login passa a definir senha no primeiro acesso por convite e na redefinicao de senha.
+
+### Limites
+
+- O escopo de agenda e um filtro de exibicao (compromissos sem responsavel continuam visiveis).
+- O backend PHP legado mantem papeis proprios; as regras valem para o Supabase, fonte usada em producao.
+- MFA, SSO, politica de senha e revogacao global de sessoes estao fora do escopo.
+
+```bash
+node scripts/test-user-permissions.mjs
+```
+
+```sql
+-- Antes/depois da migracao inicial, por pessoa
+SELECT a.created_at, a.target_user_id, a.data_before, a.data_after
+FROM public.company_member_audit a
+WHERE a.action = 'migration.backfill'
+ORDER BY a.id;
+```
+
 ## ?? Build de Produ��o
 
 ```bash

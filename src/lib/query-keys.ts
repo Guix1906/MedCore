@@ -15,6 +15,23 @@ export const qk = {
     members: (companyId: string | null | undefined) => ["company-members", companyId] as const,
   },
 
+  /** Acesso do usuário logado (permissões efetivas, situação e convites) */
+  access: {
+    all: () => ["my-access"] as const,
+    me: (userId: string | null | undefined, companyId: string | null | undefined) =>
+      ["my-access", userId, companyId] as const,
+  },
+
+  /** Administração de usuários e perfis (/admin) */
+  admin: {
+    all: (companyId: string | null | undefined) => ["admin", companyId] as const,
+    overview: (companyId: string | null | undefined) => ["admin", companyId, "overview"] as const,
+    audit: (companyId: string | null | undefined, filters: Record<string, string | null>) =>
+      ["admin", companyId, "audit", filters] as const,
+    memberHistory: (companyId: string | null | undefined, userId: string | null | undefined) =>
+      ["admin", companyId, "member-history", userId] as const,
+  },
+
   /** Mini-listas para selects/dropdowns */
   membersMini: (companyId: string | null | undefined) => ["members-mini", companyId] as const,
   casesMini: (companyId: string | null | undefined) => ["cases-mini", companyId] as const,

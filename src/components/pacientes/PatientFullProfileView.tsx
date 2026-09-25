@@ -54,6 +54,8 @@ import {
 } from "@/hooks/usePatientClinicalHistory";
 import { PatientFinanceTab } from "@/components/pacientes/PatientFinanceTab";
 import { PatientPackagesTab } from "@/components/pacientes/PatientPackagesTab";
+import { usePermissions } from "@/hooks/use-permissions";
+import type { PermissionKey } from "@/features/admin/permissions";
 
 export type PatientProfileData = {
   id?: string;
@@ -99,6 +101,16 @@ const DEFAULT_PATIENT: PatientProfileData = {
     "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&auto=format&fit=crop&q=80",
 };
 
+// Abas que dependem de outro módulo seguem a permissão correspondente.
+const TAB_PERMISSION: Record<string, PermissionKey> = {
+  timeline: "records.view",
+  prontuario: "records.view",
+  carteira: "finance.view",
+  financeiro: "finance.view",
+  orcamentos: "finance.view",
+  pacotes: "followups.view",
+};
+
 const TABS = [
   { id: "informacoes", label: "Informações" },
   { id: "timeline", label: "Linha do tempo" },
@@ -121,7 +133,10 @@ export function PatientFullProfileView({
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<string>("informacoes");
+  const [selectedTab, setActiveTab] = useState<string>("informacoes");
+  const { can } = usePermissions();
+  const visibleTabs = TABS.filter((tab) => !TAB_PERMISSION[tab.id] || can(TAB_PERMISSION[tab.id]));
+  const activeTab = visibleTabs.some((tab) => tab.id === selectedTab) ? selectedTab : "informacoes";
 
   // Estado do Prontuário Clínico & Anamnese Unificada
   const [anamnese, setAnamnese] = useState("");
@@ -628,7 +643,7 @@ export function PatientFullProfileView({
 
           {/* Lista de Navegação das Abas */}
           <nav className="mt-5 w-full space-y-1">
-            {TABS.map((tab) => {
+            {visibleTabs.map((tab) => {
               const isActive = activeTab === tab.id;
               return (
                 <button

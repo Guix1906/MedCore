@@ -22,6 +22,8 @@ import { type Activity, isSameDay } from "@/components/agenda/agenda-types";
 import { useAuth } from "@/hooks/use-auth";
 import { useActiveCompany } from "@/hooks/use-active-company";
 import { useCompanyMembers } from "@/hooks/use-company-members";
+import { usePermissions } from "@/hooks/use-permissions";
+import { agendaVisibleIds, filterByAgendaScope } from "@/features/admin/permissions";
 import { useClinicCities } from "@/hooks/use-clinic-cities";
 import { supabase } from "@/integrations/supabase/client";
 import { patientsService } from "@/services/api";
@@ -175,7 +177,27 @@ function AgendaPage() {
   }, []);
   const draggedRef = useRef<Activity | null>(null);
 
-  const { activities, isLoading, refresh: refreshData } = useAgendaData(companyId, user?.id);
+  const {
+    activities: allActivities,
+    isLoading,
+    refresh: refreshData,
+  } = useAgendaData(companyId, user?.id);
+  // Escopo de agenda definido em Administração > Usuários (filtro de exibição).
+  const { access } = usePermissions();
+  const activities = useMemo(
+    () =>
+      access.mode === "active"
+        ? filterByAgendaScope(
+            allActivities,
+            agendaVisibleIds({
+              scope: access.agendaScope,
+              ownIds: [user?.id, access.doctorId],
+              selectedIds: access.agendaProfessionalIds,
+            }),
+          )
+        : allActivities,
+    [allActivities, access, user?.id],
+  );
 
   const refresh = useCallback(() => {
     refreshData();

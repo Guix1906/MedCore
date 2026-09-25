@@ -1,8 +1,9 @@
-import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { authService, getStoredToken } from "@/services/api";
+import { safeRedirectPath } from "@/features/admin/permissions";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShieldCheck,
@@ -23,7 +24,24 @@ import {
   Stethoscope,
 } from "lucide-react";
 
+type AuthSearch = { redirect?: string; modo?: "convite" | "nova-senha" };
+
+/** Mensagem de erro que o Supabase devolve no fragmento do link (ex.: link expirado). */
+function readLinkError(): string | null {
+  if (typeof window === "undefined" || !window.location.hash.includes("error")) return null;
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  if (!params.get("error") && !params.get("error_code")) return null;
+  return params.get("error_code") === "otp_expired"
+    ? "Este link expirou ou já foi utilizado. Peça um novo convite ou use “Esqueci minha senha”."
+    : params.get("error_description")?.replace(/\+/g, " ") ||
+        "Não foi possível validar o link. Solicite um novo e-mail.";
+}
+
 export const Route = createFileRoute("/auth")({
+  validateSearch: (search: Record<string, unknown>): AuthSearch => ({
+    redirect: safeRedirectPath(search.redirect) ?? undefined,
+    modo: search.modo === "convite" || search.modo === "nova-senha" ? search.modo : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "MedCore — Gestão Médica Inteligente & Premium" },
@@ -134,9 +152,18 @@ function DiscreteMedicalIllustration() {
 }
 
 function AuthPage() {
-  const navigate = useNavigate();
   const router = useRouter();
-  const [mode, setMode] = useState<"signin" | "signup" | "forgot">("signin");
+  const search = Route.useSearch();
+  const target = search.redirect ?? "/dashboard";
+  const [mode, setMode] = useState<"signin" | "signup" | "forgot" | "password">(
+    search.modo ? "password" : "signin",
+  );
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [sessionEmail, setSessionEmail] = useState<string | null>(null);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const goToTarget = useCallback(() => {
+    router.history.push(target);
+  }, [router, target]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -149,15 +176,40 @@ function AuthPage() {
   const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
   useEffect(() => {
+    if (search.modo) {
+      // Convite ou redefinição: a sessão vem do próprio link enviado por e-mail.
+      const error = readLinkError();
+      if (error) setLinkError(error);
+      supabase.auth.getSession().then(({ data }) => {
+        if (data.session) {
+          setSessionEmail(data.session.user.email ?? null);
+          setLinkError(null);
+        } else if (!error) {
+          setLinkError("Link inválido ou expirado. Solicite um novo e-mail.");
+        }
+      });
+      return;
+    }
     const token = getStoredToken();
     if (token) {
-      navigate({ to: "/dashboard" });
+      goToTarget();
       return;
     }
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate({ to: "/dashboard" });
+      if (data.session) goToTarget();
     });
-  }, [navigate]);
+  }, [search.modo, goToTarget]);
+
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY" || (event === "SIGNED_IN" && search.modo)) {
+        setMode("password");
+        setSessionEmail(session?.user.email ?? null);
+        setLinkError(null);
+      }
+    });
+    return () => sub.subscription.unsubscribe();
+  }, [search.modo]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -173,7 +225,7 @@ function AuthPage() {
         }
         toast.success("Bem-vindo de volta ao MedCore!");
         router.invalidate();
-        navigate({ to: "/dashboard" });
+        goToTarget();
       } else if (mode === "signup") {
         try {
           await authService.signUp(email, password, fullName);
@@ -190,10 +242,22 @@ function AuthPage() {
         }
         toast.success("Conta criada com sucesso!");
         router.invalidate();
-        navigate({ to: "/dashboard" });
+        goToTarget();
+      } else if (mode === "password") {
+        if (password.length < 8) throw new Error("A senha deve ter pelo menos 8 caracteres.");
+        if (password !== confirmPassword) throw new Error("As senhas não conferem.");
+        const { error } = await supabase.auth.updateUser({ password });
+        if (error) throw error;
+        toast.success(
+          search.modo === "convite"
+            ? "Senha definida. Bem-vindo(a) ao MedCore!"
+            : "Senha atualizada com sucesso.",
+        );
+        router.invalidate();
+        goToTarget();
       } else {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/auth`,
+          redirectTo: `${window.location.origin}/auth?modo=nova-senha`,
         });
         if (error) throw error;
         toast.success("Instruções enviadas para o seu email!");
@@ -420,15 +484,32 @@ function AuthPage() {
                 ? "Acesse sua Clínica"
                 : mode === "signup"
                   ? "Criar Conta Premium"
-                  : "Recuperar Acesso"}
+                  : mode === "password"
+                    ? search.modo === "convite"
+                      ? "Defina sua senha"
+                      : "Crie uma nova senha"
+                    : "Recuperar Acesso"}
             </h2>
             <p className="text-xs text-slate-500 text-center mt-1 mb-5 font-medium">
               {mode === "signin"
                 ? "Digite suas credenciais para acessar o painel"
                 : mode === "signup"
                   ? "Preencha os dados abaixo para cadastrar sua equipe"
-                  : "Informe seu email cadastrado para redefinir a senha"}
+                  : mode === "password"
+                    ? sessionEmail
+                      ? `Conta: ${sessionEmail}`
+                      : "Use o link recebido por e-mail para continuar"
+                    : "Informe seu email cadastrado para redefinir a senha"}
             </p>
+
+            {mode === "password" && linkError && (
+              <div
+                role="alert"
+                className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800"
+              >
+                {linkError}
+              </div>
+            )}
 
             {/* Formulário com Campos Arredondados (Rounded Pill Inputs) */}
             <form onSubmit={submit} className="space-y-3.5">
@@ -460,38 +541,40 @@ function AuthPage() {
               </AnimatePresence>
 
               {/* Campo Email Arredondado (Rounded Pill Input) */}
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1 ml-1">
-                  Email profissional
-                </label>
-                <div className="flex items-center bg-white/80 hover:bg-white border border-sky-100 focus-within:border-sky-300 rounded-2xl px-4 py-3 transition-all bg-white shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
-                  <Mail className="w-4 h-4 text-sky-500 mr-2.5 shrink-0" />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    className="w-full bg-transparent text-xs sm:text-sm text-slate-800 placeholder-slate-400 outline-none font-medium"
-                    placeholder="guigos191@gmail.com"
-                  />
-                  {isValidEmail && (
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="flex items-center gap-1 bg-emerald-50 text-emerald-600 px-2.5 py-0.5 rounded-full text-[10px] font-bold shrink-0 ml-1.5 border border-emerald-200/60"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                      <span>Válido</span>
-                    </motion.div>
-                  )}
+              {mode !== "password" && (
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1 ml-1">
+                    Email profissional
+                  </label>
+                  <div className="flex items-center bg-white/80 hover:bg-white border border-sky-100 focus-within:border-sky-300 rounded-2xl px-4 py-3 transition-all bg-white shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+                    <Mail className="w-4 h-4 text-sky-500 mr-2.5 shrink-0" />
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      className="w-full bg-transparent text-xs sm:text-sm text-slate-800 placeholder-slate-400 outline-none font-medium"
+                      placeholder="guigos191@gmail.com"
+                    />
+                    {isValidEmail && (
+                      <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="flex items-center gap-1 bg-emerald-50 text-emerald-600 px-2.5 py-0.5 rounded-full text-[10px] font-bold shrink-0 ml-1.5 border border-emerald-200/60"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                        <span>Válido</span>
+                      </motion.div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Campo Senha Arredondado (Rounded Pill Input) */}
               {mode !== "forgot" && (
                 <div>
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1 ml-1">
-                    Senha
+                    {mode === "password" ? "Nova senha" : "Senha"}
                   </label>
                   <div className="flex items-center bg-white/80 hover:bg-white border border-sky-100 focus-within:border-sky-300 rounded-2xl px-4 py-3 transition-all bg-white shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
                     <Lock className="w-4 h-4 text-sky-500 mr-2.5 shrink-0" />
@@ -521,6 +604,32 @@ function AuthPage() {
                       )}
                     </button>
                   </div>
+                </div>
+              )}
+
+              {mode === "password" && (
+                <div>
+                  <label
+                    htmlFor="confirm-password"
+                    className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1 ml-1"
+                  >
+                    Confirmar senha
+                  </label>
+                  <div className="flex items-center bg-white/80 hover:bg-white border border-sky-100 focus-within:border-sky-300 rounded-2xl px-4 py-3 transition-all">
+                    <Lock className="w-4 h-4 text-sky-500 mr-2.5 shrink-0" />
+                    <input
+                      id="confirm-password"
+                      type={showPassword ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      required
+                      minLength={8}
+                      autoComplete="new-password"
+                      className="w-full bg-transparent text-xs sm:text-sm text-slate-800 placeholder-slate-400 outline-none font-medium"
+                      placeholder="Repita a nova senha"
+                    />
+                  </div>
+                  <p className="mt-1 ml-1 text-[11px] text-slate-500">Mínimo de 8 caracteres.</p>
                 </div>
               )}
 
@@ -567,7 +676,9 @@ function AuthPage() {
                         ? "Entrar na Clínica"
                         : mode === "signup"
                           ? "Criar Conta"
-                          : "Enviar instruções"}
+                          : mode === "password"
+                            ? "Salvar senha"
+                            : "Enviar instruções"}
                     </span>
                   </>
                 )}
@@ -609,7 +720,30 @@ function AuthPage() {
 
             {/* Alternar Modo (Cadastre-se / Entrar) */}
             <p className="mt-4 sm:mt-5 text-center text-xs text-slate-500 font-medium">
-              {mode === "signin" ? (
+              {mode === "password" ? (
+                sessionEmail ? (
+                  search.modo === "convite" ? (
+                    <button
+                      type="button"
+                      onClick={goToTarget}
+                      className="text-[#0284C7] font-bold hover:underline"
+                    >
+                      Definir a senha depois
+                    </button>
+                  ) : null
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLinkError(null);
+                      setMode("forgot");
+                    }}
+                    className="text-[#0284C7] font-bold hover:underline"
+                  >
+                    Solicitar novo link
+                  </button>
+                )
+              ) : mode === "signin" ? (
                 <>
                   Sua clínica ainda não usa o MedCore?{" "}
                   <button

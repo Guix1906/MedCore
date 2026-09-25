@@ -1,5 +1,5 @@
 import type { DbRow, Json, IconType } from "@/lib/types";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, X, Trash2, Pencil, Save, MapPin } from "lucide-react";
@@ -12,6 +12,8 @@ import { companyService, financeService } from "@/services/api";
 import FinanceOperations from "@/features/finance/FinanceOperations";
 import { getFinancialSnapshot } from "@/features/finance/finance-api";
 import { errorMessage } from "@/features/acompanhamentos/followup-utils";
+import { usePermissions } from "@/hooks/use-permissions";
+import type { PermissionKey } from "@/features/admin/permissions";
 
 export const Route = createFileRoute("/_authenticated/configuracoes")({
   head: () => ({
@@ -25,9 +27,23 @@ export const Route = createFileRoute("/_authenticated/configuracoes")({
 
 type Tab = "clinica" | "servicos" | "categorias" | "cidades" | "contas";
 
+const TAB_PERMISSIONS: Record<Tab, PermissionKey[]> = {
+  clinica: ["settings.manage"],
+  servicos: ["settings.manage"],
+  categorias: ["settings.manage", "finance.accounts"],
+  contas: ["finance.accounts"],
+  cidades: ["settings.manage"],
+};
+
 function ConfiguracoesPage() {
-  const [tab, setTab] = useState<Tab>("clinica");
+  const { canAny } = usePermissions();
+  const [selectedTab, setTab] = useState<Tab>("clinica");
   const [financeLocked, setFinanceLocked] = useState(false);
+  const allowedTabs = (Object.keys(TAB_PERMISSIONS) as Tab[]).filter((key) =>
+    canAny(TAB_PERMISSIONS[key]),
+  );
+  const tab = allowedTabs.includes(selectedTab) ? selectedTab : (allowedTabs[0] ?? "clinica");
+  const showAdminLink = canAny(["users.view", "roles.manage", "audit.view"]);
   return (
     <AppShell title="Configurações">
       <div className="p-6 space-y-4">
@@ -40,20 +56,30 @@ function ConfiguracoesPage() {
               ["contas", "Contas financeiras"],
               ["cidades", "Cidades de atendimento"],
             ] as const
-          ).map(([k, label]) => (
-            <button
-              key={k}
-              disabled={financeLocked}
-              onClick={() => setTab(k as Tab)}
-              className={`px-4 h-10 text-[13px] font-medium border-b-2 -mb-px transition-colors ${
-                tab === k
-                  ? "border-[#8B47FF] text-[#8B47FF]"
-                  : "border-transparent text-[#6B7280] hover:text-[#111827]"
-              }`}
+          )
+            .filter(([k]) => allowedTabs.includes(k))
+            .map(([k, label]) => (
+              <button
+                key={k}
+                disabled={financeLocked}
+                onClick={() => setTab(k as Tab)}
+                className={`px-4 h-10 text-[13px] font-medium border-b-2 -mb-px transition-colors ${
+                  tab === k
+                    ? "border-[#8B47FF] text-[#8B47FF]"
+                    : "border-transparent text-[#6B7280] hover:text-[#111827]"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          {showAdminLink && (
+            <Link
+              to="/admin"
+              className="ml-auto self-center rounded-lg px-3 py-1.5 text-[13px] font-medium text-[#8B47FF] hover:bg-[#F5F3FF]"
             >
-              {label}
-            </button>
-          ))}
+              Usuários e permissões →
+            </Link>
+          )}
         </div>
         {tab === "clinica" && <ClinicSettings />}
         {tab === "servicos" && <ServiceTypes />}

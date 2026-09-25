@@ -37,7 +37,7 @@ export const Route = createFileRoute("/_authenticated")({
     throw redirect({
       to: "/auth",
       search: {
-        redirect: location?.pathname || "/dashboard",
+        redirect: location?.href || location?.pathname || "/dashboard",
       },
     });
   },

@@ -22,6 +22,7 @@ import {
   Zap,
   Search,
   BarChart3,
+  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -36,6 +37,13 @@ import PageTransition from "./motion/PageTransition";
 import Tooltip from "./motion/Tooltip";
 import { ConfirmDialogHost } from "@/components/app/confirm-dialog";
 import { dropdownVariants, EASE_OUT } from "@/lib/motion";
+import { usePermissions } from "@/hooks/use-permissions";
+import { firstAllowedRoute, routeRuleFor } from "@/features/admin/permissions";
+import {
+  BlockedAccessScreen,
+  NoAccessScreen,
+  PendingInvitationsBanner,
+} from "@/features/admin/AccessScreens";
 
 type NavItem = {
   to: string;
@@ -128,6 +136,12 @@ const navSections: NavSection[] = [
         icon: Settings,
         children: [{ to: "/configuracoes", label: "Configurações" }],
       },
+      {
+        to: "/admin",
+        label: "Administração",
+        icon: ShieldCheck,
+        children: [{ to: "/admin", label: "Usuários e permissões" }],
+      },
     ],
   },
 ];
@@ -146,6 +160,24 @@ export default function AppShell({ children, title }: { children: ReactNode; tit
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user, profile, loading, isAuthenticated } = useAuth();
+  const { access, can } = usePermissions();
+  // Menu e rotas seguem as permissões; no modo legado (migração pendente) nada muda,
+  // exceto a Administração, que só aparece quando o banco já controla os acessos.
+  const allowedPath = (to: string) => {
+    if (access.mode === "loading" || access.mode === "blocked") return false;
+    const rule = routeRuleFor(to);
+    if (!rule) return true;
+    if (access.mode === "legacy") return rule.path !== "/admin";
+    return rule.any.some(can);
+  };
+  const currentRule = routeRuleFor(pathname);
+  const routeAllowed = !currentRule || access.mode !== "active" || currentRule.any.some(can);
+  const fallbackPath = access.mode === "active" ? firstAllowedRoute(can) : null;
+  const redirectToFallback =
+    access.mode === "active" && !routeAllowed && pathname === "/dashboard" && !!fallbackPath;
+  const canNewPatient = can("patients.manage");
+  const canNewAppointment = can("agenda.manage");
+  const canNewEntry = can("finance.receive") || can("finance.pay");
   const [hovered, setHovered] = useState(false);
   const [pinned, setPinned] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -185,6 +217,10 @@ export default function AppShell({ children, title }: { children: ReactNode; tit
   }, [pathname]);
 
   const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (redirectToFallback && fallbackPath) navigate({ to: fallbackPath, replace: true });
+  }, [redirectToFallback, fallbackPath, navigate]);
 
   // Auth guard: redirect to /auth if not signed in
   useEffect(() => {
@@ -290,6 +326,7 @@ export default function AppShell({ children, title }: { children: ReactNode; tit
       >
         {navSections
           .flatMap((section) => section.items)
+          .filter((item) => allowedPath(item.to))
           .map((item) => {
             const Icon = item.icon;
             const active = isActive(item.to);
@@ -424,7 +461,7 @@ export default function AppShell({ children, title }: { children: ReactNode; tit
           </Tooltip>
 
           {/* Novo (dropdown) */}
-          <div className="relative">
+          <div className="relative" hidden={!canNewPatient && !canNewAppointment && !canNewEntry}>
             <motion.button
               type="button"
               aria-label="Novo"
@@ -446,29 +483,35 @@ export default function AppShell({ children, title }: { children: ReactNode; tit
                   style={{ transformOrigin: "top right" }}
                   className="absolute right-0 top-11 z-50 w-56 rounded-xl bg-white border border-black/[0.06] shadow-xl overflow-hidden"
                 >
-                  <Link
-                    to="/pacientes"
-                    onClick={() => setOpenMenu(null)}
-                    className="flex items-center gap-2.5 px-3.5 py-2.5 text-[13.5px] text-[#111827] hover:bg-[#F5F3FF] transition-colors"
-                  >
-                    <UserPlus size={16} className="text-[#6C4CF7]" /> Novo paciente
-                  </Link>
-                  <Link
-                    to="/agenda"
-                    search={{ novo: "true" } as any}
-                    onClick={() => setOpenMenu(null)}
-                    className="flex items-center gap-2.5 px-3.5 py-2.5 text-[13.5px] text-[#111827] hover:bg-[#F5F3FF] transition-colors"
-                  >
-                    <Calendar size={16} className="text-[#6C4CF7]" /> Novo agendamento
-                  </Link>
-                  <Link
-                    to="/financeiro"
-                    search={{ novo: "true" } as any}
-                    onClick={() => setOpenMenu(null)}
-                    className="flex items-center gap-2.5 px-3.5 py-2.5 text-[13.5px] text-[#111827] hover:bg-[#F5F3FF] transition-colors"
-                  >
-                    <Wallet size={16} className="text-[#6C4CF7]" /> Novo lançamento
-                  </Link>
+                  {canNewPatient && (
+                    <Link
+                      to="/pacientes"
+                      onClick={() => setOpenMenu(null)}
+                      className="flex items-center gap-2.5 px-3.5 py-2.5 text-[13.5px] text-[#111827] hover:bg-[#F5F3FF] transition-colors"
+                    >
+                      <UserPlus size={16} className="text-[#6C4CF7]" /> Novo paciente
+                    </Link>
+                  )}
+                  {canNewAppointment && (
+                    <Link
+                      to="/agenda"
+                      search={{ novo: "true" } as any}
+                      onClick={() => setOpenMenu(null)}
+                      className="flex items-center gap-2.5 px-3.5 py-2.5 text-[13.5px] text-[#111827] hover:bg-[#F5F3FF] transition-colors"
+                    >
+                      <Calendar size={16} className="text-[#6C4CF7]" /> Novo agendamento
+                    </Link>
+                  )}
+                  {canNewEntry && (
+                    <Link
+                      to="/financeiro"
+                      search={{ novo: "true" } as any}
+                      onClick={() => setOpenMenu(null)}
+                      className="flex items-center gap-2.5 px-3.5 py-2.5 text-[13.5px] text-[#111827] hover:bg-[#F5F3FF] transition-colors"
+                    >
+                      <Wallet size={16} className="text-[#6C4CF7]" /> Novo lançamento
+                    </Link>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -518,20 +561,33 @@ export default function AppShell({ children, title }: { children: ReactNode; tit
                     </div>
                     <div className="text-[11.5px] text-[#6B7280] truncate">{displayEmail}</div>
                   </div>
-                  <Link
-                    to="/configuracoes"
-                    onClick={() => setOpenMenu(null)}
-                    className="flex items-center gap-2.5 px-3.5 py-2.5 text-[13.5px] text-[#111827] hover:bg-[#F5F3FF] transition-colors"
-                  >
-                    <User size={16} className="text-[#6C4CF7]" /> Meu perfil
-                  </Link>
-                  <Link
-                    to="/configuracoes"
-                    onClick={() => setOpenMenu(null)}
-                    className="flex items-center gap-2.5 px-3.5 py-2.5 text-[13.5px] text-[#111827] hover:bg-[#F5F3FF] transition-colors"
-                  >
-                    <Settings size={16} className="text-[#6C4CF7]" /> Configurações
-                  </Link>
+                  {allowedPath("/configuracoes") && (
+                    <>
+                      <Link
+                        to="/configuracoes"
+                        onClick={() => setOpenMenu(null)}
+                        className="flex items-center gap-2.5 px-3.5 py-2.5 text-[13.5px] text-[#111827] hover:bg-[#F5F3FF] transition-colors"
+                      >
+                        <User size={16} className="text-[#6C4CF7]" /> Meu perfil
+                      </Link>
+                      <Link
+                        to="/configuracoes"
+                        onClick={() => setOpenMenu(null)}
+                        className="flex items-center gap-2.5 px-3.5 py-2.5 text-[13.5px] text-[#111827] hover:bg-[#F5F3FF] transition-colors"
+                      >
+                        <Settings size={16} className="text-[#6C4CF7]" /> Configurações
+                      </Link>
+                    </>
+                  )}
+                  {allowedPath("/admin") && (
+                    <Link
+                      to="/admin"
+                      onClick={() => setOpenMenu(null)}
+                      className="flex items-center gap-2.5 px-3.5 py-2.5 text-[13.5px] text-[#111827] hover:bg-[#F5F3FF] transition-colors"
+                    >
+                      <ShieldCheck size={16} className="text-[#6C4CF7]" /> Usuários e permissões
+                    </Link>
+                  )}
                   <button
                     onClick={handleSignOut}
                     className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[13.5px] text-[#DC2626] hover:bg-[#FEF2F2] border-t border-black/[0.06] transition-colors"
@@ -584,10 +640,11 @@ export default function AppShell({ children, title }: { children: ReactNode; tit
                   .flatMap((s) => s.items)
                   .find((i) => i.to === flyout.to);
                 if (!currentItem) return null;
-                const options =
+                const options = (
                   currentItem.children && currentItem.children.length > 0
                     ? currentItem.children
-                    : [{ to: currentItem.to, label: currentItem.label }];
+                    : [{ to: currentItem.to, label: currentItem.label }]
+                ).filter((child) => allowedPath(child.to));
 
                 return (
                   <AnimatePresence mode="wait">
@@ -690,7 +747,28 @@ export default function AppShell({ children, title }: { children: ReactNode; tit
           className={`flex-1 overflow-auto transition-[padding] duration-[280ms] outline-none ${pinned ? "md:pl-[232px]" : "md:pl-[56px]"}`}
         >
           <ErrorBoundary>
-            <PageTransition>{children}</PageTransition>
+            {access.mode === "loading" || redirectToFallback ? (
+              <div
+                role="status"
+                className="flex min-h-[50vh] items-center justify-center text-[13px] text-[#6B7280]"
+              >
+                Carregando permissões…
+              </div>
+            ) : access.mode === "blocked" ? (
+              <BlockedAccessScreen access={access} onSignOut={handleSignOut} />
+            ) : !routeAllowed ? (
+              <NoAccessScreen
+                moduleLabel={currentRule?.label ?? "este módulo"}
+                fallbackPath={fallbackPath}
+              />
+            ) : (
+              <>
+                {access.mode === "active" && (
+                  <PendingInvitationsBanner invitations={access.invitations} />
+                )}
+                <PageTransition>{children}</PageTransition>
+              </>
+            )}
           </ErrorBoundary>
         </main>
       </div>
