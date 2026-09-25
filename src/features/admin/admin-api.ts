@@ -175,6 +175,7 @@ const FRIENDLY: Record<string, string> = {
   "admin.invalid_email": "Informe um e-mail válido.",
   "admin.invalid_name": "O nome pode ter no máximo 120 caracteres.",
   "admin.already_member": "Este e-mail já tem acesso a esta clínica.",
+  "admin.password_too_short": "A senha deve ter no mínimo 6 caracteres.",
   "admin.member_suspended": "Este acesso está suspenso. Reative-o na lista de usuários.",
   "admin.member_pending": "Esta pessoa já se cadastrou e aguarda aprovação na lista de usuários.",
   "admin.invite_exists": "Já existe um convite pendente para este e-mail. Use “Reenviar convite”.",
@@ -678,3 +679,71 @@ export async function sendInvitationEmail(email: string, fullName?: string | nul
   });
   if (error) throw new AdminError(friendlyEmailError(error.message), error.code, "auth.email");
 }
+
+export async function createDirectUser(input: {
+  companyId: string;
+  email: string;
+  password: string;
+  fullName: string;
+  roleId: string;
+  doctorId?: string | null;
+  agendaScope?: AgendaScope;
+  agendaProfessionalIds?: string[];
+  confirmSensitive?: boolean;
+}) {
+  // 1. Tenta criar pelo Auth do Supabase com cliente isolado (não altera a sessão do admin)
+  try {
+    const { createClient } = await import("@supabase/supabase-js");
+    const authClient = createClient(
+      "https://yqgafvblxxyksximctzk.supabase.co",
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlxZ2FmdmJseHh5a3N4aW1jdHprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyNjA5MTYsImV4cCI6MjA5MjgzNjkxNn0.KsHS2h6eqfm9-suJ_yxpgSQLYw44bvqG4S6xUD-ZSX8",
+      {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+        },
+      },
+    );
+    await authClient.auth.signUp({
+      email: input.email.trim(),
+      password: input.password,
+      options: {
+        data: { full_name: input.fullName.trim() },
+      },
+    });
+  } catch {
+    // Ignora erro de signup no client; a RPC no banco fará o cadastro ou atualização com senha
+  }
+
+  // 2. Chama a RPC segura do banco para ativar o usuário, aplicar perfil e confirmar credenciais
+  const r = obj(
+    await rpc("admin_create_direct_user", {
+      p_company_id: input.companyId,
+      p_email: input.email.trim(),
+      p_password: input.password,
+      p_full_name: input.fullName.trim(),
+      p_role_id: input.roleId,
+      p_doctor_id: input.doctorId || null,
+      p_agenda_scope: input.agendaScope || "all",
+      p_agenda_professional_ids: input.agendaProfessionalIds || [],
+      p_confirm_sensitive: input.confirmSensitive ?? false,
+    }),
+  );
+
+  return {
+    userId: String(r.user_id),
+    memberId: String(r.member_id),
+    email: String(r.email),
+    status: String(r.status),
+  };
+}
+
+export async function setUserPassword(companyId: string, targetUserId: string, newPassword: string) {
+  await rpc("admin_set_user_password", {
+    p_company_id: companyId,
+    p_target_user_id: targetUserId,
+    p_new_password: newPassword,
+  });
+}
+

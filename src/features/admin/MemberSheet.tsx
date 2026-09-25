@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { History, Info, Lock, LogOut, Stethoscope } from "lucide-react";
+import { Eye, EyeOff, History, Info, KeyRound, Lock, LogOut, Stethoscope } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
@@ -24,6 +25,7 @@ import { confirmDialog } from "@/components/app/confirm-dialog";
 import { qk } from "@/lib/query-keys";
 import {
   fetchAuditPage,
+  setUserPassword,
   toAdminError,
   updateMemberAccess,
   type AdminMember,
@@ -115,6 +117,9 @@ function MemberEditor({
   const [agendaScope, setAgendaScope] = useState<AgendaScope>(member.agendaScope);
   const [agendaIds, setAgendaIds] = useState<string[]>(member.agendaProfessionalIds);
   const [saving, setSaving] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
 
   const role = rolesById.get(roleId);
   const ownerSelected = isOwnerRole(role);
@@ -210,6 +215,32 @@ function MemberEditor({
       if (err.hint === "admin.stale") await onSaved();
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleUpdatePassword = async () => {
+    if (newPassword.length < 6) {
+      toast.error("A senha deve ter no mínimo 6 caracteres.");
+      return;
+    }
+    const ok = await confirmDialog({
+      title: "Alterar senha do usuário",
+      message: `Deseja definir esta nova senha para ${member.fullName}? A pessoa poderá fazer login imediatamente com a nova senha.`,
+      confirmText: "Alterar senha",
+      variant: "default",
+    });
+    if (!ok) return;
+
+    setChangingPassword(true);
+    try {
+      await setUserPassword(overview.company.id, member.userId, newPassword);
+      toast.success(`Senha de ${member.fullName} alterada com sucesso!`);
+      setNewPassword("");
+      await onSaved();
+    } catch (error) {
+      toast.error(toAdminError(error).message);
+    } finally {
+      setChangingPassword(false);
     }
   };
 
@@ -434,6 +465,53 @@ function MemberEditor({
             aparecem.
           </p>
         </section>
+
+        {!member.isSelf && !blockReason && member.status !== "removed" && (
+          <section
+            aria-labelledby="member-password-change"
+            className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-4"
+          >
+            <div className="flex items-center gap-2">
+              <KeyRound size={16} className="text-slate-600" aria-hidden="true" />
+              <h3 id="member-password-change" className="text-sm font-semibold text-slate-900">
+                Alterar senha de acesso
+              </h3>
+            </div>
+            <p className="text-xs text-slate-500">
+              Defina uma nova senha para que este usuário possa fazer login no MedCore imediatamente.
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="relative flex-1">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Nova senha (mínimo 6 dígitos)"
+                  minLength={6}
+                  disabled={changingPassword}
+                  className="bg-white pr-10"
+                />
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                  title={showPassword ? "Ocultar senha" : "Ver senha"}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void handleUpdatePassword()}
+                disabled={changingPassword || newPassword.length < 6}
+              >
+                {changingPassword ? "Salvando…" : "Salvar nova senha"}
+              </Button>
+            </div>
+          </section>
+        )}
 
         {actor.canViewAudit && (
           <section aria-labelledby="member-history" className="space-y-2">
