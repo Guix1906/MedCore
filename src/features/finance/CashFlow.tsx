@@ -946,7 +946,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
             </div>
           </div>
 
-          {/* Botões de Ação Topo Direito (Planilha, Transferência, + Novo Lançamento) */}
+          {/* Botões de Ação Topo Direito (Planilha e Transferência) */}
           <div className="flex items-center gap-2 flex-wrap">
             <Button
               variant="outline"
@@ -966,16 +966,6 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
             >
               <ArrowLeftRight className="h-3.5 w-3.5 text-info" />
               Transferência
-            </Button>
-
-            <Button
-              size="sm"
-              className="h-8 bg-info hover:bg-info/90 text-white text-xs font-medium shadow-2xs cursor-pointer px-3"
-              onClick={() =>
-                onOpenNew ? onOpenNew("receita") : (window.location.href = "/financeiro?novo=1")
-              }
-            >
-              Novo Lançamento
             </Button>
           </div>
         </div>

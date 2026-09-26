@@ -12,6 +12,8 @@ import { getFinancialSnapshot, refreshFinance } from "@/features/finance/finance
 import { reportingRows } from "@/features/finance/finance-math";
 import { useResolvedTheme } from "@/hooks/use-theme";
 import { supabase } from "@/integrations/supabase/client";
+import { getStoredLocalEvents } from "@/lib/local-events";
+import { mergeWithLocalPatients } from "@/lib/local-patients";
 import { calcCashFlow } from "@/lib/finance";
 import { agendaService, companyService, patientsService } from "@/services/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -48,6 +50,7 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 type Appt = {
   id: string;
   patient_id: string | null;
+  patient_name?: string | null;
   doctor_id: string | null;
   date: string;
   start_time: string;
@@ -125,21 +128,36 @@ function DashboardPage() {
   const [showBalance, setShowBalance] = useState(true);
   const [reportTab, setReportTab] = useState<"prof" | "type" | "insurance" | "cat">("prof");
 
-  // Sincronização em tempo real do financeiro com o fluxo de caixa
+  // Sincronização em tempo real do financeiro, agendamentos e pacientes
   useEffect(() => {
-    // 1. Escuta alterações no localStorage (exclusão, estorno ou novo pagamento em outras abas ou telas)
+    // 1. Escuta alterações no localStorage (exclusão, estorno, novos agendamentos e lançamentos)
     const handleStorage = (e: StorageEvent) => {
       if (
         e.key === "medcore_deleted_cash_entries" ||
         e.key === "medcore_deleted_titles" ||
-        e.key === "medcore_local_payments"
+        e.key === "medcore_local_payments" ||
+        e.key === "medcore_local_titles" ||
+        e.key === "medcore_local_events" ||
+        e.key === "medcore_local_patients"
       ) {
         void qc.invalidateQueries({ queryKey: ["financial-snapshot"] });
+        void qc.invalidateQueries({ queryKey: ["dashboard", "events-appointments"] });
+        void qc.invalidateQueries({ queryKey: ["dashboard", "patients"] });
       }
     };
     window.addEventListener("storage", handleStorage);
 
-    // 2. Realtime do Supabase para alterações nas tabelas de títulos e baixas financeiras
+    // 2. Escuta eventos customizados disparados nas telas do sistema
+    const handleCustomEvents = () => {
+      void qc.invalidateQueries({ queryKey: ["financial-snapshot"] });
+      void qc.invalidateQueries({ queryKey: ["dashboard", "events-appointments"] });
+      void qc.invalidateQueries({ queryKey: ["dashboard", "patients"] });
+    };
+    window.addEventListener("medcore_events_updated", handleCustomEvents);
+    window.addEventListener("medcore_local_title_saved", handleCustomEvents);
+    window.addEventListener("medcore_patients_updated", handleCustomEvents);
+
+    // 3. Realtime do Supabase para alterações no banco
     const ch = supabase
       .channel("dashboard-financial-sync")
       .on("postgres_changes", { event: "*", schema: "public", table: "financial_titles" }, () => {
@@ -148,10 +166,17 @@ function DashboardPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "financial_payments" }, () => {
         void refreshFinance(qc);
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "events" }, () => {
+        void qc.invalidateQueries({ queryKey: ["dashboard", "events-appointments"] });
+        void refreshFinance(qc);
+      })
       .subscribe();
 
     return () => {
       window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("medcore_events_updated", handleCustomEvents);
+      window.removeEventListener("medcore_local_title_saved", handleCustomEvents);
+      window.removeEventListener("medcore_patients_updated", handleCustomEvents);
       void supabase.removeChannel(ch);
     };
   }, [qc]);
@@ -160,82 +185,96 @@ function DashboardPage() {
     queryKey: ["dashboard", "events-appointments"],
     placeholderData: (prev) => prev,
     queryFn: async () => {
+      let rawList: any[] = [];
       try {
         const phpEvents = await agendaService.getEvents();
-        if (phpEvents && Array.isArray(phpEvents)) {
-          return phpEvents.map((e) => {
-            const startsAt = new Date(e.start_time);
-            const endsAt = e.end_time
-              ? new Date(e.end_time)
-              : new Date(startsAt.getTime() + 30 * 60_000);
-            const y = startsAt.getFullYear();
-            const m = String(startsAt.getMonth() + 1).padStart(2, "0");
-            const d = String(startsAt.getDate()).padStart(2, "0");
-            return {
-              id: e.id,
-              patient_id: (e as any).patient_id || null,
-              doctor_id: (e as any).doctor_id || null,
-              date: `${y}-${m}-${d}`,
-              start_time: startsAt.toTimeString().slice(0, 5),
-              end_time: endsAt.toTimeString().slice(0, 5),
-              status: e.status || "agendado",
-              type: e.event_type || "atendimento",
-              color: (e as any).color || CHART_COLORS.primary,
-              title: e.title,
-              when: startsAt,
-            };
-          }) as Appt[];
+        if (phpEvents && Array.isArray(phpEvents) && phpEvents.length > 0) {
+          rawList = phpEvents;
         }
       } catch {}
 
-      const { data } = await supabase
-        .from("events")
-        .select("id, title, description, starts_at, ends_at, assigned_to, case_id")
-        .order("starts_at", { ascending: true });
+      if (rawList.length === 0) {
+        const { data } = await supabase
+          .from("events")
+          .select("id, title, description, starts_at, ends_at, assigned_to, case_id")
+          .order("starts_at", { ascending: true });
+        if (data && Array.isArray(data)) {
+          rawList = data;
+        }
+      }
 
-      const mapped = (data ?? []).map((e) => {
+      // Merge com agendamentos salvos localmente
+      const localEvents = getStoredLocalEvents();
+      const eventMap = new Map<string, any>();
+      rawList.forEach((e) => {
+        if (e?.id) eventMap.set(e.id, e);
+      });
+      localEvents.forEach((le) => {
+        if (le?.id) {
+          const existing = eventMap.get(le.id);
+          eventMap.set(le.id, existing ? { ...existing, ...le } : le);
+        }
+      });
+
+      const allMerged = Array.from(eventMap.values());
+
+      return allMerged.map((e) => {
         const meta = parseMeta(e.description);
-        const startsAt = new Date(e.starts_at);
-        const endsAt = e.ends_at ? new Date(e.ends_at) : new Date(startsAt.getTime() + 30 * 60_000);
+        const startsAt = e.starts_at
+          ? new Date(e.starts_at)
+          : e.start_time
+            ? new Date(e.start_time)
+            : new Date();
+        const endsAt = e.ends_at
+          ? new Date(e.ends_at)
+          : e.end_time
+            ? new Date(e.end_time)
+            : new Date(startsAt.getTime() + 30 * 60_000);
 
         const y = startsAt.getFullYear();
         const m = String(startsAt.getMonth() + 1).padStart(2, "0");
         const d = String(startsAt.getDate()).padStart(2, "0");
         const dateStr = `${y}-${m}-${d}`;
 
-        const startStr = startsAt.toTimeString().slice(0, 5);
-        const endStr = endsAt.toTimeString().slice(0, 5);
+        const startStr =
+          e.start_time && e.start_time.length === 5
+            ? e.start_time
+            : startsAt.toTimeString().slice(0, 5);
+        const endStr =
+          e.end_time && e.end_time.length === 5
+            ? e.end_time
+            : endsAt.toTimeString().slice(0, 5);
 
         return {
           id: e.id,
-          patient_id: meta?.clientId || null,
-          doctor_id: e.assigned_to || null,
+          patient_id: e.patient_id || meta?.clientId || e.case_id || null,
+          patient_name: e.patient_name || null,
+          doctor_id: e.assigned_to || e.doctor_id || null,
           date: dateStr,
           start_time: startStr,
           end_time: endStr,
-          status: meta?.status || "agendado",
-          type: meta?.type || "atendimento",
-          color: meta?.color || CHART_COLORS.primary,
-          title: e.title,
+          status: meta?.status || e.status || "agendado",
+          type: meta?.type || e.event_type || "atendimento",
+          color: meta?.color || e.color || CHART_COLORS.primary,
+          title: e.title || e.patient_name || "Agendamento",
           when: startsAt,
         };
-      });
-
-      return mapped as Appt[];
+      }) as Appt[];
     },
-    staleTime: 5 * 60_000,
+    staleTime: 0,
     gcTime: 30 * 60_000,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
   });
 
   const patientsQ = useQuery({
     queryKey: ["dashboard", "patients"],
     placeholderData: (prev) => prev,
     queryFn: async () => {
+      let list: Patient[] = [];
       try {
         const phpPat = await patientsService.getPatients({ limit: 500 });
-        if (phpPat && Array.isArray(phpPat)) {
-          return phpPat.map((p) => ({
+        if (phpPat && Array.isArray(phpPat) && phpPat.length > 0) {
+          list = phpPat.map((p) => ({
             id: p.id,
             name: p.name,
             gender: p.gender || null,
@@ -243,12 +282,15 @@ function DashboardPage() {
           })) as Patient[];
         }
       } catch {}
-      const { data } = await supabase.from("patients").select("id,name,gender,birth_date");
-      return (data ?? []) as Patient[];
+      if (list.length === 0) {
+        const { data } = await supabase.from("patients").select("id,name,gender,birth_date");
+        list = (data ?? []) as Patient[];
+      }
+      return mergeWithLocalPatients(list) as Patient[];
     },
-    staleTime: 5 * 60_000,
+    staleTime: 0,
     gcTime: 30 * 60_000,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
   });
 
   const financeQ = useQuery({
@@ -278,21 +320,30 @@ function DashboardPage() {
   const appts = apptsQ.data ?? [];
   const patients = patientsQ.data ?? [];
   const tx: DashboardTx[] = useMemo(() => {
-    if (!financeQ.data || !financeQ.data.scopes?.length) return [];
+    if (!financeQ.data) return [];
     return reportingRows(financeQ.data);
   }, [financeQ.data]);
   const doctors = doctorsQ.data ?? [];
   const loading =
     apptsQ.isLoading || patientsQ.isLoading || financeQ.isLoading || doctorsQ.isLoading;
 
-  // Garante que o dashboard mostre os lançamentos vigentes do sistema caso o mês do usuário não tenha dados
+  // Garante que o dashboard mostre os lançamentos e agendamentos vigentes do sistema
   useEffect(() => {
-    if (tx.length > 0) {
+    const hasDataInPeriod =
+      tx.some((t) => (t.date || "").slice(0, 7) === toISO(range[0]).slice(0, 7)) ||
+      appts.some((a) => (a.date || "").slice(0, 7) === toISO(range[0]).slice(0, 7));
+
+    if (!hasDataInPeriod && (tx.length > 0 || appts.length > 0)) {
       const now = new Date();
       const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-      const hasCurrentMonthEntries = tx.some((t) => (t.date || "").startsWith(currentMonthStr));
+      const hasCurrentMonthEntries =
+        tx.some((t) => (t.date || "").startsWith(currentMonthStr)) ||
+        appts.some((a) => (a.date || "").startsWith(currentMonthStr));
+
       if (!hasCurrentMonthEntries) {
-        const hasSep2026 = tx.some((t) => (t.date || "").startsWith("2026-09"));
+        const hasSep2026 =
+          tx.some((t) => (t.date || "").startsWith("2026-09")) ||
+          appts.some((a) => (a.date || "").startsWith("2026-09"));
         if (hasSep2026) {
           const s = new Date(2026, 8, 1);
           s.setHours(0, 0, 0, 0);
@@ -308,7 +359,7 @@ function DashboardPage() {
         }
       }
     }
-  }, [tx]);
+  }, [tx, appts, range]);
 
   const [rangeStart, rangeEnd] = range;
 
@@ -329,8 +380,19 @@ function DashboardPage() {
   // Status pie
   const statusData = useMemo(() => {
     const map: Record<string, number> = {};
+    const normalizeKey = (s: string) => {
+      const l = (s || "").toLowerCase();
+      if (l === "agendado" || l === "scheduled") return "scheduled";
+      if (l === "confirmado" || l === "confirmed") return "confirmed";
+      if (l === "finalizado" || l === "completed" || l === "realizado") return "completed";
+      if (l === "cancelado" || l === "cancelled") return "cancelled";
+      if (l === "faltou" || l === "no_show") return "no_show";
+      return l || "scheduled";
+    };
+
     apptsInRange.forEach((a) => {
-      map[a.status] = (map[a.status] ?? 0) + 1;
+      const k = normalizeKey(a.status);
+      map[k] = (map[k] ?? 0) + 1;
     });
     const labels: Record<string, { label: string; color: string }> = {
       confirmed: { label: "Confirmado", color: CHART_COLORS.secondary },
@@ -454,16 +516,29 @@ function DashboardPage() {
     };
   }, [cashflow]);
 
-  // Próximas 24h
+  // Próximas 24h a 36h: cobre todos os atendimentos previstos para hoje e amanhã
   const next24h = useMemo(() => {
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const endWindow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 23, 59, 59, 999);
 
-    const in24 = new Date(new Date().getTime() + 24 * 3600_000);
     return appts
-      .map((a) => ({ ...a, when: a.when || new Date(`${a.date}T${a.start_time}`) }))
-      .filter((a) => a.when >= startOfToday && a.when <= in24 && a.status !== "cancelado")
-      .sort((a, b) => a.when.getTime() - b.when.getTime());
+      .map((a) => {
+        let when = a.when;
+        if (!when || isNaN(when.getTime())) {
+          const [y, m, d] = (a.date || "").split("-").map(Number);
+          const [hh, mm] = (a.start_time || "08:00").split(":").map(Number);
+          when = new Date(y, (m ?? 1) - 1, d ?? 1, hh ?? 8, mm ?? 0, 0);
+        }
+        return { ...a, when };
+      })
+      .filter((a) => {
+        if (!a.when || isNaN(a.when.getTime())) return false;
+        const st = (a.status || "").toLowerCase();
+        if (st === "cancelado" || st === "cancelled") return false;
+        return a.when >= startOfToday && a.when <= endWindow;
+      })
+      .sort((a, b) => a.when!.getTime() - b.when!.getTime());
   }, [appts]);
 
   // Aniversariantes (mês atual)
@@ -634,27 +709,27 @@ function DashboardPage() {
           <section aria-label="Resumo" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <KPICard
               label="Agendamentos no período"
-              value={count(statusData.total)}
+              value={apptsQ.isLoading ? "—" : apptsInRange.length.toLocaleString("pt-BR")}
               hint={rangeLabel}
               icon={<CalendarDays className="size-4" />}
             />
             <KPICard
               label="Próximas 24 horas"
-              value={count(next24h.length)}
+              value={apptsQ.isLoading ? "—" : next24h.length.toLocaleString("pt-BR")}
               hint={next24h.length === 1 ? "atendimento previsto" : "atendimentos previstos"}
               icon={<Clock className="size-4" />}
               accent="info"
             />
             <KPICard
               label="Pacientes cadastrados"
-              value={count(patients.length)}
+              value={patientsQ.isLoading ? "—" : patients.length.toLocaleString("pt-BR")}
               hint="na base da clínica"
               icon={<Users className="size-4" />}
               accent="success"
             />
             <KPICard
               label="Aniversariantes do mês"
-              value={count(birthdaysCount)}
+              value={patientsQ.isLoading ? "—" : birthdaysCount.toLocaleString("pt-BR")}
               hint={monthName}
               icon={<Cake className="size-4" />}
               accent="warning"
@@ -686,7 +761,18 @@ function DashboardPage() {
                   {next24h.slice(0, 6).map((a) => {
                     const pat = patients.find((p) => p.id === a.patient_id);
                     const accent = a.color || CHART_COLORS.primary;
-                    const name = pat?.name || a.title || "Agendamento";
+                    const name =
+                      (a as any).patient_name ||
+                      pat?.name ||
+                      a.title ||
+                      "Agendamento";
+                    const todayStr = toISO(new Date());
+                    const isToday = a.date === todayStr;
+                    const dateBadge = isToday
+                      ? "Hoje"
+                      : a.date
+                        ? `${a.date.slice(8, 10)}/${a.date.slice(5, 7)}`
+                        : "";
                     return (
                       <li
                         key={a.id}
@@ -701,8 +787,21 @@ function DashboardPage() {
                         <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
                           {name}
                         </span>
-                        <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
-                          {a.start_time} - {a.end_time}
+                        <span className="shrink-0 flex items-center gap-1.5 text-xs font-medium tabular-nums text-muted-foreground">
+                          {dateBadge && (
+                            <span
+                              className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
+                                isToday
+                                  ? "bg-primary/10 text-primary"
+                                  : "bg-muted text-muted-foreground"
+                              }`}
+                            >
+                              {dateBadge}
+                            </span>
+                          )}
+                          <span>
+                            {a.start_time} - {a.end_time}
+                          </span>
                         </span>
                       </li>
                     );
@@ -770,7 +869,7 @@ function DashboardPage() {
                 />
 
                 <div className="h-[270px] animate-fade-in" key={period}>
-                  {loading ? (
+                  {financeQ.isLoading ? (
                     <Skeleton />
                   ) : (
                     <Chart
