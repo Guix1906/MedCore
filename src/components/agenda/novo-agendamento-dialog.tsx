@@ -35,7 +35,7 @@ type MemberOpt = {
 type IdOpt = { id: string };
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { refreshFinance, saveLocalFinancialTitle, saveLocalPayment } from "@/features/finance/finance-api";
+import { refreshFinance, saveLocalFinancialTitle, saveLocalPayment, deleteLocalPayment, deleteLocalFinancialTitle } from "@/features/finance/finance-api";
 import { errorMessage } from "@/features/acompanhamentos/followup-utils";
 import { patientsService, companyService, agendaService } from "@/services/api";
 import { PatientModal } from "@/components/pacientes/PatientModal";
@@ -1109,7 +1109,11 @@ export function NovoAgendamentoDialog({
                 },
               );
 
-              if (scheduleErr) {
+              if (!scheduleErr && scheduleData?.title_id) {
+                // Backend persistiu com sucesso: limpa o placeholder local para evitar duplicidade
+                deleteLocalPayment(`pay-evt-${insertedId}`);
+                deleteLocalFinancialTitle(`evt-${insertedId}`);
+              } else if (scheduleErr) {
                 // Fallback legado se a migration ainda não foi executada no banco
                 const { data: titleId, error: titleErr } = await supabase.rpc(
                   "create_event_financial_title",
@@ -1120,7 +1124,10 @@ export function NovoAgendamentoDialog({
                   },
                 );
 
-                if (titleErr) {
+                if (!titleErr && titleId) {
+                  deleteLocalPayment(`pay-evt-${insertedId}`);
+                  deleteLocalFinancialTitle(`evt-${insertedId}`);
+                } else if (titleErr) {
                   // Fallback direto inserindo na tabela transactions do Supabase
                   const directTitleId = crypto.randomUUID();
                   const { error: directErr } = await supabase.from("transactions").insert({
@@ -1152,6 +1159,11 @@ export function NovoAgendamentoDialog({
                       payer_name: clientDisplayName,
                       created_by: remoteCreatedBy || null,
                     });
+                  }
+
+                  if (!directErr) {
+                    deleteLocalPayment(`pay-evt-${insertedId}`);
+                    deleteLocalFinancialTitle(`evt-${insertedId}`);
                   }
                 }
               }

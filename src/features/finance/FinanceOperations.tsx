@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { errorMessage } from "@/features/acompanhamentos/followup-utils";
 import type { FinanceSnapshot, FinancialTitle } from "./finance-schema";
+import { extractEventId } from "./finance-api";
 import { OperationLock, fieldClass } from "./OperationForm";
 import ManagementReports from "./ManagementReports";
 import BankReconciliation from "./BankReconciliation";
@@ -62,15 +63,40 @@ export default function FinanceOperations({
     return () => onLockChange(false);
   }, [active, onLockChange]);
   useBlocker({ shouldBlockFn: () => active !== null, enableBeforeUnload: active !== null });
-  const titles = finance.titles.filter((t) => t.company_id === company);
-  const ids = new Set(titles.map((t) => t.id));
+  const titles = company
+    ? finance.titles.filter((t) => !t.company_id || t.company_id === company)
+    : finance.titles;
+
+  const ids = new Set<string>();
+  const titleEventKeys = new Set<string>();
+  titles.forEach((t) => {
+    ids.add(t.id);
+    if (t.origin_key) ids.add(t.origin_key);
+    const ev = extractEventId(t.origin_key) || extractEventId(t.id);
+    if (ev) titleEventKeys.add(ev);
+  });
+
+  const scopedPayments = finance.payments.filter((p) => {
+    if (!company) return true;
+    if (ids.has(p.transaction_id) || ids.has(p.id)) return true;
+    const pEv = extractEventId(p.id) || extractEventId(p.transaction_id);
+    if (pEv && titleEventKeys.has(pEv)) return true;
+    return false;
+  });
+
   const scoped: FinanceSnapshot = {
     ...finance,
     titles,
-    payments: finance.payments.filter((p) => ids.has(p.transaction_id)),
-    accounts: finance.accounts.filter((a) => a.company_id === company),
-    scopes: finance.scopes.filter((s) => s.id === company),
-    patients: finance.patients.filter((p) => p.company_id === company),
+    payments: scopedPayments,
+    accounts: company
+      ? finance.accounts.filter((a) => !a.company_id || a.company_id === company)
+      : finance.accounts,
+    scopes: company
+      ? finance.scopes.filter((s) => s.id === company)
+      : finance.scopes,
+    patients: company
+      ? finance.patients.filter((p) => !p.company_id || p.company_id === company)
+      : finance.patients,
   };
   const ops = query.data;
   const cash = cashQuery.data;

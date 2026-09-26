@@ -145,7 +145,14 @@ export function reportingRows(data: FinanceSnapshot) {
   safeTitles.forEach((t) => {
     if (!t || isRecordWiped(t) || deletedIds.has(t.id) || deletedIds.has(`title-pay-${t.id}`)) return;
     if (t.status === "cancelado") return;
-    if ((t.status === "pago" || Number(t.paid_amount || 0) > 0) && !handledTitleIds.has(t.id)) {
+    const isAgendamento =
+      Boolean(t.origin_key && t.origin_key.startsWith("event:")) ||
+      Boolean(t.id && t.id.startsWith("evt-")) ||
+      (t.category || "").toLowerCase().includes("atendimento") ||
+      (t.description || "").toLowerCase().includes("agendamento");
+    if (isAgendamento) return;
+
+    if (t.status === "pago" && !handledTitleIds.has(t.id)) {
       handledTitleIds.add(t.id);
       syntheticPaid.push({
         id: `title-pay-${t.id}`,

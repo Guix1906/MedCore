@@ -349,7 +349,10 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
         Boolean(t?.origin_key && String(t.origin_key).startsWith("event:")) ||
         Boolean(t?.id && String(t.id).startsWith("evt-")) ||
         Boolean(p?.id && String(p.id).startsWith("pay-evt-")) ||
-        (t?.category || "").toLowerCase().includes("atendimento");
+        Boolean(p?.transaction_id && String(p.transaction_id).startsWith("evt-")) ||
+        (t?.category || "").toLowerCase().includes("atendimento") ||
+        (t?.description || "").toLowerCase().includes("agendamento") ||
+        (t?.description || "").toLowerCase().includes("atendimento");
       const isPlano = !!t?.treatment_id;
       const isManual = !isAgendamento && !isPlano;
 
@@ -360,6 +363,10 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
           : isManual
             ? "MANUAL"
             : "LANÇAMENTO";
+
+      const cleanTitleDesc = t?.description && !t.description.toLowerCase().includes("cobrança") && !t.description.toLowerCase().includes("cobranca")
+        ? t.description
+        : null;
 
       const defaultDesc = isAgendamento
         ? `Sinal de Agendamento - ${t?.patient_name || p.payer_name || "Paciente"}`
@@ -377,7 +384,6 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       const payDate =
         p.paid_on ||
         (p.created_at ? p.created_at.slice(0, 10) : "") ||
-        t?.date ||
         new Date().toISOString().slice(0, 10);
 
       result.push({
@@ -385,7 +391,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
         transaction_id: p.transaction_id,
         created_at: p.created_at || (t as any)?.created_at || new Date().toISOString(),
         date: payDate,
-        description: t?.description || defaultDesc,
+        description: cleanTitleDesc || defaultDesc,
         category: t?.category || defaultCat,
         client_name: t?.patient_name || p.payer_name || t?.payer_name || "Avulso",
         payment_method: p.payment_method || "PIX",
@@ -404,28 +410,34 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       });
     }
 
-    // Apenas inclui títulos que foram efetivamente quitados e que ainda NÃO estejam em payments.
-    // Títulos pendentes (como os R$ 400 restantes) pertencem a Contas a Receber, NÃO ao Fluxo de Caixa.
+    // Apenas inclui títulos manuais que foram 100% quitados (status: 'pago') e que ainda NÃO estejam em payments.
+    // Títulos de agendamento NUNCA geram entradas sintéticas aqui (o sinal é estritamente via payments e o restante em Contas a Receber).
     for (const t of titles) {
+      const isAgendamentoTitle =
+        Boolean(t?.origin_key && String(t.origin_key).startsWith("event:")) ||
+        Boolean(t?.id && String(t.id).startsWith("evt-")) ||
+        (t?.category || "").toLowerCase().includes("atendimento") ||
+        (t?.description || "").toLowerCase().includes("agendamento") ||
+        (t?.description || "").toLowerCase().includes("atendimento");
+      if (isAgendamentoTitle) {
+        continue;
+      }
+
+      // IMPORTANTE: Fluxo de Caixa Realizado só inclui títulos 100% quitados sem registros em payments!
+      // Títulos pendentes pertencem a Contas a Receber, NÃO ao Fluxo de Caixa.
+      if (t.status !== "pago") {
+        continue;
+      }
+
       const evKey = extractEventId(t?.origin_key) || extractEventId(t?.id);
       if (
         handledTitleIds.has(t.id) ||
         (t.origin_key && handledTitleIds.has(t.origin_key)) ||
-        (evKey && handledEventKeys.has(evKey))
+        (evKey && handledEventKeys.has(evKey)) ||
+        payments.some((p) => p.transaction_id === t.id || (t.origin_key && p.transaction_id === t.origin_key))
       ) {
         continue;
       }
-
-      // IMPORTANTE: Fluxo de Caixa exibe APENAS valores REALIZADOS/PAGOS!
-      const hasPaid = t.status === "pago" || Number(t.paid_amount || 0) > 0;
-      if (!hasPaid) {
-        continue;
-      }
-
-      const isAgendamentoTitle =
-        Boolean(t?.origin_key && String(t.origin_key).startsWith("event:")) ||
-        Boolean(t?.id && String(t.id).startsWith("evt-")) ||
-        (t?.category || "").toLowerCase().includes("atendimento");
 
       const isExpense = t.type === "despesa";
       const isIncome = !isExpense;
@@ -439,18 +451,14 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
         date: t.date || (t as any).created_at?.slice(0, 10) || new Date().toISOString().slice(0, 10),
         description:
           t.description ||
-          (isAgendamentoTitle
-            ? `Agendamento - ${t.patient_name || t.payer_name || "Paciente"}`
-            : isIncome
-              ? "Recebimento de Consulta"
-              : "Pagamento realizado"),
+          (isIncome
+            ? "Recebimento de Consulta"
+            : "Pagamento realizado"),
         category:
           t.category ||
-          (isAgendamentoTitle
-            ? "Atendimentos"
-            : isIncome
-              ? "Consultas / Procedimentos"
-              : "Despesas Gerais"),
+          (isIncome
+            ? "Consultas / Procedimentos"
+            : "Despesas Gerais"),
         client_name: t.patient_name || t.payer_name || "Avulso",
         payment_method: "PIX",
         payment_account: accountObj?.name || accounts[0]?.name || "BANCO DO BRASIL",
@@ -463,7 +471,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
         status: "pago" as const,
         reversed_at: null,
         reversal_reason: null,
-        badgeLabel: isAgendamentoTitle ? "AGENDAMENTO" : t.treatment_id ? "PLANO" : "MANUAL",
+        badgeLabel: t.treatment_id ? "PLANO" : "MANUAL",
         title: t,
       });
 
@@ -475,10 +483,11 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
     // Deduplicação estrita: nenhum agendamento pode ter múltiplos lançamentos de sinal duplicados
     const seenPayIds = new Set<string>();
     const seenEventKeys = new Set<string>();
+    const seenClientDownPayments = new Map<string, any>();
     const finalResult = [];
 
     for (const e of result) {
-      if (seenPayIds.has(e.id)) continue;
+      if (!e || seenPayIds.has(e.id)) continue;
       seenPayIds.add(e.id);
 
       const evKey =
@@ -494,6 +503,38 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
         }
         seenEventKeys.add(evKey);
       }
+
+      // Deduplicação de sinal por paciente e valor
+      const isSinalOrAgendamento =
+        e.badgeLabel === "AGENDAMENTO" ||
+        (e.description || "").toLowerCase().includes("sinal") ||
+        (e.description || "").toLowerCase().includes("agendamento") ||
+        (e.category || "").toLowerCase().includes("atendimento");
+
+      if (isSinalOrAgendamento && !e.reversed_at) {
+        const normClient = (e.client_name || "").trim().toLowerCase();
+        const normAmount = Math.round(Number(e.amount || e.paid_amount || 0) * 100);
+        if (normClient && normClient !== "avulso" && normAmount > 0) {
+          const clientKey = `${normClient}|${normAmount}`;
+          const existing = seenClientDownPayments.get(clientKey);
+          if (existing) {
+            // Se já existe um lançamento para este paciente e valor:
+            // Mantém preferencialmente aquele com data de hoje/anterior (quando o dinheiro entrou),
+            // descartando data futura gerada por agendamento
+            const todayStr = new Date().toISOString().slice(0, 10);
+            if (e.date <= todayStr && existing.date > todayStr) {
+              const idx = finalResult.indexOf(existing);
+              if (idx !== -1) {
+                finalResult[idx] = e;
+                seenClientDownPayments.set(clientKey, e);
+              }
+            }
+            continue;
+          }
+          seenClientDownPayments.set(clientKey, e);
+        }
+      }
+
       finalResult.push(e);
     }
 

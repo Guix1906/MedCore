@@ -182,9 +182,19 @@ export function isRecordWiped(item: any): boolean {
     item.paid_on || item.date || item.due_date || item.starts_at || "",
   ).slice(0, 10);
 
-  // 2. The user specifically requested to eliminate the 21/09 PIX and 29/09 PIX and any records on 21/09:
-  if (dateStr === "2026-09-21" || dateStr === "2026-09-29") {
+  // 2. The user specifically requested to eliminate the 21/09 PIX and legacy test records:
+  if (dateStr === "2026-09-21") {
     return true;
+  }
+  if (dateStr === "2026-09-29") {
+    // Only wipe if created before the system reset cutoff (legacy test data)
+    if (item.created_at) {
+      const cTime = new Date(item.created_at).getTime();
+      const cutoff = new Date(BASE_SYSTEM_RESET_TIMESTAMP).getTime();
+      if (!isNaN(cTime) && cTime < cutoff) return true;
+    } else {
+      return true; // legacy item with no created_at
+    }
   }
 
   // 3. Any old test record before today (2026-09-26) is wiped:

@@ -250,6 +250,41 @@ function normalizeFinancialSnapshot(
   const rawAccounts: FinancialAccount[] = Array.isArray(raw?.accounts) ? raw.accounts : [];
   const rawScopes: any[] = Array.isArray(raw?.scopes) ? raw.scopes : [];
 
+  // 0. Mapeia todos os agendamentos (locais e remotos) para cruzar IDs, pacientes e metadados financeiros
+  const localEvents = getStoredLocalEvents();
+  const allEventsMap = new Map<string, any>();
+  remoteEvents.forEach((re) => {
+    if (re?.id && !isRecordWiped(re)) allEventsMap.set(re.id, re);
+  });
+  localEvents.forEach((le) => {
+    if (le?.id && !isRecordWiped(le)) {
+      const existing = allEventsMap.get(le.id);
+      allEventsMap.set(le.id, existing ? { ...existing, ...le } : le);
+    }
+  });
+
+  // Função auxiliar para vincular qualquer título ao seu agendamento (por origin_key, id ou correspondência de paciente e procedimento)
+  function resolveTitleEventKey(t: FinancialTitle | undefined | null): string | null {
+    if (!t) return null;
+    const directKey = extractEventId(t.origin_key) || extractEventId(t.id);
+    if (directKey) return directKey;
+
+    const normPatient = (t.patient_name || t.payer_name || "").trim().toLowerCase();
+    const tAmount = Number(t.amount) || 0;
+    if (normPatient && normPatient !== "paciente" && normPatient !== "cliente") {
+      for (const ev of allEventsMap.values()) {
+        const evPatient = (ev.patient_name || (ev.title && ev.title.includes("-") ? ev.title.split("-")[0]?.trim() : "")).toLowerCase();
+        if (evPatient && (evPatient === normPatient || normPatient.includes(evPatient) || evPatient.includes(normPatient))) {
+          const fMeta = parseEventFinancialMeta(ev.description);
+          if (fMeta && Math.abs((fMeta.procedurePrice || fMeta.downPayment) - tAmount) < 0.01) {
+            return ev.id;
+          }
+        }
+      }
+    }
+    return null;
+  }
+
   const mergedTitles: FinancialTitle[] = [];
   const existingTitleIds = new Set<string>();
   const existingEventToTitleMap = new Map<string, FinancialTitle>();
@@ -257,8 +292,9 @@ function normalizeFinancialSnapshot(
   // 1. Deduplica e insere títulos remotos (garante 1 título por agendamento)
   rawTitles.forEach((rt) => {
     if (existingTitleIds.has(rt.id)) return;
-    const evKey = getTitleEventKey(rt);
+    const evKey = resolveTitleEventKey(rt);
     if (evKey) {
+      if (!rt.origin_key) rt.origin_key = `event:${evKey}`;
       const existing = existingEventToTitleMap.get(evKey);
       if (existing) {
         if ((Number(rt.paid_amount) || 0) > (Number(existing.paid_amount) || 0)) {
@@ -291,7 +327,7 @@ function normalizeFinancialSnapshot(
   const localTitles = getLocalTitles();
   localTitles.forEach((lt) => {
     if (deletedTitleIds.has(lt.id) || isRecordWiped(lt) || existingTitleIds.has(lt.id)) return;
-    const evKey = getTitleEventKey(lt);
+    const evKey = resolveTitleEventKey(lt);
     if (evKey) {
       const existing = existingEventToTitleMap.get(evKey);
       if (existing) {
@@ -322,7 +358,21 @@ function normalizeFinancialSnapshot(
     const fromP = extractEventId(p.id) || extractEventId(p.transaction_id);
     if (fromP) return fromP;
     const t = titlesById.get(p.transaction_id);
-    if (t) return getTitleEventKey(t);
+    if (t) return resolveTitleEventKey(t);
+
+    const normPayer = (p.payer_name || "").trim().toLowerCase();
+    const pAmt = Number(p.amount) || 0;
+    if (normPayer && normPayer !== "paciente" && normPayer !== "cliente") {
+      for (const ev of allEventsMap.values()) {
+        const evPatient = (ev.patient_name || (ev.title && ev.title.includes("-") ? ev.title.split("-")[0]?.trim() : "")).toLowerCase();
+        if (evPatient && (evPatient === normPayer || normPayer.includes(evPatient) || evPatient.includes(normPayer))) {
+          const fMeta = parseEventFinancialMeta(ev.description);
+          if (fMeta && Math.abs((fMeta.downPayment || fMeta.procedurePrice) - pAmt) < 0.01) {
+            return ev.id;
+          }
+        }
+      }
+    }
     return null;
   }
 
@@ -358,17 +408,6 @@ function normalizeFinancialSnapshot(
   });
 
   // 3. Integração de agendamentos com valores financeiros (Local Events + Remote Events)
-  const localEvents = getStoredLocalEvents();
-  const allEventsMap = new Map<string, any>();
-  remoteEvents.forEach((re) => {
-    if (re?.id && !isRecordWiped(re)) allEventsMap.set(re.id, re);
-  });
-  localEvents.forEach((le) => {
-    if (le?.id && !isRecordWiped(le)) {
-      const existing = allEventsMap.get(le.id);
-      allEventsMap.set(le.id, existing ? { ...existing, ...le } : le);
-    }
-  });
 
   Array.from(allEventsMap.values()).forEach((event) => {
     if (isRecordWiped(event)) return;
@@ -521,6 +560,18 @@ function normalizeFinancialSnapshot(
       handledEventDownPayments.add(evKey);
     }
 
+    // Deduplicação estrita: se já existe um pagamento equivalente em mergedPayments (mesmo valor, pagador e data)
+    const isDup = mergedPayments.some((mp) => {
+      if (mp.reversed_at) return false;
+      const sameAmt = Math.abs(Number(mp.amount) - Number(lp.amount)) < 0.01;
+      const sameDt = (mp.paid_on || "").slice(0, 10) === (lp.paid_on || "").slice(0, 10);
+      const normMp = (mp.payer_name || "").trim().toLowerCase();
+      const normLp = (lp.payer_name || "").trim().toLowerCase();
+      const sameP = normMp && normLp && (normMp === normLp || normMp.includes(normLp) || normLp.includes(normMp));
+      return sameAmt && (sameDt || mp.transaction_id === lp.transaction_id) && (sameP || mp.transaction_id === lp.transaction_id);
+    });
+    if (isDup) return;
+
     mergedPayments.push(lp);
     existingPaymentIds.add(lp.id);
     existingTxPaymentIds.add(lp.transaction_id);
@@ -535,14 +586,25 @@ function normalizeFinancialSnapshot(
     }
   });
 
-  // 5. Gera pagamento sintético apenas para títulos marcados como 'pago' que não possuam nenhum pagamento
+  // 5. Gera pagamento sintético apenas para títulos manuais marcados como 'pago' que não possuam nenhum pagamento
   mergedTitles.forEach((t) => {
     if (isRecordWiped(t)) return;
-    const evKey = getTitleEventKey(t);
+    const evKey = resolveTitleEventKey(t);
     if (evKey && handledEventDownPayments.has(evKey)) return;
     if (existingTxPaymentIds.has(t.id)) return;
 
-    if (t.status === "pago" || Number(t.paid_amount || 0) > 0) {
+    // IMPORTANTE: Títulos de agendamento NUNCA geram pagamentos sintéticos aqui.
+    // Pagamentos de agendamento são reais (sinal em payments) ou saldo restante pendente.
+    const isAgendamento =
+      Boolean(t.origin_key && t.origin_key.startsWith("event:")) ||
+      Boolean(t.id && t.id.startsWith("evt-")) ||
+      (t.category || "").toLowerCase().includes("atendimento") ||
+      (t.description || "").toLowerCase().includes("agendamento");
+    if (isAgendamento) return;
+
+    // Só gera pagamento sintético se o título foi marcado explicitamente como 'pago' (100% quitado)
+    // Títulos parciais / pendentes pertencem a Contas a Receber, NÃO ao Fluxo de Caixa.
+    if (t.status === "pago") {
       const synPayId = `syn-pay-${t.id}`;
       if (isRecordWiped({ id: synPayId, date: t.date, paid_on: t.date, created_at: (t as any).created_at })) return;
       const synPay: FinancialPayment = {
@@ -692,6 +754,29 @@ export async function getFinancialSnapshot(): Promise<FinanceSnapshot> {
       scopes: Array.isArray(data?.scopes) ? data.scopes : [],
       patients: Array.isArray(data?.patients) ? data.patients : [],
     };
+
+    // Enriquece origin_key caso a RPC do banco não tenha retornado a coluna
+    if (raw.titles.length > 0) {
+      const missingOriginIds = raw.titles
+        .filter((t) => !t.origin_key && t.id && !t.id.startsWith("evt-"))
+        .map((t) => t.id);
+      if (missingOriginIds.length > 0) {
+        try {
+          const { data: txOrigins } = await (supabase as any)
+            .from("transactions")
+            .select("id, origin_key")
+            .in("id", missingOriginIds);
+          if (txOrigins && Array.isArray(txOrigins)) {
+            const map = new Map(txOrigins.map((o: any) => [o.id, o.origin_key]));
+            raw.titles.forEach((t) => {
+              if (!t.origin_key && map.has(t.id)) {
+                t.origin_key = map.get(t.id);
+              }
+            });
+          }
+        } catch {}
+      }
+    }
 
     // Se o snapshot remoto estiver vazio (ex: RPC indisponível ou RLS restrito), busca diretamente em public.transactions
     if (!raw.titles.length) {

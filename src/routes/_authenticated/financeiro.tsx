@@ -72,13 +72,18 @@ function FinanceiroPage() {
 
   // Sincronização em tempo real instantânea (0ms) ao entrar na tela, agendar ou salvar lançamentos
   useEffect(() => {
-    void query.refetch();
+    void queryClient.invalidateQueries({ queryKey: ["financial-snapshot"], refetchType: "all" });
+    void queryClient.invalidateQueries({ queryKey: ["cash-flow-snapshot"], refetchType: "all" });
 
     const handleSync = () => {
+      void queryClient.invalidateQueries({ queryKey: ["financial-snapshot"], refetchType: "all" });
+      void queryClient.invalidateQueries({ queryKey: ["cash-flow-snapshot"], refetchType: "all" });
       void query.refetch();
     };
     const handleStorage = (e: StorageEvent) => {
       if (!e.key || e.key.startsWith("medcore_")) {
+        void queryClient.invalidateQueries({ queryKey: ["financial-snapshot"], refetchType: "all" });
+        void queryClient.invalidateQueries({ queryKey: ["cash-flow-snapshot"], refetchType: "all" });
         void query.refetch();
       }
     };
@@ -90,7 +95,7 @@ function FinanceiroPage() {
       window.removeEventListener("medcore_events_updated", handleSync);
       window.removeEventListener("storage", handleStorage);
     };
-  }, [query]);
+  }, [queryClient]);
 
   const handleWipeAll = async () => {
     const ok = await confirmDialog({
