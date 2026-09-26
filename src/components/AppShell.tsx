@@ -155,10 +155,12 @@ export default function AppShell({ children, title }: { children: ReactNode; tit
     const rule = routeRuleFor(to);
     if (!rule) return true;
     if (access.mode === "legacy") return rule.path !== "/admin";
+    if (access.isOwner) return true;
     return rule.any.some(can);
   };
   const currentRule = routeRuleFor(pathname);
-  const routeAllowed = !currentRule || access.mode !== "active" || currentRule.any.some(can);
+  const routeAllowed =
+    !currentRule || access.mode !== "active" || access.isOwner || currentRule.any.some(can);
   const fallbackPath = access.mode === "active" ? firstAllowedRoute(can) : null;
   const redirectToFallback =
     access.mode === "active" && !routeAllowed && pathname === "/dashboard" && !!fallbackPath;

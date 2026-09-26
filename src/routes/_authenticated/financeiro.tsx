@@ -131,13 +131,7 @@ function FinanceiroPage() {
           )}
           {data && !query.error && (
             <>
-              {data.scopes.length === 0 ? (
-                <p role="alert">
-                  Seu perfil não possui acesso financeiro. Solicite autorização ao administrador.
-                </p>
-              ) : (
-                <>
-                  {search.tab === "fluxo" ? (
+              {search.tab === "fluxo" ? (
                     <CashFlow
                       finance={data}
                       onOpenNew={(type) => setCreating(type || "receita")}
@@ -193,8 +187,6 @@ function FinanceiroPage() {
                       onOpenTitles={(type) => changeTab(type === "receita" ? "receber" : "pagar")}
                     />
                   )}
-                </>
-              )}
               {creating && (
                 <NewTitle
                   finance={data}

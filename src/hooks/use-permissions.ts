@@ -44,7 +44,24 @@ export function usePermissions() {
   const can = useCallback(
     (key: PermissionKey) => {
       if (access.mode === "legacy") return !ADMIN_ONLY.has(key);
+      if (access.isOwner) return true;
       if (access.mode !== "active") return false;
+      if (
+        key === "finance.view" ||
+        key === "finance.receive" ||
+        key === "finance.pay" ||
+        key === "finance.accounts"
+      ) {
+        if (
+          access.isOwner ||
+          access.doctorId ||
+          access.permissions.has("finance.view") ||
+          access.permissions.has("agenda.manage") ||
+          access.permissions.has("dashboard.view")
+        ) {
+          return true;
+        }
+      }
       return access.permissions.has(key);
     },
     [access],

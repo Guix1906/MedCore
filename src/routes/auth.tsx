@@ -7,13 +7,10 @@ import { authService, getStoredToken } from "@/services/api";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import {
   ArrowRight,
-  CalendarDays,
   Eye,
   EyeOff,
-  FileText,
   Loader2,
   ShieldCheck,
-  Users,
 } from "lucide-react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
@@ -278,55 +275,17 @@ function AuthPage() {
   return (
     <div className="auth-canvas grid min-h-dvh lg:grid-cols-2">
       <aside className="hidden flex-col justify-between p-12 lg:flex xl:p-16">
-        <BrandLogo />
-        <div className="mx-auto my-12 w-full max-w-lg">
-          <div className="mb-8">
-            <img
-              src="/assets/dr-jonatas-bandeira-logo.png"
-              alt="Dr. Jonatas Bandeira - Nutrologia"
-              className="h-24 w-auto object-contain select-none drop-shadow-xs transition-transform duration-300 hover:scale-105"
-            />
-          </div>
-          <p className="mb-4 text-sm font-semibold text-primary">Cuidado em cada detalhe</p>
-          <h2 className="text-4xl font-semibold leading-tight tracking-tight text-foreground xl:text-5xl">
-            Mais clareza para gerir.
-            <br />
-            Mais tempo para cuidar.
-          </h2>
-          <p className="mt-5 max-w-md text-lg leading-relaxed text-muted-foreground">
-            Agenda, prontuários e gestão conectados em um único ambiente de trabalho.
-          </p>
-          <div className="mt-10 space-y-5">
-            {[
-              {
-                icon: CalendarDays,
-                title: "Uma rotina organizada",
-                text: "Agendamentos e atendimentos sempre à mão.",
-              },
-              {
-                icon: FileText,
-                title: "O paciente no centro",
-                text: "Histórico clínico e acompanhamentos no mesmo lugar.",
-              },
-              {
-                icon: Users,
-                title: "Sua equipe conectada",
-                text: "Informações e acessos organizados por função.",
-              },
-            ].map(({ icon: Icon, title, text }) => (
-              <div key={title} className="flex items-start gap-4">
-                <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-hairline bg-card/70 text-primary shadow-(--glass-shadow)">
-                  <Icon size={20} aria-hidden="true" />
-                </span>
-                <div>
-                  <p className="text-base font-semibold text-foreground">{title}</p>
-                  <p className="mt-0.5 text-sm text-muted-foreground">{text}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+        <div />
+        <div className="mx-auto my-auto flex w-full max-w-xl flex-col items-center justify-center text-center">
+          <img
+            src="/assets/dr-jonatas-bandeira-logo.png"
+            alt="Dr. Jonatas Bandeira - Nutrologia"
+            className="w-full max-w-[460px] xl:max-w-[540px] object-contain select-none drop-shadow-md transition-transform duration-300 hover:scale-105"
+          />
         </div>
-        <p className="text-sm text-muted-foreground">MedCore · Consultório Dr. Jonatas Bandeira</p>
+        <p className="text-center text-sm text-muted-foreground">
+          MedCore · Consultório Dr. Jonatas Bandeira
+        </p>
       </aside>
       <main className="flex min-w-0 flex-col items-center justify-center px-4 py-8 sm:px-8 lg:py-12">
         <div className="w-full max-w-[440px] rounded-2xl border border-hairline bg-glass-strong p-6 shadow-(--glass-shadow-lg) glass-blur-strong sm:p-10">

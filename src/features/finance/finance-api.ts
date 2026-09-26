@@ -183,12 +183,17 @@ function normalizeFinancialSnapshot(
     } catch {}
   }
 
-  const existingTitleIds = new Set(raw.titles.map((t) => t.id));
-  const existingPaymentIds = new Set(raw.payments.map((p) => p.id));
-  const existingTxPaymentIds = new Set(raw.payments.map((p) => p.transaction_id));
+  const rawTitles: FinancialTitle[] = Array.isArray(raw?.titles) ? raw.titles : [];
+  const rawPayments: FinancialPayment[] = Array.isArray(raw?.payments) ? raw.payments : [];
+  const rawAccounts: FinancialAccount[] = Array.isArray(raw?.accounts) ? raw.accounts : [];
+  const rawScopes: any[] = Array.isArray(raw?.scopes) ? raw.scopes : [];
+
+  const existingTitleIds = new Set(rawTitles.map((t) => t.id));
+  const existingPaymentIds = new Set(rawPayments.map((p) => p.id));
+  const existingTxPaymentIds = new Set(rawPayments.map((p) => p.transaction_id));
 
   // 1. Merge baseline titles if database doesn't have them and they haven't been deleted
-  const mergedTitles = raw.titles.filter((t) => !deletedTitleIds.has(t.id));
+  const mergedTitles = rawTitles.filter((t) => !deletedTitleIds.has(t.id));
   BASELINE_TITLES.forEach((bt) => {
     if (!existingTitleIds.has(bt.id) && !deletedTitleIds.has(bt.id)) {
       mergedTitles.push(bt);
@@ -219,7 +224,7 @@ function normalizeFinancialSnapshot(
   });
 
   // 3. Merge baseline payments e pagamentos existentes
-  const mergedPayments = raw.payments.filter(
+  const mergedPayments = rawPayments.filter(
     (p) => !deletedTitleIds.has(p.id) && !deletedTitleIds.has(p.transaction_id)
   );
   BASELINE_PAYMENTS.forEach((bp) => {
@@ -410,8 +415,8 @@ function normalizeFinancialSnapshot(
   });
 
   // 5. Ensure accounts exist
-  const existingAccountNames = new Set(raw.accounts.map((a) => a.name.toLowerCase()));
-  const mergedAccounts = [...raw.accounts];
+  const existingAccountNames = new Set(rawAccounts.map((a) => (a.name ? a.name.toLowerCase() : "")));
+  const mergedAccounts = [...rawAccounts];
   DEFAULT_ACCOUNTS.forEach((da) => {
     if (!existingAccountNames.has(da.name.toLowerCase())) {
       mergedAccounts.push(da);
@@ -421,8 +426,8 @@ function normalizeFinancialSnapshot(
 
   // 6. Ensure scopes have full permissions
   const mergedScopes =
-    raw.scopes.length > 0
-      ? raw.scopes.map((s) => ({
+    rawScopes.length > 0
+      ? rawScopes.map((s) => ({
           ...s,
           can_create: true,
           can_pay: true,
@@ -448,66 +453,77 @@ function normalizeFinancialSnapshot(
 }
 
 export async function getFinancialSnapshot(): Promise<FinanceSnapshot> {
-  const { data, error } = await supabase.rpc("get_financial_snapshot");
-  if (error) {
-    console.warn("Aviso ao carregar financial snapshot via RPC, utilizando fallback seguro:", error);
-  }
-
-  let remoteEvents: any[] = [];
   try {
-    const { data: evts } = await supabase
-      .from("events")
-      .select("id, title, starts_at, description, patient_id, company_id, created_at")
-      .order("starts_at", { ascending: false })
-      .limit(100);
-    if (evts && Array.isArray(evts)) {
-      remoteEvents = evts;
+    const { data, error } = await supabase.rpc("get_financial_snapshot");
+    if (error) {
+      console.warn("Aviso ao carregar financial snapshot via RPC, utilizando fallback seguro:", error);
     }
-  } catch {}
 
-  const raw: FinanceSnapshot = data || {
-    titles: [],
-    payments: [],
-    accounts: [],
-    scopes: [],
-    patients: [],
-  };
-
-  // Se o snapshot remoto estiver vazio (ex: RPC indisponível ou RLS restrito), busca diretamente em public.transactions
-  if (!raw.titles.length) {
+    let remoteEvents: any[] = [];
     try {
-      const { data: txList } = await supabase
-        .from("transactions")
-        .select("id, type, amount, paid_amount, due_date, date, status, description, category, patient_id, payer_name, company_id, treatment_id, installment_id, competence_date, origin_key")
-        .is("deleted_at", null)
-        .order("date", { ascending: false })
+      const { data: evts } = await supabase
+        .from("events")
+        .select("id, title, starts_at, description, patient_id, company_id, created_at")
+        .order("starts_at", { ascending: false })
         .limit(100);
-      if (txList && Array.isArray(txList)) {
-        raw.titles = txList.map((t: any) => ({
-          ...t,
-          can_settle: true,
-          can_reverse: true,
-          can_cancel: true,
-        }));
+      if (evts && Array.isArray(evts)) {
+        remoteEvents = evts;
       }
     } catch {}
-  }
 
-  if (!raw.payments.length) {
-    try {
-      const { data: payList } = await supabase
-        .from("transaction_payments")
-        .select("id, transaction_id, amount, paid_on, payment_method, account_id, payer_name, created_by, created_at, legacy, reversed_at, reversed_by, reversal_reason")
-        .is("reversed_at", null)
-        .order("paid_on", { ascending: false })
-        .limit(100);
-      if (payList && Array.isArray(payList)) {
-        raw.payments = payList;
-      }
-    } catch {}
-  }
+    const raw: FinanceSnapshot = {
+      titles: Array.isArray(data?.titles) ? data.titles : [],
+      payments: Array.isArray(data?.payments) ? data.payments : [],
+      accounts: Array.isArray(data?.accounts) ? data.accounts : [],
+      scopes: Array.isArray(data?.scopes) ? data.scopes : [],
+      patients: Array.isArray(data?.patients) ? data.patients : [],
+    };
 
-  return normalizeFinancialSnapshot(raw, remoteEvents);
+    // Se o snapshot remoto estiver vazio (ex: RPC indisponível ou RLS restrito), busca diretamente em public.transactions
+    if (!raw.titles.length) {
+      try {
+        const { data: txList } = await supabase
+          .from("transactions")
+          .select("id, type, amount, paid_amount, due_date, date, status, description, category, patient_id, payer_name, company_id, treatment_id, installment_id, competence_date, origin_key")
+          .is("deleted_at", null)
+          .order("date", { ascending: false })
+          .limit(100);
+        if (txList && Array.isArray(txList)) {
+          raw.titles = txList.map((t: any) => ({
+            ...t,
+            can_settle: true,
+            can_reverse: true,
+            can_cancel: true,
+          }));
+        }
+      } catch {}
+    }
+
+    if (!raw.payments.length) {
+      try {
+        const { data: payList } = await supabase
+          .from("transaction_payments")
+          .select("id, transaction_id, amount, paid_on, payment_method, account_id, payer_name, created_by, created_at, legacy, reversed_at, reversed_by, reversal_reason")
+          .is("reversed_at", null)
+          .order("paid_on", { ascending: false })
+          .limit(100);
+        if (payList && Array.isArray(payList)) {
+          raw.payments = payList;
+        }
+      } catch {}
+    }
+
+    return normalizeFinancialSnapshot(raw, remoteEvents);
+  } catch (criticalErr) {
+    console.warn("Erro ao processar snapshot financeiro, fornecendo estado seguro:", criticalErr);
+    return normalizeFinancialSnapshot({
+      titles: [],
+      payments: [],
+      accounts: [],
+      scopes: [],
+      patients: [],
+    });
+  }
 }
 
 export async function getFinancialReportingRows() {
