@@ -256,6 +256,10 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
   const query = useQuery({
     queryKey: ["cash-flow-snapshot", scope],
     enabled: !!selectedScope,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("get_cash_flow_snapshot", {
         p_company_id: scope === "legacy" ? null : scope,
@@ -282,17 +286,28 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
     }
   }, [availableAccounts]);
 
-  // Sincronização em tempo real instantânea (0ms) ao criar agendamentos ou lançamentos
+  // Sincronização em tempo real instantânea (0ms) ao carregar ou criar agendamentos e lançamentos
   useEffect(() => {
+    void qc.invalidateQueries({ queryKey: ["financial-snapshot"], refetchType: "all" });
+    void qc.invalidateQueries({ queryKey: ["cash-flow-snapshot"], refetchType: "all" });
+
     const handleSync = () => {
-      void qc.invalidateQueries({ queryKey: ["financial-snapshot"] });
-      void qc.invalidateQueries({ queryKey: ["cash-flow-snapshot"] });
+      void qc.invalidateQueries({ queryKey: ["financial-snapshot"], refetchType: "all" });
+      void qc.invalidateQueries({ queryKey: ["cash-flow-snapshot"], refetchType: "all" });
+    };
+    const handleStorage = (e: StorageEvent) => {
+      if (!e.key || e.key.startsWith("medcore_")) {
+        void qc.invalidateQueries({ queryKey: ["financial-snapshot"], refetchType: "all" });
+        void qc.invalidateQueries({ queryKey: ["cash-flow-snapshot"], refetchType: "all" });
+      }
     };
     window.addEventListener("medcore_local_title_saved", handleSync);
     window.addEventListener("medcore_events_updated", handleSync);
+    window.addEventListener("storage", handleStorage);
     return () => {
       window.removeEventListener("medcore_local_title_saved", handleSync);
       window.removeEventListener("medcore_events_updated", handleSync);
+      window.removeEventListener("storage", handleStorage);
     };
   }, [qc]);
 
@@ -437,7 +452,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
           locallyDeleted.push({
             id: p.id,
             transaction_id: p.transaction_id,
-            date: p.paid_on || t?.due_date || t?.date || "2026-09-15",
+            date: p.paid_on || t?.due_date || t?.date || new Date().toISOString().slice(0, 10),
             description:
               t?.description ||
               (isIncome ? "Honorários - Ação de Cobrança – Entrada Paga" : "Pagamento realizado"),
@@ -471,7 +486,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
           locallyDeleted.push({
             id: t.id,
             transaction_id: t.id,
-            date: t.date || t.due_date || "2026-09-15",
+            date: t.date || t.due_date || new Date().toISOString().slice(0, 10),
             description:
               t.description ||
               (isIncome ? "Honorários - Ação de Cobrança – Entrada Paga" : "Pagamento realizado"),

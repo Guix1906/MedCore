@@ -492,7 +492,7 @@ function normalizeFinancialSnapshot(
       const safeAmount = Number.isFinite(amountNum) ? amountNum : 0;
       const safePaid = Number.isFinite(paidNum) ? paidNum : 0;
       const dateStr = t.date ? String(t.date).slice(0, 10) : "";
-      const dueStr = t.due_date ? String(t.due_date).slice(0, 10) : dateStr || "2026-09-15";
+      const dueStr = t.due_date ? String(t.due_date).slice(0, 10) : dateStr || new Date().toISOString().slice(0, 10);
 
       return {
         ...t,
@@ -524,7 +524,7 @@ function normalizeFinancialSnapshot(
     .map((p) => {
       const amountNum = Number(p.amount);
       const safeAmount = Number.isFinite(amountNum) ? amountNum : 0;
-      const paidOnStr = p.paid_on ? String(p.paid_on).slice(0, 10) : "2026-09-15";
+      const paidOnStr = p.paid_on ? String(p.paid_on).slice(0, 10) : new Date().toISOString().slice(0, 10);
 
       return {
         ...p,
@@ -634,6 +634,10 @@ export async function getFinancialReportingRows() {
 }
 
 export async function refreshFinance(qc: QueryClient) {
+  try {
+    qc.removeQueries({ queryKey: ["financial-snapshot"] });
+    qc.removeQueries({ queryKey: ["cash-flow-snapshot"] });
+  } catch {}
   await Promise.all(
     [
       "financial-snapshot",
@@ -647,6 +651,6 @@ export async function refreshFinance(qc: QueryClient) {
       "treatments-list",
       "dashboard",
       "reports-data",
-    ].map((key) => qc.invalidateQueries({ queryKey: [key] })),
+    ].map((key) => qc.invalidateQueries({ queryKey: [key], refetchType: "all" })),
   );
 }

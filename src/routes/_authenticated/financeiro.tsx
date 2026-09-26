@@ -47,7 +47,14 @@ function FinanceiroPage() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const queryClient = useQueryClient();
-  const query = useQuery({ queryKey: ["financial-snapshot"], queryFn: getFinancialSnapshot });
+  const query = useQuery({
+    queryKey: ["financial-snapshot"],
+    queryFn: getFinancialSnapshot,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+  });
   const [selected, setSelected] = useState("");
   const [creatingType, setCreating] = useState<"receita" | "despesa" | null>(null);
   const creating =
@@ -63,16 +70,25 @@ function FinanceiroPage() {
     void navigate({ search: { tab, novo: false }, replace: true });
   };
 
-  // Sincronização em tempo real instantânea (0ms) ao agendar ou salvar lançamentos
+  // Sincronização em tempo real instantânea (0ms) ao entrar na tela, agendar ou salvar lançamentos
   useEffect(() => {
+    void query.refetch();
+
     const handleSync = () => {
       void query.refetch();
     };
+    const handleStorage = (e: StorageEvent) => {
+      if (!e.key || e.key.startsWith("medcore_")) {
+        void query.refetch();
+      }
+    };
     window.addEventListener("medcore_local_title_saved", handleSync);
     window.addEventListener("medcore_events_updated", handleSync);
+    window.addEventListener("storage", handleStorage);
     return () => {
       window.removeEventListener("medcore_local_title_saved", handleSync);
       window.removeEventListener("medcore_events_updated", handleSync);
+      window.removeEventListener("storage", handleStorage);
     };
   }, [query]);
 
