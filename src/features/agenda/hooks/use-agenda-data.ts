@@ -6,7 +6,7 @@ import { qk } from "@/lib/query-keys";
 import { mergeWithLocalEvents } from "@/lib/local-events";
 import { toActivities, type RawDeadline, type RawEvent, type RawTask } from "../lib/normalize";
 
-const AGENDA_STALE_TIME = 10 * 60_000;
+const AGENDA_STALE_TIME = 0;
 const AGENDA_GC_TIME = 30 * 60_000;
 
 /**
@@ -24,11 +24,11 @@ export function useAgendaData(
   const tasksQ = useQuery({
     queryKey: [...qk.agendaLists.tasks(companyId), "all"] as const,
     enabled,
-    staleTime: AGENDA_STALE_TIME,
+    staleTime: 0,
     gcTime: AGENDA_GC_TIME,
     placeholderData: (prev) => prev,
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
     queryFn: async () => {
       try {
         const phpTasks = await agendaService.getTasks();
@@ -62,11 +62,11 @@ export function useAgendaData(
   const eventsQ = useQuery({
     queryKey: [...qk.agendaLists.events(companyId), "all"] as const,
     enabled,
-    staleTime: AGENDA_STALE_TIME,
+    staleTime: 0,
     gcTime: AGENDA_GC_TIME,
     placeholderData: (prev) => prev,
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
     queryFn: async () => {
       let rawList: RawEvent[] = [];
       let loadedFromPhp = false;
@@ -117,11 +117,11 @@ export function useAgendaData(
   const deadlinesQ = useQuery({
     queryKey: [...qk.agendaLists.deadlines(companyId), "all"] as const,
     enabled,
-    staleTime: AGENDA_STALE_TIME,
+    staleTime: 0,
     gcTime: AGENDA_GC_TIME,
     placeholderData: (prev) => prev,
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
     queryFn: async () => {
       try {
         const phpDeads = await agendaService.getDeadlines();
@@ -149,15 +149,24 @@ export function useAgendaData(
   });
 
   useEffect(() => {
-    if (!companyId || !userId) return;
-    const invTasks = () =>
-      qc.invalidateQueries({ queryKey: [...qk.agendaLists.tasks(companyId), "all"] });
-    const invEvents = () =>
-      qc.invalidateQueries({ queryKey: [...qk.agendaLists.events(companyId), "all"] });
-    const invDeads = () =>
-      qc.invalidateQueries({ queryKey: [...qk.agendaLists.deadlines(companyId), "all"] });
+    const invEvents = () => {
+      void qc.invalidateQueries({ queryKey: [...qk.agendaLists.events(companyId), "all"] });
+      void qc.invalidateQueries({ queryKey: ["agenda"] });
+      void qc.invalidateQueries({ queryKey: ["dashboard", "events-appointments"] });
+    };
 
     window.addEventListener("medcore_events_updated", invEvents);
+
+    if (!companyId || !userId) {
+      return () => {
+        window.removeEventListener("medcore_events_updated", invEvents);
+      };
+    }
+
+    const invTasks = () =>
+      qc.invalidateQueries({ queryKey: [...qk.agendaLists.tasks(companyId), "all"] });
+    const invDeads = () =>
+      qc.invalidateQueries({ queryKey: [...qk.agendaLists.deadlines(companyId), "all"] });
 
     const ch = supabase
       .channel(`agenda-${companyId}`)
@@ -177,6 +186,7 @@ export function useAgendaData(
         invDeads,
       )
       .subscribe();
+
     return () => {
       window.removeEventListener("medcore_events_updated", invEvents);
       supabase.removeChannel(ch);

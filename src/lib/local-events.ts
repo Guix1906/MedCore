@@ -6,9 +6,32 @@
 import type { RawEvent } from "@/features/agenda/lib/normalize";
 
 const STORAGE_KEY = "medcore_local_events";
+const PURGE_KEY = "medcore_events_purged_v2";
+
+// Purga única de agendamentos e movimentações de teste residuais anteriores
+if (typeof window !== "undefined") {
+  try {
+    if (!localStorage.getItem(PURGE_KEY)) {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem("medcore_local_titles");
+      localStorage.removeItem("medcore_local_payments");
+      localStorage.setItem(PURGE_KEY, "true");
+    }
+  } catch {}
+}
 
 interface StoredLocalEvent extends RawEvent {
   company_id?: string | null;
+}
+
+export function clearAllStoredLocalEvents(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    window.dispatchEvent(new CustomEvent("medcore_events_updated", { detail: [] }));
+  } catch (e) {
+    console.error("Erro ao limpar eventos locais:", e);
+  }
 }
 
 export function getStoredLocalEvents(companyId?: string | null): RawEvent[] {
