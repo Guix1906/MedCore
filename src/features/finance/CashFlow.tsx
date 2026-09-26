@@ -81,7 +81,7 @@ import {
   localDate,
   moneyCents,
 } from "@/features/acompanhamentos/followup-utils";
-import { refreshFinance } from "./finance-api";
+import { refreshFinance, extractEventId, getTitleEventKey } from "./finance-api";
 import { remaining } from "./finance-math";
 import { cashFlow } from "./cash-flow-math";
 import type { CashAccount, CashFlowSnapshot } from "./cash-flow-schema";
@@ -319,10 +319,28 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
 
     const result = [];
     const handledTitleIds = new Set<string>();
+    const handledEventKeys = new Set<string>();
 
     for (const p of payments) {
-      const t = titles.find((title) => title.id === p.transaction_id);
-      if (t) handledTitleIds.add(t.id);
+      const t = titles.find((title) => {
+        if (title.id === p.transaction_id) return true;
+        const pEv = extractEventId(p.id) || extractEventId(p.transaction_id);
+        const tEv = extractEventId(title.origin_key) || extractEventId(title.id);
+        if (pEv && tEv && pEv === tEv) return true;
+        return false;
+      });
+
+      if (t) {
+        handledTitleIds.add(t.id);
+        if (t.origin_key) handledTitleIds.add(t.origin_key);
+      }
+      if (p.transaction_id) handledTitleIds.add(p.transaction_id);
+
+      const evKey =
+        extractEventId(p.id) ||
+        extractEventId(p.transaction_id) ||
+        (t ? extractEventId(t.origin_key) || extractEventId(t.id) : null);
+      if (evKey) handledEventKeys.add(evKey);
 
       const isExpense = t?.type === "despesa";
       const isIncome = !isExpense;
@@ -355,11 +373,18 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
           ? "Honorários Iniciais / sinal"
           : "Despesas Gerais";
 
+      // A data de movimentação de caixa é quando foi pago (paid_on ou data do lançamento), NUNCA o vencimento futuro
+      const payDate =
+        p.paid_on ||
+        (p.created_at ? p.created_at.slice(0, 10) : "") ||
+        t?.date ||
+        new Date().toISOString().slice(0, 10);
+
       result.push({
         id: p.id,
         transaction_id: p.transaction_id,
         created_at: p.created_at || (t as any)?.created_at || new Date().toISOString(),
-        date: p.paid_on || t?.due_date || t?.date || new Date().toISOString().slice(0, 10),
+        date: payDate,
         description: t?.description || defaultDesc,
         category: t?.category || defaultCat,
         client_name: t?.patient_name || p.payer_name || t?.payer_name || "Avulso",
@@ -379,55 +404,100 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       });
     }
 
-    // Inclui títulos com status 'pago' ou com valor pago registrado que ainda não estejam em payments
-    // E também inclui títulos de agendamentos para refletir instantaneamente todo valor inserido na agenda
+    // Apenas inclui títulos que foram efetivamente quitados e que ainda NÃO estejam em payments.
+    // Títulos pendentes (como os R$ 400 restantes) pertencem a Contas a Receber, NÃO ao Fluxo de Caixa.
     for (const t of titles) {
+      const evKey = extractEventId(t?.origin_key) || extractEventId(t?.id);
+      if (
+        handledTitleIds.has(t.id) ||
+        (t.origin_key && handledTitleIds.has(t.origin_key)) ||
+        (evKey && handledEventKeys.has(evKey))
+      ) {
+        continue;
+      }
+
+      // IMPORTANTE: Fluxo de Caixa exibe APENAS valores REALIZADOS/PAGOS!
+      const hasPaid = t.status === "pago" || Number(t.paid_amount || 0) > 0;
+      if (!hasPaid) {
+        continue;
+      }
+
       const isAgendamentoTitle =
         Boolean(t?.origin_key && String(t.origin_key).startsWith("event:")) ||
         Boolean(t?.id && String(t.id).startsWith("evt-")) ||
         (t?.category || "").toLowerCase().includes("atendimento");
 
-      const hasPaid = t.status === "pago" || Number(t.paid_amount || 0) > 0;
-      const shouldInclude = (hasPaid || isAgendamentoTitle) && !handledTitleIds.has(t.id);
+      const isExpense = t.type === "despesa";
+      const isIncome = !isExpense;
+      const accountObj = accounts.find((a) => a.company_id === t.company_id) || accounts[0];
+      const effectiveAmount = Number(t.paid_amount > 0 ? t.paid_amount : t.amount);
 
-      if (shouldInclude) {
-        const isExpense = t.type === "despesa";
-        const isIncome = !isExpense;
-        const accountObj = accounts.find((a) => a.company_id === t.company_id) || accounts[0];
-        const effectiveAmount = Number(t.paid_amount > 0 ? t.paid_amount : t.amount);
+      result.push({
+        id: `title-pay-${t.id}`,
+        transaction_id: t.id,
+        created_at: (t as any).created_at || new Date().toISOString(),
+        date: t.date || (t as any).created_at?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+        description:
+          t.description ||
+          (isAgendamentoTitle
+            ? `Agendamento - ${t.patient_name || t.payer_name || "Paciente"}`
+            : isIncome
+              ? "Honorários - Ação de Cobrança – Entrada Paga"
+              : "Pagamento realizado"),
+        category:
+          t.category ||
+          (isAgendamentoTitle
+            ? "Atendimentos"
+            : isIncome
+              ? "Honorários Iniciais / sinal"
+              : "Despesas Gerais"),
+        client_name: t.patient_name || t.payer_name || "Avulso",
+        payment_method: "PIX",
+        payment_account: accountObj?.name || accounts[0]?.name || "BANCO DO BRASIL",
+        account_id: accountObj?.id || accounts[0]?.id || "00000000-0000-0000-0000-000000000001",
+        company_id: t.company_id || null,
+        type: t.type as "receita" | "despesa",
+        is_expense: isExpense,
+        amount: effectiveAmount,
+        paid_amount: effectiveAmount,
+        status: "pago" as const,
+        reversed_at: null,
+        reversal_reason: null,
+        badgeLabel: isAgendamentoTitle ? "AGENDAMENTO" : t.treatment_id ? "PLANO" : "MANUAL",
+        title: t,
+      });
 
-        result.push({
-          id: `title-pay-${t.id}`,
-          transaction_id: t.id,
-          created_at: (t as any).created_at || new Date().toISOString(),
-          date: t.date || t.due_date || new Date().toISOString().slice(0, 10),
-          description:
-            t.description ||
-            (isAgendamentoTitle
-              ? `Agendamento - ${t.patient_name || t.payer_name || "Paciente"}`
-              : isIncome
-                ? "Honorários - Ação de Cobrança – Entrada Paga"
-                : "Pagamento realizado"),
-          category: t.category || (isAgendamentoTitle ? "Atendimentos" : (isIncome ? "Honorários Iniciais / sinal" : "Despesas Gerais")),
-          client_name: t.patient_name || t.payer_name || "Avulso",
-          payment_method: "PIX",
-          payment_account: accountObj?.name || accounts[0]?.name || "BANCO DO BRASIL",
-          account_id: accountObj?.id || accounts[0]?.id || "00000000-0000-0000-0000-000000000001",
-          company_id: t.company_id || null,
-          type: t.type as "receita" | "despesa",
-          is_expense: isExpense,
-          amount: effectiveAmount,
-          paid_amount: effectiveAmount,
-          status: "pago" as const,
-          reversed_at: null,
-          reversal_reason: null,
-          badgeLabel: isAgendamentoTitle ? "AGENDAMENTO" : (t.treatment_id ? "PLANO" : "MANUAL"),
-          title: t,
-        });
-      }
+      handledTitleIds.add(t.id);
+      if (t.origin_key) handledTitleIds.add(t.origin_key);
+      if (evKey) handledEventKeys.add(evKey);
     }
 
-    return result.filter(
+    // Deduplicação estrita: nenhum agendamento pode ter múltiplos lançamentos de sinal duplicados
+    const seenPayIds = new Set<string>();
+    const seenEventKeys = new Set<string>();
+    const finalResult = [];
+
+    for (const e of result) {
+      if (seenPayIds.has(e.id)) continue;
+      seenPayIds.add(e.id);
+
+      const evKey =
+        extractEventId(e.id) ||
+        extractEventId(e.transaction_id) ||
+        extractEventId(e.title?.origin_key) ||
+        extractEventId(e.title?.id);
+
+      if (evKey && !e.reversed_at) {
+        if (seenEventKeys.has(evKey)) {
+          // Já existe um lançamento de sinal para este agendamento! Ignora duplicata!
+          continue;
+        }
+        seenEventKeys.add(evKey);
+      }
+      finalResult.push(e);
+    }
+
+    return finalResult.filter(
       (e) =>
         !deletedEntryIds.includes(e.id) &&
         !deletedEntryIds.includes(e.transaction_id) &&

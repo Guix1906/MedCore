@@ -1014,7 +1014,7 @@ export function NovoAgendamentoDialog({
       // Salva título financeiro e entrada de caixa localmente para disponibilidade imediata (0ms)
       if ((type === "atendimento" || totalAmt > 0 || sinalAmt > 0) && !isIncludedInPlan && (totalAmt > 0 || sinalAmt > 0)) {
         const effectiveAmount = totalAmt > 0 ? totalAmt : sinalAmt;
-        const effectivePayment = sinalAmt > 0 ? sinalAmt : effectiveAmount;
+        const effectivePayment = sinalAmt > 0 ? sinalAmt : 0;
 
         saveLocalFinancialTitle({
           id: `evt-${insertedId}`,
@@ -1024,7 +1024,7 @@ export function NovoAgendamentoDialog({
           due_date: day,
           date: todayStr,
           competence_date: day.slice(0, 7) + "-01",
-          status: effectivePayment >= effectiveAmount ? "pago" : "pendente",
+          status: effectivePayment >= effectiveAmount && effectiveAmount > 0 ? "pago" : "pendente",
           description: finalTitle,
           category: "Atendimentos",
           patient_id: validPatientId || clientId || null,
@@ -1040,21 +1040,23 @@ export function NovoAgendamentoDialog({
           created_at: new Date().toISOString(),
         } as any);
 
-        saveLocalPayment({
-          id: `pay-evt-${insertedId}`,
-          transaction_id: `evt-${insertedId}`,
-          amount: effectivePayment,
-          paid_on: todayStr,
-          payment_method: (downPaymentMethod || "pix").toUpperCase(),
-          account_id: "00000000-0000-0000-0000-000000000001",
-          payer_name: clientDisplayName,
-          created_by: null,
-          created_at: new Date().toISOString(),
-          legacy: false,
-          reversed_at: null,
-          reversed_by: null,
-          reversal_reason: null,
-        });
+        if (effectivePayment > 0) {
+          saveLocalPayment({
+            id: `pay-evt-${insertedId}`,
+            transaction_id: `evt-${insertedId}`,
+            amount: effectivePayment,
+            paid_on: todayStr,
+            payment_method: (downPaymentMethod || "pix").toUpperCase(),
+            account_id: "00000000-0000-0000-0000-000000000001",
+            payer_name: clientDisplayName,
+            created_by: null,
+            created_at: new Date().toISOString(),
+            legacy: false,
+            reversed_at: null,
+            reversed_by: null,
+            reversal_reason: null,
+          });
+        }
       }
 
       // Notifica em tempo real com 0ms de latência
