@@ -51,11 +51,18 @@ export const Route = createFileRoute("/auth")({
   }),
   head: () => ({
     meta: [
-      { title: "Acesse sua conta • MedCore" },
+      { title: "Acesse sua conta • Dr. Jonatas Bandeira • MedCore" },
       {
         name: "description",
         content:
-          "Agenda, pacientes e gestão da sua clínica em um só lugar. Acesse sua conta MedCore.",
+          "Agenda, prontuários e acompanhamentos clínicos do consultório Dr. Jonatas Bandeira.",
+      },
+    ],
+    links: [
+      {
+        rel: "preload",
+        as: "image",
+        href: "/assets/dr-jonatas-bandeira-logo.png",
       },
     ],
   }),
@@ -273,6 +280,13 @@ function AuthPage() {
       <aside className="hidden flex-col justify-between p-12 lg:flex xl:p-16">
         <BrandLogo />
         <div className="mx-auto my-12 w-full max-w-lg">
+          <div className="mb-8">
+            <img
+              src="/assets/dr-jonatas-bandeira-logo.png"
+              alt="Dr. Jonatas Bandeira - Nutrologia"
+              className="h-24 w-auto object-contain select-none drop-shadow-xs transition-transform duration-300 hover:scale-105"
+            />
+          </div>
           <p className="mb-4 text-sm font-semibold text-primary">Cuidado em cada detalhe</p>
           <h2 className="text-4xl font-semibold leading-tight tracking-tight text-foreground xl:text-5xl">
             Mais clareza para gerir.
@@ -312,13 +326,17 @@ function AuthPage() {
             ))}
           </div>
         </div>
-        <p className="text-sm text-muted-foreground">MedCore · Gestão clínica</p>
+        <p className="text-sm text-muted-foreground">MedCore · Consultório Dr. Jonatas Bandeira</p>
       </aside>
       <main className="flex min-w-0 flex-col items-center justify-center px-4 py-8 sm:px-8 lg:py-12">
         <div className="w-full max-w-[440px] rounded-2xl border border-hairline bg-glass-strong p-6 shadow-(--glass-shadow-lg) glass-blur-strong sm:p-10">
           <div className="mb-7">
             <div className="mb-6 flex items-center justify-between">
-              <BrandLogo size="large" />
+              <img
+                src="/assets/dr-jonatas-bandeira-logo.png"
+                alt="Dr. Jonatas Bandeira - Nutrologia"
+                className="h-14 w-auto max-w-[200px] object-contain select-none drop-shadow-xs transition-transform duration-300 hover:scale-105"
+              />
               <div className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
                 <ShieldCheck size={20} aria-hidden="true" />
               </div>
