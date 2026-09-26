@@ -116,17 +116,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
   const [showChart, setShowChart] = useState<boolean>(true);
 
   // Período (Navegação mensal pelo Stepper do cabeçalho)
-  const [currentMonthDate, setCurrentMonthDate] = useState(() => {
-    const now = new Date();
-    const currentMonthStr = format(now, "yyyy-MM");
-    const hasCurrentMonthEntries = (finance.payments || []).some((p) =>
-      (p.paid_on || "").startsWith(currentMonthStr),
-    );
-    if (!hasCurrentMonthEntries) {
-      return new Date(2026, 8, 15);
-    }
-    return now;
-  });
+  const [currentMonthDate, setCurrentMonthDate] = useState(() => new Date());
 
   const start = useMemo(
     () => format(startOfMonth(currentMonthDate), "yyyy-MM-dd"),

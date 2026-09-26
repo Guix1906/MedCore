@@ -187,20 +187,13 @@ export function GraficoFluxoDeCaixa({ entries = [], customChartData }: GraficoFl
                 bar: { columnWidth: "40%", borderRadius: 3, borderRadiusApplication: "end" },
               },
               xaxis: { categories: chartData.map((d) => d.date) },
-              yaxis: [
-                { seriesName: "Entradas", labels: { formatter: compactValue } },
-                { seriesName: "Entradas", show: false },
-                {
-                  seriesName: "Resultado acumulado",
-                  opposite: true,
-                  labels: { formatter: compactValue },
-                },
-              ],
+              yaxis: {
+                labels: { formatter: compactValue },
+              },
               annotations: {
                 yaxis: [
                   {
                     y: maxVolume,
-                    yAxisIndex: 0,
                     borderColor: CHART_COLORS.neutral,
                     strokeDashArray: 3,
                     opacity: 0.6,
