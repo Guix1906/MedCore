@@ -21,6 +21,7 @@ import { CountUp } from "@/components/finance/CountUp";
 import { currency, formatClinicalDate } from "@/features/acompanhamentos/followup-utils";
 import { remaining } from "./finance-math";
 import type { FinanceSnapshot, FinancialTitle } from "./finance-schema";
+import { isRecordWiped } from "@/lib/wipe-system";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/ui-app/StatusBadge";
 import { AlertCircle, Clock3 } from "lucide-react";
@@ -51,7 +52,7 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
   // Filtra todas as despesas ativas do sistema
   const despesas = useMemo(() => {
     return (finance?.titles || []).filter((t) => {
-      if (t.status === "cancelado") return false;
+      if (t.status === "cancelado" || isRecordWiped(t)) return false;
       return t.type === "despesa";
     });
   }, [finance?.titles]);

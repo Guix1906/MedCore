@@ -1,4 +1,5 @@
 import type { FinanceSnapshot, FinancialTitle } from "./finance-schema";
+import { isRecordWiped } from "@/lib/wipe-system";
 
 export const cents = (value: number | string | null | undefined): number => {
   if (value === null || value === undefined) return 0;
@@ -47,23 +48,23 @@ export function financialSummary(
   accountId = "",
 ) {
   const within = (date?: string | null) => (!date ? false : (!start || date >= start) && (!end || date <= end));
-  const safeTitles = Array.isArray(titles) ? titles : [];
-  const safePayments = Array.isArray(data?.payments) ? data.payments : [];
+  const safeTitles = (Array.isArray(titles) ? titles : []).filter((t) => !isRecordWiped(t));
+  const safePayments = (Array.isArray(data?.payments) ? data.payments : []).filter((p) => !isRecordWiped(p));
   const byId = new Map(safeTitles.map((t) => [t.id, t]));
   let income = 0,
     expense = 0,
     receivable = 0,
     payable = 0;
   for (const p of safePayments) {
-    if (!p) continue;
+    if (!p || isRecordWiped(p)) continue;
     const title = byId.get(p.transaction_id);
-    if (!title || p.reversed_at || !within(p.paid_on) || (accountId && p.account_id !== accountId))
+    if (!title || title.status === "cancelado" || isRecordWiped(title) || p.reversed_at || !within(p.paid_on) || (accountId && p.account_id !== accountId))
       continue;
     if (title.type === "receita") income += cents(p.amount);
     else expense += cents(p.amount);
   }
   for (const t of safeTitles) {
-    if (!t || t.status === "cancelado") continue;
+    if (!t || t.status === "cancelado" || isRecordWiped(t)) continue;
     if (isFreeBalance(t)) {
       // Saldo livre compõe o total a receber da clínica, mas não é projetado em um mês específico quando há filtro de período (start/end)
       if (start || end) continue;
@@ -106,15 +107,22 @@ export function reportingRows(data: FinanceSnapshot) {
     } catch {}
   }
 
-  const safeTitles = Array.isArray(data?.titles) ? data.titles : [];
-  const safePayments = Array.isArray(data?.payments) ? data.payments : [];
+  const safeTitles = (Array.isArray(data?.titles) ? data.titles : []).filter(
+    (t) => !isRecordWiped(t) && !deletedIds.has(t.id),
+  );
+  const safePayments = (Array.isArray(data?.payments) ? data.payments : []).filter(
+    (p) =>
+      !isRecordWiped(p) &&
+      !deletedIds.has(p.id) &&
+      !deletedIds.has(p.transaction_id),
+  );
 
   const byId = new Map(safeTitles.map((t) => [t.id, t]));
   const handledTitleIds = new Set<string>();
 
   const paid = safePayments
     .filter((p) => {
-      if (!p || p.reversed_at) return false;
+      if (!p || p.reversed_at || isRecordWiped(p)) return false;
       if (deletedIds.has(p.id) || deletedIds.has(p.transaction_id)) return false;
       return true;
     })
@@ -135,7 +143,7 @@ export function reportingRows(data: FinanceSnapshot) {
 
   const syntheticPaid: any[] = [];
   safeTitles.forEach((t) => {
-    if (!t || deletedIds.has(t.id) || deletedIds.has(`title-pay-${t.id}`)) return;
+    if (!t || isRecordWiped(t) || deletedIds.has(t.id) || deletedIds.has(`title-pay-${t.id}`)) return;
     if (t.status === "cancelado") return;
     if ((t.status === "pago" || Number(t.paid_amount || 0) > 0) && !handledTitleIds.has(t.id)) {
       handledTitleIds.add(t.id);
@@ -154,7 +162,7 @@ export function reportingRows(data: FinanceSnapshot) {
 
   const pending = safeTitles
     .filter((t) => {
-      if (deletedIds.has(t.id) || deletedIds.has(`title-pay-${t.id}`)) return false;
+      if (isRecordWiped(t) || deletedIds.has(t.id) || deletedIds.has(`title-pay-${t.id}`)) return false;
       if (t.status === "cancelado") return false;
       return remaining(t) > 0;
     })

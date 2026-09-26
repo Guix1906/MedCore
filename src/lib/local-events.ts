@@ -4,127 +4,23 @@
  */
 
 import type { RawEvent } from "@/features/agenda/lib/normalize";
-import { supabase } from "@/integrations/supabase/client";
+import { isRecordWiped, performFullSystemWipe } from "./wipe-system";
+
+export { isRecordWiped, performFullSystemWipe } from "./wipe-system";
 
 const STORAGE_KEY = "medcore_local_events";
-const AUTO_WIPE_KEY = "medcore_system_clean_reset_v2026_09_26_final_1";
 
 /**
  * Exclui absolutamente todos os agendamentos e movimentações de teste existentes
  * (banco Supabase e localStorage), zerando o sistema integralmente.
  */
 export async function wipeAllAppointments(): Promise<void> {
-  if (typeof window === "undefined") return;
-  try {
-    // 1. Limpa todas as chaves locais do MedCore
-    const storageKeys = [
-      STORAGE_KEY,
-      "medcore_local_titles",
-      "medcore_local_payments",
-      "medcore_deleted_titles",
-      "medcore_deleted_cash_entries",
-      "medcore_events_purged_v2",
-      "medcore_wipe_all_events_v2026_09_final",
-      "medcore_wipe_all_events_v2026_09_final_done",
-    ];
-    storageKeys.forEach((key) => {
-      try {
-        localStorage.removeItem(key);
-      } catch {}
-    });
-
-    // Remove qualquer chave residual dinâmica
-    try {
-      for (let i = localStorage.length - 1; i >= 0; i--) {
-        const k = localStorage.key(i);
-        if (
-          k &&
-          (k.startsWith("medcore_event_") ||
-            k.startsWith("medcore_appt_") ||
-            k.startsWith("medcore_title_") ||
-            k.startsWith("medcore_pay_"))
-        ) {
-          localStorage.removeItem(k);
-        }
-      }
-    } catch {}
-
-    // 2. Tenta zerar via RPC transacional com privilégios de segurança
-    try {
-      const { data: rpcRes, error: rpcErr } = await supabase.rpc("reset_all_system_test_data");
-      if (!rpcErr) {
-        console.info("RPC reset_all_system_test_data executada com sucesso:", rpcRes);
-      }
-    } catch {}
-
-    // 3. Limpeza direta e irrestrita nas tabelas do Supabase (fallback ativo)
-    try {
-      await (supabase as any)
-        .from("transaction_payments")
-        .delete()
-        .neq("id", "00000000-0000-0000-0000-000000000000");
-    } catch (err) {
-      console.warn("Aviso ao limpar transaction_payments no Supabase:", err);
-    }
-
-    try {
-      await (supabase as any)
-        .from("transactions")
-        .delete()
-        .neq("id", "00000000-0000-0000-0000-000000000000");
-    } catch (err) {
-      console.warn("Aviso ao limpar transactions no Supabase:", err);
-    }
-
-    try {
-      await supabase.from("events").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-    } catch (err) {
-      console.warn("Aviso ao limpar events no Supabase:", err);
-    }
-
-    try {
-      await supabase.from("appointments").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-    } catch (err) {
-      console.warn("Aviso ao limpar appointments no Supabase:", err);
-    }
-
-    try {
-      await (supabase as any)
-        .from("financial_titles")
-        .delete()
-        .neq("id", "00000000-0000-0000-0000-000000000000");
-    } catch {}
-
-    try {
-      await (supabase as any)
-        .from("financial_payments")
-        .delete()
-        .neq("id", "00000000-0000-0000-0000-000000000000");
-    } catch {}
-
-    // 4. Emite eventos para notificar todas as telas do sistema e forçar refetch imediato
-    window.dispatchEvent(new CustomEvent("medcore_events_updated", { detail: [] }));
-    window.dispatchEvent(new CustomEvent("medcore_local_title_saved"));
-    window.dispatchEvent(new CustomEvent("medcore_system_wiped"));
-  } catch (e) {
-    console.error("Erro ao zerar dados do sistema:", e);
-  }
-}
-
-// Purga automática inicial para zerar todos os agendamentos e movimentações de teste residuais
-if (typeof window !== "undefined") {
-  try {
-    if (!localStorage.getItem(AUTO_WIPE_KEY)) {
-      localStorage.setItem(AUTO_WIPE_KEY, "true");
-      setTimeout(() => {
-        void wipeAllAppointments();
-      }, 0);
-    }
-  } catch {}
+  await performFullSystemWipe();
 }
 
 interface StoredLocalEvent extends RawEvent {
   company_id?: string | null;
+  created_at?: string;
 }
 
 export function clearAllStoredLocalEvents(): void {
@@ -144,7 +40,7 @@ export function getStoredLocalEvents(companyId?: string | null): RawEvent[] {
     if (!raw) return [];
     const list: StoredLocalEvent[] = JSON.parse(raw);
     if (!Array.isArray(list)) return [];
-    return list;
+    return list.filter((e) => !isRecordWiped(e));
   } catch {
     return [];
   }
@@ -156,6 +52,7 @@ export function saveStoredLocalEvent(event: RawEvent, companyId?: string | null)
     const current: StoredLocalEvent[] = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
     const itemToSave: StoredLocalEvent = {
       ...event,
+      created_at: (event as any).created_at || new Date().toISOString(),
       company_id: companyId || event.case_id || null,
     };
     const exists = current.some((e) => e.id === event.id);
@@ -212,6 +109,7 @@ export function updateStoredLocalEventTimes(
           location: null,
           assigned_to: null,
           case_id: null,
+          created_at: new Date().toISOString(),
         },
         ...current,
       ];
@@ -227,11 +125,14 @@ export function mergeWithLocalEvents(
   remoteEvents: RawEvent[],
   companyId?: string | null,
 ): RawEvent[] {
+  const safeRemote = (Array.isArray(remoteEvents) ? remoteEvents : []).filter(
+    (e) => !isRecordWiped(e),
+  );
   const local = getStoredLocalEvents(companyId);
-  if (!local.length) return remoteEvents;
+  if (!local.length) return safeRemote;
 
   const map = new Map<string, RawEvent>();
-  remoteEvents.forEach((e) => {
+  safeRemote.forEach((e) => {
     if (e?.id) map.set(e.id, e);
   });
   local.forEach((e) => {
@@ -241,5 +142,5 @@ export function mergeWithLocalEvents(
     }
   });
 
-  return Array.from(map.values());
+  return Array.from(map.values()).filter((e) => !isRecordWiped(e));
 }

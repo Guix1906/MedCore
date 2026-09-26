@@ -13,6 +13,7 @@ import { reportingRows } from "@/features/finance/finance-math";
 import { useResolvedTheme } from "@/hooks/use-theme";
 import { supabase } from "@/integrations/supabase/client";
 import { getStoredLocalEvents, wipeAllAppointments } from "@/lib/local-events";
+import { isRecordWiped } from "@/lib/wipe-system";
 import { mergeWithLocalPatients } from "@/lib/local-patients";
 import { calcCashFlow } from "@/lib/finance";
 import { agendaService, companyService, patientsService } from "@/services/api";
@@ -184,7 +185,7 @@ function DashboardPage() {
 
   // Purga única inicial para zerar todos os agendamentos e movimentações de teste anteriores
   useEffect(() => {
-    const WIPE_FLAG = "medcore_system_clean_reset_v2026_09_26_final_1_done";
+    const WIPE_FLAG = "medcore_system_wipe_executed_v5";
     if (typeof window !== "undefined" && !localStorage.getItem(WIPE_FLAG)) {
       localStorage.setItem(WIPE_FLAG, "true");
       void wipeAllAppointments().then(() => {
@@ -210,7 +211,7 @@ function DashboardPage() {
       if (rawList.length === 0) {
         const { data } = await supabase
           .from("events")
-          .select("id, title, description, starts_at, ends_at, assigned_to, case_id")
+          .select("id, title, description, starts_at, ends_at, assigned_to, case_id, created_at")
           .order("starts_at", { ascending: true });
         if (data && Array.isArray(data)) {
           rawList = data;
@@ -221,16 +222,16 @@ function DashboardPage() {
       const localEvents = getStoredLocalEvents();
       const eventMap = new Map<string, any>();
       rawList.forEach((e) => {
-        if (e?.id) eventMap.set(e.id, e);
+        if (e?.id && !isRecordWiped(e)) eventMap.set(e.id, e);
       });
       localEvents.forEach((le) => {
-        if (le?.id) {
+        if (le?.id && !isRecordWiped(le)) {
           const existing = eventMap.get(le.id);
           eventMap.set(le.id, existing ? { ...existing, ...le } : le);
         }
       });
 
-      const allMerged = Array.from(eventMap.values());
+      const allMerged = Array.from(eventMap.values()).filter((e) => !isRecordWiped(e));
 
       return allMerged.map((e) => {
         const meta = parseMeta(e.description);

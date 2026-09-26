@@ -3,6 +3,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { reportingRows } from "./finance-math";
 import type { FinanceSnapshot, FinancialTitle, FinancialPayment, FinancialAccount } from "./finance-schema";
 import { getStoredLocalEvents } from "@/lib/local-events";
+import { isRecordWiped, addSuppressedIds } from "@/lib/wipe-system";
 
 // Demonstração ou títulos base desabilitados para refletir 100% os dados reais cadastrados pelo usuário
 const BASELINE_TITLES: FinancialTitle[] = [];
@@ -36,7 +37,7 @@ export function getLocalTitles(): FinancialTitle[] {
     const raw = localStorage.getItem(STORAGE_KEY_LOCAL_TITLES);
     if (!raw) return [];
     const list = JSON.parse(raw);
-    return Array.isArray(list) ? list : [];
+    return Array.isArray(list) ? list.filter((t) => !isRecordWiped(t)) : [];
   } catch {
     return [];
   }
@@ -46,8 +47,12 @@ export function saveLocalFinancialTitle(title: FinancialTitle): void {
   if (typeof window === "undefined" || !window.localStorage) return;
   try {
     const current = getLocalTitles();
+    const itemToSave = {
+      ...title,
+      created_at: (title as any).created_at || new Date().toISOString(),
+    };
     const next = [
-      title,
+      itemToSave,
       ...current.filter((t) => t.id !== title.id && (!title.origin_key || t.origin_key !== title.origin_key)),
     ];
     localStorage.setItem(STORAGE_KEY_LOCAL_TITLES, JSON.stringify(next));
@@ -62,7 +67,7 @@ export function getLocalPayments(): FinancialPayment[] {
     const raw = localStorage.getItem(STORAGE_KEY_LOCAL_PAYMENTS);
     if (!raw) return [];
     const list = JSON.parse(raw);
-    return Array.isArray(list) ? list : [];
+    return Array.isArray(list) ? list.filter((p) => !isRecordWiped(p)) : [];
   } catch {
     return [];
   }
@@ -72,7 +77,11 @@ export function saveLocalPayment(payment: FinancialPayment): void {
   if (typeof window === "undefined" || !window.localStorage) return;
   try {
     const current = getLocalPayments();
-    const next = [payment, ...current.filter((p) => p.id !== payment.id)];
+    const itemToSave = {
+      ...payment,
+      created_at: payment.created_at || new Date().toISOString(),
+    };
+    const next = [itemToSave, ...current.filter((p) => p.id !== payment.id)];
     localStorage.setItem(STORAGE_KEY_LOCAL_PAYMENTS, JSON.stringify(next));
   } catch (e) {
     console.error("Erro ao salvar pagamento local:", e);
@@ -102,6 +111,7 @@ export function reverseLocalPayment(paymentId: string, reason: string): void {
 export function deleteLocalFinancialTitle(idOrOriginKey: string): void {
   if (typeof window === "undefined" || !window.localStorage) return;
   try {
+    addSuppressedIds([idOrOriginKey]);
     const current = getLocalTitles();
     const next = current.filter(
       (t) =>
@@ -119,6 +129,7 @@ export function deleteLocalFinancialTitle(idOrOriginKey: string): void {
 export function deleteLocalPayment(paymentId: string): void {
   if (typeof window === "undefined" || !window.localStorage) return;
   try {
+    addSuppressedIds([paymentId]);
     const current = getLocalPayments();
     const next = current.filter((p) => p.id !== paymentId && p.transaction_id !== paymentId);
     localStorage.setItem(STORAGE_KEY_LOCAL_PAYMENTS, JSON.stringify(next));
@@ -183,8 +194,15 @@ function normalizeFinancialSnapshot(
     } catch {}
   }
 
-  const rawTitles: FinancialTitle[] = Array.isArray(raw?.titles) ? raw.titles : [];
-  const rawPayments: FinancialPayment[] = Array.isArray(raw?.payments) ? raw.payments : [];
+  const rawTitles: FinancialTitle[] = (Array.isArray(raw?.titles) ? raw.titles : []).filter(
+    (t) => !isRecordWiped(t) && !deletedTitleIds.has(t.id),
+  );
+  const rawPayments: FinancialPayment[] = (Array.isArray(raw?.payments) ? raw.payments : []).filter(
+    (p) =>
+      !isRecordWiped(p) &&
+      !deletedTitleIds.has(p.id) &&
+      !deletedTitleIds.has(p.transaction_id),
+  );
   const rawAccounts: FinancialAccount[] = Array.isArray(raw?.accounts) ? raw.accounts : [];
   const rawScopes: any[] = Array.isArray(raw?.scopes) ? raw.scopes : [];
 
@@ -193,9 +211,9 @@ function normalizeFinancialSnapshot(
   const existingTxPaymentIds = new Set(rawPayments.map((p) => p.transaction_id));
 
   // 1. Merge baseline titles if database doesn't have them and they haven't been deleted
-  const mergedTitles = rawTitles.filter((t) => !deletedTitleIds.has(t.id));
+  const mergedTitles = rawTitles.filter((t) => !deletedTitleIds.has(t.id) && !isRecordWiped(t));
   BASELINE_TITLES.forEach((bt) => {
-    if (!existingTitleIds.has(bt.id) && !deletedTitleIds.has(bt.id)) {
+    if (!existingTitleIds.has(bt.id) && !deletedTitleIds.has(bt.id) && !isRecordWiped(bt)) {
       mergedTitles.push(bt);
       existingTitleIds.add(bt.id);
     }
@@ -204,7 +222,7 @@ function normalizeFinancialSnapshot(
   // 1b. Merge títulos locais armazenados (localStorage)
   const localTitles = getLocalTitles();
   localTitles.forEach((lt) => {
-    if (!deletedTitleIds.has(lt.id) && !existingTitleIds.has(lt.id)) {
+    if (!deletedTitleIds.has(lt.id) && !existingTitleIds.has(lt.id) && !isRecordWiped(lt)) {
       mergedTitles.push(lt);
       existingTitleIds.add(lt.id);
     }
@@ -214,10 +232,10 @@ function normalizeFinancialSnapshot(
   const localEvents = getStoredLocalEvents();
   const allEventsMap = new Map<string, any>();
   remoteEvents.forEach((re) => {
-    if (re?.id) allEventsMap.set(re.id, re);
+    if (re?.id && !isRecordWiped(re)) allEventsMap.set(re.id, re);
   });
   localEvents.forEach((le) => {
-    if (le?.id) {
+    if (le?.id && !isRecordWiped(le)) {
       const existing = allEventsMap.get(le.id);
       allEventsMap.set(le.id, existing ? { ...existing, ...le } : le);
     }
@@ -225,13 +243,17 @@ function normalizeFinancialSnapshot(
 
   // 3. Merge baseline payments e pagamentos existentes
   const mergedPayments = rawPayments.filter(
-    (p) => !deletedTitleIds.has(p.id) && !deletedTitleIds.has(p.transaction_id)
+    (p) =>
+      !deletedTitleIds.has(p.id) &&
+      !deletedTitleIds.has(p.transaction_id) &&
+      !isRecordWiped(p),
   );
   BASELINE_PAYMENTS.forEach((bp) => {
     if (
       !existingPaymentIds.has(bp.id) &&
       !deletedTitleIds.has(bp.id) &&
-      !deletedTitleIds.has(bp.transaction_id)
+      !deletedTitleIds.has(bp.transaction_id) &&
+      !isRecordWiped(bp)
     ) {
       mergedPayments.push(bp);
       existingPaymentIds.add(bp.id);
@@ -241,6 +263,7 @@ function normalizeFinancialSnapshot(
 
   // Processa cada evento com metadados financeiros
   Array.from(allEventsMap.values()).forEach((event) => {
+    if (isRecordWiped(event)) return;
     const fMeta = parseEventFinancialMeta(event.description);
     if (!fMeta) return;
 
@@ -255,6 +278,18 @@ function normalizeFinancialSnapshot(
       ? event.created_at.slice(0, 10)
       : new Date().toISOString().slice(0, 10);
     const signalPaidDate = eventDateStr <= bookingDateStr ? eventDateStr : bookingDateStr;
+
+    // Se o evento ou o sinal for de dados de teste zerados, ignora
+    if (
+      isRecordWiped({
+        id: `evt-${event.id}`,
+        created_at: event.created_at,
+        date: signalPaidDate,
+        starts_at: event.starts_at,
+      })
+    ) {
+      return;
+    }
 
     const patientName =
       fMeta.patientName ||
@@ -293,7 +328,7 @@ function normalizeFinancialSnapshot(
       // Garante que o pagamento do sinal esteja registrado no fluxo de caixa com a data correta
       if (down > 0 && !existingTxPaymentIds.has(existingTitle.id)) {
         const payId = `pay-evt-${event.id}`;
-        if (!existingPaymentIds.has(payId) && !deletedTitleIds.has(payId)) {
+        if (!existingPaymentIds.has(payId) && !deletedTitleIds.has(payId) && !isRecordWiped({ id: payId, created_at: event.created_at, paid_on: signalPaidDate })) {
           const evtPayment: FinancialPayment = {
             id: payId,
             transaction_id: existingTitle.id,
@@ -317,7 +352,7 @@ function normalizeFinancialSnapshot(
     } else {
       // Cria título sintético correspondente ao agendamento se não foi excluído
       const evtTitleId = `evt-${event.id}`;
-      if (!deletedTitleIds.has(evtTitleId) && !deletedTitleIds.has(event.id)) {
+      if (!deletedTitleIds.has(evtTitleId) && !deletedTitleIds.has(event.id) && !isRecordWiped({ id: evtTitleId, created_at: event.created_at, date: signalPaidDate })) {
         const newTitle: FinancialTitle = {
           id: evtTitleId,
           type: "receita",
@@ -345,7 +380,7 @@ function normalizeFinancialSnapshot(
 
         if (down > 0) {
           const payId = `pay-evt-${event.id}`;
-          if (!existingPaymentIds.has(payId) && !deletedTitleIds.has(payId)) {
+          if (!existingPaymentIds.has(payId) && !deletedTitleIds.has(payId) && !isRecordWiped({ id: payId, created_at: event.created_at, paid_on: signalPaidDate })) {
             const evtPayment: FinancialPayment = {
               id: payId,
               transaction_id: evtTitleId,
@@ -373,7 +408,7 @@ function normalizeFinancialSnapshot(
   // 4. Merge pagamentos locais persistidos no localStorage (ex: baixa dos R$ 400 restantes)
   const localPayments = getLocalPayments();
   localPayments.forEach((lp) => {
-    if (deletedTitleIds.has(lp.id) || deletedTitleIds.has(lp.transaction_id)) return;
+    if (deletedTitleIds.has(lp.id) || deletedTitleIds.has(lp.transaction_id) || isRecordWiped(lp)) return;
     if (!existingPaymentIds.has(lp.id)) {
       mergedPayments.push(lp);
       existingPaymentIds.add(lp.id);
@@ -392,9 +427,12 @@ function normalizeFinancialSnapshot(
 
   // Ensure any title marked 'pago' has a payment record in cash
   mergedTitles.forEach((t) => {
+    if (isRecordWiped(t)) return;
     if ((t.status === "pago" || t.paid_amount > 0) && !existingTxPaymentIds.has(t.id)) {
+      const synPayId = `syn-pay-${t.id}`;
+      if (isRecordWiped({ id: synPayId, date: t.date, paid_on: t.date })) return;
       const synPay: FinancialPayment = {
-        id: `syn-pay-${t.id}`,
+        id: synPayId,
         transaction_id: t.id,
         amount: t.paid_amount > 0 ? t.paid_amount : t.amount,
         paid_on: t.date || t.due_date || "2026-09-15",
@@ -402,7 +440,7 @@ function normalizeFinancialSnapshot(
         account_id: raw.accounts[0]?.id || "00000000-0000-0000-0000-000000000001",
         payer_name: t.patient_name || t.payer_name || "Cliente",
         created_by: null,
-        created_at: new Date().toISOString(),
+        created_at: (t as any).created_at || new Date().toISOString(),
         legacy: false,
         reversed_at: null,
         reversed_by: null,
@@ -445,7 +483,7 @@ function normalizeFinancialSnapshot(
 
   // Sanitização rigorosa de títulos para prevenir quebras em runtime
   const sanitizedTitles: FinancialTitle[] = mergedTitles
-    .filter((t): t is FinancialTitle => Boolean(t && t.id))
+    .filter((t): t is FinancialTitle => Boolean(t && t.id && !isRecordWiped(t)))
     .map((t) => {
       const amountNum = Number(t.amount);
       const paidNum = Number(t.paid_amount);
@@ -480,7 +518,7 @@ function normalizeFinancialSnapshot(
     });
 
   const sanitizedPayments: FinancialPayment[] = mergedPayments
-    .filter((p): p is FinancialPayment => Boolean(p && p.id))
+    .filter((p): p is FinancialPayment => Boolean(p && p.id && !isRecordWiped(p)))
     .map((p) => {
       const amountNum = Number(p.amount);
       const safeAmount = Number.isFinite(amountNum) ? amountNum : 0;
@@ -545,7 +583,7 @@ export async function getFinancialSnapshot(): Promise<FinanceSnapshot> {
       try {
         const { data: txList } = await (supabase as any)
           .from("transactions")
-          .select("id, type, amount, paid_amount, due_date, date, status, description, category, patient_id, payer_name, company_id, treatment_id, installment_id, competence_date, origin_key")
+          .select("id, type, amount, paid_amount, due_date, date, status, description, category, patient_id, payer_name, company_id, treatment_id, installment_id, competence_date, origin_key, created_at")
           .is("deleted_at", null)
           .order("date", { ascending: false })
           .limit(100);

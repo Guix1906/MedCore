@@ -20,6 +20,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { parseISO, startOfDay, format } from "date-fns";
+import { isRecordWiped } from "@/lib/wipe-system";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -109,7 +110,7 @@ export function ContasReceberTab({
       } catch {}
     }
     return (finance?.titles || []).filter((t) => {
-      if (t.status === "cancelado" || deleted.has(t.id)) return false;
+      if (t.status === "cancelado" || deleted.has(t.id) || isRecordWiped(t)) return false;
       return t.type === "receita";
     });
   }, [finance?.titles]);

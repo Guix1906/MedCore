@@ -94,6 +94,7 @@ import {
 import { CountUp } from "@/components/finance/CountUp";
 import { cn } from "@/lib/utils";
 import PaymentHistory from "./PaymentHistory";
+import { isRecordWiped } from "@/lib/wipe-system";
 
 const balance = (value: number | null) =>
   value === null ? "Pendente de conferência" : currency(value);
@@ -382,7 +383,10 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
     }
 
     return result.filter(
-      (e) => !deletedEntryIds.includes(e.id) && !deletedEntryIds.includes(e.transaction_id),
+      (e) =>
+        !deletedEntryIds.includes(e.id) &&
+        !deletedEntryIds.includes(e.transaction_id) &&
+        !isRecordWiped(e),
     );
   }, [finance.payments, finance.titles, finance.accounts, deletedEntryIds]);
 
@@ -486,7 +490,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
         title: t,
       }));
 
-    return [...locallyDeleted, ...fromReversed, ...fromCancelledTitles];
+    return [...locallyDeleted, ...fromReversed, ...fromCancelledTitles].filter((e) => !isRecordWiped(e));
   }, [allRealizedEntries, finance.payments, finance.titles, finance.accounts, deletedEntryIds]);
 
   // 3. Filtragem dos Lançamentos para exibição na tabela

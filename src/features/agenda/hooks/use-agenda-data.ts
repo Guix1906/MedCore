@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { agendaService } from "@/services/api";
 import { qk } from "@/lib/query-keys";
 import { mergeWithLocalEvents } from "@/lib/local-events";
+import { isRecordWiped } from "@/lib/wipe-system";
 import { toActivities, type RawDeadline, type RawEvent, type RawTask } from "../lib/normalize";
 
 const AGENDA_STALE_TIME = 0;
@@ -92,7 +93,7 @@ export function useAgendaData(
         let q = supabase
           .from("events")
           .select(
-            "id, title, description, event_type, starts_at, ends_at, location, assigned_to, case_id",
+            "id, title, description, event_type, starts_at, ends_at, location, assigned_to, case_id, created_at",
           );
         if (companyId) {
           q = q.eq("company_id", companyId);
@@ -110,6 +111,7 @@ export function useAgendaData(
         console.warn("A fonte complementar da agenda não está disponível.", error);
       }
 
+      rawList = rawList.filter((e) => !isRecordWiped(e));
       return mergeWithLocalEvents(rawList, companyId);
     },
   });
@@ -141,10 +143,10 @@ export function useAgendaData(
 
       const { data, error } = await supabase
         .from("deadlines")
-        .select("id, title, description, due_date, status, assigned_to, case_id, is_double_term")
+        .select("id, title, description, due_date, status, assigned_to, case_id, is_double_term, created_at")
         .eq("company_id", companyId!);
       if (error) throw error;
-      return (data ?? []) as RawDeadline[];
+      return ((data ?? []) as RawDeadline[]).filter((d) => !isRecordWiped(d));
     },
   });
 
