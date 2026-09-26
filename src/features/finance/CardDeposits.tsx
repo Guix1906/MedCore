@@ -18,12 +18,12 @@ export default function CardDeposits({
       !ops.cards.some((c) => c.payment_id === p.id && !c.reversed_at),
   );
   return (
-    <details className="rounded-xl border bg-white p-4">
+    <details className="rounded-xl border bg-card p-4">
       <summary className="cursor-pointer text-sm font-medium">
         Depósitos de cartão · {pending.length} recebimento(s) aguardando depósito
       </summary>
       <div className="mt-4 space-y-4">
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-muted-foreground">
           O pagamento já abateu a dívida do paciente. Registre aqui o depósito confirmado da
           operadora, sem criar outra receita. Cada registro liquida integralmente um recebimento.
         </p>
@@ -81,7 +81,7 @@ export default function CardDeposits({
                   {c.reversed_at && <p>{c.reversal_reason}</p>}
                   {ops.can_manage && !c.reversed_at && (
                     <details className="mt-2">
-                      <summary className="cursor-pointer text-red-700">
+                      <summary className="cursor-pointer text-destructive">
                         Desfazer registro incorreto
                       </summary>
                       <OperationForm

@@ -69,9 +69,11 @@ export function useAgendaData(
     refetchOnWindowFocus: false,
     queryFn: async () => {
       let rawList: RawEvent[] = [];
+      let loadedFromPhp = false;
       try {
         const phpEvents = await agendaService.getEvents();
         if (phpEvents && Array.isArray(phpEvents)) {
+          loadedFromPhp = true;
           rawList = phpEvents.map((e) => ({
             id: e.id,
             title: e.title,
@@ -95,14 +97,18 @@ export function useAgendaData(
         if (companyId) {
           q = q.eq("company_id", companyId);
         }
-        const { data } = await q.order("starts_at", { ascending: true }).limit(1000);
+        const { data, error } = await q.order("starts_at", { ascending: true }).limit(1000);
+        if (error) throw error;
         if (data && data.length > 0) {
           const map = new Map<string, RawEvent>();
           rawList.forEach((e) => map.set(e.id, e));
           data.forEach((e: any) => map.set(e.id, e as RawEvent));
           rawList = Array.from(map.values());
         }
-      } catch {}
+      } catch (error) {
+        if (!loadedFromPhp) throw error;
+        console.warn("A fonte complementar da agenda não está disponível.", error);
+      }
 
       return mergeWithLocalEvents(rawList, companyId);
     },
@@ -195,6 +201,8 @@ export function useAgendaData(
 
   return {
     activities,
+    error: eventsQ.error,
+    isFetching: tasksQ.isFetching || eventsQ.isFetching || deadlinesQ.isFetching,
     isLoading:
       (tasksQ.isLoading && !tasksQ.data) ||
       (eventsQ.isLoading && !eventsQ.data) ||

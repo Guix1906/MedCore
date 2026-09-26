@@ -280,7 +280,7 @@ function StatusForm({
       <DialogHeader>
         <DialogTitle>{copy.title}</DialogTitle>
         <DialogDescription>
-          {name ? <strong className="font-semibold text-slate-800">{name}. </strong> : null}
+          {name ? <strong className="font-semibold text-foreground">{name}. </strong> : null}
           {copy.description}
         </DialogDescription>
       </DialogHeader>
@@ -301,13 +301,15 @@ function StatusForm({
             </SelectContent>
           </Select>
           {grantableRoles.length === 0 && (
-            <p className="text-xs text-rose-700">Nenhum perfil está dentro das suas permissões.</p>
+            <p className="text-xs text-destructive">
+              Nenhum perfil está dentro das suas permissões.
+            </p>
           )}
         </div>
       )}
 
       {request.action === "approve" && member?.suggestedDoctor && (
-        <label className="flex items-start gap-2 rounded-lg border border-slate-200 p-3 text-sm">
+        <label className="flex items-start gap-2 rounded-lg border border-border p-3 text-sm">
           <Checkbox
             checked={linkDoctor}
             onCheckedChange={(checked) => setLinkDoctor(checked === true)}
@@ -336,7 +338,7 @@ function StatusForm({
             }
             aria-invalid={!reasonOk}
           />
-          <p className="text-[11px] text-slate-500">O motivo fica registrado na auditoria.</p>
+          <p className="text-xs text-muted-foreground">O motivo fica registrado na auditoria.</p>
         </div>
       )}
 

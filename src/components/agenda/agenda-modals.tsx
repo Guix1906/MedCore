@@ -65,7 +65,7 @@ export function CreateMenu({
         align="end"
         className="w-52 bg-popover backdrop-blur-xl border-border text-foreground"
       >
-        <DropdownMenuLabel className="text-[11px] uppercase tracking-wider text-muted-foreground">
+        <DropdownMenuLabel className="text-xs uppercase tracking-wider text-muted-foreground">
           Criar
         </DropdownMenuLabel>
         <DropdownMenuSeparator className="bg-border" />
@@ -79,13 +79,13 @@ export function CreateMenu({
           onClick={() => onPick("evento")}
           className="focus:bg-accent cursor-pointer"
         >
-          <Users className="h-4 w-4 mr-2 text-violet-400" /> Evento
+          <Users className="h-4 w-4 mr-2 text-primary/80" /> Evento
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => onPick("prazo")}
           className="focus:bg-accent cursor-pointer"
         >
-          <AlertCircle className="h-4 w-4 mr-2 text-rose-400" /> Prazo
+          <AlertCircle className="h-4 w-4 mr-2 text-destructive/80" /> Prazo
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => onPick("audiencia")}
@@ -176,11 +176,11 @@ export function Field({
 }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-[11px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-        {label} {required && <span className="text-rose-400">*</span>}
+      <Label className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+        {label} {required && <span className="text-destructive/80">*</span>}
       </Label>
       {children}
-      {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }

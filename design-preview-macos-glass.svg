@@ -1,0 +1,176 @@
+<svg width="1600" height="1000" viewBox="0 0 1600 1000" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1600" y2="1000" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F7F8FC"/>
+      <stop offset="0.45" stop-color="#EEF3FF"/>
+      <stop offset="1" stop-color="#F9F5FF"/>
+    </linearGradient>
+    <linearGradient id="primary" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#7C5CFF"/>
+      <stop offset="1" stop-color="#4AB3FF"/>
+    </linearGradient>
+    <linearGradient id="success" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#58D68D"/>
+      <stop offset="1" stop-color="#2ECCB1"/>
+    </linearGradient>
+    <filter id="blurBlob" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="70"/>
+    </filter>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="24" stdDeviation="28" flood-color="#121827" flood-opacity="0.12"/>
+    </filter>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#121827" flood-opacity="0.08"/>
+    </filter>
+    <style>
+      .title { font: 700 42px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; fill: #111827; }
+      .h2 { font: 700 24px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; fill: #111827; }
+      .h3 { font: 650 18px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; fill: #111827; }
+      .body { font: 500 15px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; fill: #6B7280; }
+      .small { font: 600 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; fill: #8A93A3; letter-spacing: .08em; }
+      .metric { font: 750 34px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; fill: #111827; }
+      .nav { font: 650 15px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; fill: #697386; }
+      .navActive { font: 700 15px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; fill: #25185E; }
+      .glass { fill: rgba(255,255,255,.64); stroke: rgba(255,255,255,.78); stroke-width: 1.2; filter: url(#shadow); }
+      .glassSoft { fill: rgba(255,255,255,.54); stroke: rgba(255,255,255,.72); stroke-width: 1.1; filter: url(#softShadow); }
+      .hairline { stroke: rgba(17,24,39,.07); stroke-width: 1; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1000" fill="url(#bg)"/>
+  <circle cx="260" cy="180" r="170" fill="#A78BFA" opacity="0.45" filter="url(#blurBlob)"/>
+  <circle cx="1250" cy="120" r="210" fill="#60A5FA" opacity="0.38" filter="url(#blurBlob)"/>
+  <circle cx="1050" cy="840" r="240" fill="#F0ABFC" opacity="0.34" filter="url(#blurBlob)"/>
+  <circle cx="460" cy="810" r="190" fill="#99F6E4" opacity="0.28" filter="url(#blurBlob)"/>
+
+  <rect x="70" y="62" width="1460" height="876" rx="34" class="glass"/>
+
+  <!-- Sidebar -->
+  <rect x="92" y="86" width="260" height="828" rx="28" fill="rgba(255,255,255,.52)" stroke="rgba(255,255,255,.70)"/>
+  <circle cx="133" cy="126" r="16" fill="#FF5F57" opacity="0.88"/>
+  <circle cx="177" cy="126" r="16" fill="#FFBD2E" opacity="0.88"/>
+  <circle cx="221" cy="126" r="16" fill="#28C840" opacity="0.88"/>
+
+  <rect x="118" y="178" width="208" height="58" rx="18" fill="rgba(255,255,255,.58)" stroke="rgba(255,255,255,.78)"/>
+  <circle cx="147" cy="207" r="17" fill="url(#primary)"/>
+  <path d="M140 207h14M147 200v14" stroke="white" stroke-width="2.2" stroke-linecap="round"/>
+  <text x="176" y="203" class="h3">MedCore</text>
+  <text x="176" y="221" class="body" font-size="12">Clinical OS</text>
+
+  <text x="122" y="278" class="small">NAVEGACAO</text>
+  <rect x="116" y="298" width="214" height="48" rx="16" fill="rgba(109,63,245,.13)" stroke="rgba(109,63,245,.18)"/>
+  <circle cx="143" cy="322" r="10" fill="#6D3FF5" opacity="0.92"/>
+  <text x="166" y="327" class="navActive">Dashboard</text>
+
+  <circle cx="143" cy="378" r="9" fill="#9CA3AF" opacity="0.75"/>
+  <text x="166" y="383" class="nav">Agenda</text>
+  <circle cx="143" cy="430" r="9" fill="#9CA3AF" opacity="0.75"/>
+  <text x="166" y="435" class="nav">Pacientes</text>
+  <circle cx="143" cy="482" r="9" fill="#9CA3AF" opacity="0.75"/>
+  <text x="166" y="487" class="nav">Prontuario</text>
+  <circle cx="143" cy="534" r="9" fill="#9CA3AF" opacity="0.75"/>
+  <text x="166" y="539" class="nav">Financeiro</text>
+  <circle cx="143" cy="586" r="9" fill="#9CA3AF" opacity="0.75"/>
+  <text x="166" y="591" class="nav">Relatorios</text>
+
+  <rect x="116" y="798" width="214" height="74" rx="20" fill="rgba(255,255,255,.52)" stroke="rgba(255,255,255,.74)"/>
+  <circle cx="150" cy="835" r="19" fill="url(#primary)" opacity="0.9"/>
+  <text x="180" y="832" class="h3" font-size="15">Dra. Marina</text>
+  <text x="180" y="852" class="body" font-size="13">Clinica Central</text>
+
+  <!-- Header -->
+  <rect x="378" y="86" width="1128" height="86" rx="26" fill="rgba(255,255,255,.58)" stroke="rgba(255,255,255,.78)" filter="url(#softShadow)"/>
+  <rect x="410" y="109" width="430" height="40" rx="20" fill="rgba(255,255,255,.64)" stroke="rgba(255,255,255,.84)"/>
+  <circle cx="434" cy="129" r="8" stroke="#8A93A3" stroke-width="2"/>
+  <path d="M440 135l8 8" stroke="#8A93A3" stroke-width="2" stroke-linecap="round"/>
+  <text x="462" y="134" class="body">Buscar pacientes, consultas, relatorios...</text>
+  <rect x="779" y="116" width="43" height="26" rx="10" fill="rgba(17,24,39,.06)"/>
+  <text x="790" y="134" class="body" font-size="12">⌘K</text>
+
+  <rect x="1198" y="109" width="110" height="40" rx="20" fill="url(#primary)" opacity="0.95"/>
+  <text x="1226" y="134" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-weight="700" font-size="14" fill="white">Novo</text>
+  <circle cx="1370" cy="129" r="20" fill="rgba(255,255,255,.70)" stroke="rgba(255,255,255,.86)"/>
+  <path d="M1361 130h18M1370 121v18" stroke="#6B7280" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="1435" cy="129" r="22" fill="url(#primary)" opacity="0.92"/>
+
+  <!-- Main content -->
+  <text x="398" y="242" class="small">VISUAL MACOS GLASS PREVIEW</text>
+  <text x="398" y="296" class="title">Dashboard clinico</text>
+  <text x="400" y="326" class="body">Resumo operacional com cards translucidios, foco em leitura e profundidade suave.</text>
+
+  <rect x="1240" y="238" width="238" height="48" rx="24" fill="rgba(255,255,255,.58)" stroke="rgba(255,255,255,.78)"/>
+  <rect x="1248" y="246" width="74" height="32" rx="16" fill="rgba(109,63,245,.12)"/>
+  <text x="1267" y="267" class="navActive" font-size="13">Hoje</text>
+  <text x="1348" y="267" class="nav" font-size="13">Semana</text>
+  <text x="1420" y="267" class="nav" font-size="13">Mes</text>
+
+  <!-- KPI cards -->
+  <rect x="398" y="368" width="250" height="154" rx="28" class="glassSoft"/>
+  <rect x="422" y="392" width="48" height="48" rx="16" fill="rgba(109,63,245,.12)"/>
+  <path d="M435 416h22M446 405v22" stroke="#6D3FF5" stroke-width="2.4" stroke-linecap="round"/>
+  <text x="422" y="470" class="metric">128</text>
+  <text x="422" y="498" class="body">Atendimentos no mes</text>
+  <text x="548" y="414" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-weight="700" font-size="13" fill="#16A34A">+12%</text>
+
+  <rect x="674" y="368" width="250" height="154" rx="28" class="glassSoft"/>
+  <rect x="698" y="392" width="48" height="48" rx="16" fill="rgba(74,179,255,.14)"/>
+  <path d="M711 416h22M711 407h22M711 425h14" stroke="#2586D1" stroke-width="2.3" stroke-linecap="round"/>
+  <text x="698" y="470" class="metric">34</text>
+  <text x="698" y="498" class="body">Consultas agendadas</text>
+  <text x="825" y="414" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-weight="700" font-size="13" fill="#2563EB">Hoje</text>
+
+  <rect x="950" y="368" width="250" height="154" rx="28" class="glassSoft"/>
+  <rect x="974" y="392" width="48" height="48" rx="16" fill="rgba(46,204,177,.14)"/>
+  <path d="M986 418l8 8 18-21" stroke="#0F9F8A" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="974" y="470" class="metric">92%</text>
+  <text x="974" y="498" class="body">Ocupacao da agenda</text>
+
+  <rect x="1226" y="368" width="250" height="154" rx="28" class="glassSoft"/>
+  <rect x="1250" y="392" width="48" height="48" rx="16" fill="rgba(245,158,11,.14)"/>
+  <path d="M1274 405v17M1274 430h.01" stroke="#D97706" stroke-width="3" stroke-linecap="round"/>
+  <text x="1250" y="470" class="metric">7</text>
+  <text x="1250" y="498" class="body">Alertas clinicos</text>
+
+  <!-- Chart -->
+  <rect x="398" y="558" width="720" height="300" rx="30" class="glassSoft"/>
+  <text x="430" y="610" class="h2">Fluxo de atendimentos</text>
+  <text x="430" y="636" class="body">Tendencia semanal com grid discreto e tooltip glass.</text>
+  <line x1="430" y1="704" x2="1086" y2="704" class="hairline"/>
+  <line x1="430" y1="760" x2="1086" y2="760" class="hairline"/>
+  <line x1="430" y1="816" x2="1086" y2="816" class="hairline"/>
+  <path d="M438 800 C500 756, 540 774, 600 726 C662 676, 724 710, 786 656 C850 601, 915 645, 980 606 C1025 580, 1056 588, 1084 558" stroke="url(#primary)" stroke-width="5" stroke-linecap="round" fill="none"/>
+  <path d="M438 800 C500 756, 540 774, 600 726 C662 676, 724 710, 786 656 C850 601, 915 645, 980 606 C1025 580, 1056 588, 1084 558 L1084 834 L438 834 Z" fill="url(#primary)" opacity="0.10"/>
+  <circle cx="786" cy="656" r="8" fill="#6D3FF5" stroke="white" stroke-width="4"/>
+  <rect x="724" y="574" width="132" height="56" rx="18" fill="rgba(255,255,255,.72)" stroke="rgba(255,255,255,.88)" filter="url(#softShadow)"/>
+  <text x="746" y="598" class="body" font-size="12">Quarta</text>
+  <text x="746" y="618" class="h3" font-size="16">24 consultas</text>
+
+  <!-- Appointment panel -->
+  <rect x="1148" y="558" width="328" height="300" rx="30" class="glassSoft"/>
+  <text x="1180" y="610" class="h2">Proximas consultas</text>
+  <text x="1180" y="636" class="body">Cards compactos como notificacoes do macOS.</text>
+
+  <rect x="1180" y="674" width="264" height="56" rx="18" fill="rgba(255,255,255,.62)" stroke="rgba(255,255,255,.78)"/>
+  <rect x="1198" y="690" width="6" height="24" rx="3" fill="#6D3FF5"/>
+  <text x="1220" y="696" class="h3" font-size="15">Ana Luiza</text>
+  <text x="1220" y="717" class="body" font-size="13">14:30 - Retorno</text>
+
+  <rect x="1180" y="746" width="264" height="56" rx="18" fill="rgba(255,255,255,.62)" stroke="rgba(255,255,255,.78)"/>
+  <rect x="1198" y="762" width="6" height="24" rx="3" fill="#38BDF8"/>
+  <text x="1220" y="768" class="h3" font-size="15">Roberto Lima</text>
+  <text x="1220" y="789" class="body" font-size="13">15:10 - Primeira consulta</text>
+
+  <rect x="1180" y="818" width="264" height="56" rx="18" fill="rgba(255,255,255,.62)" stroke="rgba(255,255,255,.78)"/>
+  <rect x="1198" y="834" width="6" height="24" rx="3" fill="#10B981"/>
+  <text x="1220" y="840" class="h3" font-size="15">Camila Torres</text>
+  <text x="1220" y="861" class="body" font-size="13">16:00 - Acompanhamento</text>
+
+  <!-- Spotlight overlay sample -->
+  <rect x="520" y="210" width="560" height="96" rx="28" fill="rgba(255,255,255,.68)" stroke="rgba(255,255,255,.88)" filter="url(#shadow)"/>
+  <circle cx="558" cy="258" r="11" stroke="#6B7280" stroke-width="2.4"/>
+  <path d="M566 266l11 11" stroke="#6B7280" stroke-width="2.4" stroke-linecap="round"/>
+  <text x="598" y="253" class="h3">Spotlight do MedCore</text>
+  <text x="598" y="278" class="body">Busca global com blur, atalhos e resultados por modulo</text>
+
+  <text x="70" y="972" class="body" font-size="13">Previa conceitual: estilo macOS glassmorphism aplicado ao AppShell, Dashboard, cards, busca global e paineis.</text>
+</svg>

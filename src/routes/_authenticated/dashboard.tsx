@@ -1,33 +1,36 @@
+import AppShell from "@/components/AppShell";
+import { Card, CardHeader, KPICard, StatNumber } from "@/components/ds";
+import { Chart, CHART_COLORS, chartColor } from "@/components/ds/Chart";
+import { RevealGroup, RevealItem } from "@/components/motion/Reveal";
+import { PageHeader } from "@/components/ui-app/PageHeader";
+import { SegmentedControl } from "@/components/ui-app/SegmentedControl";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { errorMessage } from "@/features/acompanhamentos/followup-utils";
+import { BRL, parseMeta } from "@/features/dashboard/dashboard-utils";
 import { getFinancialSnapshot, refreshFinance } from "@/features/finance/finance-api";
 import { reportingRows } from "@/features/finance/finance-math";
-import { errorMessage } from "@/features/acompanhamentos/followup-utils";
-import type { DbRow, Json, IconType } from "@/lib/types";
+import { useResolvedTheme } from "@/hooks/use-theme";
+import { supabase } from "@/integrations/supabase/client";
+import { calcCashFlow } from "@/lib/finance";
+import { agendaService, companyService, patientsService } from "@/services/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import ReactApexChart from "react-apexcharts";
+import type { ApexOptions } from "apexcharts";
 import {
-  HelpCircle,
-  AlertTriangle,
-  User,
-  Clipboard,
-  Stethoscope,
-  LayoutGrid,
+  Cake,
+  CalendarDays,
+  Check,
   ChevronLeft,
   ChevronRight,
-  Eye,
+  Clock,
   ExternalLink,
-  CircleHelp,
+  Eye,
+  EyeOff,
+  Inbox,
+  Users,
 } from "lucide-react";
-import AppShell from "@/components/AppShell";
-import { RevealGroup, RevealItem } from "@/components/motion/Reveal";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { patientsService, companyService, agendaService } from "@/services/api";
-import { StatNumber } from "@/components/ds";
-import { Chart, CHART_COLORS } from "@/components/ds/Chart";
-import type { ApexOptions } from "apexcharts";
-import { calcCashFlow } from "@/lib/finance";
+import { useEffect, useMemo, useState } from "react";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -55,22 +58,10 @@ type Appt = {
   title?: string;
   when?: Date;
 };
-import { BRL, fmtBR, parseMeta, hexToHsl } from "@/features/dashboard/dashboard-utils";
 
 type Patient = { id: string; name: string; gender: string | null; birth_date: string | null };
 type DashboardTx = { id: string; type: string; amount: number; date: string; status: string };
 type Doctor = { id: string; name: string; avatar_url?: string | null };
-
-function softenColor(hex: string) {
-  if (!hex || !hex.startsWith("#")) return "rgba(124, 92, 252, 0.08)";
-  try {
-    const { h, s } = hexToHsl(hex);
-    return `hsl(${h}, ${s}%, 96%)`;
-  } catch {
-    return "rgba(124, 92, 252, 0.08)";
-  }
-}
-
 // ---------- helpers ----------
 // Local-date helpers — evita bug de timezone (toISOString retorna UTC e
 // causa deslocamento de 1 dia no fuso -03:00, jogando lançamentos e
@@ -189,7 +180,7 @@ function DashboardPage() {
               end_time: endsAt.toTimeString().slice(0, 5),
               status: e.status || "agendado",
               type: e.event_type || "atendimento",
-              color: (e as any).color || "#7C5CFC",
+              color: (e as any).color || CHART_COLORS.primary,
               title: e.title,
               when: startsAt,
             };
@@ -224,7 +215,7 @@ function DashboardPage() {
           end_time: endStr,
           status: meta?.status || "agendado",
           type: meta?.type || "atendimento",
-          color: meta?.color || "#7C5CFC",
+          color: meta?.color || CHART_COLORS.primary,
           title: e.title,
           when: startsAt,
         };
@@ -342,16 +333,16 @@ function DashboardPage() {
       map[a.status] = (map[a.status] ?? 0) + 1;
     });
     const labels: Record<string, { label: string; color: string }> = {
-      confirmed: { label: "Confirmado", color: "#C7F062" },
-      scheduled: { label: "Agendado", color: "#8B47FF" },
-      completed: { label: "Finalizado", color: "#10B981" },
-      cancelled: { label: "Cancelado", color: "#EF4444" },
-      no_show: { label: "Faltou", color: "#F59E0B" },
+      confirmed: { label: "Confirmado", color: CHART_COLORS.secondary },
+      scheduled: { label: "Agendado", color: CHART_COLORS.primary },
+      completed: { label: "Finalizado", color: CHART_COLORS.success },
+      cancelled: { label: "Cancelado", color: CHART_COLORS.danger },
+      no_show: { label: "Faltou", color: CHART_COLORS.warning },
     };
     const rows = Object.entries(map).map(([k, v]) => ({
       name: labels[k]?.label ?? k,
       value: v,
-      color: labels[k]?.color ?? "#C7F062",
+      color: labels[k]?.color ?? CHART_COLORS.neutral,
     }));
     return { rows, total: apptsInRange.length };
   }, [apptsInRange]);
@@ -367,10 +358,10 @@ function DashboardPage() {
       else o++;
     });
     const rows = [
-      { name: "Feminino", value: f, color: "#C9A6FF" },
-      { name: "Masculino", value: m, color: "#FCD34D" },
+      { name: "Feminino", value: f, color: CHART_COLORS.primarySoft },
+      { name: "Masculino", value: m, color: CHART_COLORS.secondary },
     ];
-    if (o > 0) rows.push({ name: "Outro", value: o, color: "#D1D5DB" });
+    if (o > 0) rows.push({ name: "Outro", value: o, color: CHART_COLORS.neutral });
     return { rows: rows.filter((r) => r.value > 0), total: patients.length };
   }, [patients]);
 
@@ -546,28 +537,28 @@ function DashboardPage() {
     prof: {
       title: "Agendamentos por profissional",
       data: perDoctor,
-      color: "#D8CBFF",
+      color: CHART_COLORS.primarySoft,
       empty: "Sem agendamentos no período",
       isCurrency: false,
     },
     type: {
       title: "Agendamentos por tipo",
       data: perType,
-      color: "#A78BFA",
+      color: CHART_COLORS.primary,
       empty: "Sem agendamentos no período",
       isCurrency: false,
     },
     insurance: {
       title: "Agendamentos por status",
       data: perStatus,
-      color: "#8B47FF",
+      color: CHART_COLORS.secondary,
       empty: "Sem agendamentos no período",
       isCurrency: false,
     },
     cat: {
       title: "Movimentação financeira",
       data: perCategory,
-      color: "#22C55E",
+      color: CHART_COLORS.success,
       empty: "Sem lançamentos no período",
       isCurrency: true,
     },
@@ -602,108 +593,191 @@ function DashboardPage() {
   }, [apptsInRange]);
 
   const rangeLabel = `${rangeStart.toLocaleDateString("pt-BR")} - ${rangeEnd.toLocaleDateString("pt-BR")}`;
+  const mode = useResolvedTheme();
+  const monthName = new Date().toLocaleString("pt-BR", { month: "long" });
+  const birthdaysCount = patients.filter(
+    (p) => p.birth_date && parseISO(p.birth_date).getMonth() === new Date().getMonth(),
+  ).length;
+  const topStatus = statusData.rows.reduce<(typeof statusData.rows)[number] | null>(
+    (best, row) => (!best || row.value > best.value ? row : best),
+    null,
+  );
+  const busiestDay = busyDays.reduce((best, day) => (day.value > best.value ? day : best));
+  const revenueTotal = revenueDaily.reduce((sum, day) => sum + day.value, 0);
+  const reportRows = currentReport.data as { name: string; value: number }[];
+  const topReport = reportRows[0];
+  const reportSummary = !topReport
+    ? currentReport.empty
+    : `Maior: ${topReport.name}${
+        currentReport.isCurrency
+          ? showBalance
+            ? ` (${BRL(topReport.value)})`
+            : ""
+          : ` (${topReport.value})`
+      }`;
+  const count = (value: number) => (loading ? "—" : value.toLocaleString("pt-BR"));
 
   return (
-    <AppShell>
-      <RevealGroup className="max-w-7xl mx-auto p-6 space-y-6 pb-16" stagger={0.08} delay={0.05}>
-        {/* Fluxo de caixa + Filtros/Balanço */}
+    <AppShell title="Dashboard">
+      <RevealGroup className="page-container space-y-6 pb-12" stagger={0.08} delay={0.05}>
+        <PageHeader
+          title="Dashboard"
+          description="Sua rotina de atendimento e os principais resultados da clínica."
+          actions={
+            <Button asChild variant="outline">
+              <Link to="/agenda">Abrir agenda</Link>
+            </Button>
+          }
+        />
+
+        <RevealItem>
+          <section aria-label="Resumo" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <KPICard
+              label="Agendamentos no período"
+              value={count(statusData.total)}
+              hint={rangeLabel}
+              icon={<CalendarDays className="size-4" />}
+            />
+            <KPICard
+              label="Próximas 24 horas"
+              value={count(next24h.length)}
+              hint={next24h.length === 1 ? "atendimento previsto" : "atendimentos previstos"}
+              icon={<Clock className="size-4" />}
+              accent="info"
+            />
+            <KPICard
+              label="Pacientes cadastrados"
+              value={count(patients.length)}
+              hint="na base da clínica"
+              icon={<Users className="size-4" />}
+              accent="success"
+            />
+            <KPICard
+              label="Aniversariantes do mês"
+              value={count(birthdaysCount)}
+              hint={monthName}
+              icon={<Cake className="size-4" />}
+              accent="warning"
+            />
+          </section>
+        </RevealItem>
+
+        {/* Agendamentos das próximas 24h + Recebimentos */}
+        <RevealItem>
+          <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <Card>
+              <CardHeader
+                title="Agendamentos das próximas 24h"
+                subtitle={
+                  next24h.length === 0
+                    ? "Agenda livre por enquanto."
+                    : `${next24h.length} agendamento${next24h.length === 1 ? "" : "s"}${
+                        next24h.length > 6 ? " · mostrando os 6 primeiros" : ""
+                      }`
+                }
+              />
+              {next24h.length === 0 ? (
+                <EmptyBlock
+                  title="Agenda livre nas próximas 24 horas"
+                  subtitle="Nenhum agendamento para as próximas 24 horas"
+                />
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {next24h.slice(0, 6).map((a) => {
+                    const pat = patients.find((p) => p.id === a.patient_id);
+                    const accent = a.color || CHART_COLORS.primary;
+                    const name = pat?.name || a.title || "Agendamento";
+                    return (
+                      <li
+                        key={a.id}
+                        className="flex items-center gap-3 rounded-xl border border-border-soft bg-card px-3 py-2.5"
+                        style={{ borderLeftColor: accent, borderLeftWidth: 3 }}
+                      >
+                        <span
+                          className="size-2.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: accent }}
+                          aria-hidden="true"
+                        />
+                        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
+                          {name}
+                        </span>
+                        <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
+                          {a.start_time} - {a.end_time}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Card>
+
+            <Card>
+              <CardHeader
+                title="Recebimentos no período"
+                subtitle={
+                  financeQ.error
+                    ? undefined
+                    : showBalance
+                      ? `${BRL(revenueTotal)} recebidos`
+                      : "Valores ocultos"
+                }
+              />
+              <div className="h-[240px]">
+                {financeQ.error ? (
+                  <p className="text-sm text-muted-foreground">Recebimentos indisponíveis.</p>
+                ) : (
+                  <ApexRevenueDaily data={revenueDaily} />
+                )}
+              </div>
+            </Card>
+          </section>
+        </RevealItem>
+
+        {/* Fluxo de caixa + Período/Resultado */}
         {financeQ.error ? (
-          <div role="alert" className="rounded-xl bg-red-50 p-4 text-red-700">
+          <div
+            role="alert"
+            className="rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive"
+          >
             Financeiro indisponível: {errorMessage(financeQ.error)}
             <p>Indicadores financeiros ocultos; demais áreas permanecem disponíveis.</p>
-            <button onClick={() => financeQ.refetch()} className="underline">
+            <button onClick={() => financeQ.refetch()} className="font-medium underline">
               Tentar novamente
             </button>
           </div>
         ) : (
           <RevealItem>
-            <section className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
-              <div
-                className="bg-white"
-                style={{
-                  borderRadius: 18,
-                  padding: 20,
-                  border: "1px solid #EEF2F6",
-                  boxShadow: "0 10px 35px rgba(15,23,42,.06)",
-                }}
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <h2
-                      style={{
-                        fontFamily: "Inter, sans-serif",
-                        fontSize: 19,
-                        fontWeight: 700,
-                        color: "#101828",
-                        letterSpacing: "-0.01em",
-                      }}
-                    >
-                      Fluxo de Caixa
-                    </h2>
-                    <button
-                      type="button"
-                      title="Entradas e saídas ao longo do período selecionado."
-                      className="group inline-flex items-center justify-center h-6 w-6 rounded-full transition-colors"
-                    >
-                      <CircleHelp
-                        size={16}
-                        className="text-[#98A2B3] group-hover:text-[#6941C6] transition-colors"
-                      />
-                    </button>
-                  </div>
-                  <div className="flex gap-1" style={{ fontFamily: "Inter, sans-serif" }}>
-                    {(["day", "week", "month", "year"] as const).map((p) => {
-                      const active = period === p;
-                      return (
-                        <button
-                          key={p}
-                          onClick={() => setPeriod(p)}
-                          className="relative px-3 pb-2 pt-1 transition-colors duration-[250ms]"
-                          style={{
-                            fontSize: 14,
-                            fontWeight: active ? 600 : 500,
-                            color: active ? "#7C3AED" : "#98A2B3",
-                          }}
-                          onMouseEnter={(e) => {
-                            if (!active)
-                              (e.currentTarget as HTMLButtonElement).style.color = "#6941C6";
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!active)
-                              (e.currentTarget as HTMLButtonElement).style.color = "#98A2B3";
-                          }}
-                        >
-                          {p === "day"
-                            ? "Diária"
-                            : p === "week"
-                              ? "Semanal"
-                              : p === "month"
-                                ? "Mensal"
-                                : "Anual"}
-                          <span
-                            className="absolute left-2 right-2 bottom-0 transition-all duration-[250ms]"
-                            style={{
-                              height: 3,
-                              borderRadius: 2,
-                              background: "#7C3AED",
-                              opacity: active ? 1 : 0,
-                              transform: active ? "scaleX(1)" : "scaleX(0.4)",
-                            }}
-                          />
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+            <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+              <Card>
+                <CardHeader
+                  className="flex-wrap"
+                  title="Fluxo de caixa"
+                  subtitle="Entradas e saídas ao longo do período selecionado."
+                  action={
+                    <SegmentedControl
+                      size="sm"
+                      aria-label="Agrupamento do fluxo de caixa"
+                      value={period}
+                      onChange={setPeriod}
+                      options={[
+                        { value: "day", label: "Diária" },
+                        { value: "week", label: "Semanal" },
+                        { value: "month", label: "Mensal" },
+                        { value: "year", label: "Anual" },
+                      ]}
+                    />
+                  }
+                />
 
                 <div className="h-[270px] animate-fade-in" key={period}>
                   {loading ? (
                     <Skeleton />
                   ) : (
-                    <ReactApexChart
+                    <Chart
                       key={`${period}-${cashflow.map((d) => d.date).join()}`}
                       type="line"
                       height={270}
+                      summary="Gráfico de entradas, saídas e resultado de caixa no período."
                       series={
                         cashflow.length > 0
                           ? [
@@ -734,12 +808,9 @@ function DashboardPage() {
                           id: "cashflow",
                           type: "line",
                           stacked: true,
-                          toolbar: { show: false },
-                          zoom: { enabled: false },
                           animations: { enabled: true, easing: "easeinout", speed: 700 },
-                          fontFamily: "Inter, sans-serif",
                         },
-                        colors: ["#FF355B", "#22C55E", "#2F7DF6"],
+                        colors: [CHART_COLORS.danger, CHART_COLORS.success, CHART_COLORS.secondary],
                         stroke: {
                           width: [0, 0, 3],
                           curve: "straight",
@@ -748,8 +819,8 @@ function DashboardPage() {
                         markers: {
                           size: [0, 0, 6],
                           strokeWidth: 2,
-                          strokeColors: ["#2f7df6"],
-                          colors: ["#ffffff"],
+                          strokeColors: [chartColor(CHART_COLORS.secondary, mode)],
+                          colors: [mode === "dark" ? "#1c1c1e" : "#ffffff"],
                           hover: { size: 8 },
                         },
                         plotOptions: {
@@ -761,25 +832,18 @@ function DashboardPage() {
                         },
                         dataLabels: { enabled: false },
                         grid: {
-                          borderColor: "#E9EDF5",
                           strokeDashArray: 0,
                           padding: { left: 15, right: 10 },
                         },
                         xaxis: {
                           categories: cashflow.map((d) => d.label),
-                          axisBorder: { show: false },
-                          axisTicks: { show: false },
-                          labels: {
-                            style: { fontSize: "12px", colors: "#667085" },
-                            offsetY: 6,
-                          },
+                          labels: { offsetY: 6 },
                         },
                         yaxis: {
                           min: chartYMin,
                           max: chartYMax,
                           tickAmount: yaxisTickAmount,
                           labels: {
-                            style: { fontSize: "11px", fontWeight: 500, colors: "#475467" },
                             offsetX: -12,
                             formatter: (v: number) => {
                               if (v === 0) return "R$ 0";
@@ -807,238 +871,192 @@ function DashboardPage() {
                     />
                   )}
                 </div>
-                <div
-                  className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 mt-6 pt-4 border-t"
-                  style={{
-                    borderColor: "#F2F4F7",
-                    fontFamily: "Inter, sans-serif",
-                    fontSize: 12,
-                    fontWeight: 500,
-                    color: "#475467",
-                  }}
-                >
-                  <LegendDot color="#22C55E" label="Entradas" />
-                  <LegendDot color="#FF355B" label="Saídas" />
-                  <LegendDot color="#2F7DF6" label="Resultado de caixa" line />
+                <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 border-t border-border-soft pt-4 text-xs font-medium text-muted-foreground">
+                  <LegendDot color={chartColor(CHART_COLORS.success, mode)} label="Entradas" />
+                  <LegendDot color={chartColor(CHART_COLORS.danger, mode)} label="Saídas" />
+                  <LegendDot
+                    color={chartColor(CHART_COLORS.secondary, mode)}
+                    label="Resultado de caixa"
+                    line
+                  />
                 </div>
-              </div>
+              </Card>
 
-              <div className="flex flex-col h-full space-y-5">
-                <div>
-                  <SectionTitle>Filtros</SectionTitle>
-                  <Card className="mt-3">
-                    <div className="text-[14px] text-[#6B7280] mb-1">Período</div>
-                    <PeriodPicker
-                      range={range}
-                      onChange={(r, p) => {
-                        setRange(r);
-                        if (p) setPeriod(p);
-                      }}
-                      onShift={(dir) => setRange(shiftRange(period, rangeStart, rangeEnd, dir))}
-                      label={rangeLabel}
-                    />
-                  </Card>
-                </div>
+              <div className="flex h-full flex-col gap-5">
+                <Card>
+                  <CardHeader
+                    className="mb-3"
+                    title="Período"
+                    subtitle="Intervalo usado nos gráficos e indicadores do painel."
+                  />
+                  <PeriodPicker
+                    range={range}
+                    onChange={(r, p) => {
+                      setRange(r);
+                      if (p) setPeriod(p);
+                    }}
+                    onShift={(dir) => setRange(shiftRange(period, rangeStart, rangeEnd, dir))}
+                    label={rangeLabel}
+                  />
+                </Card>
 
-                <div className="flex-1 flex flex-col">
-                  <div className="flex items-center gap-2">
-                    <SectionTitle>Resultado de caixa</SectionTitle>
-                    <CircleHelp size={13} className="text-[#9CA3AF]" />
-                  </div>
-                  <Card className="mt-3 flex-1 flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-start justify-between">
-                        <div className="flex flex-col space-y-1">
-                          <div
-                            className={`text-[26px] font-bold tabular-nums ${balance.saldo < 0 ? "text-[#FF355B]" : "text-[#22C55E]"}`}
-                          >
-                            {showBalance ? (
-                              <StatNumber value={balance.saldo} format={BRL} />
-                            ) : (
-                              "R$ ••••••"
-                            )}
-                          </div>
-                          <div className="text-[12px] text-[#6B7280]">
-                            de{" "}
-                            <span
-                              className={`font-semibold ${balance.saldoPrev < 0 ? "text-[#FF355B]" : "text-[#22C55E]"}`}
-                            >
-                              {showBalance ? BRL(balance.saldoPrev) : "R$ ••••••"}
-                            </span>{" "}
-                            previstos
-                          </div>
-                        </div>
+                <Card className="flex flex-1 flex-col justify-between">
+                  <div>
+                    <CardHeader
+                      className="mb-3"
+                      title="Resultado de caixa"
+                      subtitle="Valores pagos no período e o previsto."
+                      action={
                         <button
+                          type="button"
+                          aria-label={
+                            showBalance
+                              ? "Ocultar valores financeiros"
+                              : "Mostrar valores financeiros"
+                          }
+                          aria-pressed={!showBalance}
                           onClick={() => setShowBalance((v) => !v)}
-                          className="text-[#8B47FF]"
+                          className="grid size-8 place-items-center rounded-full text-primary transition-colors hover:bg-primary/10"
                         >
-                          <Eye size={16} />
+                          {showBalance ? <Eye size={16} /> : <EyeOff size={16} />}
                         </button>
+                      }
+                    />
+                    <div className="flex flex-col space-y-1">
+                      <div
+                        className={`text-[28px] font-semibold leading-none tracking-tight tabular-nums ${balance.saldo < 0 ? "text-destructive" : "text-success"}`}
+                      >
+                        {showBalance ? (
+                          <StatNumber value={balance.saldo} format={BRL} />
+                        ) : (
+                          "R$ ••••••"
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        de{" "}
+                        <span
+                          className={`font-semibold ${balance.saldoPrev < 0 ? "text-destructive" : "text-success"}`}
+                        >
+                          {showBalance ? BRL(balance.saldoPrev) : "R$ ••••••"}
+                        </span>{" "}
+                        previstos
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4 mt-auto pt-4 border-t border-dashed border-[#F3F4F6]">
-                      <div className="flex flex-col space-y-1">
-                        <div className="text-[14px] text-[#6B7280] font-semibold">Entradas:</div>
-                        <div className="text-[18px] font-bold text-[#22C55E] flex items-center gap-1.5 tabular-nums">
-                          {showBalance ? (
-                            <StatNumber value={balance.entradas} format={BRL} />
-                          ) : (
-                            "R$ ••••"
-                          )}
-                          <Link to="/financeiro" className="text-[#8B47FF]">
-                            <ExternalLink size={12} />
-                          </Link>
-                        </div>
-                        <div className="text-[11px] text-[#6B7280]">
-                          de{" "}
-                          <span className="font-semibold text-[#6B7280]">
-                            {showBalance ? BRL(balance.entradasPrev) : "R$ ••••"}
-                          </span>{" "}
-                          previsto
-                        </div>
+                  </div>
+                  <div className="mt-auto grid grid-cols-2 gap-4 border-t border-border-soft pt-4">
+                    <div className="flex flex-col space-y-1">
+                      <div className="text-xs font-medium text-muted-foreground">Entradas</div>
+                      <div className="flex items-center gap-1.5 text-lg font-semibold tabular-nums text-success">
+                        {showBalance ? (
+                          <StatNumber value={balance.entradas} format={BRL} />
+                        ) : (
+                          "R$ ••••"
+                        )}
+                        <Link
+                          to="/financeiro"
+                          className="text-primary"
+                          aria-label="Abrir entradas no financeiro"
+                        >
+                          <ExternalLink size={12} />
+                        </Link>
                       </div>
-                      <div className="flex flex-col space-y-1">
-                        <div className="text-[14px] text-[#6B7280] font-semibold">Saídas:</div>
-                        <div className="text-[18px] font-bold text-[#FF355B] flex items-center gap-1.5 tabular-nums">
-                          {showBalance ? (
-                            <StatNumber
-                              value={balance.saidas}
-                              format={(v) => (v === 0 ? "R$ 0,00" : `-${BRL(v)}`)}
-                            />
-                          ) : (
-                            "R$ ••••"
-                          )}
-                          <Link to="/financeiro" className="text-[#8B47FF]">
-                            <ExternalLink size={12} />
-                          </Link>
-                        </div>
-                        <div className="text-[11px] text-[#6B7280]">
-                          de{" "}
-                          <span className="font-semibold text-[#6B7280]">
-                            {showBalance
-                              ? balance.saidasPrev === 0
-                                ? "R$ 0,00"
-                                : `-${BRL(balance.saidasPrev)}`
-                              : "R$ ••••"}
-                          </span>{" "}
-                          previsto
-                        </div>
+                      <div className="text-xs text-muted-foreground">
+                        de{" "}
+                        <span className="font-semibold tabular-nums">
+                          {showBalance ? BRL(balance.entradasPrev) : "R$ ••••"}
+                        </span>{" "}
+                        previsto
                       </div>
                     </div>
-                  </Card>
-                </div>
+                    <div className="flex flex-col space-y-1">
+                      <div className="text-xs font-medium text-muted-foreground">Saídas</div>
+                      <div className="flex items-center gap-1.5 text-lg font-semibold tabular-nums text-destructive">
+                        {showBalance ? (
+                          <StatNumber
+                            value={balance.saidas}
+                            format={(v) => (v === 0 ? "R$ 0,00" : `-${BRL(v)}`)}
+                          />
+                        ) : (
+                          "R$ ••••"
+                        )}
+                        <Link
+                          to="/financeiro"
+                          className="text-primary"
+                          aria-label="Abrir saídas no financeiro"
+                        >
+                          <ExternalLink size={12} />
+                        </Link>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        de{" "}
+                        <span className="font-semibold tabular-nums">
+                          {showBalance
+                            ? balance.saidasPrev === 0
+                              ? "R$ 0,00"
+                              : `-${BRL(balance.saidasPrev)}`
+                            : "R$ ••••"}
+                        </span>{" "}
+                        previsto
+                      </div>
+                    </div>
+                  </div>
+                </Card>
               </div>
             </section>
           </RevealItem>
         )}
 
-        {/* Agendamentos das próximas 24h + Faturamento comparado */}
+        {/* Status e sexo à esquerda, aniversariantes à direita */}
         <RevealItem>
-          <section className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
-            <Card>
-              <SectionTitle>Agendamentos das próximas 24h</SectionTitle>
-              {next24h.length === 0 ? (
-                <EmptyBlock
-                  title="Não há nada aqui!"
-                  subtitle="Nenhum agendamento para as próximas 24 horas"
-                />
-              ) : (
-                <div className="mt-4 flex flex-col gap-2">
-                  {next24h.slice(0, 6).map((a) => {
-                    const pat = patients.find((p) => p.id === a.patient_id);
-                    const accent = a.color || "#8B47FF";
-                    const bgSoft = softenColor(accent);
-                    const name = pat?.name || a.title || "Agendamento";
-                    return (
-                      <div
-                        key={a.id}
-                        className="p-3 rounded-xl border-l-[5px] border transition-all flex flex-col gap-1 shadow-sm"
-                        style={{
-                          background: bgSoft,
-                          borderLeftColor: accent,
-                          borderTopColor: "rgba(0,0,0,0.02)",
-                          borderRightColor: "rgba(0,0,0,0.02)",
-                          borderBottomColor: "rgba(0,0,0,0.02)",
-                        }}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span
-                            className="w-2.5 h-2.5 rounded-full shrink-0"
-                            style={{ backgroundColor: accent }}
-                          />
-                          <span className="text-[13px] font-bold text-[#1F2937]">{name}</span>
-                        </div>
-                        <div className="text-[11px] text-[#6B7280] font-semibold ml-4.5">
-                          {a.start_time} - {a.end_time}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </Card>
-
-            <Card>
-              <TitleRow title="Recebimentos no período" />
-              <div className="h-[240px]">
-                {financeQ.error ? (
-                  <p>Recebimentos indisponíveis.</p>
-                ) : (
-                  <ApexRevenueDaily data={revenueDaily} />
-                )}
-              </div>
-            </Card>
-          </section>
-        </RevealItem>
-
-        {/* Status, Sexo na esquerda e Aniversariantes na direita alinhados */}
-        <RevealItem>
-          <section className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               <Card>
-                <TitleRow title="Status por agendamento" />
+                <CardHeader
+                  title="Status por agendamento"
+                  subtitle={
+                    topStatus
+                      ? `Mais frequente: ${topStatus.name} (${topStatus.value})`
+                      : "Sem agendamentos no período"
+                  }
+                />
                 <div className="relative h-[240px]">
                   <ApexDonut
                     rows={statusData.rows}
                     centerLabel={String(statusData.total)}
                     centerSub="Agendamentos"
                   />
-                  <div className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] text-[#6B7280]">
-                    {statusData.total} agendamento{statusData.total === 1 ? "" : "s"} no período
-                  </div>
                 </div>
                 <PieLegend rows={statusData.rows} />
               </Card>
 
               <Card>
-                <TitleRow title="Pacientes por sexo" />
+                <CardHeader
+                  title="Pacientes por sexo"
+                  subtitle={`${genderData.total} paciente${genderData.total === 1 ? "" : "s"} cadastrado${genderData.total === 1 ? "" : "s"}`}
+                />
                 <div className="relative h-[240px]">
                   <ApexDonut
                     rows={genderData.rows}
                     centerLabel={String(genderData.total)}
                     centerSub="Pacientes"
                   />
-                  <div className="absolute left-2 bottom-2 text-[11px] text-[#6B7280]">
-                    {genderData.total} paciente{genderData.total === 1 ? "" : "s"} cadastrado
-                    {genderData.total === 1 ? "" : "s"}
-                  </div>
                 </div>
                 <PieLegend rows={genderData.rows} />
               </Card>
             </div>
 
             <Card>
-              <SectionTitle>Próximos aniversariantes</SectionTitle>
+              <CardHeader title="Próximos aniversariantes" subtitle={`Em ${monthName}`} />
               {birthdaysThisMonth.length === 0 ? (
                 <EmptyBlock
                   title="Não há nada aqui!"
-                  subtitle={`Nenhum aniversariante em ${new Date().toLocaleString("pt-BR", { month: "long" })}`}
+                  subtitle={`Nenhum aniversariante em ${monthName}`}
                 />
               ) : (
-                <div className="mt-4 space-y-3">
+                <ul className="space-y-3">
                   {birthdaysThisMonth.map((p) => (
-                    <div key={p.id} className="flex items-center gap-3">
-                      <div className="h-8 w-8 rounded-full bg-[#EDE4FF] text-[#8B47FF] grid place-items-center text-[11px] font-bold">
+                    <li key={p.id} className="flex items-center gap-3">
+                      <div className="grid h-8 w-8 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
                         {p.name
                           .split(" ")
                           .map((n) => n[0])
@@ -1046,16 +1064,16 @@ function DashboardPage() {
                           .join("")
                           .toUpperCase()}
                       </div>
-                      <div className="text-[13px] text-[#111827] flex-1 truncate">{p.name}</div>
-                      <div className="text-[12px] text-[#6B7280]">
+                      <div className="flex-1 truncate text-sm text-foreground">{p.name}</div>
+                      <div className="text-xs tabular-nums text-muted-foreground">
                         {parseISO(p.birth_date!).toLocaleDateString("pt-BR", {
                           day: "2-digit",
                           month: "2-digit",
                         })}
                       </div>
-                    </div>
+                    </li>
                   ))}
-                </div>
+                </ul>
               )}
             </Card>
           </section>
@@ -1063,45 +1081,38 @@ function DashboardPage() {
 
         {/* Relatórios */}
         <RevealItem>
-          <section>
-            <div className="flex items-center gap-2 mb-3">
-              <h2 className="text-[19px] font-bold text-[#111827]">Relatórios</h2>
-              <HelpCircle size={14} className="text-[#9CA3AF]" />
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <section aria-labelledby="dashboard-reports-title">
+            <h2 id="dashboard-reports-title" className="mb-3 text-xl font-semibold text-foreground">
+              Relatórios
+            </h2>
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <Card>
-                  <div className="flex gap-6 border-b border-[#E5E7EB] mb-4">
-                    {[
-                      { k: "prof" as const, icon: User, label: "Por profissional" },
-                      { k: "type" as const, icon: Clipboard, label: "Por tipo" },
-                      { k: "insurance" as const, icon: Stethoscope, label: "Por status" },
-                      { k: "cat" as const, icon: LayoutGrid, label: "Financeiro" },
-                    ].map(({ k, icon: Icon, label }) => (
-                      <button
-                        key={k}
-                        onClick={() => setReportTab(k)}
-                        title={label}
-                        className={`pb-2 transition-colors ${reportTab === k ? "text-[#8B47FF] border-b-2 border-[#8B47FF]" : "text-[#9CA3AF] hover:text-[#6B7280]"}`}
-                      >
-                        <Icon size={16} />
-                      </button>
-                    ))}
-                  </div>
-                  <TitleRow title={currentReport.title} />
-                  <div className="h-[240px] mt-2">
+                  <CardHeader title={currentReport.title} subtitle={reportSummary} />
+                  <SegmentedControl
+                    size="sm"
+                    aria-label="Tipo de relatório"
+                    value={reportTab}
+                    onChange={setReportTab}
+                    className="mb-3 w-full"
+                    options={[
+                      { value: "prof", label: "Profissional" },
+                      { value: "type", label: "Tipo" },
+                      { value: "insurance", label: "Status" },
+                      { value: "cat", label: "Financeiro" },
+                    ]}
+                  />
+                  <div className="h-[240px]">
                     {reportTab === "cat" && financeQ.error ? (
-                      <p>Dados financeiros indisponíveis.</p>
-                    ) : currentReport.data.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        Dados financeiros indisponíveis.
+                      </p>
+                    ) : reportRows.length === 0 ? (
                       <EmptyBlock small title="Sem dados" subtitle={currentReport.empty} />
                     ) : (
                       <ApexBar
-                        categories={(currentReport.data as { name: string; value: number }[]).map(
-                          (d) => d.name,
-                        )}
-                        values={(currentReport.data as { name: string; value: number }[]).map(
-                          (d) => d.value,
-                        )}
+                        categories={reportRows.map((d) => d.name)}
+                        values={reportRows.map((d) => d.value)}
                         color={currentReport.color}
                         isCurrency={currentReport.isCurrency}
                         height={240}
@@ -1111,12 +1122,19 @@ function DashboardPage() {
                 </Card>
 
                 <Card>
-                  <TitleRow title="Dias mais movimentados" />
+                  <CardHeader
+                    title="Dias mais movimentados"
+                    subtitle={
+                      busiestDay.value > 0
+                        ? `Maior movimento: ${busiestDay.name} (${busiestDay.value})`
+                        : "Sem agendamentos no período"
+                    }
+                  />
                   <div className="h-[280px]">
                     <ApexBar
                       categories={busyDays.map((d) => d.name)}
                       values={busyDays.map((d) => d.value)}
-                      color="#A78BFA"
+                      color={CHART_COLORS.primarySoft}
                       height={280}
                       showValueLabels
                     />
@@ -1125,23 +1143,49 @@ function DashboardPage() {
               </div>
 
               <Card>
-                <TitleRow title="Horários mais movimentados" />
-                <div className="mt-2 max-h-[280px] overflow-auto">
+                <CardHeader
+                  title="Horários mais movimentados"
+                  subtitle="Agendamentos por hora e dia da semana."
+                />
+                <div className="max-h-[300px] overflow-auto">
                   <table className="w-full border-separate" style={{ borderSpacing: 4 }}>
+                    <thead>
+                      <tr>
+                        <th scope="col" className="w-8">
+                          <span className="sr-only">Hora</span>
+                        </th>
+                        {WEEKDAYS.map((day) => (
+                          <th
+                            key={day}
+                            scope="col"
+                            className="text-center text-xs font-medium text-muted-foreground"
+                          >
+                            {day}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
                     <tbody>
                       {heat.hours.map((h, r) => (
                         <tr key={h}>
-                          <td className="text-[11px] text-[#6B7280] pr-2 w-8">{h}h</td>
+                          <th
+                            scope="row"
+                            className="w-8 pr-2 text-left text-xs font-normal text-muted-foreground"
+                          >
+                            {h}h
+                          </th>
                           {heat.grid[r].map((v, c) => {
                             const alpha = heat.max === 0 ? 0 : v / heat.max;
                             const bg =
-                              v === 0 ? "#F3F4F6" : `rgba(139,71,255,${0.15 + alpha * 0.75})`;
+                              v === 0
+                                ? "var(--muted)"
+                                : `color-mix(in srgb, var(--primary) ${Math.round((0.15 + alpha * 0.75) * 100)}%, transparent)`;
                             return (
                               <td key={c}>
                                 <div
-                                  className="h-5 w-8 rounded"
+                                  className="mx-auto h-5 w-8 rounded-md"
                                   style={{ background: bg }}
-                                  title={`${v} agendamento${v === 1 ? "" : "s"}`}
+                                  title={`${WEEKDAYS[c]}, ${h}h: ${v} agendamento${v === 1 ? "" : "s"}`}
                                 />
                               </td>
                             );
@@ -1161,96 +1205,8 @@ function DashboardPage() {
 }
 
 // ---------- shared UI ----------
-function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={`bg-white rounded-2xl border border-[#E5E7EB] p-5 ${className}`}>
-      {children}
-    </div>
-  );
-}
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <h3 className="text-[19px] font-bold text-[#111827]">{children}</h3>;
-}
-function computeStart(to: number): number {
-  const abs = Math.abs(to);
-  if (abs < 1) return 0;
-  const magnitude = Math.pow(10, Math.floor(Math.log10(abs)));
-  const step = magnitude >= 1000 ? magnitude : magnitude / 10;
-  const floored = Math.floor(abs / step) * step;
-  const start = floored >= abs ? floored - step : floored;
-  return to < 0 ? -start : start;
-}
+const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
-function CountUp({
-  value,
-  format,
-  duration = 1200,
-}: {
-  value: number;
-  format: (v: number) => string;
-  duration?: number;
-}) {
-  const to = Number(value) || 0;
-  const ref = useRef<HTMLSpanElement | null>(null);
-  const seenRef = useRef(false);
-  const prevRef = useRef<number>(computeStart(to));
-  const [display, setDisplay] = useState<number>(prevRef.current);
-  const [inView, setInView] = useState(false);
-
-  useEffect(() => {
-    if (seenRef.current) {
-      setInView(true);
-      return;
-    }
-    const el = ref.current;
-    if (!el || typeof IntersectionObserver === "undefined") {
-      setInView(true);
-      return;
-    }
-    const io = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((e) => {
-          if (e.isIntersecting) {
-            seenRef.current = true;
-            setInView(true);
-            io.disconnect();
-          }
-        });
-      },
-      { threshold: 0.2 },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (!inView) return;
-    const from = seenRef.current && prevRef.current !== 0 ? prevRef.current : computeStart(to);
-    const start = performance.now();
-    let raf = 0;
-    const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / duration);
-      const eased = 1 - Math.pow(2, -10 * t); // easeOutExpo
-      const current = from + (to - from) * (t === 1 ? 1 : eased);
-      setDisplay(current);
-      if (t < 1) raf = requestAnimationFrame(tick);
-      else prevRef.current = to;
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [to, duration, inView]);
-
-  return <span ref={ref}>{format(display)}</span>;
-}
-
-function TitleRow({ title }: { title: string }) {
-  return (
-    <div className="flex items-center gap-2 mb-2">
-      <h3 className="text-[19px] font-bold text-[#111827]">{title}</h3>
-      <HelpCircle size={13} className="text-[#9CA3AF]" />
-    </div>
-  );
-}
 function EmptyBlock({
   title,
   subtitle,
@@ -1261,15 +1217,22 @@ function EmptyBlock({
   small?: boolean;
 }) {
   return (
-    <div className={`mt-4 ${small ? "py-6" : "py-10"} px-4`}>
-      <AlertTriangle size={22} className="text-[#8B47FF] mb-3" />
-      <div className="text-[17px] font-bold text-[#111827]">{title}</div>
-      <div className="text-[14px] text-[#6B7280] mt-1">{subtitle}</div>
+    <div
+      className={`flex flex-col items-center justify-center px-4 text-center ${small ? "py-6" : "py-10"}`}
+    >
+      <div
+        className="mb-3 grid size-10 place-items-center rounded-full bg-muted text-muted-foreground"
+        aria-hidden="true"
+      >
+        <Inbox size={18} />
+      </div>
+      <div className="text-sm font-semibold text-foreground">{title}</div>
+      <div className="mt-1 text-sm text-muted-foreground">{subtitle}</div>
     </div>
   );
 }
 function Skeleton() {
-  return <div className="h-full w-full rounded-xl bg-[#F3F4F6] animate-pulse" />;
+  return <div className="mc-skeleton h-full w-full rounded-xl" />;
 }
 function LegendDot({
   color,
@@ -1286,7 +1249,7 @@ function LegendDot({
     <span className="inline-flex items-center gap-1.5">
       {line ? (
         <span
-          className="inline-block w-5 h-[2px]"
+          className="inline-block h-[2px] w-5"
           style={{
             background: color,
             borderTop: dashed ? `2px dashed ${color}` : undefined,
@@ -1294,59 +1257,23 @@ function LegendDot({
           }}
         />
       ) : (
-        <span className="inline-block w-3 h-3 rounded" style={{ background: color }} />
+        <span className="inline-block h-3 w-3 rounded-full" style={{ background: color }} />
       )}
       {label}
     </span>
   );
 }
-function DonutChart({
-  data,
-  centerLabel,
-  centerSub,
-  centerSubColor,
-}: {
-  data: { name: string; value: number; color: string }[];
-  centerLabel: string;
-  centerSub: string;
-  centerSubColor: string;
-}) {
-  const rows = data.length ? data : [{ name: "—", value: 1, color: "#F3F4F6" }];
-  return (
-    <div className="relative w-full h-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
-          <Pie
-            data={rows}
-            dataKey="value"
-            innerRadius="65%"
-            outerRadius="90%"
-            stroke="none"
-            startAngle={90}
-            endAngle={-270}
-          >
-            {rows.map((r, i) => (
-              <Cell key={i} fill={r.color} />
-            ))}
-          </Pie>
-        </PieChart>
-      </ResponsiveContainer>
-      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-        <div className="text-[28px] font-bold text-[#111827] leading-none">{centerLabel}</div>
-        <div className="text-[12px] mt-1" style={{ color: centerSubColor }}>
-          {centerSub}
-        </div>
-      </div>
-    </div>
-  );
-}
 function PieLegend({ rows }: { rows: { name: string; value: number; color: string }[] }) {
+  const mode = useResolvedTheme();
   if (!rows.length) return null;
   return (
-    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-[11px] text-[#6B7280]">
+    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
       {rows.map((r) => (
         <span key={r.name} className="inline-flex items-center gap-1.5">
-          <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: r.color }} />
+          <span
+            className="inline-block h-2.5 w-2.5 rounded-full"
+            style={{ background: chartColor(r.color, mode) }}
+          />
           {r.name} ({r.value})
         </span>
       ))}
@@ -1402,17 +1329,7 @@ function PeriodPicker({
   const [mode, setMode] = useState<"presets" | "custom">("presets");
   const [customStart, setCustomStart] = useState(toISO(range[0]));
   const [customEnd, setCustomEnd] = useState(toISO(range[1]));
-  const wrapRef = useRef<HTMLDivElement | null>(null);
   const [active, setActive] = useState<string>("month");
-
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [open]);
 
   const pick = (key: "today" | "week" | "month" | "last7" | "last30") => {
     const r = presetRange(key);
@@ -1444,105 +1361,114 @@ function PeriodPicker({
     { key: "last7", label: "Últimos 7 dias" },
     { key: "last30", label: "Últimos 30 dias" },
   ];
+  const optionClass = (selected: boolean) =>
+    `flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors ${
+      selected
+        ? "bg-primary/10 font-medium text-primary"
+        : "text-foreground hover:bg-foreground/[0.05]"
+    }`;
 
   return (
-    <div ref={wrapRef} className="relative">
+    <Popover open={open} onOpenChange={setOpen}>
       <div
-        className={`flex items-center justify-between h-11 px-2 border rounded-lg bg-white transition-colors ${open ? "border-[#8B47FF] ring-2 ring-[#8B47FF]/20" : "border-[#E5E7EB]"}`}
+        className={`flex h-11 items-center justify-between rounded-full border bg-card px-1.5 transition-colors ${open ? "border-primary ring-2 ring-primary/20" : "border-border"}`}
       >
         <button
+          type="button"
           onClick={() => onShift(-1)}
-          className="h-8 w-8 grid place-items-center text-[#6B7280] hover:bg-[#F3F4F6] rounded-md"
+          aria-label="Período anterior"
+          className="grid size-8 place-items-center rounded-full text-muted-foreground hover:bg-muted"
         >
           <ChevronLeft size={16} />
         </button>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="h-8 flex-1 rounded-full text-sm font-medium tabular-nums text-foreground hover:bg-muted"
+          >
+            {label}
+          </button>
+        </PopoverTrigger>
         <button
-          onClick={() => setOpen((v) => !v)}
-          className="flex-1 text-[15px] font-medium text-[#111827] hover:bg-[#F9FAFB] h-8 rounded-md"
-        >
-          {label}
-        </button>
-        <button
+          type="button"
           onClick={() => onShift(1)}
-          className="h-8 w-8 grid place-items-center text-[#6B7280] hover:bg-[#F3F4F6] rounded-md"
+          aria-label="Próximo período"
+          className="grid size-8 place-items-center rounded-full text-muted-foreground hover:bg-muted"
         >
           <ChevronRight size={16} />
         </button>
       </div>
-      {open && (
-        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 bg-white border border-[#8B47FF] rounded-lg shadow-lg overflow-hidden animate-fade-in">
-          {mode === "presets" ? (
-            <ul className="py-1">
-              {options.map((o) => (
-                <li key={o.key}>
-                  <button
-                    onClick={() => pick(o.key)}
-                    className={`w-full flex items-center justify-between px-4 py-2.5 text-[13px] text-left transition-colors ${active === o.key ? "bg-[#F3EBFF] text-[#8B47FF] font-medium" : "text-[#111827] hover:bg-[#F9FAFB]"}`}
-                  >
-                    <span>{o.label}</span>
-                    {active === o.key && <span className="text-[#8B47FF]">✓</span>}
-                  </button>
-                </li>
-              ))}
-              <li>
+      <PopoverContent align="center" sideOffset={8} className="w-64 rounded-xl p-1">
+        {mode === "presets" ? (
+          <ul className="space-y-0.5">
+            {options.map((o) => (
+              <li key={o.key}>
                 <button
-                  onClick={() => setMode("custom")}
-                  className={`w-full flex items-center justify-between px-4 py-2.5 text-[13px] text-left transition-colors ${active === "custom" ? "bg-[#F3EBFF] text-[#8B47FF] font-medium" : "text-[#111827] hover:bg-[#F9FAFB]"}`}
+                  type="button"
+                  onClick={() => pick(o.key)}
+                  className={optionClass(active === o.key)}
                 >
-                  <span>Customizado</span>
-                  {active === "custom" && <span className="text-[#8B47FF]">✓</span>}
+                  <span>{o.label}</span>
+                  {active === o.key && <Check size={14} aria-hidden="true" />}
                 </button>
               </li>
-            </ul>
-          ) : (
-            <div className="p-3 space-y-2">
-              <div>
-                <div className="text-[11px] text-[#6B7280] mb-1">Início</div>
-                <input
-                  type="date"
-                  value={customStart}
-                  onChange={(e) => setCustomStart(e.target.value)}
-                  className="w-full h-9 px-2 border border-[#E5E7EB] rounded-md text-[13px]"
-                />
-              </div>
-              <div>
-                <div className="text-[11px] text-[#6B7280] mb-1">Fim</div>
-                <input
-                  type="date"
-                  value={customEnd}
-                  onChange={(e) => setCustomEnd(e.target.value)}
-                  className="w-full h-9 px-2 border border-[#E5E7EB] rounded-md text-[13px]"
-                />
-              </div>
-              <div className="flex items-center justify-between gap-2 pt-1">
-                <button
-                  onClick={() => setMode("presets")}
-                  className="text-[12px] text-[#6B7280] hover:text-[#111827]"
-                >
-                  Voltar
-                </button>
-                <button
-                  onClick={applyCustom}
-                  className="h-8 px-3 rounded-md bg-[#8B47FF] text-white text-[12px] font-medium hover:bg-[#7A3AE8]"
-                >
-                  Aplicar
-                </button>
-              </div>
+            ))}
+            <li>
+              <button
+                type="button"
+                onClick={() => setMode("custom")}
+                className={optionClass(active === "custom")}
+              >
+                <span>Customizado</span>
+                {active === "custom" && <Check size={14} aria-hidden="true" />}
+              </button>
+            </li>
+          </ul>
+        ) : (
+          <div className="space-y-2 p-2">
+            <label className="block">
+              <span className="mb-1 block text-xs text-muted-foreground">Início</span>
+              <input
+                type="date"
+                value={customStart}
+                onChange={(e) => setCustomStart(e.target.value)}
+                className="h-9 w-full rounded-lg border border-input bg-card px-2 text-sm text-foreground"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs text-muted-foreground">Fim</span>
+              <input
+                type="date"
+                value={customEnd}
+                onChange={(e) => setCustomEnd(e.target.value)}
+                className="h-9 w-full rounded-lg border border-input bg-card px-2 text-sm text-foreground"
+              />
+            </label>
+            <div className="flex items-center justify-between gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setMode("presets")}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                Voltar
+              </button>
+              <Button size="sm" className="h-8" onClick={applyCustom}>
+                Aplicar
+              </Button>
             </div>
-          )}
-        </div>
-      )}
-    </div>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 
 function ApexRevenueDaily({ data }: { data: { name: string; value: number }[] }) {
+  const mode = useResolvedTheme();
   const categories = data.map((d) => d.name);
   const series = [{ name: "Faturamento", data: data.map((d) => d.value) }];
   const options: ApexOptions = {
     chart: {
-      toolbar: { show: false },
-      fontFamily: "Inter, sans-serif",
       animations: { enabled: true, speed: 500 },
     },
     colors: [CHART_COLORS.primary],
@@ -1550,16 +1476,10 @@ function ApexRevenueDaily({ data }: { data: { name: string; value: number }[] })
       bar: { borderRadius: 6, columnWidth: "55%", borderRadiusApplication: "end" },
     },
     dataLabels: { enabled: false },
-    grid: { borderColor: "#F3F4F6", strokeDashArray: 0, xaxis: { lines: { show: false } } },
-    xaxis: {
-      categories,
-      axisBorder: { show: false },
-      axisTicks: { show: false },
-      labels: { style: { colors: "#6B7280", fontSize: "11px" } },
-    },
+    grid: { strokeDashArray: 0, xaxis: { lines: { show: false } } },
+    xaxis: { categories },
     yaxis: {
       labels: {
-        style: { colors: "#6B7280", fontSize: "11px" },
         formatter: (v) => `R$ ${Math.round(Number(v) / 1000)}k`,
       },
     },
@@ -1572,16 +1492,24 @@ function ApexRevenueDaily({ data }: { data: { name: string; value: number }[] })
     fill: {
       type: "gradient",
       gradient: {
-        shade: "light",
+        shade: mode,
         type: "vertical",
-        gradientToColors: ["#A78BFA"],
+        gradientToColors: [chartColor(CHART_COLORS.primarySoft, mode)],
         stops: [0, 100],
         opacityFrom: 1,
         opacityTo: 0.85,
       },
     },
   };
-  return <Chart type="bar" options={options} series={series} height={240} />;
+  return (
+    <Chart
+      type="bar"
+      options={options}
+      series={series}
+      height={240}
+      summary="Gráfico de recebimentos por dia no período."
+    />
+  );
 }
 
 function ApexDonut({
@@ -1593,9 +1521,12 @@ function ApexDonut({
   centerLabel: string;
   centerSub: string;
 }) {
-  const data = rows.length ? rows : [{ name: "—", value: 1, color: "#F3F4F6" }];
+  const mode = useResolvedTheme();
+  const empty = mode === "dark" ? "#2a2a2e" : "#ededf0";
+  const data = rows.length ? rows : [{ name: "—", value: 1, color: empty }];
+  const subColor = chartColor(CHART_COLORS.primary, mode);
   const options: ApexOptions = {
-    chart: { fontFamily: "Inter, sans-serif", animations: { enabled: true, speed: 500 } },
+    chart: { animations: { enabled: true, speed: 500 } },
     labels: data.map((r) => r.name),
     colors: data.map((r) => r.color),
     stroke: { width: 0 },
@@ -1611,7 +1542,7 @@ function ApexDonut({
             name: {
               show: true,
               offsetY: 22,
-              color: "#8B47FF",
+              color: subColor,
               fontSize: "12px",
               fontWeight: 500,
               formatter: () => centerSub,
@@ -1619,15 +1550,15 @@ function ApexDonut({
             value: {
               show: true,
               offsetY: -12,
-              color: "#111827",
+              color: chartColor(CHART_COLORS.ink, mode),
               fontSize: "28px",
-              fontWeight: 700,
+              fontWeight: 600,
               formatter: () => centerLabel,
             },
             total: {
               show: true,
               label: centerSub,
-              color: "#8B47FF",
+              color: subColor,
               fontSize: "12px",
               formatter: () => centerLabel,
             },
@@ -1636,7 +1567,17 @@ function ApexDonut({
       },
     },
   };
-  return <Chart type="donut" options={options} series={data.map((r) => r.value)} height="100%" />;
+  return (
+    <Chart
+      type="donut"
+      options={options}
+      series={data.map((r) => r.value)}
+      height="100%"
+      summary={`${centerLabel} ${centerSub.toLowerCase()}: ${
+        rows.map((r) => `${r.name} ${r.value}`).join(", ") || "sem dados"
+      }.`}
+    />
+  );
 }
 
 function ApexBar({
@@ -1654,10 +1595,9 @@ function ApexBar({
   height?: number | string;
   showValueLabels?: boolean;
 }) {
+  const mode = useResolvedTheme();
   const options: ApexOptions = {
     chart: {
-      toolbar: { show: false },
-      fontFamily: "Inter, sans-serif",
       animations: { enabled: true, speed: 500 },
     },
     colors: [color],
@@ -1672,19 +1612,17 @@ function ApexBar({
     dataLabels: {
       enabled: !!showValueLabels,
       offsetY: -18,
-      style: { fontSize: "11px", colors: ["#6B7280"], fontWeight: 500 },
+      style: {
+        fontSize: "12px",
+        colors: [mode === "dark" ? "#a1a1a6" : "#636368"],
+        fontWeight: 500,
+      },
       formatter: (v) => String(v),
     },
-    grid: { borderColor: "#F3F4F6", strokeDashArray: 0, xaxis: { lines: { show: false } } },
-    xaxis: {
-      categories,
-      axisBorder: { show: false },
-      axisTicks: { show: false },
-      labels: { style: { colors: "#6B7280", fontSize: "11px" } },
-    },
+    grid: { strokeDashArray: 0, xaxis: { lines: { show: false } } },
+    xaxis: { categories },
     yaxis: {
       labels: {
-        style: { colors: "#6B7280", fontSize: "11px" },
         formatter: (v) =>
           isCurrency ? `R$ ${Math.round(Number(v) / 1000)}k` : String(Math.round(Number(v))),
       },

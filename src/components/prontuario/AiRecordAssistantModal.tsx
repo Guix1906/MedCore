@@ -26,6 +26,7 @@ import {
   Layers,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import {
   generateConsultationRecord,
   StructuredConsultationResult,
@@ -50,14 +51,14 @@ type InputMode = "voice" | "text";
 type RecordingState = "idle" | "recording" | "paused" | "finished";
 
 const SECTION_ICONS: Record<string, React.ReactNode> = {
-  anamnese_geral: <ClipboardCheck size={16} className="text-purple-600" />,
-  queixa: <ClipboardCheck size={16} className="text-purple-600" />,
-  historico_familiar: <UserCheck size={16} className="text-blue-600" />,
-  tratamentos: <Activity size={16} className="text-teal-600" />,
-  alergias: <ShieldAlert size={16} className="text-rose-600" />,
-  historico_pessoal: <Stethoscope size={16} className="text-indigo-600" />,
-  medicacoes: <Pill size={16} className="text-emerald-600" />,
-  conduta: <FileText size={16} className="text-violet-600" />,
+  anamnese_geral: <ClipboardCheck size={16} className="text-primary" />,
+  queixa: <ClipboardCheck size={16} className="text-primary" />,
+  historico_familiar: <UserCheck size={16} className="text-info" />,
+  tratamentos: <Activity size={16} className="text-teal-600 dark:text-teal-400" />,
+  alergias: <ShieldAlert size={16} className="text-destructive" />,
+  historico_pessoal: <Stethoscope size={16} className="text-primary" />,
+  medicacoes: <Pill size={16} className="text-success" />,
+  conduta: <FileText size={16} className="text-primary" />,
 };
 
 export function AiRecordAssistantModal({
@@ -407,55 +408,38 @@ export function AiRecordAssistantModal({
   const isRecording = recordingState === "recording";
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
-      {/* Backdrop suave */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        onClick={onClose}
-        className="fixed inset-0 bg-slate-900/55 backdrop-blur-sm transition-opacity"
-      />
-
-      {/* Modal Dialog */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.97, y: 10 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.97, y: 10 }}
-        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-200 flex flex-col my-auto max-h-[92vh]"
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        className="flex max-h-[92dvh] max-w-3xl flex-col gap-0 overflow-hidden p-0 [&>button.absolute]:hidden"
+        onInteractOutside={(event) => event.preventDefault()}
       >
         {/* Cabeçalho */}
-        <div className="relative px-6 py-4.5 border-b border-slate-100 flex items-center justify-between bg-white">
+        <div className="relative px-4 sm:px-6 py-4 border-b border-border-soft flex items-center justify-between bg-card">
           <div className="flex items-center gap-3.5">
             <div
-              className="flex h-10 w-10 items-center justify-center rounded-xl text-white shadow-sm shrink-0"
-              style={{
-                background: "linear-gradient(135deg, #FF7A59 0%, #D946EF 50%, #6366F1 100%)",
-              }}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,#ff7a59,#d946ef_50%,#6366f1)] text-white shadow-sm"
+              aria-hidden="true"
             >
               <Sparkles size={20} />
             </div>
             <div>
               <div className="flex items-center gap-2.5 flex-wrap">
-                <h2 className="text-[17px] font-bold text-slate-900 tracking-tight">
-                  Assistente de Prontuário IA
-                </h2>
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11.5px] font-semibold bg-purple-50 text-purple-700 border border-purple-200/80">
+                <DialogTitle className="tracking-tight">Assistente de Prontuário IA</DialogTitle>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-primary-soft text-primary border border-primary/20">
                   <Layers size={11} />
-                  Mapeado aos Campos do Prontuário
+                  Revisão profissional necessária
                 </span>
               </div>
-              <p className="text-[12.5px] text-slate-500 mt-0.5">
+              <DialogDescription className="mt-0.5">
                 Fale ou digite os dados clínicos e a IA organizará a consulta em formato de
                 prontuário.
-              </p>
+              </DialogDescription>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors cursor-pointer"
+            className="rounded-xl p-2 text-muted-foreground hover:bg-muted hover:text-foreground/80 transition-colors cursor-pointer"
             aria-label="Fechar"
           >
             <X size={18} />
@@ -463,17 +447,17 @@ export function AiRecordAssistantModal({
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
           {/* Seletor de Modo */}
-          <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3.5">
-            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-100 border border-slate-200/60">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-soft pb-3.5">
+            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-muted border border-border/60">
               <button
                 type="button"
                 onClick={() => setMode("voice")}
-                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-all cursor-pointer ${
+                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
                   mode === "voice"
-                    ? "bg-white text-purple-700 shadow-sm"
-                    : "text-slate-600 hover:text-slate-900"
+                    ? "bg-card text-primary shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <Mic size={15} />
@@ -485,10 +469,10 @@ export function AiRecordAssistantModal({
                   if (isRecording) stopRecording();
                   setMode("text");
                 }}
-                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-all cursor-pointer ${
+                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
                   mode === "text"
-                    ? "bg-white text-purple-700 shadow-sm"
-                    : "text-slate-600 hover:text-slate-900"
+                    ? "bg-card text-primary shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <Edit3 size={15} />
@@ -497,8 +481,8 @@ export function AiRecordAssistantModal({
             </div>
 
             {isRecording && (
-              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-[12.5px] font-bold animate-pulse">
-                <span className="h-2 w-2 rounded-full bg-rose-600" />
+              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-destructive/10 border border-destructive/25 text-destructive text-sm font-semibold animate-pulse">
+                <span className="h-2 w-2 rounded-full bg-destructive" />
                 Gravando consulta ({formatSeconds(recordingSeconds)})
               </div>
             )}
@@ -510,18 +494,18 @@ export function AiRecordAssistantModal({
               <div
                 className={`relative flex flex-col items-center justify-center p-6 rounded-2xl border transition-all ${
                   isRecording
-                    ? "bg-rose-50/40 border-rose-200 shadow-sm"
+                    ? "bg-destructive/4 border-destructive/25 shadow-sm"
                     : recordingState === "paused"
-                      ? "bg-amber-50/40 border-amber-200"
-                      : "bg-slate-50/70 border-slate-200/90"
+                      ? "bg-warning/4 border-warning/25"
+                      : "bg-muted/42 border-border/90"
                 }`}
               >
                 {/* Botão Central de Microfone */}
                 <div className="relative mb-3.5">
                   {isRecording && (
                     <>
-                      <span className="absolute -inset-3 rounded-full bg-rose-400/25 animate-ping" />
-                      <span className="absolute -inset-6 rounded-full bg-rose-300/15 animate-pulse" />
+                      <span className="absolute -inset-3 rounded-full bg-destructive/25 animate-ping" />
+                      <span className="absolute -inset-6 rounded-full bg-destructive/6 animate-pulse" />
                     </>
                   )}
 
@@ -543,7 +527,7 @@ export function AiRecordAssistantModal({
                       <button
                         type="button"
                         onClick={pauseRecording}
-                        className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-200 text-slate-700 hover:bg-slate-300 transition-all shadow-sm active:scale-95 cursor-pointer"
+                        className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-2 text-foreground/80 hover:bg-input transition-all shadow-sm active:scale-95 cursor-pointer"
                         title="Pausar gravação"
                       >
                         <Pause size={18} />
@@ -551,7 +535,7 @@ export function AiRecordAssistantModal({
                       <button
                         type="button"
                         onClick={stopRecording}
-                        className="flex h-16 w-16 items-center justify-center rounded-full bg-rose-600 text-white hover:bg-rose-700 transition-all shadow-md active:scale-95 cursor-pointer"
+                        className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive text-white hover:bg-destructive/90 transition-all shadow-md active:scale-95 cursor-pointer"
                         title="Finalizar consulta"
                       >
                         <Square size={22} className="fill-white" />
@@ -562,7 +546,7 @@ export function AiRecordAssistantModal({
                       <button
                         type="button"
                         onClick={resumeRecording}
-                        className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-600 text-white hover:bg-emerald-700 transition-all shadow-md active:scale-95 cursor-pointer"
+                        className="flex h-16 w-16 items-center justify-center rounded-full bg-success text-white hover:bg-success/90 transition-all shadow-md active:scale-95 cursor-pointer"
                         title="Retomar consulta"
                       >
                         <Play size={24} className="fill-white ml-0.5" />
@@ -570,7 +554,7 @@ export function AiRecordAssistantModal({
                       <button
                         type="button"
                         onClick={stopRecording}
-                        className="flex h-12 w-12 items-center justify-center rounded-full bg-rose-600 text-white hover:bg-rose-700 transition-all shadow-sm active:scale-95 cursor-pointer"
+                        className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive text-white hover:bg-destructive/90 transition-all shadow-sm active:scale-95 cursor-pointer"
                         title="Finalizar consulta"
                       >
                         <Square size={16} className="fill-white" />
@@ -580,7 +564,7 @@ export function AiRecordAssistantModal({
                     <button
                       type="button"
                       onClick={startRecording}
-                      className="relative z-10 flex h-14 w-14 items-center justify-center rounded-full bg-purple-600 text-white hover:bg-purple-700 transition-all shadow-md active:scale-95 cursor-pointer"
+                      className="relative z-10 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-white hover:bg-primary-hover transition-all shadow-md active:scale-95 cursor-pointer"
                       title="Gravar novamente"
                     >
                       <Mic size={22} />
@@ -589,7 +573,7 @@ export function AiRecordAssistantModal({
                 </div>
 
                 <div className="text-center space-y-1">
-                  <div className="text-[15px] font-bold text-slate-800">
+                  <div className="text-[15px] font-semibold text-foreground">
                     {recordingState === "idle" && "Começar a registrar consulta"}
                     {isRecording && "Gravando consulta médica..."}
                     {recordingState === "paused" &&
@@ -597,7 +581,7 @@ export function AiRecordAssistantModal({
                     {recordingState === "finished" &&
                       `Consulta finalizada (${formatSeconds(recordingSeconds)})`}
                   </div>
-                  <p className="text-[12.5px] text-slate-500 max-w-md">
+                  <p className="text-sm text-muted-foreground max-w-md">
                     {recordingState === "idle" &&
                       "A conversa será transcrita e organizada nos campos do prontuário após o término."}
                     {isRecording &&
@@ -614,7 +598,7 @@ export function AiRecordAssistantModal({
                     {audioLevels.map((lvl, i) => (
                       <span
                         key={i}
-                        className="w-1.5 rounded-full bg-rose-500 transition-all duration-75"
+                        className="w-1.5 rounded-full bg-destructive transition-all duration-75"
                         style={{ height: `${lvl}%` }}
                       />
                     ))}
@@ -622,11 +606,11 @@ export function AiRecordAssistantModal({
                 )}
 
                 {isRecording && (
-                  <div className="flex items-center gap-3 mt-4 pt-3 border-t border-rose-200/60 w-full justify-center">
+                  <div className="flex items-center gap-3 mt-4 pt-3 border-t border-destructive/15 w-full justify-center">
                     <button
                       type="button"
                       onClick={pauseRecording}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-white border border-slate-200 text-[12.5px] font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-card border border-border text-sm font-semibold text-foreground/80 hover:bg-muted/60 transition-colors cursor-pointer"
                     >
                       <Pause size={13} />
                       Pausar
@@ -634,7 +618,7 @@ export function AiRecordAssistantModal({
                     <button
                       type="button"
                       onClick={stopRecording}
-                      className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-rose-600 text-white text-[12.5px] font-semibold hover:bg-rose-700 transition-colors shadow-sm cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-destructive text-white text-sm font-semibold hover:bg-destructive/90 transition-colors shadow-sm cursor-pointer"
                     >
                       <Square size={13} className="fill-white" />
                       Finalizar consulta
@@ -647,8 +631,8 @@ export function AiRecordAssistantModal({
               {(transcript || isRecording) && (
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-[12px] font-bold uppercase tracking-wider text-purple-950 flex items-center gap-1.5">
-                      <Volume2 size={13} className="text-purple-600" />
+                    <span className="text-xs font-semibold uppercase tracking-wider text-primary-hover flex items-center gap-1.5">
+                      <Volume2 size={13} className="text-primary" />
                       {isRecording ? "Transcrição em tempo real" : "Transcrição da consulta"}
                     </span>
                     {transcript && (
@@ -658,7 +642,7 @@ export function AiRecordAssistantModal({
                           setTranscript("");
                           finalTranscriptRef.current = "";
                         }}
-                        className="text-[11.5px] text-slate-400 hover:text-rose-600 flex items-center gap-1 transition-colors cursor-pointer"
+                        className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1 transition-colors cursor-pointer"
                       >
                         <Trash2 size={11} /> Limpar transcrição
                       </button>
@@ -676,7 +660,7 @@ export function AiRecordAssistantModal({
                         ? "Ouvindo diálogo... As falas aparecerão aqui em tempo real."
                         : "A transcrição da consulta aparecerá aqui. Você pode editar livremente."
                     }
-                    className="w-full rounded-xl border border-slate-200 p-3.5 text-[13.5px] text-slate-800 placeholder:text-slate-400 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/10 outline-none transition-all resize-y leading-relaxed bg-white shadow-sm font-normal"
+                    className="w-full rounded-xl border border-border p-3.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none transition-all resize-y leading-relaxed bg-card shadow-sm font-normal"
                   />
                 </div>
               )}
@@ -687,14 +671,14 @@ export function AiRecordAssistantModal({
           {mode === "text" && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-[13.5px] font-semibold text-slate-800">
+                <label className="text-sm font-semibold text-foreground">
                   Anotações ou relato clínico da consulta:
                 </label>
                 {manualText && (
                   <button
                     type="button"
                     onClick={() => setManualText("")}
-                    className="text-[11.5px] text-slate-400 hover:text-rose-600 flex items-center gap-1 transition-colors cursor-pointer"
+                    className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1 transition-colors cursor-pointer"
                   >
                     <Trash2 size={12} /> Limpar
                   </button>
@@ -705,7 +689,7 @@ export function AiRecordAssistantModal({
                 value={manualText}
                 onChange={(e) => setManualText(e.target.value)}
                 placeholder="Ex.: Paciente relata dor lombar há 2 semanas com piora ao esforço. Mãe com histórico de osteoporose. Faz uso de Losartana 50mg pela manhã. Alergia a dipirona..."
-                className="w-full rounded-xl border border-slate-200 p-3.5 text-[14px] text-slate-800 placeholder:text-slate-400 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/10 outline-none transition-all resize-y leading-relaxed shadow-sm"
+                className="w-full rounded-xl border border-border p-3.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none transition-all resize-y leading-relaxed shadow-sm"
               />
             </div>
           )}
@@ -716,10 +700,7 @@ export function AiRecordAssistantModal({
               type="button"
               disabled={isGenerating || (!transcript.trim() && !manualText.trim())}
               onClick={handleGenerate}
-              className="relative inline-flex items-center justify-center gap-2 h-11 px-6 rounded-xl text-[14px] font-semibold text-white transition-all shadow-sm hover:brightness-105 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
-              style={{
-                background: "linear-gradient(135deg, #FF7A59 0%, #D946EF 50%, #6366F1 100%)",
-              }}
+              className="relative inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-full bg-primary px-6 text-sm font-semibold text-primary-foreground shadow-xs transition-colors hover:bg-primary-hover active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40"
             >
               {isGenerating ? (
                 <>
@@ -742,21 +723,21 @@ export function AiRecordAssistantModal({
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
-                className="space-y-4 pt-4 border-t border-slate-200"
+                className="space-y-4 pt-4 border-t border-border"
               >
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div>
-                    <h3 className="text-[14px] font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                      <ClipboardCheck size={16} className="text-purple-600" />
+                    <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center gap-2">
+                      <ClipboardCheck size={16} className="text-primary" />
                       Prontuário Estruturado pela IA
                     </h3>
-                    <p className="text-[12px] text-slate-500 mt-0.5">
+                    <p className="text-xs text-muted-foreground mt-0.5">
                       Revise as informações mapeadas para cada campo do prontuário antes de inserir.
                     </p>
                   </div>
 
                   {structuredResult.condicoesDetectadas.length > 0 && (
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-800 text-[11.5px] font-semibold">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary-soft border border-primary/25 text-primary-hover text-xs font-semibold">
                       <span>Condições identificadas:</span>
                       <span className="underline">
                         {structuredResult.condicoesDetectadas.join(", ")}
@@ -779,46 +760,46 @@ export function AiRecordAssistantModal({
                         key={sec.id}
                         className={`rounded-xl border transition-all ${
                           isSelected
-                            ? "bg-white border-purple-200/90 shadow-sm"
-                            : "bg-slate-50/60 border-slate-200/70 opacity-75"
+                            ? "bg-card border-primary/23 shadow-sm"
+                            : "bg-muted/36 border-border/70 opacity-75"
                         }`}
                       >
                         {/* Header do Card com Indicação do Campo do Prontuário */}
-                        <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50/70 border-b border-slate-100 rounded-t-xl flex-wrap gap-2">
+                        <div className="flex items-center justify-between px-4 py-2.5 bg-muted/42 border-b border-border-soft rounded-t-xl flex-wrap gap-2">
                           <div className="flex items-center gap-2.5">
                             <button
                               type="button"
                               onClick={() => toggleSectionSelection(sec.id)}
-                              className="text-purple-600 hover:text-purple-800 transition-colors cursor-pointer"
+                              className="text-primary hover:text-primary-hover transition-colors cursor-pointer"
                               title={isSelected ? "Desmarcar esta seção" : "Incluir esta seção"}
                             >
                               {isSelected ? (
-                                <CheckSquare size={16} className="text-purple-600" />
+                                <CheckSquare size={16} className="text-primary" />
                               ) : (
-                                <SquareBox size={16} className="text-slate-400" />
+                                <SquareBox size={16} className="text-muted-foreground" />
                               )}
                             </button>
 
                             <div className="flex items-center gap-1.5">
                               {SECTION_ICONS[sec.id] || <FileText size={15} />}
-                              <span className="text-[13px] font-bold text-slate-800">
+                              <span className="text-sm font-semibold text-foreground">
                                 {sec.title}
                               </span>
                             </div>
 
-                            <span className="text-[11px] font-medium text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
+                            <span className="text-xs font-medium text-muted-foreground bg-card px-2 py-0.5 rounded border border-border">
                               {sec.fieldTarget}
                             </span>
 
                             {isUnclear && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-warning/10 text-warning border border-warning/25">
                                 <AlertCircle size={11} />
                                 Revisar informação
                               </span>
                             )}
 
                             {isNotInformed && (
-                              <span className="text-[11.5px] text-slate-400 italic font-normal">
+                              <span className="text-xs text-muted-foreground italic font-normal">
                                 (Não informado na consulta)
                               </span>
                             )}
@@ -828,11 +809,11 @@ export function AiRecordAssistantModal({
                             <button
                               type="button"
                               onClick={() => handleCopySection(sec.id, content)}
-                              className="text-slate-400 hover:text-slate-700 p-1 rounded-md transition-colors cursor-pointer"
+                              className="text-muted-foreground hover:text-foreground/80 p-1 rounded-md transition-colors cursor-pointer"
                               title="Copiar seção"
                             >
                               {copiedSectionId === sec.id ? (
-                                <Check size={13} className="text-emerald-600" />
+                                <Check size={13} className="text-success" />
                               ) : (
                                 <Copy size={13} />
                               )}
@@ -847,10 +828,10 @@ export function AiRecordAssistantModal({
                             value={content}
                             onChange={(e) => handleSectionTextChange(sec.id, e.target.value)}
                             placeholder="Não informado na consulta."
-                            className={`w-full rounded-lg p-2.5 text-[13.5px] leading-relaxed transition-all resize-y outline-none ${
+                            className={`w-full rounded-lg p-2.5 text-sm leading-relaxed transition-all resize-y outline-none ${
                               isNotInformed
-                                ? "text-slate-400 bg-slate-50/50 border border-dashed border-slate-200"
-                                : "text-slate-800 bg-white border border-slate-200/80 focus:border-purple-600 focus:ring-1 focus:ring-purple-600/20 font-medium"
+                                ? "text-muted-foreground bg-muted/30 border border-dashed border-border"
+                                : "text-foreground bg-card border border-border/80 focus:border-primary focus:ring-1 focus:ring-primary/20 font-medium"
                             }`}
                           />
                         </div>
@@ -864,11 +845,11 @@ export function AiRecordAssistantModal({
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-3.5 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+        <div className="px-6 py-3.5 border-t border-border-soft bg-muted/60 flex items-center justify-between">
           <button
             type="button"
             onClick={onClose}
-            className="text-[13px] font-medium text-slate-600 hover:text-slate-900 px-3 py-2 rounded-lg transition-colors cursor-pointer"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground px-3 py-2 rounded-lg transition-colors cursor-pointer"
           >
             Cancelar
           </button>
@@ -879,7 +860,7 @@ export function AiRecordAssistantModal({
                 type="button"
                 onClick={handleGenerate}
                 disabled={isGenerating}
-                className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl border border-slate-300 bg-white text-[13px] font-semibold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 h-10 px-4 rounded-full border border-input bg-card text-sm font-semibold text-foreground/80 hover:bg-muted transition-colors cursor-pointer"
               >
                 <RefreshCw size={14} className={isGenerating ? "animate-spin" : ""} />
                 Regenerar
@@ -890,15 +871,15 @@ export function AiRecordAssistantModal({
               type="button"
               disabled={!structuredResult}
               onClick={handleConfirmInsert}
-              className="inline-flex items-center gap-2 h-10 px-5 rounded-xl bg-purple-600 text-[13.5px] font-semibold text-white shadow-sm hover:bg-purple-700 transition-all active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+              className="inline-flex items-center gap-2 h-10 px-5 rounded-full bg-primary text-sm font-semibold text-white shadow-sm hover:bg-primary-hover transition-all active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
             >
               <Check size={16} />
               Inserir no prontuário
             </button>
           </div>
         </div>
-      </motion.div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

@@ -22,7 +22,7 @@ export function StatNumber({
   prefix,
   suffix,
   decimals = 0,
-  duration = 1.2,
+  duration = 0.35,
   className,
   format,
 }: StatNumberProps) {
@@ -51,12 +51,19 @@ export function StatNumber({
     if (!cuRef.current) {
       cuRef.current = new CountUp(ref.current, value, options);
       if (!cuRef.current.error) cuRef.current.start();
+      else console.error("Não foi possível animar o indicador.", cuRef.current.error);
     } else {
       cuRef.current.update(value);
     }
   }, [value, prefix, suffix, decimals, duration, format, reduce]);
 
-  return <span ref={ref} className={cn("tabular-nums", className)} />;
+  return (
+    <span ref={ref} className={cn("tabular-nums", className)}>
+      {format
+        ? format(value)
+        : `${prefix ?? ""}${value.toLocaleString("pt-BR", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}${suffix ?? ""}`}
+    </span>
+  );
 }
 
 export const formatBRL = (v: number) =>

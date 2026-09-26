@@ -218,14 +218,14 @@ function InviteForm({
         </DialogDescription>
       </DialogHeader>
 
-      <div className="flex rounded-lg border border-slate-200 bg-slate-100 p-1 text-xs">
+      <div className="flex rounded-lg border border-border bg-muted p-1 text-xs">
         <button
           type="button"
           onClick={() => setMode("direct")}
           className={`flex-1 rounded-md py-1.5 font-medium transition ${
             mode === "direct"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-600 hover:text-slate-900"
+              ? "bg-card text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
           }`}
         >
           <span className="inline-flex items-center gap-1.5">
@@ -238,8 +238,8 @@ function InviteForm({
           onClick={() => setMode("invite")}
           className={`flex-1 rounded-md py-1.5 font-medium transition ${
             mode === "invite"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-600 hover:text-slate-900"
+              ? "bg-card text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
           }`}
         >
           <span className="inline-flex items-center gap-1.5">
@@ -276,20 +276,20 @@ function InviteForm({
           required
         />
         {touched && !emailValid && (
-          <p id="invite-email-error" className="text-xs text-rose-700">
+          <p id="invite-email-error" className="text-xs text-destructive">
             Informe um e-mail válido.
           </p>
         )}
       </div>
 
       {mode === "direct" && (
-        <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3.5">
+        <div className="space-y-3 rounded-xl border border-border bg-muted/36 p-3.5">
           <div className="flex items-center justify-between">
             <Label htmlFor="invite-password">Senha de acesso</Label>
             <button
               type="button"
               onClick={handleGeneratePassword}
-              className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
             >
               <Sparkles size={12} />
               Gerar senha forte
@@ -304,13 +304,13 @@ function InviteForm({
               placeholder="Mínimo de 6 dígitos"
               minLength={6}
               required
-              className="pr-10 bg-white"
+              className="pr-10 bg-card"
             />
             <button
               type="button"
               tabIndex={-1}
               onClick={() => setShowPassword((v) => !v)}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground/80"
               title={showPassword ? "Ocultar senha" : "Ver senha"}
             >
               {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -318,7 +318,7 @@ function InviteForm({
           </div>
 
           <div className="space-y-1">
-            <Label htmlFor="invite-password-confirm" className="text-xs text-slate-600">
+            <Label htmlFor="invite-password-confirm" className="text-xs text-muted-foreground">
               Confirmar senha
             </Label>
             <Input
@@ -329,10 +329,10 @@ function InviteForm({
               placeholder="Digite a mesma senha novamente"
               minLength={6}
               required
-              className="bg-white"
+              className="bg-card"
             />
             {touched && !passwordMatch && (
-              <p className="text-xs text-rose-600">As senhas não coincidem.</p>
+              <p className="text-xs text-destructive">As senhas não coincidem.</p>
             )}
           </div>
         </div>
@@ -353,7 +353,7 @@ function InviteForm({
           </SelectContent>
         </Select>
         {selectedRole?.description && (
-          <p className="text-xs text-slate-500">{selectedRole.description}</p>
+          <p className="text-xs text-muted-foreground">{selectedRole.description}</p>
         )}
       </div>
 
@@ -373,7 +373,7 @@ function InviteForm({
             ))}
           </SelectContent>
         </Select>
-        <p className="text-[11px] text-slate-500">
+        <p className="text-xs text-muted-foreground">
           Associa a conta a um profissional clínico para prontuário, agendamentos e comissões.
         </p>
       </div>
@@ -383,11 +383,7 @@ function InviteForm({
           Cancelar
         </Button>
         <Button type="submit" disabled={busy || !roleId}>
-          {busy
-            ? "Salvando…"
-            : mode === "direct"
-              ? "Cadastrar usuário"
-              : "Enviar convite"}
+          {busy ? "Salvando…" : mode === "direct" ? "Cadastrar usuário" : "Enviar convite"}
         </Button>
       </DialogFooter>
     </form>

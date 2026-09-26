@@ -272,7 +272,7 @@ function MemberEditor({
 
   return (
     <>
-      <SheetHeader className="space-y-3 border-b border-slate-200 p-5 pr-12 text-left">
+      <SheetHeader className="space-y-3 border-b border-border p-5 pr-12 text-left">
         <div className="flex items-start gap-3">
           <Avatar name={member.fullName} className="h-11 w-11 text-sm" />
           <div className="min-w-0">
@@ -280,24 +280,24 @@ function MemberEditor({
             <SheetDescription className="truncate">{member.email ?? "Sem e-mail"}</SheetDescription>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <StatusBadge status={member.status} />
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground/80">
                 {roleDisplayName(rolesById.get(member.roleId ?? ""))}
               </span>
               {member.isSelf && (
-                <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-700">
+                <span className="rounded-full bg-primary-soft px-2 py-0.5 text-xs font-semibold text-primary">
                   Você
                 </span>
               )}
             </div>
           </div>
         </div>
-        <dl className="grid grid-cols-2 gap-2 text-[12px] text-slate-600">
+        <dl className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
           <div>
-            <dt className="text-slate-400">Último acesso</dt>
+            <dt className="text-muted-foreground">Último acesso</dt>
             <dd>{formatRelative(member.lastSignInAt)}</dd>
           </div>
           <div>
-            <dt className="text-slate-400">No sistema desde</dt>
+            <dt className="text-muted-foreground">No sistema desde</dt>
             <dd>{formatDateTime(member.createdAt)}</dd>
           </div>
         </dl>
@@ -305,13 +305,13 @@ function MemberEditor({
 
       <div className="flex-1 space-y-6 overflow-y-auto p-5">
         {blockReason && (
-          <p className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-[13px] text-slate-700">
-            <Lock size={16} className="mt-0.5 shrink-0 text-slate-500" aria-hidden="true" />
+          <p className="flex items-start gap-2 rounded-xl border border-border bg-muted/60 p-3 text-sm text-foreground/80">
+            <Lock size={16} className="mt-0.5 shrink-0 text-muted-foreground" aria-hidden="true" />
             {blockReason}
           </p>
         )}
         {member.status === "pending" && (
-          <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[13px] text-amber-900">
+          <p className="flex items-start gap-2 rounded-xl border border-warning/25 bg-warning/10 p-3 text-sm text-warning">
             <Info size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
             <span>
               Cadastro aguardando aprovação. Use “Aprovar” para escolher o perfil.
@@ -323,11 +323,11 @@ function MemberEditor({
           </p>
         )}
         {member.status !== "active" && member.statusReason && (
-          <p className="text-[12px] text-slate-500">Motivo registrado: {member.statusReason}</p>
+          <p className="text-xs text-muted-foreground">Motivo registrado: {member.statusReason}</p>
         )}
 
         <section aria-labelledby="member-role" className="space-y-2">
-          <h3 id="member-role" className="text-sm font-semibold text-slate-900">
+          <h3 id="member-role" className="text-sm font-semibold text-foreground">
             Perfil de acesso
           </h3>
           <Select
@@ -348,22 +348,22 @@ function MemberEditor({
               ))}
             </SelectContent>
           </Select>
-          {role?.description && <p className="text-xs text-slate-500">{role.description}</p>}
+          {role?.description && <p className="text-xs text-muted-foreground">{role.description}</p>}
         </section>
 
         <section aria-labelledby="member-permissions" className="space-y-2">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h3 id="member-permissions" className="text-sm font-semibold text-slate-900">
+            <h3 id="member-permissions" className="text-sm font-semibold text-foreground">
               Permissões
             </h3>
-            <p className="text-[12px] text-slate-500">
+            <p className="text-xs text-muted-foreground">
               {adjustments.extra.length + adjustments.revoked.length === 0
                 ? "Igual ao perfil"
                 : `${adjustments.extra.length} adicionada(s), ${adjustments.revoked.length} removida(s) em relação ao perfil`}
             </p>
           </div>
           {ownerSelected && (
-            <p className="text-xs text-slate-500">Proprietários sempre têm acesso total.</p>
+            <p className="text-xs text-muted-foreground">Proprietários sempre têm acesso total.</p>
           )}
           <PermissionMatrix
             idPrefix={`member-${member.id}`}
@@ -378,7 +378,7 @@ function MemberEditor({
         <section aria-labelledby="member-doctor" className="space-y-2">
           <h3
             id="member-doctor"
-            className="flex items-center gap-2 text-sm font-semibold text-slate-900"
+            className="flex items-center gap-2 text-sm font-semibold text-foreground"
           >
             <Stethoscope size={15} aria-hidden="true" />
             Profissional vinculado
@@ -402,13 +402,13 @@ function MemberEditor({
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted-foreground">
             Liga a conta ao cadastro de profissionais (agenda, comissões e autoria clínica).
           </p>
         </section>
 
         <section aria-labelledby="member-agenda" className="space-y-2">
-          <h3 id="member-agenda" className="text-sm font-semibold text-slate-900">
+          <h3 id="member-agenda" className="text-sm font-semibold text-foreground">
             Agenda visível
           </h3>
           <RadioGroup
@@ -428,10 +428,10 @@ function MemberEditor({
             ))}
           </RadioGroup>
           {agendaScope === "selected" && (
-            <fieldset className="max-h-56 space-y-1 overflow-y-auto rounded-xl border border-slate-200 p-3">
+            <fieldset className="max-h-56 space-y-1 overflow-y-auto rounded-xl border border-border p-3">
               <legend className="sr-only">Profissionais visíveis</legend>
               {agendaOptions.length === 0 && (
-                <p className="text-xs text-slate-500">Nenhum profissional cadastrado.</p>
+                <p className="text-xs text-muted-foreground">Nenhum profissional cadastrado.</p>
               )}
               {agendaOptions.map((option) => {
                 const id = `agenda-pick-${member.id}-${option.id}`;
@@ -449,8 +449,8 @@ function MemberEditor({
                         )
                       }
                     />
-                    <label htmlFor={id} className="text-[13px] text-slate-700">
-                      {option.label} <span className="text-slate-400">· {option.hint}</span>
+                    <label htmlFor={id} className="text-sm text-foreground/80">
+                      {option.label} <span className="text-muted-foreground">· {option.hint}</span>
                     </label>
                   </div>
                 );
@@ -458,9 +458,9 @@ function MemberEditor({
             </fieldset>
           )}
           {agendaInvalid && (
-            <p className="text-xs text-rose-700">Selecione ao menos um profissional.</p>
+            <p className="text-xs text-destructive">Selecione ao menos um profissional.</p>
           )}
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted-foreground">
             Filtra a exibição da agenda. A própria agenda e os compromissos sem responsável sempre
             aparecem.
           </p>
@@ -469,16 +469,17 @@ function MemberEditor({
         {!member.isSelf && !blockReason && member.status !== "removed" && (
           <section
             aria-labelledby="member-password-change"
-            className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-4"
+            className="space-y-3 rounded-2xl border border-border bg-muted/42 p-4"
           >
             <div className="flex items-center gap-2">
-              <KeyRound size={16} className="text-slate-600" aria-hidden="true" />
-              <h3 id="member-password-change" className="text-sm font-semibold text-slate-900">
+              <KeyRound size={16} className="text-muted-foreground" aria-hidden="true" />
+              <h3 id="member-password-change" className="text-sm font-semibold text-foreground">
                 Alterar senha de acesso
               </h3>
             </div>
-            <p className="text-xs text-slate-500">
-              Defina uma nova senha para que este usuário possa fazer login no MedCore imediatamente.
+            <p className="text-xs text-muted-foreground">
+              Defina uma nova senha para que este usuário possa fazer login no MedCore
+              imediatamente.
             </p>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="relative flex-1">
@@ -489,13 +490,13 @@ function MemberEditor({
                   placeholder="Nova senha (mínimo 6 dígitos)"
                   minLength={6}
                   disabled={changingPassword}
-                  className="bg-white pr-10"
+                  className="bg-card pr-10"
                 />
                 <button
                   type="button"
                   tabIndex={-1}
                   onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground/80"
                   title={showPassword ? "Ocultar senha" : "Ver senha"}
                 >
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -517,34 +518,36 @@ function MemberEditor({
           <section aria-labelledby="member-history" className="space-y-2">
             <h3
               id="member-history"
-              className="flex items-center gap-2 text-sm font-semibold text-slate-900"
+              className="flex items-center gap-2 text-sm font-semibold text-foreground"
             >
               <History size={15} aria-hidden="true" />
               Histórico recente
             </h3>
-            {history.isPending && <p className="text-xs text-slate-500">Carregando histórico…</p>}
+            {history.isPending && (
+              <p className="text-xs text-muted-foreground">Carregando histórico…</p>
+            )}
             {history.error && (
-              <p className="text-xs text-rose-700">{toAdminError(history.error).message}</p>
+              <p className="text-xs text-destructive">{toAdminError(history.error).message}</p>
             )}
             {history.data && history.data.entries.length === 0 && (
-              <p className="text-xs text-slate-500">Nenhuma alteração registrada.</p>
+              <p className="text-xs text-muted-foreground">Nenhuma alteração registrada.</p>
             )}
             <ol className="space-y-2">
               {history.data?.entries.map((entry) => (
-                <li key={entry.id} className="rounded-lg border border-slate-200 p-2.5 text-[12px]">
-                  <p className="font-medium text-slate-800">
+                <li key={entry.id} className="rounded-lg border border-border p-2.5 text-xs">
+                  <p className="font-medium text-foreground">
                     {AUDIT_ACTION_LABEL[entry.action] ?? entry.action}
-                    <span className="font-normal text-slate-500">
+                    <span className="font-normal text-muted-foreground">
                       {" "}
                       · {formatDateTime(entry.createdAt)} · {entry.actorName}
                     </span>
                   </p>
                   {describeAuditChange(entry.dataBefore, entry.dataAfter).map((line) => (
-                    <p key={line} className="text-slate-600">
+                    <p key={line} className="text-muted-foreground">
                       {line}
                     </p>
                   ))}
-                  {entry.reason && <p className="text-slate-500">Motivo: {entry.reason}</p>}
+                  {entry.reason && <p className="text-muted-foreground">Motivo: {entry.reason}</p>}
                 </li>
               ))}
             </ol>
@@ -552,7 +555,7 @@ function MemberEditor({
         )}
       </div>
 
-      <footer className="flex flex-wrap items-center gap-2 border-t border-slate-200 p-4">
+      <footer className="flex flex-wrap items-center gap-2 border-t border-border p-4">
         {member.isSelf ? (
           <Button variant="outline" onClick={() => onRequestStatus("leave", member)}>
             <LogOut aria-hidden="true" />
@@ -564,7 +567,7 @@ function MemberEditor({
             <Button
               key={action}
               variant="outline"
-              className={tone === "danger" ? "text-rose-700 hover:text-rose-800" : undefined}
+              className={tone === "danger" ? "text-destructive hover:text-destructive" : undefined}
               onClick={() => onRequestStatus(action, member)}
             >
               {label}

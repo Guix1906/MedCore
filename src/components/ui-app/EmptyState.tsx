@@ -1,10 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "@/utils/cn";
 
-/**
- * Estado vazio padronizado.
- * Ilustração SVG opcional + texto + CTA opcional.
- */
 export type EmptyStateProps = {
   title?: string;
   description?: ReactNode;
@@ -23,14 +19,25 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "rounded-xl border border-dashed border-border bg-muted/30 p-6 text-center",
+        "flex flex-col items-center rounded-xl border border-dashed border-border bg-surface/60 px-5 py-10 text-center",
         className,
       )}
     >
-      {illustration}
-      {title && <p className="text-sm font-medium text-foreground mt-1">{title}</p>}
-      {description && <p className="text-xs text-muted-foreground mt-1">{description}</p>}
-      {action && <div className="mt-3">{action}</div>}
+      {illustration && (
+        <div
+          className="mb-4 flex size-12 items-center justify-center rounded-xl bg-primary-soft text-primary"
+          aria-hidden="true"
+        >
+          {illustration}
+        </div>
+      )}
+      {title && <p className="text-base font-semibold text-foreground">{title}</p>}
+      {description && (
+        <div className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
+          {description}
+        </div>
+      )}
+      {action && <div className="mt-5">{action}</div>}
     </div>
   );
 }

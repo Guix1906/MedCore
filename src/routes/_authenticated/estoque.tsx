@@ -1,3 +1,6 @@
+import { PageHeader } from "@/components/ui-app/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -17,11 +20,17 @@ import AppShell from "@/components/AppShell";
 import { confirmDialog } from "@/components/app/confirm-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { inventoryService } from "@/services/api";
+import { KPICard } from "@/components/ds/Card";
+import { SortableHeader } from "@/components/ui-app/SortableHeader";
+import { StatusBadge } from "@/components/ui-app/StatusBadge";
+import { nextSort, sortRows, type SortState } from "@/lib/table-sort";
+
+type StockSortKey = "name" | "category" | "supplier" | "expiry" | "quantity" | "cost" | "status";
 
 export const Route = createFileRoute("/_authenticated/estoque")({
   head: () => ({
     meta: [
-      { title: "Estoque • ClinicMed" },
+      { title: "Estoque • MedCore" },
       { name: "description", content: "Controle de estoque de insumos e medicamentos da clínica." },
     ],
   }),
@@ -173,166 +182,220 @@ function EstoquePage() {
     return { total, low, value, expiring };
   }, [rows]);
 
+  const [sort, setSort] = useState<SortState<StockSortKey>>({ key: "name", direction: "asc" });
+  const toggleSort = (key: StockSortKey) => setSort((previous) => nextSort(previous, key));
+  const sorted = useMemo(
+    () =>
+      sortRows(filtered, sort, {
+        name: (r) => r.name,
+        category: (r) => r.category,
+        supplier: (r) => r.supplier,
+        expiry: (r) => (r.expiry_date ? new Date(r.expiry_date) : null),
+        quantity: (r) => r.quantity,
+        cost: (r) => (r.unit_cost ? Number(r.unit_cost) : null),
+        status: (r) => r.quantity <= r.min_quantity,
+      }),
+    [filtered, sort],
+  );
+
   return (
     <AppShell title="Estoque">
       {clinicalStock.error && (
-        <p role="alert" className="p-4 text-red-700">
+        <p role="alert" className="p-4 text-destructive">
           O saldo clínico não pôde ser atualizado: {clinicalStock.error.message}
         </p>
       )}
       {inventoryError && (
-        <p role="alert" className="p-4 text-red-700">
+        <p role="alert" className="p-4 text-destructive">
           Erro ao carregar estoque: {inventoryError.message}
         </p>
       )}
-      <div className="p-6 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <StatCard
+      <div className="page-container space-y-5">
+        <PageHeader
+          title="Estoque"
+          icon={Package}
+          description="Controle itens, quantidades e validades com clareza."
+          actions={
+            <Button onClick={() => setOpenNew(true)}>
+              <Plus />
+              Novo item
+            </Button>
+          }
+        />
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <KPICard
             label="Itens cadastrados"
             value={String(stats.total)}
-            icon={<Package size={16} />}
-            tint="#EDE4FF"
-            fg="#6B2FE0"
+            icon={<Package className="size-4" />}
           />
-          <StatCard
+          <KPICard
             label="Estoque baixo"
             value={String(stats.low)}
-            icon={<AlertTriangle size={16} />}
-            tint="#FEE2E2"
-            fg="#991B1B"
+            icon={<AlertTriangle className="size-4" />}
+            accent="danger"
           />
-          <StatCard
+          <KPICard
             label="Vencendo (30d)"
             value={String(stats.expiring)}
-            icon={<AlertTriangle size={16} />}
-            tint="#FEF3C7"
-            fg="#92400E"
+            icon={<AlertTriangle className="size-4" />}
+            accent="warning"
           />
-          <StatCard
+          <KPICard
             label="Valor em estoque"
             value={BRL(stats.value)}
-            icon={<Package size={16} />}
-            tint="#DCFCE7"
-            fg="#166534"
+            icon={<Package className="size-4" />}
+            accent="success"
           />
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-md">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative max-w-md flex-1">
+            <Search
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+            />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Buscar por nome, código, categoria ou fornecedor…"
-              className="w-full h-10 pl-9 pr-3 rounded-lg border border-[#E5E7EB] bg-white text-[13px] focus:outline-none focus:border-[#8B47FF]"
+              aria-label="Buscar itens do estoque"
+              className="h-10 w-full rounded-full border border-input bg-card pl-9 pr-3 text-sm shadow-xs focus:border-primary focus:outline-none"
             />
           </div>
-          <button
-            onClick={() => setOpenNew(true)}
-            className="ml-auto inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-[#8B47FF] text-white text-[13px] font-semibold hover:bg-[#7A3AE6]"
-          >
-            <Plus size={16} /> Novo item
-          </button>
+          <p role="status" className="text-sm text-muted-foreground">
+            {filtered.length} item(ns)
+          </p>
         </div>
 
-        <div className="bg-white rounded-xl border border-[#E5E7EB] overflow-hidden">
-          <table className="w-full text-[13px]">
-            <thead className="bg-[#F9FAFB] text-[#6B7280] text-left">
-              <tr>
-                <th className="px-4 py-3 font-medium">Item</th>
-                <th className="px-4 py-3 font-medium">Categoria</th>
-                <th className="px-4 py-3 font-medium">Fornecedor</th>
-                <th className="px-4 py-3 font-medium">Validade</th>
-                <th className="px-4 py-3 font-medium text-right">Qtd.</th>
-                <th className="px-4 py-3 font-medium text-right">Custo un.</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((r) => {
-                const low = r.quantity <= r.min_quantity;
-                const exp = r.expiry_date ? new Date(r.expiry_date) : null;
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const in30 = new Date(today);
-                in30.setDate(in30.getDate() + 30);
-                const expiring = exp && exp <= in30;
-                return (
-                  <tr key={r.id} className="border-t border-[#F3F4F6] hover:bg-[#FAF7FF]">
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-[#111827]">{r.name}</div>
-                      {r.code && <div className="text-[11px] text-[#6B7280]">{r.code}</div>}
-                    </td>
-                    <td className="px-4 py-3 text-[#374151]">{r.category ?? "—"}</td>
-                    <td className="px-4 py-3 text-[#374151]">{r.supplier ?? "—"}</td>
-                    <td
-                      className={`px-4 py-3 ${expiring ? "text-[#92400E] font-medium" : "text-[#374151]"}`}
-                    >
-                      {r.expiry_date ? new Date(r.expiry_date).toLocaleDateString("pt-BR") : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold text-[#111827]">
-                      {r.quantity} {r.unit ?? ""}
-                    </td>
-                    <td className="px-4 py-3 text-right text-[#374151]">
-                      {r.unit_cost ? BRL(Number(r.unit_cost)) : "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      {low ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#FEE2E2] text-[#991B1B]">
-                          Estoque baixo
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#DCFCE7] text-[#166534]">
-                          OK
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="inline-flex gap-1">
-                        <button
-                          onClick={() => setMove({ item: r, type: "in" })}
-                          className="inline-flex items-center gap-1 h-8 px-2 rounded-md border border-[#E5E7EB] text-[12px] font-medium text-[#166534] hover:bg-[#F0FDF4]"
-                          title="Entrada"
-                        >
-                          <ArrowUp size={13} /> Entrada
-                        </button>
-                        <button
-                          onClick={() => setMove({ item: r, type: "out" })}
-                          className="inline-flex items-center gap-1 h-8 px-2 rounded-md border border-[#E5E7EB] text-[12px] font-medium text-[#991B1B] hover:bg-[#FEF2F2]"
-                          title="Saída"
-                        >
-                          <ArrowDown size={13} /> Saída
-                        </button>
-                        <button
-                          onClick={() => setEdit(r)}
-                          className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-[#E5E7EB] text-[#374151] hover:bg-[#F9FAFB]"
-                          title="Editar"
-                        >
-                          <Pencil size={13} />
-                        </button>
-                        <button
-                          onClick={() => deleteItem(r)}
-                          className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-[#E5E7EB] text-[#991B1B] hover:bg-[#FEF2F2]"
-                          title="Excluir"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
+        <div className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
+          <div className="max-h-[70dvh] overflow-auto">
+            <table className="mc-table min-w-[860px]">
+              <thead>
+                <tr>
+                  <SortableHeader label="Item" sortKey="name" sort={sort} onSort={toggleSort} />
+                  <SortableHeader
+                    label="Categoria"
+                    sortKey="category"
+                    sort={sort}
+                    onSort={toggleSort}
+                  />
+                  <SortableHeader
+                    label="Fornecedor"
+                    sortKey="supplier"
+                    sort={sort}
+                    onSort={toggleSort}
+                  />
+                  <SortableHeader
+                    label="Validade"
+                    sortKey="expiry"
+                    sort={sort}
+                    onSort={toggleSort}
+                  />
+                  <SortableHeader
+                    label="Qtd."
+                    sortKey="quantity"
+                    sort={sort}
+                    onSort={toggleSort}
+                    align="right"
+                    className="num"
+                  />
+                  <SortableHeader
+                    label="Custo un."
+                    sortKey="cost"
+                    sort={sort}
+                    onSort={toggleSort}
+                    align="right"
+                    className="num"
+                  />
+                  <SortableHeader label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
+                  <th scope="col" className="num">
+                    <span className="sr-only">Ações</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((r) => {
+                  const low = r.quantity <= r.min_quantity;
+                  const exp = r.expiry_date ? new Date(r.expiry_date) : null;
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  const in30 = new Date(today);
+                  in30.setDate(in30.getDate() + 30);
+                  const expiring = exp && exp <= in30;
+                  return (
+                    <tr key={r.id}>
+                      <td>
+                        <div className="font-medium text-foreground">{r.name}</div>
+                        {r.code && <div className="text-xs text-muted-foreground">{r.code}</div>}
+                      </td>
+                      <td className="text-foreground/80">{r.category ?? "—"}</td>
+                      <td className="text-foreground/80">{r.supplier ?? "—"}</td>
+                      <td className={expiring ? "font-medium text-warning" : "text-foreground/80"}>
+                        {r.expiry_date ? new Date(r.expiry_date).toLocaleDateString("pt-BR") : "—"}
+                      </td>
+                      <td className="num font-semibold text-foreground">
+                        {r.quantity} {r.unit ?? ""}
+                      </td>
+                      <td className="num text-foreground/80">
+                        {r.unit_cost ? BRL(Number(r.unit_cost)) : "—"}
+                      </td>
+                      <td>
+                        {low ? (
+                          <StatusBadge tone="danger" icon={AlertTriangle}>
+                            Estoque baixo
+                          </StatusBadge>
+                        ) : (
+                          <StatusBadge tone="success">OK</StatusBadge>
+                        )}
+                      </td>
+                      <td className="num">
+                        <div className="inline-flex gap-1">
+                          <button
+                            onClick={() => setMove({ item: r, type: "in" })}
+                            className="inline-flex h-8 items-center gap-1 rounded-full border border-border px-2.5 text-xs font-medium text-success hover:bg-success/10"
+                            title="Entrada"
+                          >
+                            <ArrowUp size={13} /> Entrada
+                          </button>
+                          <button
+                            onClick={() => setMove({ item: r, type: "out" })}
+                            className="inline-flex h-8 items-center gap-1 rounded-full border border-border px-2.5 text-xs font-medium text-destructive hover:bg-destructive/10"
+                            title="Saída"
+                          >
+                            <ArrowDown size={13} /> Saída
+                          </button>
+                          <button
+                            onClick={() => setEdit(r)}
+                            aria-label={`Editar ${r.name}`}
+                            className="inline-flex size-8 items-center justify-center rounded-full border border-border text-foreground/80 hover:bg-muted"
+                            title="Editar"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            onClick={() => deleteItem(r)}
+                            aria-label={`Excluir ${r.name}`}
+                            className="inline-flex size-8 items-center justify-center rounded-full border border-border text-destructive hover:bg-destructive/10"
+                            title="Excluir"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {!loading && filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="py-10 text-center text-muted-foreground">
+                      Nenhum item encontrado.
                     </td>
                   </tr>
-                );
-              })}
-
-              {!loading && filtered.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-[#6B7280]">
-                    Nenhum item encontrado.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -347,35 +410,6 @@ function EstoquePage() {
         />
       )}
     </AppShell>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  icon,
-  tint,
-  fg,
-}: {
-  label: string;
-  value: string;
-  icon: React.ReactNode;
-  tint: string;
-  fg: string;
-}) {
-  return (
-    <div className="bg-white rounded-xl border border-[#E5E7EB] p-4">
-      <div className="flex items-center justify-between">
-        <div className="text-[12px] text-[#6B7280]">{label}</div>
-        <div
-          className="h-8 w-8 rounded-lg flex items-center justify-center"
-          style={{ background: tint, color: fg }}
-        >
-          {icon}
-        </div>
-      </div>
-      <div className="mt-2 text-[20px] font-bold text-[#111827]">{value}</div>
-    </div>
   );
 }
 
@@ -402,7 +436,7 @@ function NewItemModal({
   });
   const [saving, setSaving] = useState(false);
   const inp =
-    "w-full h-10 px-3 rounded-lg border border-[#E5E7EB] text-[13px] focus:outline-none focus:border-[#8B47FF]";
+    "w-full h-10 px-3 rounded-lg border border-border text-sm focus:outline-none focus:border-primary";
 
   const save = async () => {
     if (
@@ -437,23 +471,26 @@ function NewItemModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black/40 z-[9999] flex items-center justify-center"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !saving) onClose();
+      }}
     >
-      <div className="w-[560px] bg-white rounded-2xl p-6 shadow-2xl">
+      <DialogContent className="max-w-[560px]">
+        <DialogTitle className="sr-only">Cadastro do item</DialogTitle>
+        <DialogDescription className="sr-only">
+          Confira os dados antes de confirmar.
+        </DialogDescription>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-[16px] font-bold text-[#111827]">
+          <h2 className="text-base font-semibold text-foreground">
             {item ? "Editar item" : "Novo item de estoque"}
           </h2>
-          <button onClick={onClose} className="text-[#9CA3AF]">
-            <X size={18} />
-          </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-2">
-            <label className="text-[12px] text-[#6B7280]">Nome *</label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="sm:col-span-2">
+            <label className="text-xs text-muted-foreground">Nome *</label>
             <input
               value={f.name}
               onChange={(e) => setF({ ...f, name: e.target.value })}
@@ -462,7 +499,7 @@ function NewItemModal({
             />
           </div>
           <div>
-            <label className="text-[12px] text-[#6B7280]">Código</label>
+            <label className="text-xs text-muted-foreground">Código</label>
             <input
               value={f.code}
               onChange={(e) => setF({ ...f, code: e.target.value })}
@@ -470,7 +507,7 @@ function NewItemModal({
             />
           </div>
           <div>
-            <label className="text-[12px] text-[#6B7280]">Categoria</label>
+            <label className="text-xs text-muted-foreground">Categoria</label>
             <input
               value={f.category}
               onChange={(e) => setF({ ...f, category: e.target.value })}
@@ -479,7 +516,7 @@ function NewItemModal({
             />
           </div>
           <div>
-            <label className="text-[12px] text-[#6B7280]">Quantidade</label>
+            <label className="text-xs text-muted-foreground">Quantidade</label>
             <input
               type="number"
               disabled={!!item}
@@ -490,7 +527,7 @@ function NewItemModal({
             />
           </div>
           <div>
-            <label className="text-[12px] text-[#6B7280]">Unidade</label>
+            <label className="text-xs text-muted-foreground">Unidade</label>
             <input
               value={f.unit}
               onChange={(e) => setF({ ...f, unit: e.target.value })}
@@ -499,7 +536,7 @@ function NewItemModal({
             />
           </div>
           <div>
-            <label className="text-[12px] text-[#6B7280]">Estoque mínimo</label>
+            <label className="text-xs text-muted-foreground">Estoque mínimo</label>
             <input
               type="number"
               value={f.min_quantity}
@@ -508,7 +545,7 @@ function NewItemModal({
             />
           </div>
           <div>
-            <label className="text-[12px] text-[#6B7280]">Validade</label>
+            <label className="text-xs text-muted-foreground">Validade</label>
             <input
               type="date"
               value={f.expiry_date}
@@ -517,7 +554,7 @@ function NewItemModal({
             />
           </div>
           <div>
-            <label className="text-[12px] text-[#6B7280]">Fornecedor</label>
+            <label className="text-xs text-muted-foreground">Fornecedor</label>
             <input
               value={f.supplier}
               onChange={(e) => setF({ ...f, supplier: e.target.value })}
@@ -525,7 +562,7 @@ function NewItemModal({
             />
           </div>
           <div>
-            <label className="text-[12px] text-[#6B7280]">Custo unitário (R$)</label>
+            <label className="text-xs text-muted-foreground">Custo unitário (R$)</label>
             <input
               value={f.unit_cost}
               onChange={(e) => setF({ ...f, unit_cost: e.target.value })}
@@ -533,8 +570,8 @@ function NewItemModal({
               placeholder="0,00"
             />
           </div>
-          <div className="col-span-2">
-            <label className="text-[12px] text-[#6B7280]">Localização</label>
+          <div className="sm:col-span-2">
+            <label className="text-xs text-muted-foreground">Localização</label>
             <input
               value={f.location}
               onChange={(e) => setF({ ...f, location: e.target.value })}
@@ -546,20 +583,20 @@ function NewItemModal({
         <div className="flex justify-end gap-2 mt-5">
           <button
             onClick={onClose}
-            className="h-10 px-4 rounded-lg border border-[#E5E7EB] text-[13px] font-semibold text-[#374151]"
+            className="h-10 px-4 rounded-full border border-border text-sm font-semibold text-foreground/80"
           >
             Cancelar
           </button>
           <button
             onClick={save}
             disabled={saving || !f.name.trim()}
-            className="h-10 px-4 rounded-lg bg-[#8B47FF] text-white text-[13px] font-semibold disabled:opacity-60"
+            className="h-10 px-4 rounded-full bg-primary text-white text-sm font-semibold disabled:opacity-60"
           >
             {saving ? "Salvando…" : "Salvar"}
           </button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -579,7 +616,7 @@ function MovementModal({
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const inp =
-    "w-full h-10 px-3 rounded-lg border border-[#E5E7EB] text-[13px] focus:outline-none focus:border-[#8B47FF]";
+    "w-full h-10 px-3 rounded-lg border border-border text-sm focus:outline-none focus:border-primary";
 
   const save = async () => {
     const q = Number(qty);
@@ -616,28 +653,39 @@ function MovementModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black/40 z-[9999] flex items-center justify-center"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !saving) onClose();
+      }}
     >
-      <div className="w-[420px] bg-white rounded-2xl p-6 shadow-2xl">
+      <DialogContent className="max-w-[420px]">
+        <DialogTitle className="sr-only">Movimentação de estoque</DialogTitle>
+        <DialogDescription className="sr-only">
+          Confira os dados antes de confirmar.
+        </DialogDescription>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-[16px] font-bold text-[#111827]">
+          <h2 className="text-base font-semibold text-foreground">
             {type === "in" ? "Entrada" : "Saída"} — {item.name}
           </h2>
-          <button onClick={onClose} className="text-[#9CA3AF]">
-            <X size={18} />
-          </button>
         </div>
-        <div className="text-[12px] text-[#6B7280] mb-3">
+        <div className="text-xs text-muted-foreground mb-3">
           Estoque atual:{" "}
-          <span className="font-semibold text-[#111827]">
+          <span className="font-semibold text-foreground">
             {item.quantity} {item.unit ?? ""}
           </span>
         </div>
+        <div role="status" className="mb-4 rounded-lg border border-border bg-surface p-3 text-sm">
+          Saldo após a movimentação:{" "}
+          <strong className="tabular-nums">
+            {Number.isInteger(Number(qty)) && Number(qty) > 0
+              ? `${item.quantity + (type === "in" ? Number(qty) : -Number(qty))} ${item.unit ?? ""}`
+              : "Informe uma quantidade válida"}
+          </strong>
+        </div>
         <div className="space-y-3">
           <div>
-            <label className="text-[12px] text-[#6B7280]">Quantidade *</label>
+            <label className="text-xs text-muted-foreground">Quantidade *</label>
             <input
               type="number"
               min={1}
@@ -648,7 +696,7 @@ function MovementModal({
             />
           </div>
           <div>
-            <label className="text-[12px] text-[#6B7280]">Motivo</label>
+            <label className="text-xs text-muted-foreground">Motivo</label>
             <input
               value={reason}
               onChange={(e) => setReason(e.target.value)}
@@ -660,19 +708,19 @@ function MovementModal({
         <div className="flex justify-end gap-2 mt-5">
           <button
             onClick={onClose}
-            className="h-10 px-4 rounded-lg border border-[#E5E7EB] text-[13px] font-semibold text-[#374151]"
+            className="h-10 px-4 rounded-full border border-border text-sm font-semibold text-foreground/80"
           >
             Cancelar
           </button>
           <button
             onClick={save}
             disabled={saving}
-            className={`h-10 px-4 rounded-lg text-white text-[13px] font-semibold disabled:opacity-60 ${type === "in" ? "bg-[#166534] hover:bg-[#14532D]" : "bg-[#991B1B] hover:bg-[#7F1D1D]"}`}
+            className={`h-10 px-4 rounded-full text-white text-sm font-semibold disabled:opacity-60 ${type === "in" ? "bg-success hover:bg-success/90" : "bg-destructive hover:bg-destructive/90"}`}
           >
             {saving ? "Salvando…" : "Confirmar"}
           </button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -1,285 +1,317 @@
+import { Card, CardHeader, KPICard } from "@/components/ds/Card";
+import { Chart } from "@/components/ds/Chart";
+import { EmptyState, PageHeader, SkeletonKpiGrid } from "@/components/ui-app";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { agendaVisibleIds, filterByAgendaScope } from "@/features/admin/permissions";
+import { useAgendaData } from "@/features/agenda/hooks/use-agenda-data";
+import { useActiveCompany } from "@/hooks/use-active-company";
+import { useAuth } from "@/hooks/use-auth";
+import { useCompanyMembers } from "@/hooks/use-company-members";
+import { usePermissions } from "@/hooks/use-permissions";
+import { toLocalDateInputValue } from "@/lib/date-utils";
+import { Link } from "@tanstack/react-router";
+import { BarChart3, CalendarCheck, CheckCircle2, Clock, XCircle } from "lucide-react";
 import { useMemo, useState } from "react";
-import { CalendarCheck, Clock3, Users, Info, UserCheck } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { summarizeAgenda, type OverviewPeriod } from "../overview-utils";
+import { SegmentedControl } from "@/components/ui-app/SegmentedControl";
 
-import { HeaderFilters } from "./HeaderFilters";
-import { DashCard, CardTitle, KpiCard, EmptyHint } from "./cards";
-import {
-  AppointmentsChart,
-  BusiestDaysChart,
-  DiscreteBarsChart,
-  GaugeCard,
-  HeatmapChart,
-  MiniBarsCard,
-} from "./charts";
-import { StatusCard, type StatusRow } from "./StatusCard";
-
-const TABS = ["Diária", "Semanal", "Mensal", "Anual"] as const;
-type Tab = (typeof TABS)[number];
-
-const SERIES: Record<Tab, { categories: string[]; data: number[] }> = {
-  Diária: {
-    categories: ["26/Jul", "27/Jul", "28/Jul", "29/Jul", "30/Jul", "31/Jul", "1/Ago"],
-    data: [1, 0, 4, 0, 0, 0, 0],
-  },
-  Semanal: {
-    categories: ["S1", "S2", "S3", "S4", "S5"],
-    data: [2, 5, 3, 4, 1],
-  },
-  Mensal: {
-    categories: ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul"],
-    data: [3, 6, 4, 8, 5, 7, 5],
-  },
-  Anual: {
-    categories: ["2023", "2024", "2025", "2026"],
-    data: [24, 42, 38, 5],
-  },
-};
-
-const STATUS_ROWS: StatusRow[] = [
-  { key: "agendado", label: "Agendado", count: 1, pct: 20 },
-  { key: "reservado", label: "Reservado", count: 0, pct: 0 },
-  { key: "confirmado", label: "Confirmado", count: 0, pct: 0 },
-  { key: "nao_compareceu", label: "Não compareceu", count: 1, pct: 20 },
-  { key: "concluido", label: "Concluído", count: 2, pct: 40 },
-  { key: "cancelado", label: "Cancelado", count: 1, pct: 20 },
-];
-
-const HOURS = ["09h", "10h", "11h", "12h", "13h", "14h", "15h", "16h", "17h"];
+function statusBarClass(label: string) {
+  const normalized = label.toLowerCase();
+  if (normalized.startsWith("conclu")) return "bg-success";
+  if (normalized.startsWith("cancel")) return "bg-destructive";
+  if (normalized.startsWith("confirm")) return "bg-info";
+  if (normalized.includes("falt") || normalized.includes("não compareceu")) return "bg-warning";
+  return "bg-primary/70";
+}
 
 export function DashboardPage() {
-  const [tab, setTab] = useState<Tab>("Diária");
-  const current = SERIES[tab];
-
-  // Dados reais de agendamentos e pacientes para alimentar os KPIs
-  const { data: realEvents = [] } = useQuery({
-    queryKey: ["dashboard-events-overview"],
-    staleTime: 60_000,
-    queryFn: async () => {
-      try {
-        const { data } = await supabase
-          .from("events")
-          .select("id, title, description, starts_at, ends_at")
-          .limit(1000);
-        return data || [];
-      } catch {
-        return [];
-      }
-    },
-  });
-
-  const { data: realPatientsCount = 0 } = useQuery({
-    queryKey: ["dashboard-patients-count"],
-    staleTime: 60_000,
-    queryFn: async () => {
-      try {
-        const { count } = await supabase
-          .from("patients")
-          .select("id", { count: "exact", head: true });
-        return count || 0;
-      } catch {
-        return 0;
-      }
-    },
-  });
-
-  const parsedStatusCounts = useMemo(() => {
-    const counts: Record<string, number> = {
-      agendado: 0,
-      confirmado: 0,
-      concluido: 0,
-      cancelado: 0,
-      pendente: 0,
-    };
-
-    realEvents.forEach((e) => {
-      let status = "agendado";
-      if (e.description) {
-        const m = e.description.match(/<!--AGENDAMENTO_META:(.*?)-->/s);
-        if (m && m[1]) {
-          try {
-            const parsed = JSON.parse(m[1]);
-            if (parsed.status) status = parsed.status;
-          } catch {}
-        }
-      }
-      if (counts[status] !== undefined) {
-        counts[status]++;
-      } else {
-        counts.agendado++;
-      }
-    });
-
-    return counts;
-  }, [realEvents]);
-
-  const computedStatusRows = useMemo(() => {
-    if (realEvents.length === 0) return STATUS_ROWS;
-    const total = realEvents.length;
-    return [
-      {
-        key: "agendado",
-        label: "Agendado",
-        count: parsedStatusCounts.agendado,
-        pct: Math.round((parsedStatusCounts.agendado / total) * 100),
-      },
-      {
-        key: "confirmado",
-        label: "Confirmado",
-        count: parsedStatusCounts.confirmado,
-        pct: Math.round((parsedStatusCounts.confirmado / total) * 100),
-      },
-      {
-        key: "concluido",
-        label: "Concluído",
-        count: parsedStatusCounts.concluido,
-        pct: Math.round((parsedStatusCounts.concluido / total) * 100),
-      },
-      {
-        key: "cancelado",
-        label: "Cancelado",
-        count: parsedStatusCounts.cancelado,
-        pct: Math.round((parsedStatusCounts.cancelado / total) * 100),
-      },
-      {
-        key: "pendente",
-        label: "Pendente",
-        count: parsedStatusCounts.pendente,
-        pct: Math.round((parsedStatusCounts.pendente / total) * 100),
-      },
-    ];
-  }, [realEvents, parsedStatusCounts]);
-
-  const average = useMemo(
-    () => Number((current.data.reduce((a, b) => a + b, 0) / current.data.length).toFixed(2)),
-    [current],
-  );
-
-  const heatmap = useMemo(
+  const { user } = useAuth();
+  const { companyId } = useActiveCompany();
+  const { byId } = useCompanyMembers(companyId);
+  const { access } = usePermissions();
+  const { activities, isLoading, error, refresh } = useAgendaData(companyId, user?.id);
+  const [date, setDate] = useState(() => new Date());
+  const [period, setPeriod] = useState<OverviewPeriod>("mes");
+  const [professional, setProfessional] = useState("todos");
+  const [status, setStatus] = useState("todos");
+  const visible = useMemo(
     () =>
-      HOURS.map((h, hi) => ({
-        name: h,
-        data: ["D", "S", "T", "Q", "Q", "S", "S"].map((d, di) => ({
-          x: d,
-          y: (hi * 3 + di * 5) % 7 === 0 ? 3 : (hi + di) % 4 === 0 ? 2 : 0,
-        })),
-      })).reverse(),
-    [],
+      access.mode === "active"
+        ? filterByAgendaScope(
+            activities,
+            agendaVisibleIds({
+              scope: access.agendaScope,
+              ownIds: [user?.id, access.doctorId],
+              selectedIds: access.agendaProfessionalIds,
+            }),
+          )
+        : activities,
+    [activities, access, user?.id],
   );
-
-  const totalApptsDisplay = realEvents.length > 0 ? realEvents.length : 5;
+  const data = useMemo(
+    () => summarizeAgenda(visible, date, period, professional, status),
+    [visible, date, period, professional, status],
+  );
+  const rangeLabel = `${data.start.toLocaleDateString("pt-BR")} – ${data.end.toLocaleDateString("pt-BR")}`;
+  const selectClass = "h-10 w-full min-w-0 rounded-lg border border-input bg-card px-3 text-sm";
 
   return (
-    <div className="min-h-full bg-[#F7F8FC] p-4 md:p-6">
-      <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
-        {/* Banner de transparência analítica */}
-        <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-sky-200 bg-sky-50 text-xs text-sky-900 shadow-2xs">
-          <Info className="h-4 w-4 text-sky-600 shrink-0" />
-          <span>
-            <strong>Painel Analítico MedCore:</strong> Os indicadores de agendamentos e pacientes refletem dados registrados no banco de dados. Projeções horárias e canais utilizam modelos analíticos prévios.
-          </span>
-        </div>
-
-        <HeaderFilters period="26/07/2026 – 01/08/2026" />
-
-        {/* KPIs */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <KpiCard
-            title="Total de agendamentos"
-            value={totalApptsDisplay}
-            icon={CalendarCheck}
-            delay={0.02}
-          />
-          <KpiCard title="Ociosidade estimada" value={85} suffix="%" trend={5} icon={Clock3} delay={0.06} />
-          <KpiCard
-            title="Pacientes cadastrados"
-            value={realPatientsCount}
-            icon={UserCheck}
-            delay={0.1}
-          />
-        </div>
-
-        {/* Gauges */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <GaugeCard title="Agendamentos por convênio" value={totalApptsDisplay} delay={0.12} />
-          <GaugeCard title="Conversão por canal" value={totalApptsDisplay} delay={0.16} />
-        </div>
-
-        {/* Período + status */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <DashCard className="lg:col-span-2" delay={0.18}>
-            <div className="mb-2 flex items-center justify-between gap-4">
-              <CardTitle>Agendamentos por período</CardTitle>
-              <div className="-mt-3 flex items-center gap-3">
-                {TABS.map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setTab(t)}
-                    className={
-                      t === tab
-                        ? "border-b-2 border-[#7C5CFA] pb-0.5 text-[14.5px] font-bold text-[#7C5CFA]"
-                        : "pb-0.5 text-[14.5px] font-semibold text-[#6B7280] hover:text-[#111827]"
-                    }
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <AppointmentsChart
-              categories={current.categories}
-              data={current.data}
-              average={average}
+    <div className="page-container space-y-5">
+      <PageHeader
+        title="Indicadores da agenda"
+        description="Agendamentos registrados, com o mesmo escopo de acesso da Agenda."
+        icon={BarChart3}
+        actions={
+          <Button asChild variant="outline">
+            <Link to="/agenda">Abrir agenda</Link>
+          </Button>
+        }
+      />
+      <section
+        aria-label="Filtros dos indicadores"
+        className="rounded-xl border border-border bg-card p-4 shadow-xs"
+      >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="space-y-1.5 text-sm font-medium">
+            <span id="overview-period-label">Período</span>
+            <SegmentedControl
+              aria-label="Período"
+              value={period}
+              onChange={setPeriod}
+              className="flex h-10 w-full"
+              options={[
+                { value: "semana", label: "Semana" },
+                { value: "mes", label: "Mês" },
+                { value: "ano", label: "Ano" },
+              ]}
             />
-          </DashCard>
-          <StatusCard rows={computedStatusRows} delay={0.2} />
+          </div>
+          <label className="space-y-1.5 text-sm font-medium">
+            <span>Data de referência</span>
+            <Input
+              type="date"
+              value={toLocalDateInputValue(date)}
+              onChange={(event) => {
+                if (event.target.value) {
+                  const [year, month, day] = event.target.value.split("-").map(Number);
+                  setDate(new Date(year, month - 1, day));
+                }
+              }}
+            />
+          </label>
+          <label className="space-y-1.5 text-sm font-medium">
+            <span>Profissional</span>
+            <select
+              value={professional}
+              onChange={(event) => setProfessional(event.target.value)}
+              className={selectClass}
+            >
+              <option value="todos">Todos os profissionais</option>
+              {professional !== "todos" && !data.availableProfessionals.includes(professional) && (
+                <option value={professional}>
+                  {byId.get(professional) ?? "Profissional selecionado"}
+                </option>
+              )}
+              {data.availableProfessionals.map((id) => (
+                <option key={id} value={id}>
+                  {byId.get(id) ?? "Profissional sem nome"}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1.5 text-sm font-medium">
+            <span>Status</span>
+            <select
+              value={status}
+              onChange={(event) => setStatus(event.target.value)}
+              className={selectClass}
+            >
+              <option value="todos">Todos os status</option>
+              {status !== "todos" && !data.availableStatuses.includes(status) && (
+                <option value={status}>{status}</option>
+              )}
+              {data.availableStatuses.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
-
-        {/* Mini métricas */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <MiniBarsCard
-            title="Pacientes mais frequentes"
-            items={[{ label: "Clara Ribeiro (Paciente)", value: 5, pct: 100 }]}
-            delay={0.22}
-          />
-          <DashCard delay={0.24}>
-            <CardTitle>Ociosidade por sala</CardTitle>
-            <button className="-mt-2 mb-1 block text-[14.5px] font-semibold text-[#7C5CFA] hover:underline">
-              ver mais
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border-soft pt-3">
+          <p className="text-sm text-muted-foreground">
+            Período exibido: <span className="font-medium text-foreground">{rangeLabel}</span>
+          </p>
+          {(professional !== "todos" || status !== "todos") && (
+            <button
+              type="button"
+              onClick={() => {
+                setProfessional("todos");
+                setStatus("todos");
+              }}
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              Limpar profissional e status
             </button>
-            <EmptyHint />
-          </DashCard>
-          <DashCard delay={0.26}>
-            <CardTitle>Ociosidade por profissional</CardTitle>
-            <button className="-mt-2 mb-1 block text-[14.5px] font-semibold text-[#7C5CFA] hover:underline">
-              ver mais
-            </button>
-            <EmptyHint />
-          </DashCard>
-          <MiniBarsCard
-            title="Procedimentos mais frequentes"
-            items={[{ label: "Atendimento", value: 1, pct: 100 }]}
-            delay={0.28}
+          )}
+        </div>
+      </section>
+      {error ? (
+        <div role="alert">
+          <EmptyState
+            title="Indicadores indisponíveis"
+            description="Não foi possível atualizar a agenda. Nenhum número de exemplo é utilizado."
+            action={
+              <Button variant="outline" onClick={() => void refresh()}>
+                Tentar novamente
+              </Button>
+            }
           />
         </div>
-
-        {/* Linha final */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <DashCard delay={0.3}>
-            <CardTitle>Distribuição geral</CardTitle>
-            <DiscreteBarsChart data={[2, 1, 4, 1, 3, 1, 2]} />
-          </DashCard>
-          <DashCard delay={0.32}>
-            <CardTitle>Dias mais movimentados</CardTitle>
-            <BusiestDaysChart data={[1, 0, 5, 0, 1, 0, 1]} />
-          </DashCard>
-          <DashCard delay={0.34}>
-            <CardTitle>Horários mais movimentados</CardTitle>
-            <HeatmapChart series={heatmap} />
-          </DashCard>
-        </div>
-      </div>
+      ) : isLoading ? (
+        <SkeletonKpiGrid count={4} />
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <KPICard
+              label="Agendamentos no período"
+              value={data.total}
+              icon={<CalendarCheck size={18} />}
+              hint="Após os filtros selecionados"
+            />
+            <KPICard
+              label="Confirmados"
+              value={data.statusCounts.get("Confirmado") ?? 0}
+              icon={<Clock size={18} />}
+              hint="Confirmação registrada"
+            />
+            <KPICard
+              label="Concluídos"
+              value={data.statusCounts.get("Concluído") ?? 0}
+              icon={<CheckCircle2 size={18} />}
+              accent="success"
+              hint="Status informado na agenda"
+            />
+            <KPICard
+              label="Cancelados"
+              value={data.statusCounts.get("Cancelado") ?? 0}
+              icon={<XCircle size={18} />}
+              accent="danger"
+              hint="Cancelamento registrado"
+            />
+          </div>
+          {!data.total ? (
+            <EmptyState
+              title="Sem agendamentos neste recorte"
+              description="Escolha outro período ou ajuste os filtros. Tarefas, prazos e feriados não entram nestes indicadores."
+              illustration={<CalendarCheck size={24} />}
+            />
+          ) : (
+            <>
+              <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+                <Card className="xl:col-span-2">
+                  <CardHeader
+                    title={period === "ano" ? "Agendamentos por mês" : "Agendamentos por dia"}
+                    subtitle={rangeLabel}
+                  />
+                  <Chart
+                    type="bar"
+                    height={280}
+                    series={[
+                      { name: "Agendamentos", data: data.buckets.map((bucket) => bucket.count) },
+                    ]}
+                    options={{
+                      xaxis: {
+                        categories: data.buckets.map((bucket) => bucket.label),
+                        tickAmount: Math.min(data.buckets.length, 10),
+                      },
+                      yaxis: {
+                        min: 0,
+                        forceNiceScale: true,
+                        labels: { formatter: (value) => String(Math.round(value)) },
+                      },
+                      plotOptions: { bar: { borderRadius: 4, columnWidth: "45%" } },
+                    }}
+                  />
+                </Card>
+                <Card>
+                  <CardHeader
+                    title="Situação dos agendamentos"
+                    subtitle="Participação no total filtrado"
+                  />
+                  <div className="space-y-5">
+                    {Array.from(data.statusCounts).map(([label, count]) => (
+                      <div key={label}>
+                        <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+                          <span>{label}</span>
+                          <span className="tabular-nums text-muted-foreground">
+                            {count} · {Math.round((count / data.total) * 100)}%
+                          </span>
+                        </div>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                          <div
+                            className={`h-full rounded-full ${statusBarClass(label)}`}
+                            style={{ width: `${(count / data.total) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </div>
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                <Card>
+                  <CardHeader
+                    title="Distribuição por dia da semana"
+                    subtitle="Quantidade de agendamentos, não taxa de ocupação"
+                  />
+                  <Chart
+                    type="bar"
+                    height={240}
+                    series={[{ name: "Agendamentos", data: data.weekDays.map((day) => day.count) }]}
+                    options={{
+                      xaxis: { categories: data.weekDays.map((day) => day.label) },
+                      yaxis: {
+                        min: 0,
+                        labels: { formatter: (value) => String(Math.round(value)) },
+                      },
+                      plotOptions: { bar: { borderRadius: 4, columnWidth: "40%" } },
+                    }}
+                  />
+                </Card>
+                <Card>
+                  <CardHeader
+                    title="Agendamentos por profissional"
+                    subtitle="Todos os profissionais presentes neste recorte"
+                  />
+                  <ul className="max-h-64 divide-y divide-border-soft overflow-y-auto">
+                    {Array.from(data.professionals)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([id, count]) => (
+                        <li
+                          key={id}
+                          className="flex items-center justify-between gap-4 py-3 text-sm"
+                        >
+                          <span>
+                            {id
+                              ? (byId.get(id) ?? "Profissional sem nome")
+                              : "Profissional não informado"}
+                          </span>
+                          <span className="font-medium tabular-nums">{count}</span>
+                        </li>
+                      ))}
+                  </ul>
+                </Card>
+              </div>
+            </>
+          )}
+          <p className="text-xs text-muted-foreground">
+            Os indicadores representam os agendamentos carregados na Agenda. Não incluem estimativas
+            de ociosidade, conversão ou evolução clínica.
+          </p>
+        </>
+      )}
     </div>
   );
 }

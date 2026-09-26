@@ -23,14 +23,14 @@ export default function FinancialAccounts({
     <section className="space-y-4">
       <div>
         <h2 className="text-lg font-semibold">Contas financeiras</h2>
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-muted-foreground">
           Caixa físico, bancos e recebíveis de cartão. Saldos iniciais exigem conferência; não são
           presumidos como zero.
         </p>
       </div>
-      <div className="overflow-x-auto rounded-xl border bg-white">
+      <div className="overflow-x-auto rounded-xl border bg-card">
         <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50">
+          <thead className="bg-muted/60">
             <tr>
               {["Conta", "Natureza", "Saldo inicial", "Data de abertura", "Situação"].map(
                 (label) => (
@@ -69,7 +69,7 @@ export default function FinancialAccounts({
       </div>
       {ops.can_manage && (
         <>
-          <details className="rounded-xl border bg-white p-4">
+          <details className="rounded-xl border bg-card p-4">
             <summary className="cursor-pointer font-medium">Cadastrar conta</summary>
             <div className="mt-3">
               <OperationForm
@@ -92,7 +92,7 @@ export default function FinancialAccounts({
                     { id: "caixa", name: "Caixa físico" },
                   ]}
                 />
-                <p className="text-xs text-slate-500 sm:col-span-2">
+                <p className="text-xs text-muted-foreground sm:col-span-2">
                   Após cadastrar, confirme a natureza e o saldo inicial abaixo antes de usar o saldo
                   nos demonstrativos.
                 </p>
@@ -128,18 +128,18 @@ export default function FinancialAccounts({
               <Field name="amount" label="Saldo no início do dia (R$)" />
               <Field name="date" label="Data da abertura conferida" type="date" max={localDate()} />
               <Reason />
-              <p className="text-xs text-slate-500 sm:col-span-2">
+              <p className="text-xs text-muted-foreground sm:col-span-2">
                 Movimentos do dia entram depois da abertura. Uma abertura confirmada não pode ser
                 sobrescrita.
               </p>
             </OperationForm>
           )}
           {legacyAccounts.length > 0 && (
-            <details className="rounded-xl border bg-white p-4">
+            <details className="rounded-xl border bg-card p-4">
               <summary className="cursor-pointer text-sm">
                 Desativar controle legado por turno
               </summary>
-              <p className="my-3 text-sm text-slate-500">
+              <p className="my-3 text-sm text-muted-foreground">
                 Somente para contas que já utilizavam turnos. A desativação encerra o turno aberto
                 com a contagem informada, preserva o histórico e permite a rotina sem abertura
                 diária.

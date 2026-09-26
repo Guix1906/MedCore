@@ -66,7 +66,7 @@ export default function Tooltip({ label, children, placement = "bottom", delay =
             ref={refs.setFloating}
             style={{ ...floatingStyles, ...styles, zIndex: 80 }}
             {...getFloatingProps()}
-            className="pointer-events-none px-2.5 py-1.5 rounded-lg bg-[#111827] text-white text-[12px] font-medium shadow-lg whitespace-nowrap"
+            className="pointer-events-none whitespace-nowrap rounded-lg bg-foreground/90 px-2.5 py-1.5 text-xs font-medium text-background shadow-lg"
           >
             {label}
           </div>

@@ -45,12 +45,12 @@ export function MonthGrid({
   if (loading) return <SkeletonRows count={6} />;
 
   return (
-    <div className="flex flex-col">
+    <div className="flex min-w-[640px] flex-col">
       <div className="grid grid-cols-7 border-b border-border bg-muted/30">
         {WEEKDAYS.map((w) => (
           <div
             key={w}
-            className="px-2 py-2 text-[10px] uppercase tracking-wider text-muted-foreground text-center border-r border-border last:border-r-0"
+            className="px-2 py-2 text-xs font-medium text-muted-foreground text-center border-r border-border last:border-r-0"
           >
             {w}
           </div>
@@ -89,20 +89,28 @@ export function MonthGrid({
                 draggedRef.current = null;
               }}
               className={cn(
-                "border-r border-b border-border p-1.5 min-h-[110px] cursor-crosshair hover:bg-accent/30 transition-colors flex flex-col gap-1",
+                "border-r border-b border-border p-1.5 min-h-[120px] cursor-crosshair hover:bg-accent/30 transition-colors flex flex-col gap-1",
                 !inMonth && "bg-muted/20 text-muted-foreground/60",
                 isSelected && "bg-primary/10 ring-1 ring-inset ring-primary/30",
               )}
             >
               <div className="flex items-center justify-end">
-                <span
+                <button
+                  type="button"
+                  aria-label={`Abrir ${d.toLocaleDateString("pt-BR", { dateStyle: "full" })}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSelectDate(d);
+                  }}
                   className={cn(
                     "text-xs font-medium tabular-nums h-6 w-6 grid place-items-center rounded-full",
-                    isToday ? "bg-red-500 text-white" : isSelected && "bg-primary/20 text-primary",
+                    isToday
+                      ? "bg-primary text-primary-foreground"
+                      : isSelected && "bg-primary/20 text-primary",
                   )}
                 >
                   {d.getDate()}
-                </span>
+                </button>
               </div>
               <div className="flex flex-col gap-0.5">
                 {visible.map((a) => {
@@ -135,7 +143,7 @@ export function MonthGrid({
                         onActivityClick(a);
                       }}
                       className={cn(
-                        "text-left text-[11px] truncate rounded px-1.5 py-0.5 border transition-colors hover:brightness-110",
+                        "text-left text-xs truncate rounded px-1.5 py-0.5 border transition-colors hover:brightness-110",
                         c.soft,
                         c.text,
                       )}
@@ -147,7 +155,7 @@ export function MonthGrid({
                   );
                 })}
                 {overflow > 0 && (
-                  <span className="text-[10px] text-muted-foreground pl-1">+{overflow} mais</span>
+                  <span className="text-xs text-muted-foreground pl-1">+{overflow} mais</span>
                 )}
               </div>
             </div>

@@ -1,16 +1,6 @@
-import React, { useMemo } from "react";
-import {
-  ResponsiveContainer,
-  ComposedChart,
-  Bar,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ReferenceLine,
-} from "recharts";
+import { useMemo } from "react";
 import { format, parseISO } from "date-fns";
+import { Chart, CHART_COLORS } from "@/components/ds/Chart";
 
 // ============================================================================
 // Tipagens
@@ -43,30 +33,25 @@ export interface GraficoFluxoDeCaixaProps {
 // ============================================================================
 const fmtBRL = (val: number): string =>
   val.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const compactValue = (val: number) =>
+  Math.abs(val) >= 1000 ? `${Math.round(val / 1000)}k` : String(Math.round(val));
 
 // ============================================================================
 // Componente Principal do Gráfico
 // ============================================================================
-export function GraficoFluxoDeCaixa({
-  entries = [],
-  customChartData,
-}: GraficoFluxoDeCaixaProps) {
+export function GraficoFluxoDeCaixa({ entries = [], customChartData }: GraficoFluxoDeCaixaProps) {
   // Processamento e agrupamento dos lançamentos por dia (quando não passado direto)
   const { chartData, maxVolume } = useMemo(() => {
     if (customChartData && customChartData.length > 0) {
       const maxVol = Math.max(
-        ...customChartData.map((d) =>
-          Math.max(d.entradas, d.saidas, Math.abs(d.saldo))
-        ),
-        1000
+        ...customChartData.map((d) => Math.max(d.entradas, d.saidas, Math.abs(d.saldo))),
+        1000,
       );
       return { chartData: customChartData, maxVolume: maxVol };
     }
 
     // REGRA DO FLUXO DE CAIXA: Apenas lançamentos realizados (pagos)
-    const realizadados = entries.filter(
-      (e) => e.status === "pago" && (e.paid_at || e.due_date)
-    );
+    const realizadados = entries.filter((e) => e.status === "pago" && (e.paid_at || e.due_date));
 
     // Ordenação cronológica
     const ordenados = [...realizadados].sort((a, b) => {
@@ -101,40 +86,31 @@ export function GraficoFluxoDeCaixa({
     });
 
     let runningSaldo = 0;
-    const days: DayChartPoint[] = Array.from(dayMap.entries()).map(
-      ([date, vals]) => {
-        runningSaldo += vals.entradas - vals.saidas;
-        return {
-          date,
-          entradas: vals.entradas,
-          saidas: vals.saidas,
-          saldo: runningSaldo,
-        };
-      }
-    );
+    const days: DayChartPoint[] = Array.from(dayMap.entries()).map(([date, vals]) => {
+      runningSaldo += vals.entradas - vals.saidas;
+      return {
+        date,
+        entradas: vals.entradas,
+        saidas: vals.saidas,
+        saldo: runningSaldo,
+      };
+    });
 
     const maxVol =
       days.length > 0
-        ? Math.max(
-            ...days.map((d) =>
-              Math.max(d.entradas, d.saidas, Math.abs(d.saldo))
-            ),
-            1000
-          )
+        ? Math.max(...days.map((d) => Math.max(d.entradas, d.saidas, Math.abs(d.saldo))), 1000)
         : 1000;
 
     return { chartData: days, maxVolume: maxVol };
   }, [entries, customChartData]);
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs space-y-4">
+    <div className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
       {/* Cabeçalho do Card e Legendas */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="text-base font-semibold text-slate-900">
-            Movimento por dia
-          </h2>
-          <p className="text-xs text-slate-500">
+          <h2 className="text-base font-semibold text-foreground">Movimento por dia</h2>
+          <p className="text-xs text-muted-foreground">
             Entradas, saídas e resultado acumulado dentro do período selecionado.
           </p>
         </div>
@@ -142,16 +118,16 @@ export function GraficoFluxoDeCaixa({
         {/* Legenda com Pills */}
         <div className="flex items-center gap-3 text-xs font-medium">
           <div className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-            <span className="text-slate-600">Entradas</span>
+            <span className="h-2.5 w-2.5 rounded-full bg-success" />
+            <span className="text-muted-foreground">Entradas</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
-            <span className="text-slate-600">Saídas</span>
+            <span className="h-2.5 w-2.5 rounded-full bg-destructive" />
+            <span className="text-muted-foreground">Saídas</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="h-1 w-4 rounded-full bg-blue-600" />
-            <span className="text-slate-600">Saldo</span>
+            <span className="h-1 w-4 rounded-full bg-info" />
+            <span className="text-muted-foreground">Saldo</span>
           </div>
         </div>
       </div>
@@ -159,132 +135,55 @@ export function GraficoFluxoDeCaixa({
       {/* Área do Gráfico */}
       <div className="h-[280px] w-full pt-2">
         {chartData.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-xs text-slate-400">
+          <div className="h-full flex items-center justify-center text-xs text-muted-foreground">
             Nenhum lançamento no período para exibição no gráfico.
           </div>
         ) : (
-          <ResponsiveContainer width="100%" height={280} minWidth={0} debounce={50}>
-            <ComposedChart
-              data={chartData}
-              margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
-            >
-              <CartesianGrid
-                strokeDasharray="3 3"
-                vertical={false}
-                stroke="#E2E8F0"
-                opacity={0.6}
-              />
-              <XAxis
-                dataKey="date"
-                tickLine={false}
-                axisLine={false}
-                tick={{ fontSize: 11, fill: "#64748B" }}
-              />
-              {/* Eixo Y da Esquerda: Volume de Entradas e Saídas */}
-              <YAxis
-                yAxisId="volume"
-                orientation="left"
-                tickLine={false}
-                axisLine={false}
-                tick={{ fontSize: 11, fill: "#64748B" }}
-                tickFormatter={(val) =>
-                  val >= 1000 ? `${Math.round(val / 1000)}k` : String(val)
-                }
-              />
-              {/* Eixo Y da Direita: Saldo Acumulado */}
-              <YAxis
-                yAxisId="saldo"
-                orientation="right"
-                tickLine={false}
-                axisLine={false}
-                tick={{ fontSize: 11, fill: "#64748B" }}
-                tickFormatter={(val) =>
-                  val >= 1000 ? `${Math.round(val / 1000)}k` : String(val)
-                }
-              />
-
-              {/* Tooltip Personalizado */}
-              <Tooltip
-                content={({ active, payload, label }) => {
-                  if (active && payload && payload.length) {
-                    const entradas =
-                      (payload.find((p) => p.dataKey === "entradas")
-                        ?.value as number) || 0;
-                    const saidas =
-                      (payload.find((p) => p.dataKey === "saidas")
-                        ?.value as number) || 0;
-                    const saldo =
-                      (payload.find((p) => p.dataKey === "saldo")
-                        ?.value as number) || 0;
-
-                    return (
-                      <div className="rounded-xl border border-slate-200 bg-white/95 backdrop-blur px-3.5 py-2.5 shadow-lg text-xs space-y-1.5 min-w-[190px]">
-                        <p className="font-semibold text-slate-800 border-b pb-1">
-                          Dia {label}
-                        </p>
-                        <div className="flex items-center justify-between gap-4 text-emerald-600 font-medium">
-                          <span>Entradas:</span>
-                          <span>{fmtBRL(entradas)}</span>
-                        </div>
-                        <div className="flex items-center justify-between gap-4 text-rose-600 font-medium">
-                          <span>Saídas:</span>
-                          <span>{fmtBRL(saidas)}</span>
-                        </div>
-                        <div className="flex items-center justify-between gap-4 text-blue-600 font-bold pt-1 border-t border-slate-100">
-                          <span>Resultado acumulado:</span>
-                          <span>{fmtBRL(saldo)}</span>
-                        </div>
-                      </div>
-                    );
-                  }
-                  return null;
-                }}
-              />
-
-              {/* Barras Verdes: Entradas */}
-              <Bar
-                yAxisId="volume"
-                dataKey="entradas"
-                fill="#10B981"
-                radius={[3, 3, 0, 0]}
-                maxBarSize={10}
-                isAnimationActive={true}
-                animationDuration={500}
-              />
-
-              {/* Barras Vermelhas: Saídas */}
-              <Bar
-                yAxisId="volume"
-                dataKey="saidas"
-                fill="#EF4444"
-                radius={[3, 3, 0, 0]}
-                maxBarSize={10}
-                isAnimationActive={true}
-                animationDuration={500}
-              />
-
-              {/* Linha Azul: Saldo Acumulado */}
-              <Line
-                yAxisId="saldo"
-                type="monotone"
-                dataKey="saldo"
-                stroke="#2563EB"
-                strokeWidth={2.5}
-                dot={{ r: 3, fill: "#2563EB" }}
-                activeDot={{ r: 5 }}
-                isAnimationActive={true}
-                animationDuration={700}
-              />
-
-              {/* Linha de Referência do Teto */}
-              <ReferenceLine
-                yAxisId="volume"
-                y={maxVolume}
-                stroke="#CBD5E1"
-                strokeDasharray="3 3"
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
+          <Chart
+            type="line"
+            height={280}
+            summary="Entradas e saídas por dia, com o resultado acumulado no período."
+            series={[
+              { name: "Entradas", type: "column", data: chartData.map((d) => d.entradas) },
+              { name: "Saídas", type: "column", data: chartData.map((d) => d.saidas) },
+              { name: "Resultado acumulado", type: "line", data: chartData.map((d) => d.saldo) },
+            ]}
+            options={{
+              colors: [CHART_COLORS.success, CHART_COLORS.danger, CHART_COLORS.secondary],
+              stroke: { width: [0, 0, 2.5], curve: "smooth" },
+              markers: { size: [0, 0, 3], strokeWidth: 0, hover: { size: 5 } },
+              plotOptions: {
+                bar: { columnWidth: "40%", borderRadius: 3, borderRadiusApplication: "end" },
+              },
+              xaxis: { categories: chartData.map((d) => d.date) },
+              yaxis: [
+                { seriesName: "Entradas", labels: { formatter: compactValue } },
+                { seriesName: "Entradas", show: false },
+                {
+                  seriesName: "Resultado acumulado",
+                  opposite: true,
+                  labels: { formatter: compactValue },
+                },
+              ],
+              annotations: {
+                yaxis: [
+                  {
+                    y: maxVolume,
+                    yAxisIndex: 0,
+                    borderColor: CHART_COLORS.neutral,
+                    strokeDashArray: 3,
+                    opacity: 0.6,
+                  },
+                ],
+              },
+              legend: { show: false },
+              tooltip: {
+                shared: true,
+                intersect: false,
+                y: { formatter: (value) => fmtBRL(Number(value) || 0) },
+              },
+            }}
+          />
         )}
       </div>
     </div>

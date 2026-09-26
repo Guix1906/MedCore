@@ -9,14 +9,24 @@ export const fmtBR = (d: Date) =>
   d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", "");
 
 export function parseMeta(
-  desc: string | null | undefined
+  desc: string | null | undefined,
 ): { color?: string; status?: string; clientId?: string; type?: string } | null {
   if (!desc) return null;
   const m = desc.match(/<!--AGENDAMENTO_META:(.*?)-->/s);
   if (!m) return null;
   try {
-    return JSON.parse(m[1]);
-  } catch {
+    const value: unknown = JSON.parse(m[1]);
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      throw new Error("Metadados de agendamento inválidos.");
+    return {
+      color: "color" in value && typeof value.color === "string" ? value.color : undefined,
+      status: "status" in value && typeof value.status === "string" ? value.status : undefined,
+      clientId:
+        "clientId" in value && typeof value.clientId === "string" ? value.clientId : undefined,
+      type: "type" in value && typeof value.type === "string" ? value.type : undefined,
+    };
+  } catch (error) {
+    console.warn("Não foi possível ler os metadados de um agendamento.", error);
     return null;
   }
 }

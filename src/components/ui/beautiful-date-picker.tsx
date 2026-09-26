@@ -248,18 +248,18 @@ export function BeautifulDatePicker({
       {/* Editable date field with a calendar shortcut */}
       <div
         className={cn(
-          "w-full h-10 px-3 rounded-lg border text-[13px] flex items-center gap-2 transition-all duration-150",
+          "w-full h-10 px-3 rounded-lg border text-sm flex items-center gap-2 transition-all duration-150",
           open
-            ? "border-[#8B47FF] ring-2 ring-[#8B47FF]/10 bg-white"
-            : "border-[#E5E7EB] bg-white hover:border-[#8B47FF]/60",
-          inputError && "border-rose-400 ring-2 ring-rose-500/10",
+            ? "border-primary ring-2 ring-primary/10 bg-card"
+            : "border-border bg-card hover:border-primary/60",
+          inputError && "border-destructive/50 ring-2 ring-destructive/10",
         )}
       >
         <CalendarIcon
           size={16}
           className={cn(
             "shrink-0 transition-colors",
-            inputValue ? "text-[#8B47FF]" : "text-[#9CA3AF]",
+            inputValue ? "text-primary" : "text-muted-foreground",
           )}
         />
         <input
@@ -272,10 +272,10 @@ export function BeautifulDatePicker({
           placeholder="dd/mm/aaaa"
           aria-label={placeholder}
           aria-invalid={inputError}
-          className="min-w-0 flex-1 bg-transparent outline-none text-[13px] text-[#111827] placeholder:text-[#9CA3AF]"
+          className="min-w-0 flex-1 bg-transparent outline-none text-sm text-foreground placeholder:text-muted-foreground"
         />
         {formattedDisplay?.ageStr && (
-          <span className="hidden sm:inline-flex text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#F5F3FF] text-[#8B47FF] border border-[#DDD6FE] whitespace-nowrap">
+          <span className="hidden sm:inline-flex text-xs font-medium px-2 py-0.5 rounded-full bg-primary-soft text-primary border border-primary/25 whitespace-nowrap">
             {formattedDisplay.ageStr}
           </span>
         )}
@@ -289,7 +289,7 @@ export function BeautifulDatePicker({
                 setInputError(false);
                 onChange("");
               }}
-              className="h-5 w-5 rounded-full hover:bg-slate-100 hover:text-rose-600 grid place-items-center text-[#9CA3AF] transition cursor-pointer"
+              className="h-5 w-5 rounded-full hover:bg-muted hover:text-destructive grid place-items-center text-muted-foreground transition cursor-pointer"
               title="Limpar data"
               aria-label="Limpar data"
             >
@@ -300,29 +300,29 @@ export function BeautifulDatePicker({
             type="button"
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => setOpen((prev) => !prev)}
-            className="h-7 w-7 rounded-md grid place-items-center text-[#9CA3AF] hover:bg-[#F5F3FF] hover:text-[#8B47FF] transition cursor-pointer"
+            className="h-7 w-7 rounded-md grid place-items-center text-muted-foreground hover:bg-primary-soft hover:text-primary transition cursor-pointer"
             title="Abrir calendário"
             aria-label="Abrir calendário"
           >
-            <span className="text-[10px]">▼</span>
+            <span className="text-xs">▼</span>
           </button>
         </div>
       </div>
       {inputError && (
-        <p className="mt-1 text-[11px] text-rose-500">
+        <p className="mt-1 text-xs text-destructive">
           Digite uma data válida entre {minYear} e {maxYear}.
         </p>
       )}
 
       {/* Modern & Polished Calendar Popover */}
       {open && (
-        <div className="absolute left-0 top-[calc(100%+6px)] z-[10000] w-[310px] rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-2xl animate-in fade-in-0 zoom-in-95 duration-150">
+        <div className="absolute left-0 top-[calc(100%+6px)] z-(--z-popover) w-[310px] rounded-2xl border border-hairline bg-glass-strong p-4 shadow-(--glass-shadow-lg) glass-blur-strong animate-in fade-in-0 zoom-in-95 duration-150">
           {/* Header with Month & Year Selectors */}
-          <div className="flex items-center justify-between gap-1 pb-3 border-b border-[#F3F4F6]">
+          <div className="flex items-center justify-between gap-1 pb-3 border-b border-border-soft">
             <button
               type="button"
               onClick={handlePrevMonth}
-              className="h-8 w-8 rounded-lg flex items-center justify-center text-[#6B7280] hover:bg-[#F5F3FF] hover:text-[#8B47FF] transition cursor-pointer"
+              className="h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-primary-soft hover:text-primary transition cursor-pointer"
               title="Mês anterior"
             >
               <ChevronLeft size={16} />
@@ -333,7 +333,7 @@ export function BeautifulDatePicker({
               <select
                 value={viewMonth}
                 onChange={(e) => setViewMonth(parseInt(e.target.value, 10))}
-                className="h-8 px-2 rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] text-[12.5px] font-bold text-[#111827] focus:outline-none focus:border-[#8B47FF] cursor-pointer"
+                className="h-8 px-2 rounded-lg border border-border bg-surface text-sm font-semibold text-foreground focus:outline-none focus:border-primary cursor-pointer"
               >
                 {MONTHS_PT.map((m, idx) => (
                   <option key={m} value={idx}>
@@ -346,7 +346,7 @@ export function BeautifulDatePicker({
               <select
                 value={viewYear}
                 onChange={(e) => setViewYear(parseInt(e.target.value, 10))}
-                className="h-8 px-2 rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] text-[12.5px] font-bold text-[#111827] focus:outline-none focus:border-[#8B47FF] cursor-pointer max-h-48"
+                className="h-8 px-2 rounded-lg border border-border bg-surface text-sm font-semibold text-foreground focus:outline-none focus:border-primary cursor-pointer max-h-48"
               >
                 {yearOptions.map((y) => (
                   <option key={y} value={y}>
@@ -359,7 +359,7 @@ export function BeautifulDatePicker({
             <button
               type="button"
               onClick={handleNextMonth}
-              className="h-8 w-8 rounded-lg flex items-center justify-center text-[#6B7280] hover:bg-[#F5F3FF] hover:text-[#8B47FF] transition cursor-pointer"
+              className="h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-primary-soft hover:text-primary transition cursor-pointer"
               title="Próximo mês"
             >
               <ChevronRight size={16} />
@@ -369,7 +369,7 @@ export function BeautifulDatePicker({
           {/* Weekday headers */}
           <div className="grid grid-cols-7 gap-1 text-center mt-2.5 mb-1.5">
             {WEEKDAYS_PT.map((wd) => (
-              <span key={wd} className="text-[11px] font-bold text-[#9CA3AF] uppercase">
+              <span key={wd} className="text-xs font-semibold text-muted-foreground uppercase">
                 {wd}
               </span>
             ))}
@@ -387,13 +387,13 @@ export function BeautifulDatePicker({
                   type="button"
                   onClick={() => handleSelectDay(dObj.dateStr)}
                   className={cn(
-                    "h-8 w-8 rounded-xl text-[12px] font-medium flex items-center justify-center transition-all cursor-pointer",
+                    "h-8 w-8 rounded-full text-xs font-medium flex items-center justify-center transition-all cursor-pointer",
                     isSelected
-                      ? "bg-[#8B47FF] text-white font-bold shadow-md shadow-[#8B47FF]/30 scale-105"
+                      ? "bg-primary text-primary-foreground font-semibold shadow-sm"
                       : dObj.isCurrentMonth
-                        ? "text-[#111827] hover:bg-[#F5F3FF] hover:text-[#8B47FF]"
-                        : "text-[#D1D5DB] hover:bg-slate-50",
-                    isToday && !isSelected && "border border-[#8B47FF] font-bold text-[#8B47FF]",
+                        ? "text-foreground hover:bg-primary-soft hover:text-primary"
+                        : "text-muted-foreground/60 hover:bg-muted/60",
+                    isToday && !isSelected && "border border-primary font-semibold text-primary",
                   )}
                 >
                   {dObj.day}
@@ -403,14 +403,14 @@ export function BeautifulDatePicker({
           </div>
 
           {/* Quick Actions Footer */}
-          <div className="flex items-center justify-between pt-3 mt-2.5 border-t border-[#F3F4F6] text-[11.5px]">
+          <div className="flex items-center justify-between pt-3 mt-2.5 border-t border-border-soft text-xs">
             <button
               type="button"
               onClick={() => {
                 const todayStr = new Date().toISOString().slice(0, 10);
                 handleSelectDay(todayStr);
               }}
-              className="text-[#8B47FF] font-bold hover:underline cursor-pointer"
+              className="text-primary font-semibold hover:underline cursor-pointer"
             >
               Hoje
             </button>
@@ -422,7 +422,7 @@ export function BeautifulDatePicker({
                   onChange("");
                   setOpen(false);
                 }}
-                className="text-[#6B7280] hover:text-rose-600 font-semibold cursor-pointer"
+                className="text-muted-foreground hover:text-destructive font-semibold cursor-pointer"
               >
                 Limpar
               </button>

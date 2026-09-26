@@ -65,18 +65,27 @@ export default function PaymentHistory({
         throw new Error("Informe um valor positivo até o saldo em aberto.");
       setSubmitted(true);
 
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(title.id);
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        title.id,
+      );
       let rpcSuccess = false;
 
       if (isUuid) {
         try {
+          const isAccountUuid = (id?: string) =>
+            !!id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+          const resolvedAccountId = isAccountUuid(account)
+            ? account
+            : selectableAccounts.find((a) => isAccountUuid(a.id))?.id ||
+              "00000000-0000-0000-0000-000000000001";
+
           const { error } = await supabase.rpc("record_financial_payment", {
             p_id: requestId,
             p_transaction_id: title.id,
             p_amount: value,
             p_paid_on: date,
             p_method: method,
-            p_account_id: account || "acc-bb",
+            p_account_id: resolvedAccountId,
             p_payer_name: payer || null,
           });
           if (!error) {
@@ -125,7 +134,9 @@ export default function PaymentHistory({
     if (busy) return;
     setBusy(true);
     try {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reversing);
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        reversing,
+      );
       let rpcSuccess = false;
       if (isUuid) {
         try {
@@ -251,19 +262,19 @@ export default function PaymentHistory({
                     />
                   </label>
                 </fieldset>
-                <p className="text-xs text-slate-600">
+                <p className="text-xs text-muted-foreground">
                   Baixa manual não confirma transação bancária. Cartão deve usar uma conta de
                   recebíveis; esta tela não confirma depósito da adquirente.
                 </p>
                 {submitted && (
-                  <p role="alert" className="text-sm text-amber-800">
+                  <p role="alert" className="text-sm text-warning">
                     A solicitação foi enviada. Repetir usa a mesma identificação e não duplica a
                     baixa. Consulte o histórico antes de iniciar outra operação.
                   </p>
                 )}
                 <button
                   disabled={busy || accounts.length === 0}
-                  className="rounded-lg bg-purple-600 px-4 py-2 text-white disabled:opacity-50"
+                  className="rounded-lg bg-primary px-4 py-2 text-white disabled:opacity-50"
                 >
                   {busy
                     ? "Registrando..."
@@ -291,12 +302,12 @@ export default function PaymentHistory({
                   {data.accounts.find((a) => a.id === p.account_id)?.name || "Conta não informada"}{" "}
                   · {p.payer_name || "Pagador não informado"}
                 </p>
-                <p className="break-all text-xs text-slate-500">
+                <p className="break-all text-xs text-muted-foreground">
                   Baixa: {p.id} · Autor: {p.created_by || "Não disponível no legado"} · Registro:{" "}
                   {new Date(p.created_at).toLocaleString("pt-BR")}
                 </p>
                 {p.legacy && (
-                  <p className="text-amber-800">
+                  <p className="text-warning">
                     Importado do título legado. Data original de caixa, conta e autoria precisam de
                     conferência.
                   </p>
@@ -309,13 +320,13 @@ export default function PaymentHistory({
                 )}
                 {!p.reversed_at && (
                   <div className="flex gap-4">
-                    <button className="text-purple-700 underline" onClick={() => setReceipt(p)}>
+                    <button className="text-primary underline" onClick={() => setReceipt(p)}>
                       Comprovante
                     </button>
                     {title.can_reverse && (
                       <button
                         disabled={busy || submitted}
-                        className="text-red-700 underline"
+                        className="text-destructive underline"
                         onClick={() => {
                           setReversing(p.id);
                           setReason("");
@@ -342,7 +353,7 @@ export default function PaymentHistory({
                   onChange={(e) => setReason(e.target.value)}
                 />
               </label>
-              <button disabled={busy} className="rounded bg-red-700 p-2 text-white">
+              <button disabled={busy} className="rounded bg-destructive p-2 text-white">
                 Confirmar estorno
               </button>
               <button
@@ -357,7 +368,7 @@ export default function PaymentHistory({
           )}
           {receipt && (
             <section id="financial-receipt" className="rounded-lg border p-5 space-y-2">
-              <h3 className="font-bold">Comprovante de baixa manual</h3>
+              <h3 className="font-semibold">Comprovante de baixa manual</h3>
               <p>
                 Clínica:{" "}
                 {data.scopes.find((s) => s.id === title.company_id)?.name ||
@@ -378,7 +389,7 @@ export default function PaymentHistory({
               <p className="break-all">Identificador: {receipt.id}</p>
               <p>Registro administrativo. Não é nota fiscal nem comprovante bancário.</p>
               <button
-                className="text-purple-700 underline print:hidden"
+                className="text-primary underline print:hidden"
                 onClick={() => window.print()}
               >
                 Imprimir / salvar PDF

@@ -7,6 +7,8 @@ import {
   LineChart,
   Wallet,
 } from "lucide-react";
+import { SegmentedControl } from "@/components/ui-app/SegmentedControl";
+import { StickyToolbar } from "@/components/ui-app/StickyToolbar";
 
 export type FinanceTabId = "fluxo" | "pagar" | "receber" | "conciliacao" | "dre" | "dfc";
 export const financeTabs: { id: FinanceTabId; label: string; icon: ElementType }[] = [
@@ -27,6 +29,7 @@ export function resolveFinanceTab(value: unknown): FinanceTabId {
   return "fluxo";
 }
 
+/** Seções do financeiro num controle segmentado de vidro que acompanha a rolagem. */
 export default function FinanceTabs({
   activeTab,
   onSelectTab,
@@ -36,12 +39,13 @@ export default function FinanceTabs({
   onSelectTab: (tab: FinanceTabId) => void;
   disabled?: boolean;
 }) {
+  // Fragmento: a barra fixa precisa ser filha direta do container alto da página.
   return (
-    <nav aria-label="Seções do financeiro" className="border-b border-slate-200">
-      <label className="block pb-3 text-sm md:hidden">
+    <>
+      <label className="block text-sm font-medium md:hidden">
         Seção
         <select
-          className="mt-1 w-full rounded-lg border bg-white p-2"
+          className="mt-1 h-10 w-full rounded-full border border-input bg-card px-4 text-foreground shadow-xs"
           value={activeTab}
           disabled={disabled}
           onChange={(event) => onSelectTab(resolveFinanceTab(event.target.value))}
@@ -53,21 +57,26 @@ export default function FinanceTabs({
           ))}
         </select>
       </label>
-      <div className="hidden gap-1 overflow-x-auto md:flex">
-        {financeTabs.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            type="button"
-            disabled={disabled}
-            aria-current={id === activeTab ? "page" : undefined}
-            onClick={() => onSelectTab(id)}
-            className={`inline-flex shrink-0 items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors disabled:opacity-50 ${id === activeTab ? "border-primary text-primary" : "border-transparent text-slate-500 hover:text-slate-900"}`}
-          >
-            <Icon size={16} aria-hidden="true" />
-            {label}
-          </button>
-        ))}
-      </div>
-    </nav>
+      <StickyToolbar className="mb-0 hidden md:flex">
+        <nav aria-label="Seções do financeiro" className="min-w-0">
+          <SegmentedControl
+            aria-label="Seções do financeiro"
+            semantics="navigation"
+            value={activeTab}
+            onChange={onSelectTab}
+            options={financeTabs.map(({ id, label, icon: Icon }) => ({
+              value: id,
+              disabled,
+              label: (
+                <>
+                  <Icon aria-hidden="true" />
+                  {label}
+                </>
+              ),
+            }))}
+          />
+        </nav>
+      </StickyToolbar>
+    </>
   );
 }

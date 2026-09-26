@@ -48,6 +48,10 @@ import {
 import { InviteDialog } from "./InviteDialog";
 import { MemberSheet } from "./MemberSheet";
 import { StatusDialog, type StatusAction, type StatusRequest } from "./StatusDialog";
+import { SortableHeader } from "@/components/ui-app/SortableHeader";
+import { nextSort, sortRows, type SortState } from "@/lib/table-sort";
+
+type UserSortKey = "name" | "role" | "status" | "doctor" | "lastSeen";
 
 type StatusFilter = "todos" | "active" | "pending" | "invited" | "suspended" | "removed";
 
@@ -132,6 +136,28 @@ export function UsersTab({
     });
   }, [overview, search, status, roleFilter]);
 
+  const [sort, setSort] = useState<SortState<UserSortKey>>(null);
+  const toggleSort = (key: UserSortKey) => setSort((previous) => nextSort(previous, key));
+  const sortedRows = useMemo(
+    () =>
+      sortRows(rows, sort, {
+        name: (row) => row.name,
+        role: (row) =>
+          roleDisplayName(
+            rolesById.get(
+              (row.kind === "member" ? row.member.roleId : row.invitation.roleId) ?? "",
+            ),
+          ),
+        status: (row) => (row.kind === "member" ? row.member.status : "convite"),
+        doctor: (row) => (row.kind === "member" ? row.member.doctorName : null),
+        lastSeen: (row) =>
+          row.kind === "member" && row.member.lastSignInAt
+            ? new Date(row.member.lastSignInAt)
+            : null,
+      }),
+    [rows, sort, rolesById],
+  );
+
   const requestStatus = (action: Exclude<StatusAction, "cancel_invite">, member: AdminMember) => {
     setStatusRequest({ action, member });
   };
@@ -162,28 +188,28 @@ export function UsersTab({
       label: "Ativos",
       value: counts.active,
       icon: UserCheck,
-      tone: "text-emerald-600 bg-emerald-50",
+      tone: "text-success bg-success/10",
     },
     {
       key: "pending",
       label: "Aguardando aprovação",
       value: counts.pending,
       icon: Clock,
-      tone: "text-amber-600 bg-amber-50",
+      tone: "text-warning bg-warning/10",
     },
     {
       key: "invited",
       label: "Convites pendentes",
       value: counts.invited,
       icon: MailPlus,
-      tone: "text-sky-600 bg-sky-50",
+      tone: "text-sky-600 dark:text-sky-400 bg-sky-500/10",
     },
     {
       key: "suspended",
       label: "Suspensos",
       value: counts.suspended,
       icon: ShieldOff,
-      tone: "text-rose-600 bg-rose-50",
+      tone: "text-destructive bg-destructive/10",
     },
   ];
 
@@ -233,18 +259,18 @@ export function UsersTab({
             onClick={() => setStatus((current) => (current === key ? "todos" : key))}
             aria-pressed={status === key}
             className={cn(
-              "flex items-center gap-3 rounded-2xl border bg-white p-3 text-left transition-colors hover:border-violet-300",
-              status === key ? "border-violet-400 ring-2 ring-violet-100" : "border-slate-200",
+              "flex items-center gap-3 rounded-2xl border bg-card p-3 text-left transition-colors hover:border-primary/35",
+              status === key ? "border-primary/50 ring-2 ring-primary/15" : "border-border",
             )}
           >
             <span className={cn("flex h-9 w-9 items-center justify-center rounded-xl", tone)}>
               <Icon size={18} aria-hidden="true" />
             </span>
             <span>
-              <span className="block text-lg font-semibold leading-tight text-slate-900">
+              <span className="block text-lg font-semibold leading-tight text-foreground">
                 {value}
               </span>
-              <span className="block text-[12px] text-slate-500">{label}</span>
+              <span className="block text-xs text-muted-foreground">{label}</span>
             </span>
           </button>
         ))}
@@ -254,19 +280,19 @@ export function UsersTab({
         <div className="relative flex-1">
           <Search
             size={16}
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
             aria-hidden="true"
           />
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Buscar por nome ou e-mail"
-            className="bg-white pl-9"
+            className="bg-card pl-9"
             aria-label="Buscar usuários"
           />
         </div>
         <Select value={status} onValueChange={(value) => setStatus(value as StatusFilter)}>
-          <SelectTrigger className="bg-white md:w-56" aria-label="Filtrar por situação">
+          <SelectTrigger className="bg-card md:w-56" aria-label="Filtrar por situação">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -278,7 +304,7 @@ export function UsersTab({
           </SelectContent>
         </Select>
         <Select value={roleFilter} onValueChange={setRoleFilter}>
-          <SelectTrigger className="bg-white md:w-56" aria-label="Filtrar por perfil">
+          <SelectTrigger className="bg-card md:w-56" aria-label="Filtrar por perfil">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -302,65 +328,85 @@ export function UsersTab({
         <EmptyState
           title="Nenhum usuário encontrado"
           description="Ajuste a busca ou os filtros. Para incluir alguém, use “Convidar usuário”."
-          className="bg-white"
+          className="bg-card"
         />
       ) : (
         <>
-          <div className="hidden overflow-hidden rounded-2xl border border-slate-200 bg-white md:block">
-            <table className="w-full text-left text-[13px]">
+          <div className="hidden overflow-hidden rounded-2xl border border-border bg-card md:block">
+            <table className="w-full text-left text-sm">
               <caption className="sr-only">Usuários da clínica</caption>
-              <thead className="bg-slate-50 text-[12px] uppercase tracking-wide text-slate-500">
+              <thead className="bg-muted/60 text-xs text-muted-foreground">
                 <tr>
-                  <th scope="col" className="px-4 py-2.5 font-semibold">
-                    Usuário
-                  </th>
-                  <th scope="col" className="px-4 py-2.5 font-semibold">
-                    Perfil
-                  </th>
-                  <th scope="col" className="px-4 py-2.5 font-semibold">
-                    Situação
-                  </th>
-                  <th scope="col" className="px-4 py-2.5 font-semibold">
-                    Profissional
-                  </th>
-                  <th scope="col" className="px-4 py-2.5 font-semibold">
-                    Último acesso
-                  </th>
+                  <SortableHeader
+                    label="Usuário"
+                    sortKey="name"
+                    sort={sort}
+                    onSort={toggleSort}
+                    className="px-4 py-2.5"
+                  />
+                  <SortableHeader
+                    label="Perfil"
+                    sortKey="role"
+                    sort={sort}
+                    onSort={toggleSort}
+                    className="px-4 py-2.5"
+                  />
+                  <SortableHeader
+                    label="Situação"
+                    sortKey="status"
+                    sort={sort}
+                    onSort={toggleSort}
+                    className="px-4 py-2.5"
+                  />
+                  <SortableHeader
+                    label="Profissional"
+                    sortKey="doctor"
+                    sort={sort}
+                    onSort={toggleSort}
+                    className="px-4 py-2.5"
+                  />
+                  <SortableHeader
+                    label="Último acesso"
+                    sortKey="lastSeen"
+                    sort={sort}
+                    onSort={toggleSort}
+                    className="px-4 py-2.5"
+                  />
                   <th scope="col" className="px-4 py-2.5 text-right font-semibold">
                     <span className="sr-only">Ações</span>
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {rows.map((row) =>
+              <tbody className="divide-y divide-border-soft [&>tr:nth-child(even)]:bg-muted/30">
+                {sortedRows.map((row) =>
                   row.kind === "member" ? (
-                    <tr key={row.id} className="hover:bg-slate-50/70">
+                    <tr key={row.id} className="hover:bg-muted/42">
                       <td className="px-4 py-2.5">
                         <button
                           type="button"
                           onClick={() => setSelectedId(row.member.id)}
-                          className="flex items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 rounded-lg"
+                          className="flex items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 rounded-lg"
                         >
                           <Avatar name={row.name} />
                           <span className="min-w-0">
-                            <span className="block truncate font-medium text-slate-900">
+                            <span className="block truncate font-medium text-foreground">
                               {row.name}
                               {row.member.isSelf && (
-                                <span className="ml-1.5 text-[11px] font-semibold text-violet-600">
+                                <span className="ml-1.5 text-xs font-semibold text-primary">
                                   (você)
                                 </span>
                               )}
                             </span>
-                            <span className="block truncate text-[12px] text-slate-500">
+                            <span className="block truncate text-xs text-muted-foreground">
                               {row.email}
                             </span>
                           </span>
                         </button>
                       </td>
-                      <td className="px-4 py-2.5 text-slate-700">
+                      <td className="px-4 py-2.5 text-foreground/80">
                         {roleDisplayName(rolesById.get(row.member.roleId ?? ""))}
                         {row.member.extra.length + row.member.revoked.length > 0 && (
-                          <span className="ml-1.5 rounded bg-violet-50 px-1.5 text-[11px] font-medium text-violet-700">
+                          <span className="ml-1.5 rounded bg-primary-soft px-1.5 text-xs font-medium text-primary">
                             {row.member.extra.length + row.member.revoked.length} ajuste(s)
                           </span>
                         )}
@@ -368,8 +414,10 @@ export function UsersTab({
                       <td className="px-4 py-2.5">
                         <StatusBadge status={row.member.status} />
                       </td>
-                      <td className="px-4 py-2.5 text-slate-600">{row.member.doctorName ?? "—"}</td>
-                      <td className="px-4 py-2.5 text-slate-600">
+                      <td className="px-4 py-2.5 text-muted-foreground">
+                        {row.member.doctorName ?? "—"}
+                      </td>
+                      <td className="px-4 py-2.5 text-muted-foreground">
                         {formatRelative(row.member.lastSignInAt)}
                       </td>
                       <td className="px-4 py-2.5 text-right">
@@ -382,29 +430,32 @@ export function UsersTab({
                       </td>
                     </tr>
                   ) : (
-                    <tr key={row.id} className="bg-sky-50/30">
+                    <tr key={row.id} className="bg-sky-500/3">
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-3">
-                          <Avatar name={row.name} className="bg-sky-100 text-sky-700" />
+                          <Avatar
+                            name={row.name}
+                            className="bg-sky-500/15 text-sky-700 dark:text-sky-300"
+                          />
                           <span className="min-w-0">
-                            <span className="block truncate font-medium text-slate-900">
+                            <span className="block truncate font-medium text-foreground">
                               {row.name}
                             </span>
-                            <span className="block truncate text-[12px] text-slate-500">
+                            <span className="block truncate text-xs text-muted-foreground">
                               Convidado por {row.invitation.invitedByName} em{" "}
                               {formatDateTime(row.invitation.invitedAt)}
                             </span>
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-2.5 text-slate-700">
+                      <td className="px-4 py-2.5 text-foreground/80">
                         {roleDisplayName(rolesById.get(row.invitation.roleId))}
                       </td>
                       <td className="px-4 py-2.5">
                         <InviteBadge expired={row.invitation.expired} />
                       </td>
-                      <td className="px-4 py-2.5 text-slate-600">—</td>
-                      <td className="px-4 py-2.5 text-slate-600">
+                      <td className="px-4 py-2.5 text-muted-foreground">—</td>
+                      <td className="px-4 py-2.5 text-muted-foreground">
                         {row.invitation.expired
                           ? "Expirado"
                           : `Expira em ${formatDateTime(row.invitation.expiresAt)}`}
@@ -432,9 +483,9 @@ export function UsersTab({
           </div>
 
           <ul className="space-y-2 md:hidden" aria-label="Usuários da clínica">
-            {rows.map((row) =>
+            {sortedRows.map((row) =>
               row.kind === "member" ? (
-                <li key={row.id} className="rounded-2xl border border-slate-200 bg-white p-3">
+                <li key={row.id} className="rounded-2xl border border-border bg-card p-3">
                   <div className="flex items-start gap-3">
                     <button
                       type="button"
@@ -443,19 +494,19 @@ export function UsersTab({
                     >
                       <Avatar name={row.name} />
                       <span className="min-w-0">
-                        <span className="block truncate font-medium text-slate-900">
+                        <span className="block truncate font-medium text-foreground">
                           {row.name}
                         </span>
-                        <span className="block truncate text-[12px] text-slate-500">
+                        <span className="block truncate text-xs text-muted-foreground">
                           {row.email}
                         </span>
                         <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
                           <StatusBadge status={row.member.status} />
-                          <span className="text-[12px] text-slate-600">
+                          <span className="text-xs text-muted-foreground">
                             {roleDisplayName(rolesById.get(row.member.roleId ?? ""))}
                           </span>
                         </span>
-                        <span className="mt-1 block text-[11px] text-slate-500">
+                        <span className="mt-1 block text-xs text-muted-foreground">
                           {formatRelative(row.member.lastSignInAt)}
                         </span>
                       </span>
@@ -469,14 +520,17 @@ export function UsersTab({
                   </div>
                 </li>
               ) : (
-                <li key={row.id} className="rounded-2xl border border-sky-200 bg-sky-50/40 p-3">
+                <li key={row.id} className="rounded-2xl border border-sky-500/30 bg-sky-500/4 p-3">
                   <div className="flex items-start gap-3">
-                    <Avatar name={row.name} className="bg-sky-100 text-sky-700" />
+                    <Avatar
+                      name={row.name}
+                      className="bg-sky-500/15 text-sky-700 dark:text-sky-300"
+                    />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium text-slate-900">{row.name}</p>
+                      <p className="truncate font-medium text-foreground">{row.name}</p>
                       <p className="mt-1 flex flex-wrap items-center gap-1.5">
                         <InviteBadge expired={row.invitation.expired} />
-                        <span className="text-[12px] text-slate-600">
+                        <span className="text-xs text-muted-foreground">
                           {roleDisplayName(rolesById.get(row.invitation.roleId))}
                         </span>
                       </p>
@@ -553,7 +607,7 @@ function RowMenu({
           <DropdownMenuItem
             key={item.action}
             onSelect={() => onAction(item.action)}
-            className={item.danger ? "text-rose-700 focus:text-rose-800" : undefined}
+            className={item.danger ? "text-destructive focus:text-destructive" : undefined}
           >
             {item.label}
           </DropdownMenuItem>
@@ -584,7 +638,7 @@ function InviteMenu({
       <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuItem onSelect={onResend}>Reenviar convite</DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={onCancel} className="text-rose-700 focus:text-rose-800">
+        <DropdownMenuItem onSelect={onCancel} className="text-destructive focus:text-destructive">
           Cancelar convite
         </DropdownMenuItem>
       </DropdownMenuContent>

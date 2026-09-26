@@ -94,7 +94,7 @@ export default function OperationForm({
   const blocked = lock.active !== null && lock.active !== key;
   return (
     <form
-      className="space-y-3 rounded-xl border bg-white p-4"
+      className="space-y-3 rounded-xl border bg-card p-4"
       onSubmit={async (event) => {
         event.preventDefault();
         if (inFlight.current || blocked) return;
@@ -144,14 +144,14 @@ export default function OperationForm({
         {children}
       </fieldset>
       {submitted && (
-        <p role="alert" className="text-sm text-amber-800">
+        <p role="alert" className="text-sm text-warning">
           Solicitacao enviada. Se a resposta falhar, repita aqui com a mesma identificacao antes de
           sair.
         </p>
       )}
       <button
         disabled={busy || blocked}
-        className="rounded-lg bg-purple-600 px-4 py-2 text-white disabled:opacity-50"
+        className="rounded-lg bg-primary px-4 py-2 text-white disabled:opacity-50"
       >
         {busy ? "Registrando..." : submitted ? "Repetir mesma solicitacao" : "Confirmar"}
       </button>

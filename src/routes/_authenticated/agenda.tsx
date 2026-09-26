@@ -1,51 +1,56 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { useQuery } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
-import { toast } from "sonner";
+import { createFileRoute } from "@tanstack/react-router";
+import { addDays, addMonths } from "date-fns";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import AppShell from "@/components/AppShell";
-import { useIsMobile } from "@/hooks/use-mobile";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { confirmDialog } from "@/components/app/confirm-dialog";
-import { SectionCard } from "@/components/ui-app";
+import { CreateModalRouter, type CreateKind } from "@/components/agenda/agenda-modals";
+import { isSameDay, type Activity } from "@/components/agenda/agenda-types";
 import AgendaSidebar, {
   EMPTY_AGENDA_FILTERS,
   type AgendaFilterValues,
 } from "@/components/agenda/AgendaSidebar";
+import { confirmDialog } from "@/components/app/confirm-dialog";
+import AppShell from "@/components/AppShell";
+import { SectionCard } from "@/components/ui-app";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { agendaVisibleIds, filterByAgendaScope } from "@/features/admin/permissions";
 import {
   applyAgendaSidebarFilters,
   buildAgendaFilterOptions,
 } from "@/features/agenda/lib/sidebar-filters";
-import { CreateModalRouter, type CreateKind } from "@/components/agenda/agenda-modals";
-import { type Activity, isSameDay } from "@/components/agenda/agenda-types";
-import { useAuth } from "@/hooks/use-auth";
 import { useActiveCompany } from "@/hooks/use-active-company";
+import { useAuth } from "@/hooks/use-auth";
+import { useClinicCities } from "@/hooks/use-clinic-cities";
 import { useCompanyMembers } from "@/hooks/use-company-members";
 import { usePermissions } from "@/hooks/use-permissions";
-import { agendaVisibleIds, filterByAgendaScope } from "@/features/admin/permissions";
-import { useClinicCities } from "@/hooks/use-clinic-cities";
 import { supabase } from "@/integrations/supabase/client";
-import { patientsService } from "@/services/api";
 import { qk } from "@/lib/query-keys";
+import { patientsService } from "@/services/api";
 
+import { ActivityDrawer } from "@/features/agenda/components/ActivityDrawer";
+import { type ViewMode } from "@/features/agenda/components/AgendaFilters";
+import { AgendaHeader } from "@/features/agenda/components/AgendaHeader";
+import { AgendaToolbar } from "@/features/agenda/components/AgendaToolbar";
+import { DailyGrid } from "@/features/agenda/components/DailyGrid";
+import { ListView } from "@/features/agenda/components/ListView";
+import { MonthGrid } from "@/features/agenda/components/MonthGrid";
+import { WeeklyGrid } from "@/features/agenda/components/WeeklyGrid";
 import { useAgendaData } from "@/features/agenda/hooks/use-agenda-data";
-import { useAgendaMutations } from "@/features/agenda/hooks/use-agenda-mutations";
+import { useAgendaDeepLink } from "@/features/agenda/hooks/use-agenda-deep-link";
 import {
   useAgendaFilters,
   type AssignFilter,
   type TypeFilter,
 } from "@/features/agenda/hooks/use-agenda-filters";
-import { useAgendaDeepLink } from "@/features/agenda/hooks/use-agenda-deep-link";
 import { useAgendaKeyboard } from "@/features/agenda/hooks/use-agenda-keyboard";
-import { AgendaHeader } from "@/features/agenda/components/AgendaHeader";
-import { AgendaFilters, type ViewMode } from "@/features/agenda/components/AgendaFilters";
-import { AgendaToolbar, CityFilterDropdown } from "@/features/agenda/components/AgendaToolbar";
-import { DailyGrid } from "@/features/agenda/components/DailyGrid";
-import { WeeklyGrid } from "@/features/agenda/components/WeeklyGrid";
-import { MonthGrid } from "@/features/agenda/components/MonthGrid";
-import { ListView } from "@/features/agenda/components/ListView";
-import { ActivityDrawer } from "@/features/agenda/components/ActivityDrawer";
+import { useAgendaMutations } from "@/features/agenda/hooks/use-agenda-mutations";
 
 function formatWeekRange(date: Date) {
   const start = new Date(date);
@@ -69,13 +74,13 @@ function formatMonthLabel(date: Date) {
 export const Route = createFileRoute("/_authenticated/agenda")({
   head: () => ({
     meta: [
-      { title: "Agenda • ClinicMed" },
+      { title: "Agenda • MedCore" },
       {
         name: "description",
         content:
-          "Agenda ClinicMed — tarefas, eventos e prazos em visão diária, semanal, mensal e lista.",
+          "Agenda MedCore — tarefas, eventos e prazos em visão diária, semanal, mensal e lista.",
       },
-      { property: "og:title", content: "Agenda • ClinicMed" },
+      { property: "og:title", content: "Agenda • MedCore" },
       {
         property: "og:description",
         content: "Tarefas, eventos e prazos da clínica em um só lugar.",
@@ -146,7 +151,7 @@ function AgendaPage() {
     },
   });
 
-  const isMobile = useIsMobile();
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [view, setView] = useState<ViewMode>(() =>
     typeof window !== "undefined" && window.innerWidth < 768 ? "dia" : "semana",
   );
@@ -180,10 +185,12 @@ function AgendaPage() {
   const {
     activities: allActivities,
     isLoading,
+    isFetching,
+    error: agendaError,
     refresh: refreshData,
   } = useAgendaData(companyId, user?.id);
   // Escopo de agenda definido em Administração > Usuários (filtro de exibição).
-  const { access } = usePermissions();
+  const { access, can } = usePermissions();
   const activities = useMemo(
     () =>
       access.mode === "active"
@@ -200,8 +207,7 @@ function AgendaPage() {
   );
 
   const refresh = useCallback(() => {
-    refreshData();
-    toast.success("Agenda atualizada");
+    void refreshData();
   }, [refreshData]);
 
   const baseFiltered = useAgendaFilters({
@@ -257,13 +263,16 @@ function AgendaPage() {
 
   useAgendaDeepLink(activities, { taskId, deadlineId, eventId }, setDrawer);
 
-  const shiftDay = useCallback((delta: number) => {
-    setDate((cur) => {
-      const n = new Date(cur);
-      n.setDate(n.getDate() + delta);
-      return n;
-    });
-  }, []);
+  const shiftDay = useCallback(
+    (delta: number) => {
+      setDate((current) =>
+        view === "mes"
+          ? addMonths(current, delta)
+          : addDays(current, delta * (view === "semana" ? 7 : 1)),
+      );
+    },
+    [view],
+  );
   const goToday = useCallback(() => {
     const d = new Date();
     d.setSeconds(0, 0);
@@ -302,145 +311,166 @@ function AgendaPage() {
   return (
     <AppShell title="Agenda">
       <TooltipProvider delayDuration={200}>
-        <div className="relative h-[calc(100vh-64px)] max-h-[calc(100vh-64px)] bg-white text-foreground flex flex-col overflow-hidden">
-          <div
-            className="pointer-events-none absolute inset-0 -z-0 opacity-60"
-            style={{
-              backgroundImage:
-                "radial-gradient(700px 350px at 10% -10%, hsl(var(--primary) / 0.08), transparent 60%), radial-gradient(900px 450px at 100% 0%, hsl(var(--primary) / 0.05), transparent 60%)",
-            }}
+        <div className="flex h-[calc(100dvh-64px)] min-h-0 flex-col text-foreground">
+          <AgendaHeader
+            isLoading={isFetching}
+            onRefresh={refresh}
+            onCreate={handleCreatePick}
+            onOpenFilters={() => setFiltersOpen(true)}
+            activeFilterCount={
+              Object.values(sidebarFilters).filter(Boolean).length + Number(cityFilter !== "todas")
+            }
+            canCreate={can("agenda.manage")}
           />
-
-          <div className="relative flex w-full flex-1 items-stretch min-h-0 bg-white overflow-hidden">
-            <div className="hidden h-full self-stretch lg:block bg-white z-20 shrink-0">
+          {agendaError && (
+            <div
+              role="alert"
+              className="mx-4 mb-3 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive"
+            >
+              Não foi possível atualizar os agendamentos.{" "}
+              <button className="font-medium underline" onClick={refresh}>
+                Tentar novamente
+              </button>
+            </div>
+          )}
+          <div className="mx-3 mb-3 flex min-h-0 flex-1 gap-4 md:mx-5 md:mb-5">
+            {/* Em telas largas o calendário e os filtros ficam fixos à esquerda, como no Calendário do macOS. */}
+            <aside
+              aria-label="Calendário e filtros da agenda"
+              className="hidden w-[288px] shrink-0 flex-col overflow-hidden rounded-2xl border border-hairline bg-glass shadow-(--glass-shadow) glass-blur xl:flex"
+            >
+              <AgendaSidebar
+                className="bg-transparent"
+                selectedDate={date}
+                filters={sidebarFilters}
+                onFiltersChange={setSidebarFilters}
+                options={sidebarOptions}
+                onSelectDate={(next) => {
+                  const value = new Date(next);
+                  value.setHours(date.getHours(), date.getMinutes(), 0, 0);
+                  setDate(value);
+                }}
+              />
+            </aside>
+            <SectionCard className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <AgendaToolbar
+                date={date}
+                onSetDate={setDate}
+                onShiftDay={shiftDay}
+                onToday={goToday}
+                draggedRef={draggedRef}
+                onReschedule={handleReschedule}
+                search={search}
+                onSearchChange={setSearch}
+                cityFilter={cityFilter}
+                onCityChange={setCityFilter}
+                cities={availableCities}
+                view={view}
+                onViewChange={setView}
+                label={
+                  view === "semana"
+                    ? formatWeekRange(date)
+                    : view === "mes"
+                      ? formatMonthLabel(date)
+                      : undefined
+                }
+              />
+              {search.trim() !== "" ? (
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  <div
+                    role="status"
+                    className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-primary-soft/40 px-4 py-3 text-sm"
+                  >
+                    <span>
+                      {finalFiltered.length} resultado(s) para “{search}” em todas as datas
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSearch("")}
+                      className="font-medium text-primary hover:underline"
+                    >
+                      Limpar busca
+                    </button>
+                  </div>
+                  <ListView
+                    activities={finalFiltered}
+                    loading={isLoading}
+                    onActivityClick={handleOpenDetails}
+                  />
+                </div>
+              ) : view === "semana" ? (
+                <WeeklyGrid
+                  date={date}
+                  activities={finalFiltered}
+                  loading={isLoading}
+                  onActivityClick={handleOpenDetails}
+                  onActivityEdit={handleOpenEdit}
+                  onSlotClick={handleSlotClick}
+                  onReschedule={handleReschedule}
+                  onResize={handleResize}
+                  draggedRef={draggedRef}
+                  onSelectDate={(next) => {
+                    setDate(next);
+                    setView("dia");
+                  }}
+                />
+              ) : view === "dia" ? (
+                <DailyGrid
+                  date={date}
+                  activities={dayActivities}
+                  loading={isLoading}
+                  onActivityClick={handleOpenDetails}
+                  onActivityEdit={handleOpenEdit}
+                  onSlotClick={handleSlotClick}
+                  onReschedule={handleReschedule}
+                  onResize={handleResize}
+                  draggedRef={draggedRef}
+                />
+              ) : view === "mes" ? (
+                <div className="min-h-0 flex-1 overflow-auto">
+                  <MonthGrid
+                    date={date}
+                    activities={finalFiltered}
+                    loading={isLoading}
+                    onActivityClick={handleOpenDetails}
+                    onSelectDate={(next) => {
+                      setDate(next);
+                      setView("dia");
+                    }}
+                    onReschedule={handleReschedule}
+                    draggedRef={draggedRef}
+                  />
+                </div>
+              ) : (
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  <ListView
+                    activities={dayActivities}
+                    loading={isLoading}
+                    onActivityClick={handleOpenDetails}
+                  />
+                </div>
+              )}
+            </SectionCard>
+          </div>
+          <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+            <SheetContent side="left" className="flex w-[min(320px,100vw)] flex-col gap-0 p-0">
+              <SheetHeader className="border-b border-border px-5 py-4">
+                <SheetTitle>Filtros da agenda</SheetTitle>
+                <SheetDescription>Selecione uma data e refine os atendimentos.</SheetDescription>
+              </SheetHeader>
               <AgendaSidebar
                 selectedDate={date}
                 filters={sidebarFilters}
                 onFiltersChange={setSidebarFilters}
                 options={sidebarOptions}
-                onNewAppointment={() => setCreateKind("tarefa")}
-                onSelectDate={(d) => {
-                  const n = new Date(d);
-                  n.setHours(date.getHours(), date.getMinutes(), 0, 0);
-                  setDate(n);
+                onSelectDate={(next) => {
+                  const value = new Date(next);
+                  value.setHours(date.getHours(), date.getMinutes(), 0, 0);
+                  setDate(value);
                 }}
               />
-            </div>
-
-            <div className="relative min-w-0 flex-1 px-0 pb-0 pt-0 flex flex-col min-h-0 bg-white overflow-hidden">
-              <AgendaHeader isLoading={isLoading} onRefresh={refresh} onCreate={handleCreatePick} />
-
-              <div className="flex-1 flex flex-col min-h-0 bg-white">
-                <SectionCard className="rounded-none border-x-0 border-b-0 flex-1 flex flex-col min-h-0 bg-white shadow-none">
-                  <div className="relative shrink-0">
-                    <AgendaToolbar
-                      date={date}
-                      onSetDate={setDate}
-                      onShiftDay={(delta) => {
-                        if (view === "semana") {
-                          setDate((cur) => {
-                            const n = new Date(cur);
-                            n.setDate(n.getDate() + delta);
-                            return n;
-                          });
-                        } else {
-                          shiftDay(delta);
-                        }
-                      }}
-                      onToday={goToday}
-                      draggedRef={draggedRef}
-                      onReschedule={handleReschedule}
-                      stepDays={view === "semana" ? 7 : 1}
-                      search={search}
-                      onSearchChange={setSearch}
-                      cityFilter={cityFilter}
-                      onCityChange={setCityFilter}
-                      cities={availableCities}
-                      view={view as any}
-                      onViewChange={setView as any}
-                      onNewAppointment={() => setCreateKind("tarefa")}
-                      label={
-                        view === "semana"
-                          ? formatWeekRange(date)
-                          : view === "mes"
-                            ? formatMonthLabel(date)
-                            : undefined
-                      }
-                    />
-                  </div>
-
-                  {search.trim() !== "" ? (
-                    <div className="p-4">
-                      <div className="mb-4 flex items-center justify-between rounded-xl bg-purple-50 border border-purple-200 px-4 py-3 text-xs font-semibold text-[#6D5EF8]">
-                        <span>
-                          🔍 Resultados da busca por "{search}": {finalFiltered.length}{" "}
-                          agendamento(s) encontrado(s)
-                        </span>
-                        <button
-                          onClick={() => setSearch("")}
-                          className="hover:underline text-muted-foreground font-medium"
-                        >
-                          Limpar busca
-                        </button>
-                      </div>
-                      <ListView
-                        activities={finalFiltered}
-                        loading={isLoading}
-                        onActivityClick={handleOpenDetails}
-                      />
-                    </div>
-                  ) : view === "semana" ? (
-                    <WeeklyGrid
-                      date={date}
-                      activities={finalFiltered}
-                      loading={isLoading}
-                      onActivityClick={handleOpenDetails}
-                      onActivityEdit={handleOpenEdit}
-                      onSlotClick={handleSlotClick}
-                      onReschedule={handleReschedule}
-                      onResize={handleResize}
-                      draggedRef={draggedRef}
-                      onSelectDate={(d) => {
-                        setDate(d);
-                        setView("dia");
-                      }}
-                    />
-                  ) : view === "dia" ? (
-                    <DailyGrid
-                      date={date}
-                      activities={dayActivities}
-                      loading={isLoading}
-                      onActivityClick={handleOpenDetails}
-                      onActivityEdit={handleOpenEdit}
-                      onSlotClick={handleSlotClick}
-                      onReschedule={handleReschedule}
-                      onResize={handleResize}
-                      draggedRef={draggedRef}
-                    />
-                  ) : view === "mes" ? (
-                    <MonthGrid
-                      date={date}
-                      activities={finalFiltered}
-                      loading={isLoading}
-                      onActivityClick={handleOpenDetails}
-                      onSelectDate={(d) => {
-                        setDate(d);
-                        setView("dia");
-                      }}
-                      onReschedule={handleReschedule}
-                      draggedRef={draggedRef}
-                    />
-                  ) : (
-                    <ListView
-                      activities={finalFiltered}
-                      loading={isLoading}
-                      onActivityClick={handleOpenDetails}
-                    />
-                  )}
-                </SectionCard>
-              </div>
-            </div>
-          </div>
+            </SheetContent>
+          </Sheet>
 
           <ActivityDrawer
             activity={drawer}

@@ -8,6 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { KIND_COLOR, type Activity } from "@/components/agenda/agenda-types";
+import { FONT_STACK } from "@/lib/fonts";
 import { cn } from "@/utils/cn";
 import { KindIcon } from "./KindIcon";
 import {
@@ -70,59 +71,13 @@ function initialsOf(name: string | null | undefined) {
   return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?";
 }
 
-function hexToHsl(hex: string) {
-  const r = parseInt(hex.slice(1, 3), 16) / 255;
-  const g = parseInt(hex.slice(3, 5), 16) / 255;
-  const b = parseInt(hex.slice(5, 7), 16) / 255;
-
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  let h = 0;
-  let s = 0;
-  const l = (max + min) / 2;
-
-  if (max !== min) {
-    const d = max - min;
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-    switch (max) {
-      case r:
-        h = (g - b) / d + (g < b ? 6 : 0);
-        break;
-      case g:
-        h = (b - r) / d + 2;
-        break;
-      case b:
-        h = (r - g) / d + 4;
-        break;
-    }
-    h /= 6;
-  }
-
-  return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
+// Fundo do evento: 14% da cor do profissional sobre o cartão (funciona nos dois temas).
+function softenColor(color: string) {
+  return `color-mix(in srgb, ${color} 14%, var(--card))`;
 }
 
-function hslToHex(h: number, s: number, l: number) {
-  const sat = s / 100;
-  const light = l / 100;
-  const a = sat * Math.min(light, 1 - light);
-  const f = (n: number) => {
-    const k = (n + h / 30) % 12;
-    const color = light - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-    return Math.round(255 * color)
-      .toString(16)
-      .padStart(2, "0");
-  };
-  return `#${f(0)}${f(8)}${f(4)}`;
-}
-
-function softenColor(hex: string) {
-  const hsl = hexToHsl(hex);
-  return hslToHex(hsl.h, Math.min(hsl.s, 55), Math.max(hsl.l, 88));
-}
-
-function softenColorHover(hex: string) {
-  const hsl = hexToHsl(hex);
-  return hslToHex(hsl.h, Math.min(hsl.s, 65), Math.max(hsl.l, 82));
+function softenColorHover(color: string) {
+  return `color-mix(in srgb, ${color} 22%, var(--card))`;
 }
 
 function formatHeaderSubtitle(start: Date, end: Date | null) {
@@ -202,13 +157,13 @@ function ActivityHoverContent({
   const waUrl = getWhatsAppUrl(rawPhone, patientName);
 
   return (
-    <div className="w-[330px] p-5 bg-white rounded-2xl shadow-[0_20px_50px_rgba(24,20,50,0.18)] border border-slate-100/90 font-sans space-y-4 text-slate-800 text-[13.5px]">
+    <div className="w-[330px] p-5 bg-card rounded-2xl shadow-sm border border-border-soft/90 font-sans space-y-4 text-foreground text-sm">
       {/* Header: Badge Roxo Claro + Nome "Agendamento" + Data/Hora */}
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 h-6 w-6 rounded-lg bg-[#ECE6FE] shrink-0" />
+        <span className="mt-0.5 h-6 w-6 rounded-lg bg-primary/15 shrink-0" />
         <div className="min-w-0 flex-1">
-          <div className="text-[16px] font-bold text-[#1E2538] leading-tight">Agendamento</div>
-          <div className="mt-0.5 text-[12.5px] font-medium text-[#5A6478]">
+          <div className="text-base font-semibold text-foreground leading-tight">Agendamento</div>
+          <div className="mt-0.5 text-sm font-medium text-muted-foreground">
             {formatHeaderSubtitle(a.start, a.end)}
           </div>
         </div>
@@ -216,26 +171,26 @@ function ActivityHoverContent({
 
       {/* Profissional / Médico */}
       <div className="flex items-center gap-3">
-        <div className="h-8 w-8 rounded-full bg-[#E2E8F0] overflow-hidden shrink-0 grid place-items-center text-[12px] font-bold text-slate-700">
+        <div className="h-8 w-8 rounded-full bg-surface-2 overflow-hidden shrink-0 grid place-items-center text-xs font-semibold text-foreground/80">
           {initialsOf(profName)}
         </div>
-        <span className="font-medium text-[#1E2538] text-[12.5px] truncate">{profName}</span>
+        <span className="font-medium text-foreground text-sm truncate">{profName}</span>
       </div>
 
       {/* Paciente com Ícone do WhatsApp vinculado */}
       <div className="flex items-center gap-3">
-        <div className="h-8 w-8 rounded-full bg-[#ECE6FE] text-[#7C3AED] font-extrabold text-[12px] shrink-0 grid place-items-center">
+        <div className="h-8 w-8 rounded-full bg-primary/15 text-primary font-semibold text-xs shrink-0 grid place-items-center">
           {patientInitials}
         </div>
         <div className="flex items-center gap-2 min-w-0">
-          <span className="font-medium text-[#1E2538] text-[12.5px] truncate">{patientName}</span>
+          <span className="font-medium text-foreground text-sm truncate">{patientName}</span>
           <a
             href={waUrl}
             target="_blank"
             rel="noopener noreferrer"
             title={`Abrir conversa no WhatsApp com ${patientName}`}
             onClick={(e) => e.stopPropagation()}
-            className="inline-flex items-center justify-center p-0.5 text-[#8C96A6] hover:text-[#25D366] transition-all hover:scale-110 active:scale-95 cursor-pointer shrink-0"
+            className="inline-flex items-center justify-center p-0.5 text-muted-foreground/80 hover:text-[#25D366] transition-all hover:scale-110 active:scale-95 cursor-pointer shrink-0"
           >
             <MessageCircle className="h-4.5 w-4.5" />
           </a>
@@ -245,18 +200,18 @@ function ActivityHoverContent({
       {/* Status do Agendamento */}
       <div className="flex items-center gap-3">
         <div className="relative flex items-center justify-center shrink-0 w-8">
-          <Clock className="h-5 w-5 text-slate-500" />
-          <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-[#8B5CF6] ring-2 ring-white" />
+          <Clock className="h-5 w-5 text-muted-foreground" />
+          <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-card" />
         </div>
-        <span className="font-bold text-[#1E2538] text-[13.5px] capitalize">{statusText}</span>
+        <span className="font-semibold text-foreground text-sm capitalize">{statusText}</span>
       </div>
 
       {/* Localização / Sala de Atendimento */}
       <div className="flex items-center gap-3">
         <div className="flex items-center justify-center shrink-0 w-8">
-          <MapPin className="h-5 w-5 text-[#8C96A6]" />
+          <MapPin className="h-5 w-5 text-muted-foreground/80" />
         </div>
-        <span className="font-bold text-[#1E2538] text-[13.5px] truncate">{financialStatus}</span>
+        <span className="font-semibold text-foreground text-sm truncate">{financialStatus}</span>
       </div>
 
       {/* Botões de Ação */}
@@ -265,7 +220,7 @@ function ActivityHoverContent({
           type="button"
           onPointerDown={openEdit}
           onClick={openEdit}
-          className="flex-1 h-10 rounded-xl text-[13.5px] font-bold bg-[#F4F5F8] text-[#5A6478] hover:bg-[#EBECEF] transition-all cursor-pointer shadow-none flex items-center justify-center"
+          className="flex h-10 flex-1 cursor-pointer items-center justify-center rounded-full bg-foreground/[0.06] text-sm font-semibold text-foreground transition-colors hover:bg-foreground/[0.1]"
         >
           Editar
         </button>
@@ -273,7 +228,7 @@ function ActivityHoverContent({
           type="button"
           onPointerDown={openDetails}
           onClick={openDetails}
-          className="flex-1 h-10 rounded-xl text-[13.5px] font-bold bg-[#8B5CF6] text-white hover:bg-[#7C3AED] transition-all cursor-pointer shadow-none flex items-center justify-center"
+          className="flex h-10 flex-1 cursor-pointer items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground shadow-xs transition-colors hover:bg-primary-hover"
         >
           Ver detalhes
         </button>
@@ -668,20 +623,20 @@ export function ActivityCard({
   );
 
   const meta = parseMeta(a.description);
-  const accent = meta?.color || "#7C5CFC";
+  const accent = meta?.color || "#6d3ff5";
   const lightBg = softenColor(accent);
 
   const hasSinal = meta?.downPayment && meta.downPayment > 0;
   const hasRemaining = meta?.remainingValue && meta.remainingValue > 0;
-  let payBadge: { label: string; bg: string; fg: string } | null = null;
+  let payBadge: { label: string; tone: string } | null = null;
   if (meta?.planCoverage === "incluso") {
-    payBadge = { label: "No Plano", bg: "#E0F2FE", fg: "#0369A1" };
+    payBadge = { label: "No Plano", tone: "var(--info)" };
   } else if (hasSinal && hasRemaining) {
-    payBadge = { label: "Sinal Pago", bg: "#FEF3C7", fg: "#92400E" };
+    payBadge = { label: "Sinal Pago", tone: "var(--warning)" };
   } else if (hasSinal && !hasRemaining) {
-    payBadge = { label: "Pago Total", bg: "#DCFCE7", fg: "#166534" };
+    payBadge = { label: "Pago Total", tone: "var(--success)" };
   } else if (meta?.procedurePrice && meta.procedurePrice > 0 && !hasSinal) {
-    payBadge = { label: "Pendente", bg: "#FEE2E2", fg: "#991B1B" };
+    payBadge = { label: "Pendente", tone: "var(--destructive)" };
   }
 
   // Cálculo dinâmico do estilo e do horário durante e após o estiramento
@@ -807,12 +762,12 @@ export function ActivityCard({
             flexDirection: "column",
             justifyContent: "center",
             background: lightBg,
-            borderRadius: 8,
+            borderRadius: 10,
             padding: "6px 8px 6px 12px",
             boxShadow:
               resizeState || moveState
                 ? "0 10px 25px rgba(0,0,0,0.18)"
-                : "0 1px 2px rgba(0,0,0,.05)",
+                : "inset 0 0 0 0.5px color-mix(in srgb, currentColor 8%, transparent)",
             transition:
               resizeState || moveState
                 ? "none"
@@ -834,7 +789,8 @@ export function ActivityCard({
             setIsEdgeArea(false);
             e.currentTarget.style.background = lightBg;
             e.currentTarget.style.transform = "translateY(0)";
-            e.currentTarget.style.boxShadow = "0 1px 2px rgba(0,0,0,.05)";
+            e.currentTarget.style.boxShadow =
+              "inset 0 0 0 0.5px color-mix(in srgb, currentColor 8%, transparent)";
             e.currentTarget.style.zIndex = "10";
             closeOnLeave(e);
           }}
@@ -867,11 +823,11 @@ export function ActivityCard({
             />
             <div
               style={{
-                fontFamily: "'Barlow', sans-serif",
+                fontFamily: FONT_STACK,
                 fontWeight: 500,
                 fontSize: 13,
                 lineHeight: 1.2,
-                color: "#101828",
+                color: "var(--foreground)",
                 whiteSpace: "nowrap",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
@@ -883,11 +839,11 @@ export function ActivityCard({
 
           <div
             style={{
-              fontFamily: "'Barlow', sans-serif",
+              fontFamily: FONT_STACK,
               fontWeight: 400,
               fontSize: 12,
               lineHeight: 1.3,
-              color: "#475467",
+              color: "var(--muted-foreground)",
               marginTop: 3,
               whiteSpace: "nowrap",
               overflow: "hidden",
@@ -901,12 +857,12 @@ export function ActivityCard({
             <span
               style={{
                 display: "inline-block",
-                fontSize: "9px",
-                fontWeight: 700,
-                padding: "1px 5px",
-                borderRadius: "4px",
-                background: payBadge.bg,
-                color: payBadge.fg,
+                fontSize: "12px",
+                fontWeight: 600,
+                padding: "1px 6px",
+                borderRadius: "999px",
+                background: `color-mix(in srgb, ${payBadge.tone} 14%, transparent)`,
+                color: payBadge.tone,
                 marginTop: "2px",
               }}
             >
@@ -921,7 +877,7 @@ export function ActivityCard({
           side="left"
           align="center"
           sideOffset={6}
-          className="z-[9999] p-0 w-auto rounded-2xl shadow-[0_20px_50px_rgba(24,20,50,0.18)] border border-slate-100/90 bg-white pointer-events-auto overflow-hidden animate-slide-left-smooth"
+          className="z-(--z-popover) w-auto overflow-hidden rounded-2xl border border-hairline bg-glass-strong p-0 shadow-(--glass-shadow-lg) glass-blur-strong pointer-events-auto animate-slide-left-smooth"
           onMouseEnter={keepHoverOpen}
           onMouseLeave={closeOnLeave}
           onPointerDown={(event) => event.stopPropagation()}
@@ -957,7 +913,7 @@ export const ActivityChip = memo(function ActivityChip({
       <button
         onClick={onClick}
         title={a.title}
-        className="w-full min-h-[26px] flex items-center justify-start rounded-[3px] bg-[#FF7597] text-white px-2 py-1 text-[12px] font-semibold shadow-2xs hover:bg-[#FF5B83] transition-colors cursor-pointer select-none border-none text-left"
+        className="w-full min-h-[26px] flex items-center justify-start rounded-[3px] bg-[#FF7597] text-white px-2 py-1 text-xs font-semibold shadow-2xs hover:bg-[#FF5B83] transition-colors cursor-pointer select-none border-none text-left"
       >
         <span className="truncate w-full">{displayTitle}</span>
       </button>
@@ -968,7 +924,7 @@ export const ActivityChip = memo(function ActivityChip({
     <button
       onClick={onClick}
       className={cn(
-        "w-full flex items-center gap-1.5 rounded-[3px] border px-2 py-1 text-[11px] hover:brightness-125 transition text-left",
+        "w-full flex items-center gap-1.5 rounded-[3px] border px-2 py-1 text-xs hover:brightness-125 transition text-left",
         c.chip,
       )}
     >

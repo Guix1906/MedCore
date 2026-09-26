@@ -164,22 +164,22 @@ export function WeeklyGrid({
   );
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 overflow-x-auto bg-white">
+    <div className="flex-1 flex flex-col min-h-0 overflow-x-auto bg-card">
       {/* Header dias */}
       <div
-        className="sticky top-0 z-30 border-b border-slate-200 bg-white shrink-0 shadow-2xs"
+        className="sticky top-0 z-30 border-b border-border bg-card shrink-0 shadow-2xs"
         style={{ paddingRight: scrollbarWidth, minWidth: totalWidth ?? undefined }}
         data-agenda-header-shell
       >
         {/* Linha 1: Datas e Dias da Semana */}
         <div
-          className="relative grid border-b border-slate-200/90 h-[52px]"
+          className="relative grid border-b border-border/90 h-[52px]"
           style={{ gridTemplateColumns: gridTemplate, width: gridWidth }}
           data-agenda-header-grid
         >
           {columnGuides}
           <div
-            className="relative z-[1] border-r border-slate-200/90"
+            className="relative z-[1] border-r border-border/90"
             style={{
               backgroundImage:
                 "repeating-linear-gradient(-45deg, transparent 0 6px, rgba(203,213,225,0.4) 6px 7px)",
@@ -192,7 +192,7 @@ export function WeeklyGrid({
               <div
                 key={d.toISOString()}
                 className={cn(
-                  "relative z-[1] px-2 flex items-center justify-center border-r border-slate-200/90",
+                  "relative z-[1] px-2 flex items-center justify-center border-r border-border/90",
                 )}
                 data-agenda-day-header
                 data-selected={isSelected || undefined}
@@ -202,18 +202,18 @@ export function WeeklyGrid({
                   onClick={() => onSelectDate?.(d)}
                 >
                   {isToday || isSelected ? (
-                    <span className="bg-[#7C3AED] text-white font-bold text-[15px] rounded-xl px-2.5 py-1 h-[32px] min-w-[32px] flex items-center justify-center shadow-2xs">
+                    <span className="flex h-[32px] min-w-[32px] items-center justify-center rounded-full bg-primary px-2.5 py-1 text-[15px] font-semibold text-primary-foreground shadow-2xs">
                       {d.getDate()}
                     </span>
                   ) : (
-                    <span className="text-[#101828] font-bold text-[16px]">{d.getDate()}</span>
+                    <span className="text-foreground font-semibold text-base">{d.getDate()}</span>
                   )}
                   <span
                     className={cn(
-                      "text-[14px] lowercase",
+                      "text-sm lowercase",
                       isToday || isSelected
-                        ? "text-[#475467] font-semibold"
-                        : "text-[#64748B] font-normal",
+                        ? "text-muted-foreground font-semibold"
+                        : "text-muted-foreground font-normal",
                     )}
                   >
                     {WEEKDAY_SHORT[d.getDay()]}
@@ -226,18 +226,18 @@ export function WeeklyGrid({
 
         {/* Linha 2: Seção de Feriados / Eventos do Dia Todo */}
         <div
-          className="relative grid bg-white min-h-[30px]"
+          className="relative grid bg-card min-h-[30px]"
           style={{ gridTemplateColumns: gridTemplate, width: gridWidth }}
           data-agenda-allday-grid
         >
           {columnGuides}
-          <div className="relative z-[1] border-r border-slate-200/90" />
+          <div className="relative z-[1] border-r border-border/90" />
           {week.map((d) => {
             const dayAllDay = allDay.filter((a) => isSameDay(a.start, d));
             return (
               <div
                 key={`allday-${d.toISOString()}`}
-                className="relative z-[1] px-0.5 py-0.5 flex flex-col gap-1 items-stretch justify-center border-r border-slate-200/90 min-h-[28px] w-full"
+                className="relative z-[1] px-0.5 py-0.5 flex flex-col gap-1 items-stretch justify-center border-r border-border/90 min-h-[28px] w-full"
               >
                 {dayAllDay.map((a) => (
                   <ActivityChip key={a.id} a={a} onClick={() => onActivityClick(a)} compact />
@@ -251,7 +251,7 @@ export function WeeklyGrid({
       {/* Grid horas */}
       <div
         ref={containerRef}
-        className="relative flex-1 min-h-0 overflow-y-auto bg-white"
+        className="relative flex-1 min-h-0 overflow-y-auto bg-card"
         style={{ scrollbarGutter: "stable", minWidth: totalWidth ?? undefined }}
         data-agenda-scroll-body
       >
@@ -265,7 +265,7 @@ export function WeeklyGrid({
         >
           {columnGuides}
           {/* Coluna de horários estilo imagem de referência (media_1786217017772.png) */}
-          <div className="relative z-[1] bg-white border-r border-slate-200/90">
+          <div className="relative z-[1] bg-card border-r border-border/90">
             {Array.from({ length: 48 }, (_, i) => {
               const h = Math.floor(i / 2);
               const m = (i % 2) * 30;
@@ -276,10 +276,8 @@ export function WeeklyGrid({
                 <div
                   key={i}
                   className={cn(
-                    "absolute left-0 right-0 flex items-center justify-center px-1 text-[13px] font-normal tabular-nums text-slate-600 border-b",
-                    isHalfHour
-                      ? "border-dashed border-slate-200/90"
-                      : "border-solid border-slate-200/90",
+                    "absolute left-0 right-0 flex items-center justify-center px-1 text-sm font-normal tabular-nums text-muted-foreground border-b",
+                    isHalfHour ? "border-dashed border-border/90" : "border-solid border-border/90",
                   )}
                   style={{
                     top: i * (HOUR_H / 2),
@@ -389,8 +387,8 @@ export function WeeklyGrid({
                       className={cn(
                         "absolute left-0 right-0 w-full text-left transition-colors hover:bg-primary/[0.06] cursor-crosshair border-b",
                         isHalfHour
-                          ? "border-dashed border-slate-200/90"
-                          : "border-solid border-slate-200/90",
+                          ? "border-dashed border-border/90"
+                          : "border-solid border-border/90",
                       )}
                       style={{
                         top: (i * HOUR_H) / 2,
@@ -442,7 +440,7 @@ export function WeeklyGrid({
             >
               {/* Linha vermelha esticada de ponta a ponta */}
               <div
-                className="absolute left-0 right-0 bg-[#FF2D55] shadow-[0_0_8px_rgba(255,45,85,0.6)]"
+                className="absolute left-0 right-0 bg-[#FF2D55] shadow-sm"
                 style={{ height: 2, top: -1 }}
               />
               {/* Ponta da linha: Triângulo vermelho apontando para a direita no canto esquerdo */}
@@ -452,7 +450,7 @@ export function WeeklyGrid({
               />
               {/* Badge com horário atual na coluna de horários */}
               <div
-                className="absolute left-2.5 -top-[10px] px-1.5 py-0.5 rounded-full bg-[#FF2D55] text-white text-[10px] font-bold tabular-nums shadow-sm flex items-center justify-center z-40 leading-tight"
+                className="absolute left-2.5 -top-[10px] px-1.5 py-0.5 rounded-full bg-[#FF2D55] text-white text-xs font-semibold tabular-nums shadow-sm flex items-center justify-center z-40 leading-tight"
                 style={{ minWidth: 42 }}
               >
                 {nowLabel}

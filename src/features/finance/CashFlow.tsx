@@ -60,6 +60,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -85,7 +86,10 @@ import { cashFlow } from "./cash-flow-math";
 import type { CashAccount, CashFlowSnapshot } from "./cash-flow-schema";
 import type { FinanceSnapshot, FinancialTitle } from "./finance-schema";
 import type { OperationsSnapshot } from "./operations-schema";
-import { GraficoFluxoDeCaixa, type LancamentoFluxo } from "@/components/finance/GraficoFluxoDeCaixa";
+import {
+  GraficoFluxoDeCaixa,
+  type LancamentoFluxo,
+} from "@/components/finance/GraficoFluxoDeCaixa";
 import { CountUp } from "@/components/finance/CountUp";
 import { cn } from "@/lib/utils";
 import PaymentHistory from "./PaymentHistory";
@@ -114,8 +118,8 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
   const [currentMonthDate, setCurrentMonthDate] = useState(() => {
     const now = new Date();
     const currentMonthStr = format(now, "yyyy-MM");
-    const hasCurrentMonthEntries = (finance.payments || []).some(
-      (p) => (p.paid_on || "").startsWith(currentMonthStr)
+    const hasCurrentMonthEntries = (finance.payments || []).some((p) =>
+      (p.paid_on || "").startsWith(currentMonthStr),
     );
     if (!hasCurrentMonthEntries) {
       return new Date(2026, 8, 15);
@@ -127,10 +131,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
     () => format(startOfMonth(currentMonthDate), "yyyy-MM-dd"),
     [currentMonthDate],
   );
-  const end = useMemo(
-    () => format(endOfMonth(currentMonthDate), "yyyy-MM-dd"),
-    [currentMonthDate],
-  );
+  const end = useMemo(() => format(endOfMonth(currentMonthDate), "yyyy-MM-dd"), [currentMonthDate]);
 
   const handlePrevMonth = () => {
     setCurrentMonthDate((prev) => subMonths(prev, 1));
@@ -320,7 +321,9 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
         id: p.id,
         transaction_id: p.transaction_id,
         date: p.paid_on || t?.due_date || t?.date || "2026-09-15",
-        description: t?.description || (isIncome ? "Honorários - Ação de Cobrança – Entrada Paga" : "Pagamento realizado"),
+        description:
+          t?.description ||
+          (isIncome ? "Honorários - Ação de Cobrança – Entrada Paga" : "Pagamento realizado"),
         category: t?.category || (isIncome ? "Honorários Iniciais / sinal" : "Despesas Gerais"),
         client_name: t?.patient_name || p.payer_name || t?.payer_name || "Avulso",
         payment_method: p.payment_method || "PIX",
@@ -350,7 +353,9 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
           id: `title-pay-${t.id}`,
           transaction_id: t.id,
           date: t.date || t.due_date || "2026-09-15",
-          description: t.description || (isIncome ? "Honorários - Ação de Cobrança – Entrada Paga" : "Pagamento realizado"),
+          description:
+            t.description ||
+            (isIncome ? "Honorários - Ação de Cobrança – Entrada Paga" : "Pagamento realizado"),
           category: t.category || (isIncome ? "Honorários Iniciais / sinal" : "Despesas Gerais"),
           client_name: t.patient_name || t.payer_name || "Avulso",
           payment_method: "PIX",
@@ -393,7 +398,9 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
             id: p.id,
             transaction_id: p.transaction_id,
             date: p.paid_on || t?.due_date || t?.date || "2026-09-15",
-            description: t?.description || (isIncome ? "Honorários - Ação de Cobrança – Entrada Paga" : "Pagamento realizado"),
+            description:
+              t?.description ||
+              (isIncome ? "Honorários - Ação de Cobrança – Entrada Paga" : "Pagamento realizado"),
             category: t?.category || (isIncome ? "Honorários Iniciais / sinal" : "Despesas Gerais"),
             client_name: t?.patient_name || p.payer_name || t?.payer_name || "Avulso",
             payment_method: p.payment_method || "PIX",
@@ -425,7 +432,9 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
             id: t.id,
             transaction_id: t.id,
             date: t.date || t.due_date || "2026-09-15",
-            description: t.description || (isIncome ? "Honorários - Ação de Cobrança – Entrada Paga" : "Pagamento realizado"),
+            description:
+              t.description ||
+              (isIncome ? "Honorários - Ação de Cobrança – Entrada Paga" : "Pagamento realizado"),
             category: t.category || (isIncome ? "Honorários Iniciais / sinal" : "Despesas Gerais"),
             client_name: t.patient_name || t.payer_name || "Avulso",
             payment_method: "PIX",
@@ -733,7 +742,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       {/* ========================================================================= */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">
             Fluxo de Caixa
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
@@ -746,8 +755,10 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
         <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
           <Button
             size="sm"
-            className="h-10 px-4 bg-purple-600 hover:bg-purple-700 text-white font-semibold text-sm shadow-xs cursor-pointer rounded-xl"
-            onClick={() => (onOpenNew ? onOpenNew("receita") : (window.location.href = "/financeiro?novo=1"))}
+            className="h-10 px-4 bg-primary hover:bg-primary-hover text-white font-semibold text-sm shadow-xs cursor-pointer "
+            onClick={() =>
+              onOpenNew ? onOpenNew("receita") : (window.location.href = "/financeiro?novo=1")
+            }
           >
             Novo lançamento
           </Button>
@@ -761,9 +772,15 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
         <div className="flex flex-wrap items-center gap-2.5">
           {/* Seletor de Clínica (se houver múltiplas) */}
           {finance.scopes.length > 1 && (
-            <Select value={scope} onValueChange={(v) => { setScope(v); setSelectedAccount("todas"); }}>
-              <SelectTrigger className="h-9 w-auto min-w-[170px] bg-white border-slate-200 text-xs font-medium text-slate-700 shadow-2xs rounded-lg">
-                <Building2 className="h-3.5 w-3.5 mr-2 text-slate-400 shrink-0" />
+            <Select
+              value={scope}
+              onValueChange={(v) => {
+                setScope(v);
+                setSelectedAccount("todas");
+              }}
+            >
+              <SelectTrigger className="h-9 w-auto min-w-[170px] bg-card border-border text-xs font-medium text-foreground/80 shadow-2xs rounded-lg">
+                <Building2 className="h-3.5 w-3.5 mr-2 text-muted-foreground shrink-0" />
                 <SelectValue placeholder="Clínica" />
               </SelectTrigger>
               <SelectContent>
@@ -781,9 +798,9 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
           <Select value={selectedAccount} onValueChange={setSelectedAccount}>
             <SelectTrigger
               aria-label="Conta bancária do fluxo de caixa"
-              className="h-9 w-auto min-w-[190px] bg-white border-slate-200 text-xs font-medium text-slate-700 shadow-2xs rounded-lg"
+              className="h-9 w-auto min-w-[190px] bg-card border-border text-xs font-medium text-foreground/80 shadow-2xs rounded-lg"
             >
-              <Landmark className="h-3.5 w-3.5 mr-2 text-slate-400 shrink-0" />
+              <Landmark className="h-3.5 w-3.5 mr-2 text-muted-foreground shrink-0" />
               <SelectValue placeholder="Todas as contas" />
             </SelectTrigger>
             <SelectContent>
@@ -797,22 +814,23 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
           </Select>
 
           {/* Stepper de Mês: [ <   01/09/2026 - 30/09/2026   > ] */}
-          <div className="flex items-center bg-white border border-slate-200 rounded-lg h-9 px-1 shadow-2xs">
+          <div className="flex items-center bg-card border border-border rounded-lg h-9 px-1 shadow-2xs">
             <button
               type="button"
               onClick={handlePrevMonth}
-              className="h-7 w-7 inline-flex items-center justify-center rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              className="h-7 w-7 inline-flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground/80 hover:bg-muted transition-colors cursor-pointer"
               title="Mês anterior"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <span className="px-3 text-xs font-semibold text-slate-700 tracking-wide select-none">
-              {format(startOfMonth(currentMonthDate), "dd/MM/yyyy")} - {format(endOfMonth(currentMonthDate), "dd/MM/yyyy")}
+            <span className="px-3 text-xs font-semibold text-foreground/80 tracking-wide select-none">
+              {format(startOfMonth(currentMonthDate), "dd/MM/yyyy")} -{" "}
+              {format(endOfMonth(currentMonthDate), "dd/MM/yyyy")}
             </span>
             <button
               type="button"
               onClick={handleNextMonth}
-              className="h-7 w-7 inline-flex items-center justify-center rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              className="h-7 w-7 inline-flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground/80 hover:bg-muted transition-colors cursor-pointer"
               title="Próximo mês"
             >
               <ChevronRight className="h-4 w-4" />
@@ -823,13 +841,13 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
           <Button
             variant="outline"
             size="sm"
-            className="h-9 bg-white border-slate-200 text-slate-700 text-xs font-medium gap-1.5 shadow-2xs hover:bg-slate-50 rounded-lg cursor-pointer"
+            className="h-9 bg-card border-border text-foreground/80 text-xs font-medium gap-1.5 shadow-2xs hover:bg-muted/60 cursor-pointer"
             onClick={() => setShowChart((v) => !v)}
           >
             {showChart ? (
-              <EyeOff className="h-3.5 w-3.5 text-slate-400" />
+              <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
             ) : (
-              <Eye className="h-3.5 w-3.5 text-slate-400" />
+              <Eye className="h-3.5 w-3.5 text-muted-foreground" />
             )}
             {showChart ? "Ocultar Gráfico" : "Exibir Gráfico"}
           </Button>
@@ -841,55 +859,51 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       {/* ========================================================================= */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* CARD 1: ENTRADAS */}
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs flex items-center justify-between">
+        <div className="rounded-xl border border-border bg-card p-4 shadow-2xs flex items-center justify-between">
           <div className="space-y-1">
-            <span className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
+            <span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
               ENTRADAS
             </span>
-            <p className="text-2xl font-bold text-slate-900 tracking-tight">
+            <p className="text-2xl font-semibold text-foreground tracking-tight">
               <CountUp value={totalEntradas} format={(v) => currency(v)} />
             </p>
-            <p className="text-xs text-slate-400">
-              Total liquidado no período
-            </p>
+            <p className="text-xs text-muted-foreground">Total liquidado no período</p>
           </div>
-          <div className="h-8 w-8 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center shrink-0">
+          <div className="h-8 w-8 rounded-full bg-success/10 text-success flex items-center justify-center shrink-0">
             <ArrowUpRight className="h-4 w-4" strokeWidth={2.5} />
           </div>
         </div>
 
         {/* CARD 2: DESPESAS */}
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs flex items-center justify-between">
+        <div className="rounded-xl border border-border bg-card p-4 shadow-2xs flex items-center justify-between">
           <div className="space-y-1">
-            <span className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
+            <span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
               DESPESAS
             </span>
-            <p className="text-2xl font-bold text-slate-900 tracking-tight">
+            <p className="text-2xl font-semibold text-foreground tracking-tight">
               <CountUp value={totalDespesas} format={(v) => currency(v)} />
             </p>
-            <p className="text-xs text-slate-400">
-              Custo do escritório no período
-            </p>
+            <p className="text-xs text-muted-foreground">Despesas da clínica no período</p>
           </div>
-          <div className="h-8 w-8 rounded-full bg-rose-50 text-rose-400 flex items-center justify-center shrink-0">
+          <div className="h-8 w-8 rounded-full bg-destructive/10 text-destructive/80 flex items-center justify-center shrink-0">
             <ArrowDownLeft className="h-4 w-4" strokeWidth={2.5} />
           </div>
         </div>
 
         {/* CARD 3: RESULTADO DO PERÍODO */}
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs flex items-center justify-between">
+        <div className="rounded-xl border border-border bg-card p-4 shadow-2xs flex items-center justify-between">
           <div className="space-y-1">
-            <span className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
+            <span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
               RESULTADO DO PERÍODO
             </span>
-            <p className="text-2xl font-bold text-slate-900 tracking-tight">
+            <p className="text-2xl font-semibold text-foreground tracking-tight">
               <CountUp value={saldoFinal} format={(v) => currency(v)} />
             </p>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-muted-foreground">
               Entradas menos despesas (não inclui saldo inicial)
             </p>
           </div>
-          <div className="h-8 w-8 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center shrink-0">
+          <div className="h-8 w-8 rounded-full bg-info/10 text-info flex items-center justify-center shrink-0">
             <ArrowLeftRight className="h-4 w-4" strokeWidth={2.5} />
           </div>
         </div>
@@ -907,12 +921,12 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
         {/* Cabeçalho da Seção de Lançamentos com Botões: Planilha, Transferência, + Novo Lançamento */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-2xs">
+            <div className="h-9 w-9 rounded-xl bg-info flex items-center justify-center text-white shadow-2xs">
               <Landmark className="h-4 w-4" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900">Lançamentos</h2>
-              <p className="text-xs text-slate-400">
+              <h2 className="text-base font-semibold text-foreground">Lançamentos</h2>
+              <p className="text-xs text-muted-foreground">
                 Receitas, despesas e movimentações financeiras
               </p>
             </div>
@@ -923,27 +937,29 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
             <Button
               variant="outline"
               size="sm"
-              className="h-8 bg-white border-slate-200 text-slate-700 text-xs font-medium gap-1.5 rounded-lg shadow-2xs hover:bg-slate-50 cursor-pointer"
+              className="h-8 bg-card border-border text-foreground/80 text-xs font-medium gap-1.5 shadow-2xs hover:bg-muted/60 cursor-pointer"
               onClick={handleExportCsv}
             >
-              <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+              <FileSpreadsheet className="h-3.5 w-3.5 text-success" />
               Planilha
             </Button>
 
             <Button
               variant="outline"
               size="sm"
-              className="h-8 bg-white border-slate-200 text-slate-700 text-xs font-medium gap-1.5 rounded-lg shadow-2xs hover:bg-slate-50 cursor-pointer"
+              className="h-8 bg-card border-border text-foreground/80 text-xs font-medium gap-1.5 shadow-2xs hover:bg-muted/60 cursor-pointer"
               onClick={() => setTransferOpen(true)}
             >
-              <ArrowLeftRight className="h-3.5 w-3.5 text-blue-600" />
+              <ArrowLeftRight className="h-3.5 w-3.5 text-info" />
               Transferência
             </Button>
 
             <Button
               size="sm"
-              className="h-8 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg shadow-2xs cursor-pointer px-3"
-              onClick={() => (onOpenNew ? onOpenNew("receita") : (window.location.href = "/financeiro?novo=1"))}
+              className="h-8 bg-info hover:bg-info/90 text-white text-xs font-medium shadow-2xs cursor-pointer px-3"
+              onClick={() =>
+                onOpenNew ? onOpenNew("receita") : (window.location.href = "/financeiro?novo=1")
+              }
             >
               Novo Lançamento
             </Button>
@@ -951,14 +967,14 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
         </div>
 
         {/* Sub-abas (Lançamentos | Excluídos) */}
-        <div className="flex items-center gap-4 border-b border-slate-200 text-xs font-semibold">
+        <div className="flex items-center gap-4 border-b border-border text-xs font-semibold">
           <button
             type="button"
             className={cn(
               "pb-2.5 pt-1 border-b-2 flex items-center gap-1.5 cursor-pointer transition-colors",
               activeSubTab === "lancamentos"
-                ? "border-blue-600 text-blue-600"
-                : "border-transparent text-slate-500 hover:text-slate-700"
+                ? "border-info text-info"
+                : "border-transparent text-muted-foreground hover:text-foreground/80",
             )}
             onClick={() => setActiveSubTab("lancamentos")}
           >
@@ -969,8 +985,8 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
             className={cn(
               "pb-2.5 pt-1 border-b-2 flex items-center gap-1.5 cursor-pointer transition-colors",
               activeSubTab === "excluidos"
-                ? "border-blue-600 text-blue-600"
-                : "border-transparent text-slate-500 hover:text-slate-700"
+                ? "border-info text-info"
+                : "border-transparent text-muted-foreground hover:text-foreground/80",
             )}
             onClick={() => setActiveSubTab("excluidos")}
           >
@@ -979,28 +995,28 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
         </div>
 
         {/* Barra de Filtros */}
-        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-2xs space-y-2.5">
+        <div className="rounded-xl border border-border bg-card p-3 shadow-2xs space-y-2.5">
           <div className="flex flex-wrap items-center gap-2.5">
             {/* Busca por descrição ou paciente */}
             <div className="relative flex-1 min-w-[200px] max-w-xs">
-              <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar por desc..."
-                className="pl-8 h-8 text-xs bg-white border-slate-200 rounded-lg placeholder:text-slate-400"
+                className="pl-8 h-8 text-xs bg-card border-border rounded-lg placeholder:text-muted-foreground"
               />
             </div>
 
             {/* Segmented Buttons (Todos, Receitas, Despesas) */}
-            <div className="inline-flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200/50">
+            <div className="inline-flex items-center bg-muted p-0.5 rounded-lg border border-border/50">
               <button
                 type="button"
                 className={cn(
                   "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
                   typeFilter === "todos"
-                    ? "bg-blue-600 text-white shadow-2xs"
-                    : "text-slate-600 hover:text-slate-900"
+                    ? "bg-info text-white shadow-2xs"
+                    : "text-muted-foreground hover:text-foreground",
                 )}
                 onClick={() => setTypeFilter("todos")}
               >
@@ -1011,8 +1027,8 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                 className={cn(
                   "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
                   typeFilter === "receitas"
-                    ? "bg-blue-600 text-white shadow-2xs"
-                    : "text-slate-600 hover:text-slate-900"
+                    ? "bg-info text-white shadow-2xs"
+                    : "text-muted-foreground hover:text-foreground",
                 )}
                 onClick={() => setTypeFilter("receitas")}
               >
@@ -1023,8 +1039,8 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                 className={cn(
                   "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
                   typeFilter === "despesas"
-                    ? "bg-blue-600 text-white shadow-2xs"
-                    : "text-slate-600 hover:text-slate-900"
+                    ? "bg-info text-white shadow-2xs"
+                    : "text-muted-foreground hover:text-foreground",
                 )}
                 onClick={() => setTypeFilter("despesas")}
               >
@@ -1036,7 +1052,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger
                 aria-label="Natureza da movimentação realizada"
-                className="h-8 w-auto min-w-[130px] text-xs bg-white border-slate-200 rounded-lg text-slate-700"
+                className="h-8 w-auto min-w-[130px] text-xs bg-card border-border rounded-lg text-foreground/80"
               >
                 <SelectValue placeholder="Todas Realizadas" />
               </SelectTrigger>
@@ -1049,7 +1065,10 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
 
             {/* Filtro por Forma de Pagamento */}
             <Select value={formaFilter} onValueChange={setFormaFilter}>
-              <SelectTrigger aria-label="Forma de pagamento" className="h-8 w-auto min-w-[115px] text-xs bg-white border-slate-200 rounded-lg text-slate-700">
+              <SelectTrigger
+                aria-label="Forma de pagamento"
+                className="h-8 w-auto min-w-[115px] text-xs bg-card border-border rounded-lg text-foreground/80"
+              >
                 <SelectValue placeholder="Todas formas" />
               </SelectTrigger>
               <SelectContent>
@@ -1065,7 +1084,10 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
 
             {/* Filtro por Origem / Conta */}
             <Select value={origemFilter} onValueChange={setOrigemFilter}>
-              <SelectTrigger aria-label="Conta de origem" className="h-8 w-auto min-w-[125px] text-xs bg-white border-slate-200 rounded-lg text-slate-700">
+              <SelectTrigger
+                aria-label="Conta de origem"
+                className="h-8 w-auto min-w-[125px] text-xs bg-card border-border rounded-lg text-foreground/80"
+              >
                 <SelectValue placeholder="Todas as contas" />
               </SelectTrigger>
               <SelectContent>
@@ -1080,7 +1102,10 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
 
             {/* Filtro por Categoria / Área Médica */}
             <Select value={areaFilter} onValueChange={setAreaFilter}>
-              <SelectTrigger aria-label="Categoria / Procedimento" className="h-8 w-auto min-w-[120px] text-xs bg-white border-slate-200 rounded-lg text-slate-700">
+              <SelectTrigger
+                aria-label="Categoria / Procedimento"
+                className="h-8 w-auto min-w-[120px] text-xs bg-card border-border rounded-lg text-foreground/80"
+              >
                 <SelectValue placeholder="Todas as áreas" />
               </SelectTrigger>
               <SelectContent>
@@ -1094,37 +1119,47 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
             </Select>
           </div>
 
-          <p className="text-[11px] text-slate-400">
-            Período aplicado: {format(startOfMonth(currentMonthDate), "dd/MM/yyyy")} - {format(endOfMonth(currentMonthDate), "dd/MM/yyyy")}. Exportação desta lista respeita os filtros.
+          <p className="text-xs text-muted-foreground">
+            Período aplicado: {format(startOfMonth(currentMonthDate), "dd/MM/yyyy")} -{" "}
+            {format(endOfMonth(currentMonthDate), "dd/MM/yyyy")}. Exportação desta lista respeita os
+            filtros.
           </p>
         </div>
 
         {/* Banner Informativo da Regra de Ouro */}
-        <div className="rounded-xl border border-blue-200/80 bg-blue-50/40 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+        <div className="rounded-xl border border-info/20 bg-info/4 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
           <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="h-4 w-4 text-blue-500 shrink-0" />
-            <p className="text-xs text-slate-700 leading-relaxed">
-              <strong className="text-slate-900 font-semibold">Fluxo de Caixa Realizado:</strong> Esta tela apresenta <strong className="font-semibold text-slate-900">exclusivamente</strong> entradas e saídas que realmente se efetivaram no caixa e nas contas bancárias do escritório. Contas a receber e a pagar previstas/pendentes são geridas em suas respectivas abas.
+            <CheckCircle2 className="h-4 w-4 text-info shrink-0" />
+            <p className="text-xs text-foreground/80 leading-relaxed">
+              <strong className="text-foreground font-semibold">Fluxo de Caixa Realizado:</strong>{" "}
+              Esta tela apresenta{" "}
+              <strong className="font-semibold text-foreground">exclusivamente</strong> entradas e
+              saídas que realmente se efetivaram no caixa e nas contas bancárias da clínica. Contas
+              a receber e a pagar previstas/pendentes são geridas em suas respectivas abas.
             </p>
           </div>
-          <span className="inline-flex items-center rounded-full border border-blue-200 bg-white px-3 py-1 text-[11px] font-medium text-blue-600 shrink-0 shadow-2xs whitespace-nowrap">
+          <span className="inline-flex items-center rounded-full border border-info/25 bg-card px-3 py-1 text-xs font-medium text-info shrink-0 shadow-2xs whitespace-nowrap">
             Movimentações realizadas
           </span>
         </div>
 
         {/* Tabela de Movimentações Financeiras */}
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
+        <div className="bg-card rounded-xl border border-border overflow-hidden shadow-2xs">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="bg-white hover:bg-white border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                  <TableHead className="w-[100px] text-slate-400">DATA</TableHead>
-                  <TableHead className="text-slate-400">DESCRIÇÃO</TableHead>
-                  <TableHead className="w-[110px] text-slate-400">FORMA</TableHead>
-                  <TableHead className="w-[150px] text-slate-400">CONTA/CARTÃO</TableHead>
-                  <TableHead className="w-[110px] text-center text-slate-400">STATUS</TableHead>
-                  <TableHead className="w-[130px] text-right text-slate-400">VALOR</TableHead>
-                  <TableHead className="w-[80px] text-right text-slate-400">AÇÕES</TableHead>
+                <TableRow className="bg-card hover:bg-card border-b border-border text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <TableHead className="w-[100px] text-muted-foreground">DATA</TableHead>
+                  <TableHead className="text-muted-foreground">DESCRIÇÃO</TableHead>
+                  <TableHead className="w-[110px] text-muted-foreground">FORMA</TableHead>
+                  <TableHead className="w-[150px] text-muted-foreground">CONTA/CARTÃO</TableHead>
+                  <TableHead className="w-[110px] text-center text-muted-foreground">
+                    STATUS
+                  </TableHead>
+                  <TableHead className="w-[130px] text-right text-muted-foreground">
+                    VALOR
+                  </TableHead>
+                  <TableHead className="w-[80px] text-right text-muted-foreground">AÇÕES</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1132,7 +1167,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                   <TableRow>
                     <TableCell
                       colSpan={7}
-                      className="text-center py-12 text-sm text-slate-400"
+                      className="text-center py-12 text-sm text-muted-foreground"
                     >
                       Nenhuma movimentação encontrada para os filtros selecionados.
                     </TableCell>
@@ -1156,14 +1191,21 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                     const contaCartao = (e.payment_account || "BANCO DO BRASIL").toUpperCase();
                     const forma = e.payment_method || "PIX";
                     const typeBadge = isDespesa ? "◆ DESPESA" : "◆ HONORÁRIO";
-                    const categorySubtitle = (e.category || (isDespesa ? "Despesas Gerais" : "Honorários Iniciais / Sinal")).toUpperCase();
+                    const categorySubtitle = (
+                      e.category || (isDespesa ? "Despesas Gerais" : "Honorários Iniciais / Sinal")
+                    ).toUpperCase();
 
                     return (
-                      <TableRow key={e.id} className="hover:bg-slate-50/70 border-b border-slate-100 text-xs">
+                      <TableRow
+                        key={e.id}
+                        className="hover:bg-muted/42 border-b border-border-soft text-xs"
+                      >
                         {/* DATA */}
                         <TableCell className="align-middle py-3">
-                          <span className="font-bold text-slate-800 block text-xs">{displayDate}</span>
-                          <span className="text-[11px] text-emerald-600 font-medium block">
+                          <span className="font-semibold text-foreground block text-xs">
+                            {displayDate}
+                          </span>
+                          <span className="text-xs text-success font-medium block">
                             {isCurrentDay ? "Hoje" : "Realizado"}
                           </span>
                         </TableCell>
@@ -1175,8 +1217,8 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                               className={cn(
                                 "h-5 w-5 rounded-full flex items-center justify-center shrink-0 mt-0.5",
                                 isDespesa
-                                  ? "bg-rose-50 text-rose-500"
-                                  : "bg-emerald-50 text-emerald-600"
+                                  ? "bg-destructive/10 text-destructive"
+                                  : "bg-success/10 text-success",
                               )}
                             >
                               {isDespesa ? (
@@ -1188,16 +1230,16 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
 
                             <div className="space-y-0.5 min-w-0">
                               <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 uppercase tracking-wider">
+                                <span className="inline-flex items-center text-xs font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground uppercase tracking-wider">
                                   {typeBadge}
                                 </span>
 
-                                <span className="font-bold text-slate-800 text-xs truncate">
+                                <span className="font-semibold text-foreground text-xs truncate">
                                   {e.description}
                                 </span>
                               </div>
 
-                              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 truncate">
+                              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground truncate">
                                 {categorySubtitle}
                               </p>
                             </div>
@@ -1205,12 +1247,12 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                         </TableCell>
 
                         {/* FORMA DE PAGAMENTO */}
-                        <TableCell className="align-middle py-3 text-xs text-slate-600">
+                        <TableCell className="align-middle py-3 text-xs text-muted-foreground">
                           {forma}
                         </TableCell>
 
                         {/* CONTA / CAIXA */}
-                        <TableCell className="align-middle py-3 font-bold text-slate-700 text-xs tracking-wider uppercase">
+                        <TableCell className="align-middle py-3 font-semibold text-foreground/80 text-xs tracking-wider uppercase">
                           {contaCartao}
                         </TableCell>
 
@@ -1218,23 +1260,27 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                         <TableCell className="align-middle py-3 text-center">
                           <span
                             className={cn(
-                              "inline-block px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider",
+                              "inline-block px-2 py-0.5 rounded-md text-xs font-semibold uppercase tracking-wider",
                               e.status === "cancelado"
-                                ? "bg-slate-100 text-slate-600 border border-slate-200"
+                                ? "bg-muted text-muted-foreground border border-border"
                                 : isDespesa
-                                  ? "bg-rose-50 text-rose-700 border border-rose-200"
-                                  : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                  ? "bg-destructive/10 text-destructive border border-destructive/25"
+                                  : "bg-success/10 text-success border border-success/25",
                             )}
                           >
-                            {e.status === "cancelado" ? "CANCELADO" : isDespesa ? "PAGO" : "RECEBIDO"}
+                            {e.status === "cancelado"
+                              ? "CANCELADO"
+                              : isDespesa
+                                ? "PAGO"
+                                : "RECEBIDO"}
                           </span>
                         </TableCell>
 
                         {/* VALOR */}
                         <TableCell
                           className={cn(
-                            "align-middle py-3 text-right font-bold tabular-nums text-xs",
-                            isDespesa ? "text-rose-600" : "text-emerald-600"
+                            "align-middle py-3 text-right font-semibold tabular-nums text-xs",
+                            isDespesa ? "text-destructive" : "text-success",
                           )}
                         >
                           {isDespesa ? "- " : "+ "}
@@ -1249,7 +1295,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                                 <Button
                                   size="icon"
                                   variant="ghost"
-                                  className="h-7 w-7 text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+                                  className="h-7 w-7 text-muted-foreground hover:text-foreground/80 hover:bg-muted cursor-pointer"
                                   title="Ver histórico / Baixa"
                                   onClick={() => handleOpenEditOrHistory(e)}
                                   aria-label="Ver histórico"
@@ -1261,7 +1307,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                                   <Button
                                     size="icon"
                                     variant="ghost"
-                                    className="h-7 w-7 text-blue-500 hover:text-blue-700 hover:bg-blue-50 cursor-pointer"
+                                    className="h-7 w-7 text-info hover:text-info hover:bg-info/10 cursor-pointer"
                                     title="Recibo / Histórico"
                                     onClick={() => handleOpenEditOrHistory(e)}
                                     aria-label="Recibo"
@@ -1273,7 +1319,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                                 <Button
                                   size="icon"
                                   variant="ghost"
-                                  className="h-7 w-7 text-rose-500 hover:text-rose-700 hover:bg-rose-50 cursor-pointer"
+                                  className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer"
                                   title="Excluir movimentação"
                                   onClick={() => handleOpenDelete(e)}
                                   aria-label="Excluir movimentação"
@@ -1285,7 +1331,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="h-7 px-2 text-xs font-medium text-blue-600 border-blue-200 hover:bg-blue-50 gap-1 rounded-md cursor-pointer"
+                                className="h-7 px-2 text-xs font-medium text-info border-info/25 hover:bg-info/10 gap-1 cursor-pointer"
                                 title="Restaurar movimentação"
                                 onClick={() => handleRestoreEntry(e)}
                               >
@@ -1300,6 +1346,46 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                   })
                 )}
               </TableBody>
+              {filteredEntries.length > 0 &&
+                (() => {
+                  const totals = filteredEntries.reduce(
+                    (acc, entry) => {
+                      if (entry.status === "cancelado") return acc;
+                      const amount = Number(entry.amount) || 0;
+                      if (entry.is_expense) acc.saidas += amount;
+                      else acc.entradas += amount;
+                      return acc;
+                    },
+                    { entradas: 0, saidas: 0 },
+                  );
+                  const net = totals.entradas - totals.saidas;
+                  return (
+                    <TableFooter>
+                      <TableRow className="hover:bg-transparent">
+                        <TableCell colSpan={5} className="py-3 text-xs text-muted-foreground">
+                          Total filtrado, sem cancelados · entradas{" "}
+                          <span className="tabular-nums text-success">
+                            {currency(totals.entradas)}
+                          </span>{" "}
+                          · saídas{" "}
+                          <span className="tabular-nums text-destructive">
+                            {currency(totals.saidas)}
+                          </span>
+                        </TableCell>
+                        <TableCell
+                          className={cn(
+                            "py-3 text-right text-xs tabular-nums",
+                            net < 0 ? "text-destructive" : "text-success",
+                          )}
+                        >
+                          {net < 0 ? "- " : "+ "}
+                          {currency(Math.abs(net))}
+                        </TableCell>
+                        <TableCell />
+                      </TableRow>
+                    </TableFooter>
+                  );
+                })()}
             </Table>
           </div>
         </div>
@@ -1308,14 +1394,14 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       {/* ========================================================================= */}
       {/* PAINEL DE POSIÇÃO E CONFERÊNCIA POR CONTA BANCÁRIA (AUDITORIA CONTÁBIL)   */}
       {/* ========================================================================= */}
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+      <div className="rounded-xl border border-border bg-card p-5 shadow-xs space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
-            <h3 className="text-base font-semibold text-slate-900 flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-purple-600" />
+            <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-primary" />
               Posição e Fechamento por Conta Bancária
             </h3>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               Saldos de abertura, movimentações consolidadas e conciliação por conta.
             </p>
           </div>
@@ -1332,19 +1418,27 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
         {showAccountAudit && result && (
           <div className="space-y-4 pt-2">
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border bg-slate-50/50 p-4">
-                <span className="text-xs text-slate-500 block">Saldo disponível em caixa/bancos</span>
-                <strong className="text-lg font-bold text-slate-900">{balance(result.available)}</strong>
+              <div className="rounded-xl border bg-muted/30 p-4">
+                <span className="text-xs text-muted-foreground block">
+                  Saldo disponível em caixa/bancos
+                </span>
+                <strong className="text-lg font-semibold text-foreground">
+                  {balance(result.available)}
+                </strong>
               </div>
-              <div className="rounded-xl border bg-slate-50/50 p-4">
-                <span className="text-xs text-slate-500 block">Recebíveis futuros de cartão (a liquidar)</span>
-                <strong className="text-lg font-bold text-slate-900">{balance(result.receivable)}</strong>
+              <div className="rounded-xl border bg-muted/30 p-4">
+                <span className="text-xs text-muted-foreground block">
+                  Recebíveis futuros de cartão (a liquidar)
+                </span>
+                <strong className="text-lg font-semibold text-foreground">
+                  {balance(result.receivable)}
+                </strong>
               </div>
             </div>
 
             <div className="overflow-x-auto rounded-xl border">
               <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase font-bold text-slate-600">
+                <thead className="bg-muted/60 text-xs uppercase font-semibold text-muted-foreground">
                   <tr>
                     {[
                       "Conta / Abertura",
@@ -1365,9 +1459,11 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                   {result.rows.map((r) => (
                     <tr key={r.account.id} className="border-t text-xs">
                       <td className="p-3">
-                        <strong className="text-slate-900 block">{r.account.name}</strong>
-                        <span className="text-[11px] text-slate-500">
-                          {r.account.kind === "available" ? "Caixa / Banco" : "Recebíveis de Cartão"}
+                        <strong className="text-foreground block">{r.account.name}</strong>
+                        <span className="text-xs text-muted-foreground">
+                          {r.account.kind === "available"
+                            ? "Caixa / Banco"
+                            : "Recebíveis de Cartão"}
                         </span>
                       </td>
                       {[r.opening, r.income, r.expense, r.result, r.transfers, r.closing].map(
@@ -1407,8 +1503,8 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
           onPointerDownOutside={(e) => e.preventDefault()}
         >
           <DialogHeader>
-            <DialogTitle className="text-base font-bold flex items-center gap-2">
-              <ArrowLeftRight className="h-4 w-4 text-blue-600" />
+            <DialogTitle className="text-base font-semibold flex items-center gap-2">
+              <ArrowLeftRight className="h-4 w-4 text-info" />
               Transferência entre Contas
             </DialogTitle>
             <DialogDescription className="text-xs">
@@ -1461,7 +1557,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                 value={transferAmount || ""}
                 onChange={(e) => setTransferAmount(Number(e.target.value) || 0)}
                 placeholder="0,00"
-                className="h-9 text-sm font-bold"
+                className="h-9 text-sm font-semibold"
               />
             </div>
 
@@ -1476,7 +1572,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
             </div>
 
             {transferError && (
-              <p className="text-xs text-rose-600 font-medium">{transferError}</p>
+              <p className="text-xs text-destructive font-medium">{transferError}</p>
             )}
           </div>
 
@@ -1491,7 +1587,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
             </Button>
             <Button
               size="sm"
-              className="bg-purple-600 hover:bg-purple-700 text-white font-semibold gap-1.5 cursor-pointer"
+              className="bg-primary hover:bg-primary-hover text-white font-semibold gap-1.5 cursor-pointer"
               disabled={transferring || availableAccounts.length < 2 || !transferAmount}
               onClick={handleExecuteTransfer}
             >
@@ -1505,19 +1601,25 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       {/* ========================================================================= */}
       {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE MOVIMENTAÇÃO                          */}
       {/* ========================================================================= */}
-      <Dialog open={deleteModalOpen} onOpenChange={(open) => { if (!isDeleting) setDeleteModalOpen(open); }}>
+      <Dialog
+        open={deleteModalOpen}
+        onOpenChange={(open) => {
+          if (!isDeleting) setDeleteModalOpen(open);
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+              <div className="h-10 w-10 rounded-full bg-destructive/15 text-destructive flex items-center justify-center shrink-0">
                 <Trash2 className="h-5 w-5" />
               </div>
               <div>
-                <DialogTitle className="text-base font-bold text-slate-900">
+                <DialogTitle className="text-base font-semibold text-foreground">
                   Excluir movimentação
                 </DialogTitle>
-                <DialogDescription className="text-xs text-slate-500">
-                  Esta ação estornará o lançamento do fluxo de caixa e moverá o registro para a aba de excluídos.
+                <DialogDescription className="text-xs text-muted-foreground">
+                  Esta ação estornará o lançamento do fluxo de caixa e moverá o registro para a aba
+                  de excluídos.
                 </DialogDescription>
               </div>
             </div>
@@ -1525,32 +1627,43 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
 
           {entryToDelete && (
             <div className="space-y-4 py-2">
-              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-2 text-xs">
+              <div className="rounded-xl border border-border bg-muted/42 p-3.5 space-y-2 text-xs">
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-500">Descrição:</span>
-                  <span className="font-semibold text-slate-800 text-right">{entryToDelete.description}</span>
+                  <span className="text-muted-foreground">Descrição:</span>
+                  <span className="font-semibold text-foreground text-right">
+                    {entryToDelete.description}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-500">Valor:</span>
-                  <span className={cn("font-bold text-sm", entryToDelete.is_expense ? "text-rose-600" : "text-emerald-600")}>
+                  <span className="text-muted-foreground">Valor:</span>
+                  <span
+                    className={cn(
+                      "font-semibold text-sm",
+                      entryToDelete.is_expense ? "text-destructive" : "text-success",
+                    )}
+                  >
                     {entryToDelete.is_expense ? "- " : "+ "}
                     {currency(entryToDelete.amount)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-500">Conta:</span>
-                  <span className="font-medium text-slate-700">{entryToDelete.payment_account}</span>
+                  <span className="text-muted-foreground">Conta:</span>
+                  <span className="font-medium text-foreground/80">
+                    {entryToDelete.payment_account}
+                  </span>
                 </div>
                 {entryToDelete.client_name && entryToDelete.client_name !== "Avulso" && (
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-500">Paciente / Pagador:</span>
-                    <span className="font-medium text-slate-700">{entryToDelete.client_name}</span>
+                    <span className="text-muted-foreground">Paciente / Pagador:</span>
+                    <span className="font-medium text-foreground/80">
+                      {entryToDelete.client_name}
+                    </span>
                   </div>
                 )}
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="delete-reason" className="text-xs font-semibold text-slate-700">
+                <Label htmlFor="delete-reason" className="text-xs font-semibold text-foreground/80">
                   Motivo da exclusão (opcional)
                 </Label>
                 <Input
@@ -1579,7 +1692,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
               type="button"
               variant="destructive"
               size="sm"
-              className="text-xs h-9 bg-rose-600 hover:bg-rose-700 text-white gap-1.5 font-semibold cursor-pointer"
+              className="text-xs h-9 bg-destructive hover:bg-destructive/90 text-white gap-1.5 font-semibold cursor-pointer"
               onClick={handleConfirmDelete}
               disabled={isDeleting}
             >
@@ -1656,9 +1769,9 @@ function OpeningForm({ accounts }: { accounts: CashAccount[] }) {
   if (unconfirmedAccounts.length === 0) return null;
 
   return (
-    <form onSubmit={save} className="space-y-3 rounded-xl border bg-slate-50/60 p-4">
-      <h4 className="font-semibold text-sm text-slate-900">Confirmar saldo de abertura</h4>
-      <p className="text-xs text-slate-600">
+    <form onSubmit={save} className="space-y-3 rounded-xl border bg-muted/36 p-4">
+      <h4 className="font-semibold text-sm text-foreground">Confirmar saldo de abertura</h4>
+      <p className="text-xs text-muted-foreground">
         Informe o saldo inicial conferido no início da data escolhida para a conta.
       </p>
       <fieldset disabled={busy || submitted} className="grid grid-cols-1 sm:grid-cols-4 gap-3">
@@ -1666,7 +1779,7 @@ function OpeningForm({ accounts }: { accounts: CashAccount[] }) {
           <Label className="text-xs">Conta</Label>
           <select
             required
-            className="w-full rounded-lg border border-slate-200 p-2 text-xs bg-white"
+            className="w-full rounded-lg border border-border p-2 text-xs bg-card"
             value={account}
             onChange={(e) => setAccount(e.target.value)}
           >
@@ -1684,7 +1797,7 @@ function OpeningForm({ accounts }: { accounts: CashAccount[] }) {
             required
             type="number"
             step="0.01"
-            className="w-full rounded-lg border border-slate-200 p-2 text-xs bg-white"
+            className="w-full rounded-lg border border-border p-2 text-xs bg-card"
             placeholder="0,00"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
@@ -1696,7 +1809,7 @@ function OpeningForm({ accounts }: { accounts: CashAccount[] }) {
             required
             type="date"
             max={localDate()}
-            className="w-full rounded-lg border border-slate-200 p-2 text-xs bg-white"
+            className="w-full rounded-lg border border-border p-2 text-xs bg-card"
             value={date}
             onChange={(e) => setDate(e.target.value)}
           />
@@ -1706,7 +1819,7 @@ function OpeningForm({ accounts }: { accounts: CashAccount[] }) {
             size="sm"
             type="submit"
             disabled={busy || submitted || !account || !amount}
-            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs"
+            className="w-full bg-primary hover:bg-primary-hover text-white font-semibold text-xs"
           >
             {busy ? "Salvando..." : "Confirmar Saldo"}
           </Button>

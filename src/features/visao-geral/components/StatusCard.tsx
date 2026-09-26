@@ -36,12 +36,12 @@ export function StatusCard({ rows, delay = 0 }: { rows: StatusRow[]; delay?: num
                 <Icon className="h-3.5 w-3.5" style={{ color: m.color }} />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[15.5px] font-bold leading-[1.35] tracking-[-0.01em] text-[#1B2A4A]">
+                <p className="truncate text-[15px] font-semibold leading-[1.35] tracking-[-0.01em] text-foreground">
                   {r.label}
                 </p>
-                <p className="text-[14px] font-semibold text-[#6B7280]">{r.count}</p>
+                <p className="text-sm font-semibold text-muted-foreground">{r.count}</p>
               </div>
-              <span className="shrink-0 text-[14px] font-bold text-[#6B7280]">{r.pct}%</span>
+              <span className="shrink-0 text-sm font-semibold text-muted-foreground">{r.pct}%</span>
             </li>
           );
         })}

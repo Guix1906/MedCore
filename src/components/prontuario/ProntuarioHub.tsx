@@ -154,43 +154,42 @@ export function ProntuarioHub({
   };
 
   return (
-    <div className="min-h-full bg-[#F5F6F7] p-4 md:p-8">
-      <div className="mx-auto max-w-[1100px] space-y-6">
+    <div className="page-container min-h-full">
+      <div className="mx-auto max-w-[1400px] space-y-6">
         {/* Banner de Boas-Vindas & Busca */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.28 }}
-          className="rounded-2xl border border-[#E5E7EB] bg-white p-6 md:p-8 shadow-sm"
+          className="rounded-2xl border border-border bg-card p-6 md:p-8 shadow-sm"
         >
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2 text-[#8B47FF]">
+              <div className="flex items-center gap-2 text-primary">
                 <Stethoscope size={22} className="shrink-0" />
-                <span className="text-[12.5px] font-bold uppercase tracking-wider">
-                  Mesa Clínica & Prontuário
-                </span>
+                <span className="text-sm font-semibold uppercase tracking-wider">Prontuário</span>
               </div>
-              <h1 className="mt-1 text-[22px] md:text-[26px] font-bold text-[#111827]">
-                Central de Atendimentos
+              <h1 className="mt-1 text-2xl md:text-[28px] font-semibold text-foreground">
+                Central de atendimentos
               </h1>
-              <p className="mt-1 text-[13.5px] text-[#6B7280]">
+              <p className="mt-1 text-sm text-muted-foreground">
                 Busque um paciente ou selecione um agendamento da fila de hoje para iniciar a
                 Anamnese.
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Link
                 to="/pacientes"
-                className="inline-flex items-center gap-2 h-10 px-4 rounded-xl border border-[#E5E7EB] text-[13px] font-semibold text-[#374151] hover:bg-[#F9FAFB] transition-colors"
+                search={{ novo: true }}
+                className="inline-flex items-center gap-2 h-10 px-4 rounded-xl border border-border text-sm font-semibold text-foreground/80 hover:bg-surface transition-colors"
               >
-                <UserPlus size={16} className="text-[#8B47FF]" /> Novo paciente
+                <UserPlus size={16} className="text-primary" /> Novo paciente
               </Link>
               <Link
                 to="/agenda"
                 search={{ taskId: undefined, deadlineId: undefined, eventId: undefined }}
-                className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-[#8B47FF] text-white text-[13px] font-semibold hover:bg-[#7A3CE3] transition-colors shadow-sm"
+                className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-hover transition-colors shadow-sm"
               >
                 <Calendar size={16} /> Ver agenda completa
               </Link>
@@ -200,19 +199,20 @@ export function ProntuarioHub({
           {/* Campo de Busca Rápida */}
           <div className="relative mt-6">
             <div className="relative flex items-center">
-              <Search size={18} className="absolute left-4 text-[#9CA3AF] pointer-events-none" />
+              <Search
+                size={18}
+                className="absolute left-4 text-muted-foreground pointer-events-none"
+              />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar paciente por nome, CPF ou telefone para iniciar atendimento imediato…"
-                className="w-full h-12 pl-11 pr-4 rounded-xl border border-[#D1D5DB] bg-[#F9FAFB] text-[14px] text-[#111827] placeholder:text-[#9CA3AF] focus:bg-white focus:outline-none focus:border-[#8B47FF] focus:ring-4 focus:ring-[#8B47FF]/10 transition-all"
+                className="w-full h-12 pl-11 pr-4 rounded-xl border border-border bg-surface text-sm text-foreground placeholder:text-muted-foreground focus:bg-card focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
                 autoFocus
               />
               {isSearching && (
-                <div className="absolute right-4 text-[12px] font-medium text-[#8B47FF]">
-                  Buscando…
-                </div>
+                <div className="absolute right-4 text-xs font-medium text-primary">Buscando…</div>
               )}
             </div>
 
@@ -224,33 +224,33 @@ export function ProntuarioHub({
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 4 }}
                   transition={{ duration: 0.18 }}
-                  className="absolute left-0 right-0 top-14 z-50 rounded-xl border border-[#E5E7EB] bg-white p-2 shadow-xl overflow-hidden"
+                  className="absolute left-0 right-0 top-14 z-50 overflow-hidden rounded-xl border border-hairline bg-glass-strong p-2 shadow-(--glass-shadow-lg) glass-blur-strong"
                 >
-                  <div className="px-3 py-1.5 text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wider">
+                  <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Pacientes encontrados ({searchResults.length})
                   </div>
-                  <div className="divide-y divide-[#F3F4F6] max-h-72 overflow-y-auto">
+                  <div className="divide-y divide-border-soft max-h-72 overflow-y-auto">
                     {searchResults.map((p) => (
                       <button
                         key={p.id}
                         onClick={() => handleStartConsultation(p.id, p.name)}
-                        className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-[#F5F3FF] transition-colors text-left group"
+                        className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-primary-soft transition-colors text-left group"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-full bg-[#8B47FF]/10 text-[#8B47FF] font-bold text-[13px] flex items-center justify-center">
+                          <div className="h-9 w-9 rounded-full bg-primary/10 text-primary font-semibold text-sm flex items-center justify-center">
                             {p.name.slice(0, 2).toUpperCase()}
                           </div>
                           <div>
-                            <div className="text-[13.5px] font-semibold text-[#111827] group-hover:text-[#8B47FF] transition-colors">
+                            <div className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
                               {p.name}
                             </div>
-                            <div className="text-[11.5px] text-[#6B7280]">
+                            <div className="text-xs text-muted-foreground">
                               {p.insurance || "Particular"} • {p.phone || p.cpf || "Sem contato"}
                             </div>
                           </div>
                         </div>
 
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#8B47FF] text-white text-[12px] font-semibold shadow-xs">
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold shadow-xs">
                           <Play size={13} fill="currentColor" /> Iniciar
                         </span>
                       </button>
@@ -268,38 +268,38 @@ export function ProntuarioHub({
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <CalendarCheck size={18} className="text-[#10B981]" />
-                <h2 className="text-[15px] font-bold text-[#111827]">
+                <CalendarCheck size={18} className="text-success" />
+                <h2 className="text-[15px] font-semibold text-foreground">
                   Fila de Atendimento de Hoje
                 </h2>
               </div>
-              <span className="text-[12px] font-medium text-[#6B7280] capitalize">
+              <span className="text-xs font-medium text-muted-foreground capitalize">
                 {todayFormatted}
               </span>
             </div>
 
-            <div className="rounded-2xl border border-[#E5E7EB] bg-white overflow-hidden shadow-xs">
+            <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-xs">
               {loadingEvents ? (
-                <div className="p-8 text-center text-[13px] text-[#6B7280]">
+                <div className="p-8 text-center text-sm text-muted-foreground">
                   Carregando fila de agendamentos…
                 </div>
               ) : todayEvents.length === 0 ? (
                 <div className="p-10 text-center space-y-3">
-                  <div className="mx-auto h-12 w-12 rounded-full bg-[#F3F4F6] text-[#9CA3AF] flex items-center justify-center">
+                  <div className="mx-auto h-12 w-12 rounded-full bg-muted text-muted-foreground flex items-center justify-center">
                     <Calendar size={22} />
                   </div>
                   <div>
-                    <div className="text-[14px] font-semibold text-[#111827]">
+                    <div className="text-sm font-semibold text-foreground">
                       Nenhum agendamento para hoje
                     </div>
-                    <p className="text-[12.5px] text-[#6B7280] max-w-sm mx-auto mt-0.5">
+                    <p className="text-sm text-muted-foreground max-w-sm mx-auto mt-0.5">
                       Você pode utilizar a busca acima para iniciar o atendimento de qualquer
                       paciente cadastrado.
                     </p>
                   </div>
                 </div>
               ) : (
-                <div className="divide-y divide-[#F3F4F6]">
+                <div className="divide-y divide-border-soft">
                   {todayEvents.map((evt: any) => {
                     const startTime = evt.start_time
                       ? new Date(evt.start_time).toLocaleTimeString("pt-BR", {
@@ -311,18 +311,18 @@ export function ProntuarioHub({
                     return (
                       <div
                         key={evt.id}
-                        className="p-4 flex items-center justify-between gap-4 hover:bg-[#F9FAFB] transition-colors"
+                        className="p-4 flex items-center justify-between gap-4 hover:bg-surface transition-colors"
                       >
                         <div className="flex items-center gap-3.5 min-w-0">
-                          <div className="h-10 w-12 rounded-xl bg-[#F5F3FF] border border-[#E9D5FF] text-[#8B47FF] flex flex-col items-center justify-center font-bold text-[12px] shrink-0">
+                          <div className="h-10 w-12 rounded-xl bg-primary-soft border border-primary/25 text-primary flex flex-col items-center justify-center font-semibold text-xs shrink-0">
                             <Clock size={12} className="mb-0.5" />
                             {startTime}
                           </div>
                           <div className="min-w-0">
-                            <div className="text-[14px] font-semibold text-[#111827] truncate">
+                            <div className="text-sm font-semibold text-foreground truncate">
                               {evt.title}
                             </div>
-                            <div className="text-[12px] text-[#6B7280]">
+                            <div className="text-xs text-muted-foreground">
                               Consulta / Atendimento Clínico
                             </div>
                           </div>
@@ -330,7 +330,7 @@ export function ProntuarioHub({
 
                         <button
                           onClick={() => handleStartConsultation("", evt.title)}
-                          className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl bg-[#8B47FF] text-white text-[12.5px] font-semibold hover:bg-[#7A3CE3] transition-colors shrink-0 shadow-xs"
+                          className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-hover transition-colors shrink-0 shadow-xs"
                         >
                           <Play size={13} fill="currentColor" /> Atender
                         </button>
@@ -345,13 +345,13 @@ export function ProntuarioHub({
           {/* Atendimentos Recentes & Atalhos (1 Coluna) */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <History size={18} className="text-[#8B47FF]" />
-              <h2 className="text-[15px] font-bold text-[#111827]">Atendimentos Recentes</h2>
+              <History size={18} className="text-primary" />
+              <h2 className="text-[15px] font-semibold text-foreground">Atendimentos Recentes</h2>
             </div>
 
-            <div className="rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-xs space-y-3">
+            <div className="rounded-2xl border border-border bg-card p-4 shadow-xs space-y-3">
               {recentPatients.length === 0 ? (
-                <div className="py-8 text-center text-[12.5px] text-[#6B7280]">
+                <div className="py-8 text-center text-sm text-muted-foreground">
                   Nenhum atendimento recente gravado neste dispositivo.
                 </div>
               ) : (
@@ -360,17 +360,17 @@ export function ProntuarioHub({
                     <button
                       key={idx}
                       onClick={() => handleStartConsultation(rp.id, rp.name)}
-                      className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-[#F5F3FF] transition-colors text-left group"
+                      className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-primary-soft transition-colors text-left group"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="h-8 w-8 rounded-lg bg-[#F3F4F6] text-[#6B7280] flex items-center justify-center font-bold text-[12px] shrink-0 group-hover:bg-[#8B47FF] group-hover:text-white transition-colors">
+                        <div className="h-8 w-8 rounded-lg bg-muted text-muted-foreground flex items-center justify-center font-semibold text-xs shrink-0 group-hover:bg-primary group-hover:text-white transition-colors">
                           {rp.name.slice(0, 2).toUpperCase()}
                         </div>
                         <div className="min-w-0">
-                          <div className="text-[13px] font-semibold text-[#111827] truncate">
+                          <div className="text-sm font-semibold text-foreground truncate">
                             {rp.name}
                           </div>
-                          <div className="text-[11px] text-[#9CA3AF]">
+                          <div className="text-xs text-muted-foreground">
                             {new Date(rp.date).toLocaleDateString("pt-BR")}
                           </div>
                         </div>
@@ -378,17 +378,17 @@ export function ProntuarioHub({
 
                       <ChevronRight
                         size={16}
-                        className="text-[#9CA3AF] group-hover:text-[#8B47FF] transition-colors shrink-0"
+                        className="text-muted-foreground group-hover:text-primary transition-colors shrink-0"
                       />
                     </button>
                   ))}
                 </div>
               )}
 
-              <div className="pt-2 border-t border-[#F3F4F6]">
+              <div className="pt-2 border-t border-border-soft">
                 <Link
                   to="/pacientes"
-                  className="flex items-center justify-center gap-1.5 w-full py-2 text-[12.5px] font-semibold text-[#8B47FF] hover:underline"
+                  className="flex items-center justify-center gap-1.5 w-full py-2 text-sm font-semibold text-primary hover:underline"
                 >
                   Ver todos os pacientes <ArrowRight size={13} />
                 </Link>

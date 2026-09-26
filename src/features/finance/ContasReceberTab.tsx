@@ -46,6 +46,8 @@ import type { FinanceSnapshot, FinancialTitle } from "./finance-schema";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { StatusBadge } from "@/components/ui-app/StatusBadge";
+import { AlertCircle, Clock3 } from "lucide-react";
 
 export interface ContasReceberTabProps {
   finance: FinanceSnapshot;
@@ -83,7 +85,9 @@ export function ContasReceberTab({
       try {
         const { data } = await supabase.from("profiles").select("name").not("name", "is", null);
         if (data && data.length > 0) {
-          const names = Array.from(new Set(data.map((d: { name: string }) => d.name).filter(Boolean)));
+          const names = Array.from(
+            new Set(data.map((d: { name: string }) => d.name).filter(Boolean)),
+          );
           setAssociadosList(names);
         }
       } catch {
@@ -234,7 +238,12 @@ export function ContasReceberTab({
       if (subTab === "cartoes") {
         const desc = (e.description || "").toLowerCase();
         const cat = (e.category || "").toLowerCase();
-        if (!desc.includes("cartão") && !desc.includes("boleto") && !cat.includes("cartão") && !cat.includes("boleto")) {
+        if (
+          !desc.includes("cartão") &&
+          !desc.includes("boleto") &&
+          !cat.includes("cartão") &&
+          !cat.includes("boleto")
+        ) {
           return false;
         }
       } else if (subTab === "parcelados") {
@@ -311,7 +320,9 @@ export function ContasReceberTab({
   const handleSendWhatsApp = () => {
     const clean = cobrarPhone.replace(/\D/g, "");
     const encoded = encodeURIComponent(cobrarMessage);
-    const url = clean ? `https://wa.me/55${clean}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
+    const url = clean
+      ? `https://wa.me/55${clean}?text=${encoded}`
+      : `https://wa.me/?text=${encoded}`;
     window.open(url, "_blank");
   };
 
@@ -327,14 +338,14 @@ export function ContasReceberTab({
       {/* ========================================================================= */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
-          <div className="h-11 w-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
+          <div className="h-11 w-11 rounded-2xl bg-info text-white flex items-center justify-center shadow-xs shrink-0">
             <ArrowUpRight className="h-6 w-6" strokeWidth={2.5} />
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">
               Contas a Receber
             </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-muted-foreground mt-0.5">
               Honorários contratuais, parcelas de clientes e alertas de cobrança
             </p>
           </div>
@@ -344,7 +355,7 @@ export function ContasReceberTab({
           <Button
             variant="outline"
             size="icon"
-            className="h-9 w-9 border-slate-200 bg-white text-slate-600 hover:bg-slate-50 shadow-xs cursor-pointer rounded-lg"
+            className="h-9 w-9 border-border bg-card text-muted-foreground hover:bg-muted/60 shadow-xs cursor-pointer "
             onClick={() => void onRefresh?.()}
             disabled={refreshing || !onRefresh}
             title="Atualizar dados"
@@ -365,8 +376,8 @@ export function ContasReceberTab({
           className={cn(
             "rounded-full px-4 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer",
             subTab === "geral"
-              ? "bg-blue-600 text-white shadow-xs"
-              : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              ? "bg-info text-white shadow-xs"
+              : "border border-border bg-card text-muted-foreground hover:bg-muted/60",
           )}
         >
           <Clock className="h-3.5 w-3.5" />
@@ -379,8 +390,8 @@ export function ContasReceberTab({
           className={cn(
             "rounded-full px-4 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer",
             subTab === "clientes"
-              ? "bg-rose-600 text-white shadow-xs"
-              : "border border-rose-200 bg-white text-rose-600 hover:bg-rose-50/50"
+              ? "bg-destructive text-white shadow-xs"
+              : "border border-destructive/25 bg-card text-destructive hover:bg-destructive/5",
           )}
         >
           <FileText className="h-3.5 w-3.5" />
@@ -393,8 +404,8 @@ export function ContasReceberTab({
           className={cn(
             "rounded-full px-4 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer",
             subTab === "cartoes"
-              ? "bg-blue-600 text-white shadow-xs font-semibold"
-              : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              ? "bg-info text-white shadow-xs font-semibold"
+              : "border border-border bg-card text-muted-foreground hover:bg-muted/60",
           )}
         >
           <CreditCard className="h-3.5 w-3.5" />
@@ -407,8 +418,8 @@ export function ContasReceberTab({
           className={cn(
             "rounded-full px-4 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer",
             subTab === "parcelados"
-              ? "bg-blue-600 text-white shadow-xs font-semibold"
-              : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              ? "bg-info text-white shadow-xs font-semibold"
+              : "border border-border bg-card text-muted-foreground hover:bg-muted/60",
           )}
         >
           <Layers className="h-3.5 w-3.5" />
@@ -421,58 +432,58 @@ export function ContasReceberTab({
       {/* ========================================================================= */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* CARD 1: A RECEBER */}
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs flex items-center justify-between">
+        <div className="rounded-xl border border-border bg-card p-5 shadow-xs flex items-center justify-between">
           <div className="space-y-1">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               A RECEBER
             </span>
-            <p className="text-2xl font-bold text-slate-900 tracking-tight">
+            <p className="text-2xl font-semibold text-foreground tracking-tight">
               <CountUp value={metrics.aReceberTotal} format={(v) => currency(v)} />
             </p>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-muted-foreground">
               {metrics.aReceberCount} pagamentos previstos
             </p>
           </div>
-          <div className="h-9 w-9 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+          <div className="h-9 w-9 rounded-full bg-warning/10 text-warning flex items-center justify-center shrink-0">
             <Clock className="h-4 w-4" />
           </div>
         </div>
 
         {/* CARD 2: EM ATRASO */}
         <div
-          className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs flex items-center justify-between cursor-pointer hover:border-rose-300 transition-colors"
+          className="rounded-xl border border-border bg-card p-5 shadow-xs flex items-center justify-between cursor-pointer hover:border-destructive/35 transition-colors"
           onClick={() => setStatusFilter("vencido")}
         >
           <div className="space-y-1">
-            <span className="text-[11px] font-semibold text-rose-500 uppercase tracking-wider flex items-center gap-1">
+            <span className="text-xs font-semibold text-destructive uppercase tracking-wider flex items-center gap-1">
               EM ATRASO <ExternalLink className="h-3 w-3" />
             </span>
-            <p className="text-2xl font-bold text-rose-600 tracking-tight">
+            <p className="text-2xl font-semibold text-destructive tracking-tight">
               <CountUp value={metrics.emAtrasoTotal} format={(v) => currency(v)} />
             </p>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-muted-foreground">
               {metrics.emAtrasoClientesCount} clientes com débitos
             </p>
           </div>
-          <div className="h-9 w-9 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center shrink-0">
+          <div className="h-9 w-9 rounded-full bg-destructive/10 text-destructive flex items-center justify-center shrink-0">
             <AlertTriangle className="h-4 w-4" />
           </div>
         </div>
 
         {/* CARD 3: RECEBIDO (MANUAL) */}
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs flex items-center justify-between">
+        <div className="rounded-xl border border-border bg-card p-5 shadow-xs flex items-center justify-between">
           <div className="space-y-1">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               RECEBIDO (MANUAL)
             </span>
-            <p className="text-2xl font-bold text-slate-900 tracking-tight">
+            <p className="text-2xl font-semibold text-foreground tracking-tight">
               <CountUp value={metrics.recebidoTotal} format={(v) => currency(v)} />
             </p>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-muted-foreground">
               {metrics.recebidoCount} pagamentos recebidos
             </p>
           </div>
-          <div className="h-9 w-9 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center shrink-0">
+          <div className="h-9 w-9 rounded-full bg-info/10 text-info flex items-center justify-center shrink-0">
             <CheckCircle2 className="h-4 w-4" />
           </div>
         </div>
@@ -483,22 +494,22 @@ export function ContasReceberTab({
       {/* ========================================================================= */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* COLUNA ESQUERDA: RECEBIMENTOS POR VENCIMENTO */}
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+        <div className="rounded-xl border border-border bg-card p-5 shadow-xs space-y-4">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             RECEBIMENTOS POR VENCIMENTO
           </h2>
 
           <div className="space-y-2">
-            <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider block">
+            <span className="text-xs font-semibold text-success uppercase tracking-wider block">
               A RECEBER
             </span>
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-border-soft">
               {metrics.faixas.aReceber.map((f) => (
                 <div key={f.label} className="py-2 flex items-center justify-between text-xs">
-                  <span className="text-slate-600">{f.label}</span>
+                  <span className="text-muted-foreground">{f.label}</span>
                   <div className="flex items-center gap-4">
-                    <span className="text-slate-400">{f.count} itens</span>
-                    <strong className="font-bold text-emerald-600 tabular-nums min-w-[85px] text-right">
+                    <span className="text-muted-foreground">{f.count} itens</span>
+                    <strong className="font-semibold text-success tabular-nums min-w-[85px] text-right">
                       {currency(f.val)}
                     </strong>
                   </div>
@@ -508,16 +519,16 @@ export function ContasReceberTab({
           </div>
 
           <div className="space-y-2 pt-1">
-            <span className="text-[11px] font-bold text-rose-600 uppercase tracking-wider block">
+            <span className="text-xs font-semibold text-destructive uppercase tracking-wider block">
               EM ATRASO
             </span>
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-border-soft">
               {metrics.faixas.emAtraso.map((f) => (
                 <div key={f.label} className="py-2 flex items-center justify-between text-xs">
-                  <span className="text-slate-600">{f.label}</span>
+                  <span className="text-muted-foreground">{f.label}</span>
                   <div className="flex items-center gap-4">
-                    <span className="text-slate-400">{f.count} itens</span>
-                    <strong className="font-bold text-rose-600 tabular-nums min-w-[85px] text-right">
+                    <span className="text-muted-foreground">{f.count} itens</span>
+                    <strong className="font-semibold text-destructive tabular-nums min-w-[85px] text-right">
                       {currency(f.val)}
                     </strong>
                   </div>
@@ -528,28 +539,28 @@ export function ContasReceberTab({
         </div>
 
         {/* COLUNA DIREITA: RECEBIMENTOS PREVISTOS */}
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs flex flex-col justify-between">
+        <div className="rounded-xl border border-border bg-card p-5 shadow-xs flex flex-col justify-between">
           <div className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <div className="h-6 w-6 rounded-full bg-success/10 text-success flex items-center justify-center shrink-0">
               <TrendingUp className="h-3.5 w-3.5" />
             </div>
             <div>
-              <h2 className="font-bold text-sm text-slate-900">Recebimentos Previstos</h2>
-              <p className="text-xs text-slate-400">Próximos 6 meses</p>
+              <h2 className="font-semibold text-sm text-foreground">Recebimentos Previstos</h2>
+              <p className="text-xs text-muted-foreground">Próximos 6 meses</p>
             </div>
           </div>
 
           <div className="py-12 flex flex-col items-center justify-center text-center">
-            <div className="h-10 w-10 rounded-full bg-emerald-50/70 text-emerald-600 flex items-center justify-center mb-2.5">
+            <div className="h-10 w-10 rounded-full bg-success/7 text-success flex items-center justify-center mb-2.5">
               <ArrowUpRight className="h-5 w-5" />
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               Nenhum recebimento previsto além do período
             </p>
           </div>
 
-          <div className="border-t border-slate-100 pt-3 text-center">
-            <p className="text-[11px] text-slate-400">
+          <div className="border-t border-border-soft pt-3 text-center">
+            <p className="text-xs text-muted-foreground">
               Atualizado automaticamente com parcelamentos de honorários
             </p>
           </div>
@@ -561,20 +572,20 @@ export function ContasReceberTab({
       {/* ========================================================================= */}
       <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
         <div className="relative w-full sm:w-[280px]">
-          <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar lançamento ou cliente..."
-            className="pl-8 h-9 text-xs bg-white border-slate-200 rounded-lg placeholder:text-slate-400 shadow-2xs"
+            className="pl-8 h-9 text-xs bg-card border-border rounded-lg placeholder:text-muted-foreground shadow-2xs"
           />
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500">Associado:</span>
+            <span className="text-xs text-muted-foreground">Associado:</span>
             <Select value={selectedAssociado} onValueChange={setSelectedAssociado}>
-              <SelectTrigger className="h-9 w-[190px] text-xs bg-white border-slate-200 rounded-lg text-slate-700 shadow-2xs">
+              <SelectTrigger className="h-9 w-[190px] text-xs bg-card border-border rounded-lg text-foreground/80 shadow-2xs">
                 <SelectValue placeholder="Todos os associados" />
               </SelectTrigger>
               <SelectContent>
@@ -588,15 +599,15 @@ export function ContasReceberTab({
             </Select>
           </div>
 
-          <div className="inline-flex items-center bg-slate-50 p-0.5 rounded-lg border border-slate-200 shadow-2xs">
+          <div className="inline-flex items-center bg-muted/60 p-0.5 rounded-lg border border-border shadow-2xs">
             <button
               type="button"
               onClick={() => setStatusFilter("todos")}
               className={cn(
                 "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
                 statusFilter === "todos"
-                  ? "bg-white text-slate-900 shadow-2xs"
-                  : "text-slate-500 hover:text-slate-800"
+                  ? "bg-card text-foreground shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               Todos
@@ -607,8 +618,8 @@ export function ContasReceberTab({
               className={cn(
                 "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
                 statusFilter === "pendente"
-                  ? "bg-white text-slate-900 shadow-2xs"
-                  : "text-slate-500 hover:text-slate-800"
+                  ? "bg-card text-foreground shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               Pendente
@@ -619,8 +630,8 @@ export function ContasReceberTab({
               className={cn(
                 "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
                 statusFilter === "vencido"
-                  ? "bg-white text-slate-900 shadow-2xs"
-                  : "text-slate-500 hover:text-slate-800"
+                  ? "bg-card text-foreground shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               Vencido
@@ -632,40 +643,49 @@ export function ContasReceberTab({
       {/* ========================================================================= */}
       {/* 6. LISTA PRINCIPAL: HONORÁRIOS E RECEBIMENTOS                             */}
       {/* ========================================================================= */}
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs space-y-3">
-        <h3 className="font-bold text-sm text-slate-900">
+      <div className="rounded-xl border border-border bg-card p-5 shadow-xs space-y-3">
+        <h3 className="font-semibold text-sm text-foreground">
           Honorários e Recebimentos ({filteredTitles.length})
         </h3>
 
         {filteredTitles.length === 0 ? (
-          <div className="py-12 text-center text-sm text-slate-400">
+          <div className="py-12 text-center text-sm text-muted-foreground">
             Nenhum recebimento encontrado para os filtros selecionados.
           </div>
         ) : subTab === "clientes" ? (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-border-soft">
             {clientsGrouped.map((grp) => (
               <div key={grp.name} className="py-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h4 className="font-bold text-sm text-slate-900">{grp.name}</h4>
-                    <span className="text-xs text-slate-400">
+                    <h4 className="font-semibold text-sm text-foreground">{grp.name}</h4>
+                    <span className="text-xs text-muted-foreground">
                       {grp.titles.length} lançamento(s) associado(s)
                     </span>
                   </div>
-                  <strong className="font-bold text-sm text-emerald-600">{currency(grp.total)}</strong>
+                  <strong className="font-semibold text-sm text-success">
+                    {currency(grp.total)}
+                  </strong>
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-border-soft">
             {filteredTitles.map((t) => {
               const rem = remaining(t);
               const isPaid = t.status === "pago" || rem <= 0;
-              const isVencido = !isPaid && !!t.due_date && startOfDay(parseISO(t.due_date)) < startOfDay(new Date());
+              const isVencido =
+                !isPaid &&
+                !!t.due_date &&
+                startOfDay(parseISO(t.due_date)) < startOfDay(new Date());
 
               const clientName = (t.patient_name || t.payer_name || "Cliente").toUpperCase();
-              const associadoName = (t.payer_name || associadosList[0] || "GUILHERME SANTOS TEIXEIRA").toUpperCase();
+              const associadoName = (
+                t.payer_name ||
+                associadosList[0] ||
+                "GUILHERME SANTOS TEIXEIRA"
+              ).toUpperCase();
               const formattedDue = t.due_date ? formatClinicalDate(t.due_date) : "Sem data";
               const tagCategory = t.category || "Honorários Iniciais / sinal";
               const valorDisplay = rem > 0 ? rem : t.amount;
@@ -673,44 +693,38 @@ export function ContasReceberTab({
               return (
                 <div
                   key={t.id}
-                  className="py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-slate-50/50 rounded-lg px-2 transition-colors"
+                  className="py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-muted/30 rounded-lg px-2 transition-colors"
                 >
                   {/* Informações à Esquerda */}
                   <div className="space-y-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-sm text-slate-900 truncate">
+                      <span className="font-semibold text-sm text-foreground truncate">
                         {t.description || "Honorários - Ação de Cobrança"}
                       </span>
 
                       {/* Tag 1: Categoria / Sub-categoria */}
-                      <span className="inline-flex items-center text-[10.5px] font-semibold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">
+                      <span className="inline-flex items-center text-xs font-semibold px-2.5 py-0.5 rounded-full bg-info/10 text-info border border-info/25">
                         {tagCategory}
                       </span>
 
                       {/* Tag 2: Status */}
-                      <span
-                        className={cn(
-                          "inline-flex items-center text-[10.5px] font-semibold px-2.5 py-0.5 rounded-full",
-                          isPaid
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                            : isVencido
-                              ? "bg-rose-50 text-rose-700 border border-rose-200"
-                              : "bg-amber-50 text-amber-700 border border-amber-200"
-                        )}
+                      <StatusBadge
+                        tone={isPaid ? "success" : isVencido ? "danger" : "warning"}
+                        icon={isPaid ? CheckCircle2 : isVencido ? AlertCircle : Clock3}
                       >
                         {isPaid ? "Recebido" : isVencido ? "Vencido" : "Pendente"}
-                      </span>
+                      </StatusBadge>
                     </div>
 
-                    <p className="text-xs text-slate-400 truncate">
+                    <p className="text-xs text-muted-foreground truncate">
                       Vencimento: {formattedDue} · Cliente: {clientName} ·{" "}
-                      <span className="text-blue-600 font-medium">Associado: {associadoName}</span>
+                      <span className="text-info font-medium">Associado: {associadoName}</span>
                     </p>
                   </div>
 
                   {/* Ações e Valor à Direita */}
                   <div className="flex items-center gap-3 shrink-0 self-end md:self-auto">
-                    <strong className="font-bold text-sm text-emerald-600 tabular-nums">
+                    <strong className="font-semibold text-sm text-success tabular-nums">
                       {currency(valorDisplay)}
                     </strong>
 
@@ -718,7 +732,7 @@ export function ContasReceberTab({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-8 border-rose-200 bg-white text-rose-600 hover:bg-rose-50 text-xs font-semibold px-3 rounded-lg flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                      className="h-8 border-destructive/25 bg-card text-destructive hover:bg-destructive/10 text-xs font-semibold px-3 flex items-center gap-1.5 shadow-2xs cursor-pointer"
                       onClick={() => handleOpenCobrar(t)}
                     >
                       <MessageCircle className="h-3.5 w-3.5" />
@@ -728,7 +742,7 @@ export function ContasReceberTab({
                     {/* Botão Receber */}
                     <Button
                       size="sm"
-                      className="h-8 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold px-4 rounded-lg shadow-2xs cursor-pointer"
+                      className="h-8 bg-success hover:bg-success/90 text-white text-xs font-semibold px-4 shadow-2xs cursor-pointer"
                       onClick={() => onReceive(t)}
                     >
                       Receber
@@ -738,7 +752,7 @@ export function ContasReceberTab({
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="h-8 w-8 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground/80 hover:bg-muted cursor-pointer"
                       title="Editar título"
                       onClick={() => onEdit(t)}
                     >
@@ -749,7 +763,7 @@ export function ContasReceberTab({
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="h-8 w-8 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
+                      className="h-8 w-8 text-destructive/80 hover:text-destructive hover:bg-destructive/10 cursor-pointer"
                       title="Excluir título"
                       aria-label="Excluir título"
                       onClick={() => onDelete(t.id)}
@@ -770,18 +784,20 @@ export function ContasReceberTab({
       <Dialog open={!!cobrarTitle} onOpenChange={(open) => !open && setCobrarTitle(null)}>
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
-            <DialogTitle className="text-base font-bold flex items-center gap-2 text-slate-900">
-              <MessageCircle className="h-4 w-4 text-emerald-600" />
+            <DialogTitle className="text-base font-semibold flex items-center gap-2 text-foreground">
+              <MessageCircle className="h-4 w-4 text-success" />
               Notificação e Cobrança via WhatsApp
             </DialogTitle>
-            <DialogDescription className="text-xs text-slate-500">
+            <DialogDescription className="text-xs text-muted-foreground">
               Envie um lembrete cordial de cobrança ou copie o texto para enviar ao cliente.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3 py-2 text-xs">
             <div className="space-y-1">
-              <Label className="text-xs font-semibold text-slate-700">WhatsApp / Telefone do Cliente</Label>
+              <Label className="text-xs font-semibold text-foreground/80">
+                WhatsApp / Telefone do Cliente
+              </Label>
               <Input
                 placeholder="Ex: 11999998888 (com DDD)"
                 value={cobrarPhone}
@@ -791,12 +807,14 @@ export function ContasReceberTab({
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs font-semibold text-slate-700">Mensagem da Cobrança</Label>
+              <Label className="text-xs font-semibold text-foreground/80">
+                Mensagem da Cobrança
+              </Label>
               <textarea
                 rows={4}
                 value={cobrarMessage}
                 onChange={(e) => setCobrarMessage(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 p-2.5 text-xs text-slate-800 focus:outline-hidden focus:ring-1 focus:ring-blue-600 resize-none"
+                className="w-full rounded-lg border border-border p-2.5 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-info resize-none"
               />
             </div>
           </div>
@@ -813,7 +831,7 @@ export function ContasReceberTab({
             </Button>
             <Button
               size="sm"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold gap-1.5 cursor-pointer"
+              className="bg-success hover:bg-success/90 text-white text-xs font-semibold gap-1.5 cursor-pointer"
               onClick={handleSendWhatsApp}
             >
               <ExternalLink className="h-3.5 w-3.5" />

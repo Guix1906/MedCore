@@ -1,61 +1,57 @@
-import React, { useState, useMemo, useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
-import { supabase } from "@/integrations/supabase/client";
-import {
-  User,
-  Calendar as CalIcon,
-  Mail,
-  Phone,
-  Bell,
-  MapPin,
-  FileText,
-  Clock,
-  Sparkles,
-  Pencil,
-  MoreVertical,
-  Camera,
-  AlertTriangle,
-  Send,
-  CheckCircle2,
-  ChevronRight,
-  FolderOpen,
-  ClipboardList,
-  ArrowLeft,
-  Save,
-  Check,
-  Stethoscope,
-  Pill,
-  ShieldAlert,
-  Activity,
-  UserCheck,
-  Layers,
-  ChevronDown,
-  ExternalLink,
-  History,
-  Copy,
-  Search,
-  Filter,
-  RefreshCw,
-  PlusCircle,
-  Trash2,
-  X,
-} from "lucide-react";
-import { toast } from "sonner";
-import { prontuarioService } from "@/services/api";
+import { PatientFinanceTab } from "@/components/pacientes/PatientFinanceTab";
+import { PatientPackagesTab } from "@/components/pacientes/PatientPackagesTab";
 import {
   AiRecordAssistantModal,
   type AiSectionContext,
 } from "@/components/prontuario/AiRecordAssistantModal";
-import type { StructuredConsultationResult } from "@/lib/gemini";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import type { PermissionKey } from "@/features/admin/permissions";
+import { usePermissions } from "@/hooks/use-permissions";
 import {
   usePatientClinicalHistory,
   type ClinicalHistoryItem,
 } from "@/hooks/usePatientClinicalHistory";
-import { PatientFinanceTab } from "@/components/pacientes/PatientFinanceTab";
-import { PatientPackagesTab } from "@/components/pacientes/PatientPackagesTab";
-import { usePermissions } from "@/hooks/use-permissions";
-import type { PermissionKey } from "@/features/admin/permissions";
+import { supabase } from "@/integrations/supabase/client";
+import type { StructuredConsultationResult } from "@/lib/gemini";
+import { prontuarioService } from "@/services/api";
+import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ClipboardList,
+  Copy,
+  ExternalLink,
+  FileText,
+  FolderOpen,
+  History,
+  Pencil,
+  RefreshCw,
+  Save,
+  Search,
+  Send,
+  Sparkles,
+  Stethoscope,
+  Trash2,
+} from "lucide-react";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
 
 export type PatientProfileData = {
   id?: string;
@@ -80,27 +76,6 @@ export type PatientProfileData = {
   photoUrl?: string | null;
 };
 
-const DEFAULT_PATIENT: PatientProfileData = {
-  name: "Clara Ribeiro (Paciente de exemplo)",
-  birth_date: "26/01/1992 (34 anos)",
-  gender: "Feminino",
-  email: "clara.ribeiro@exemplo.com",
-  phone: "+55 (11) 99999-9999",
-  notifications: "Não recebe notificações",
-  address: "Av. Pedro Álvares Cabral, SN",
-  neighborhood: "Vila Mariana",
-  city: "São Paulo",
-  state: "SP",
-  cep: "04094-050",
-  country: "Brasil",
-  cpf: "315.772.070-84",
-  notes: "Esse paciente é um paciente de exemplo.",
-  created_at: "15/08/2026 09:49:12",
-  active: true,
-  photoUrl:
-    "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=300&auto=format&fit=crop&q=80",
-};
-
 // Abas que dependem de outro módulo seguem a permissão correspondente.
 const TAB_PERMISSION: Record<string, PermissionKey> = {
   timeline: "records.view",
@@ -114,12 +89,9 @@ const TAB_PERMISSION: Record<string, PermissionKey> = {
 const TABS = [
   { id: "informacoes", label: "Informações" },
   { id: "timeline", label: "Linha do tempo" },
-  { id: "carteira", label: "Carteira" },
-  { id: "pacotes", label: "Pacotes" },
-  { id: "financeiro", label: "Financeiro" },
-  { id: "orcamentos", label: "Orçamentos" },
   { id: "prontuario", label: "Prontuário" },
-  { id: "documentos", label: "Documentos" },
+  { id: "pacotes", label: "Planos e pacotes" },
+  { id: "financeiro", label: "Financeiro" },
 ];
 
 export function PatientFullProfileView({
@@ -142,7 +114,9 @@ export function PatientFullProfileView({
   const [anamnese, setAnamnese] = useState("");
   const [isSavingRecord, setIsSavingRecord] = useState(false);
   const [historySearch, setHistorySearch] = useState("");
-  const [historyFilter, setHistoryFilter] = useState<"todos" | "prontuario" | "consulta" | "evolucao">("todos");
+  const [historyFilter, setHistoryFilter] = useState<
+    "todos" | "prontuario" | "consulta" | "evolucao"
+  >("todos");
 
   // Estado do Assistente IA
   const [aiModalOpen, setAiModalOpen] = useState(false);
@@ -160,13 +134,9 @@ export function PatientFullProfileView({
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const isExample =
-    !patient || !patient.id || Boolean(patient.name?.toLowerCase().includes("exemplo"));
+  const isExample = !patient?.id;
 
   const data = useMemo(() => {
-    if (isExample && (!patient || !patient.id)) {
-      return DEFAULT_PATIENT;
-    }
     return {
       id: patient?.id,
       name: patient?.name || "Paciente sem nome",
@@ -189,7 +159,7 @@ export function PatientFullProfileView({
       active: patient?.active !== false,
       photoUrl: patient?.photoUrl || null,
     };
-  }, [patient, isExample]);
+  }, [patient]);
 
   // Carrega histórico completo de atendimentos, prontuários e consultas deste paciente específico
   const {
@@ -233,72 +203,36 @@ export function PatientFullProfileView({
   }, [clinicalHistory]);
 
   const handleSaveProntuario = async () => {
-    if (!anamnese.trim()) {
-      toast.error("Por favor, preencha as anotações do atendimento antes de salvar.");
+    if (!data.id || !anamnese.trim()) {
+      toast.error("Selecione um paciente e preencha as anotações antes de salvar.");
       return;
     }
-
     setIsSavingRecord(true);
-    const newRecord = {
-      id: crypto.randomUUID(),
-      patient_id: data.id || null,
-      patient_name: data.name,
+    const payload = {
+      patient_id: data.id,
       complaint: anamnese.trim(),
-      created_at: new Date().toISOString(),
       finished_at: new Date().toISOString(),
     };
-
-    // 1. Salva no LocalStorage garantindo persistência imediata
     try {
-      if (data.id) localStorage.setItem("medcore_prontuario_" + data.id, JSON.stringify(newRecord));
-      if (data.name)
-        localStorage.setItem("medcore_prontuario_" + data.name, JSON.stringify(newRecord));
-
-      const prevHistKey = data.id
-        ? "medcore_prontuario_history_" + data.id
-        : "medcore_prontuario_history_" + data.name;
-      const prevHist = JSON.parse(localStorage.getItem(prevHistKey) || "[]");
-      const nextHist = [newRecord, ...prevHist.filter((h: any) => h.id !== newRecord.id)];
-      if (data.id)
-        localStorage.setItem("medcore_prontuario_history_" + data.id, JSON.stringify(nextHist));
-      if (data.name)
-        localStorage.setItem("medcore_prontuario_history_" + data.name, JSON.stringify(nextHist));
-    } catch (e) {
-      console.warn("Aviso ao salvar localmente:", e);
-    }
-
-    // 2. Salva no Supabase se id válido
-    if (data.id && !isExample) {
       try {
-        await supabase.from("medical_records").insert({
-          patient_id: data.id,
-          complaint: anamnese.trim(),
-          finished_at: new Date().toISOString(),
-        });
-      } catch (err: any) {
-        console.warn("Supabase medical_records insert fallback:", err);
+        await prontuarioService.createRecord(payload);
+      } catch {
+        const { error } = await supabase.from("medical_records").insert(payload);
+        if (error) throw error;
       }
+      toast.success("Atendimento salvo no histórico do paciente.");
+      setAnamnese("");
+      void refreshHistory();
+      void queryClient.invalidateQueries({ queryKey: ["patient-clinical-history"] });
+      void queryClient.invalidateQueries({ queryKey: ["patient-medical-records"] });
+    } catch (error) {
+      console.error("Não foi possível salvar o atendimento.", error);
+      toast.error(
+        "Não foi possível salvar no servidor. Suas anotações foram mantidas para tentar novamente.",
+      );
+    } finally {
+      setIsSavingRecord(false);
     }
-
-    // 3. Sincronização em background com a API PHP
-    if (data.id) {
-      prontuarioService
-        .createRecord({
-          patient_id: data.id,
-          complaint: anamnese.trim(),
-          finished_at: new Date().toISOString(),
-        })
-        .catch(() => {});
-    }
-
-    toast.success("Atendimento salvo com sucesso!", {
-      description: `Prontuário clínico gravado no histórico de ${data.name}.`,
-    });
-    setAnamnese(""); // Reseta o editor para a próxima consulta começar limpa!
-    refreshHistory();
-    queryClient.invalidateQueries({ queryKey: ["patient-clinical-history"] });
-    queryClient.invalidateQueries({ queryKey: ["patient-medical-records"] });
-    setIsSavingRecord(false);
   };
 
   const handleOpenEdit = (item: ClinicalHistoryItem) => {
@@ -507,357 +441,160 @@ export function PatientFullProfileView({
   const activeTabLabel = TABS.find((t) => t.id === activeTab)?.label || "Informações";
 
   return (
-    <div className="flex flex-col min-h-screen bg-white text-slate-800">
-      {/* ============================================================ */}
-      {/* 1. TOP BREADCRUMB BAR (Exato como no print) */}
-      {/* ============================================================ */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-[#EFEFEF] bg-white text-[13px] text-slate-500 font-medium">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <button
-            type="button"
-            onClick={onBack}
-            className="text-purple-600 hover:text-purple-800 font-medium cursor-pointer hover:underline"
-          >
-            Contatos
-          </button>
-          <span>/</span>
-          <button
-            type="button"
-            onClick={onBack}
-            className="text-purple-600 hover:text-purple-800 font-medium cursor-pointer hover:underline"
-          >
-            Listagem
-          </button>
-          <span>/</span>
-          <span className="text-purple-600 font-semibold">Paciente</span>
-          <span>/</span>
-          <span className="text-slate-400 font-medium">{activeTabLabel}</span>
-        </div>
-
+    <div className="min-h-0 bg-surface text-foreground">
+      <header className="border-b border-border bg-card px-4 py-5 md:px-6">
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-slate-600 hover:text-purple-700 transition-colors cursor-pointer"
+          className="mb-5 inline-flex items-center gap-2 rounded text-sm text-muted-foreground hover:text-primary"
         >
-          <ArrowLeft size={14} />
-          <span>Voltar para lista</span>
+          <ArrowLeft size={16} />
+          Voltar
         </button>
-      </div>
-
-      {/* ============================================================ */}
-      {/* 2. CORPO PRINCIPAL COM SIDEBAR ESQUERDA + CONTEÚDO DIREITA */}
-      {/* ============================================================ */}
-      <div className="flex-1 flex flex-col md:flex-row min-h-0">
-        {/* SIDEBAR ESQUERDA (PERFIL DO PACIENTE) */}
-        <aside className="w-full md:w-[260px] lg:w-[280px] shrink-0 border-b md:border-b-0 md:border-r border-[#EFEFEF] bg-white p-6 flex flex-col items-center">
-          {/* Avatar com overlays */}
-          <div className="relative mb-3.5">
-            <div className="relative h-24 w-24 rounded-full overflow-hidden border-2 border-white shadow-md bg-purple-100 flex items-center justify-center">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-4">
+            <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-soft text-xl font-semibold text-primary">
               {data.photoUrl ? (
-                <img src={data.photoUrl} alt={data.name} className="h-full w-full object-cover" />
+                <img src={data.photoUrl} alt="" className="size-full object-cover" />
               ) : (
-                <div className="h-full w-full bg-[#7B3AF5] text-white font-bold text-2xl flex items-center justify-center">
-                  {data.name
-                    .split(" ")
-                    .slice(0, 2)
-                    .map((n) => n[0])
-                    .join("")}
-                </div>
-              )}
-
-              {/* Faixa diagonal EXEMPLO apenas se for paciente de demonstração */}
-              {isExample && (
-                <div className="absolute bottom-1.5 left-0 right-0 bg-[#7B3AF5] text-white text-[8px] font-extrabold uppercase tracking-widest text-center py-0.5 transform -rotate-12 shadow-sm">
-                  EXEMPLO
-                </div>
+                data.name
+                  .trim()
+                  .split(/\s+/)
+                  .slice(0, 2)
+                  .map((part) => part[0])
+                  .join("")
               )}
             </div>
-
-            {/* Ícone de câmera */}
-            <button
-              type="button"
-              className="absolute -top-1 -right-1 h-6 w-6 rounded-full bg-[#7B3AF5] text-white flex items-center justify-center shadow hover:scale-105 transition-transform cursor-pointer"
-              title="Alterar foto"
-              onClick={() => toast.info("Upload de foto")}
-            >
-              <Camera className="h-3 w-3" />
-            </button>
-
-            {/* Ícone de aviso */}
-            <div
-              className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full bg-amber-50 border-2 border-white text-amber-500 flex items-center justify-center shadow"
-              title="Atenção"
-            >
-              <AlertTriangle className="h-3 w-3" />
+            <div className="min-w-0">
+              <p className="mb-1 text-xs font-medium text-muted-foreground">Ficha do paciente</p>
+              <h1 className="text-2xl font-semibold tracking-tight">{data.name}</h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {[
+                  data.gender === "F"
+                    ? "Feminino"
+                    : data.gender === "M"
+                      ? "Masculino"
+                      : data.gender,
+                  data.age,
+                  data.insurance,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || "Dados complementares não informados"}
+              </p>
             </div>
           </div>
-
-          {/* Nome do Paciente */}
-          <h1 className="text-[17px] font-bold text-[#0F172A] text-center leading-tight">
-            {data.name}
-          </h1>
-
-          {/* Sub-informações */}
-          <div className="mt-2 text-center space-y-0.5">
-            <p className="text-[12px] font-medium text-[#64748B]">
-              {data.gender || "Feminino"} • {data.age || "34 anos"}
-            </p>
-            <p className="text-[12px] font-medium text-[#64748B]">{data.phone}</p>
-            <p className="text-[12px] font-medium text-[#64748B]">{data.cpf}</p>
-          </div>
-
-          {/* Tag Paciente */}
-          <div className="mt-2.5">
-            <span className="px-3 py-0.5 rounded-full bg-[#F3E8FF] text-[#7B3AF5] text-[11px] font-semibold tracking-wide">
-              Paciente
-            </span>
-          </div>
-
-          {/* Botão Enviar Mensagem (WhatsApp) */}
-          <div className="mt-4 w-full flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                const num = (data.phone || "").replace(/\D/g, "");
-                if (num) {
-                  window.open(`https://wa.me/${num}`, "_blank");
-                } else {
-                  toast.success("Mensagem aberta no WhatsApp");
+          <div className="flex flex-wrap gap-2">
+            {data.phone && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const number = (data.phone ?? "").replace(/\D/g, "");
+                  if (!number) {
+                    toast.error("O telefone cadastrado é inválido.");
+                    return;
+                  }
+                  window.open(
+                    "https://wa.me/" + (number.length <= 11 ? "55" + number : number),
+                    "_blank",
+                    "noopener,noreferrer",
+                  );
+                }}
+              >
+                <Send />
+                WhatsApp
+              </Button>
+            )}
+            {onEdit && (
+              <Button variant="outline" onClick={onEdit}>
+                <Pencil />
+                Editar cadastro
+              </Button>
+            )}
+            {data.id && can("records.view") && (
+              <Button
+                onClick={() =>
+                  navigate({
+                    to: "/prontuario",
+                    search: { patientId: data.id, patientName: data.name },
+                  })
                 }
-              }}
-              className="flex-1 h-10 px-3 rounded-xl bg-[#E8F8F0] hover:bg-[#D8F3E5] text-[#10B981] font-semibold text-[12.5px] flex items-center justify-center gap-2 transition-colors cursor-pointer"
-            >
-              <Send className="h-3.5 w-3.5" />
-              <span>Enviar mensagem</span>
-            </button>
-
-            <button
-              type="button"
-              className="h-10 w-10 rounded-xl border border-[#E2E8F0] hover:bg-[#F1F5F9] text-[#64748B] flex items-center justify-center transition-colors cursor-pointer shrink-0"
-              title="Mais opções"
-              onClick={() => toast.message("Opções do paciente")}
-            >
-              <MoreVertical className="h-4 w-4" />
-            </button>
+              >
+                <Stethoscope />
+                Abrir prontuário
+              </Button>
+            )}
           </div>
-
-          {/* Lista de Navegação das Abas */}
-          <nav className="mt-5 w-full space-y-1">
-            {visibleTabs.map((tab) => {
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`w-full h-9.5 px-4 rounded-xl text-[13px] font-medium transition-all text-left flex items-center justify-between cursor-pointer ${
-                    isActive
-                      ? "bg-[#7B3AF5] text-white font-semibold shadow-sm"
-                      : "text-[#475569] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
-                  }`}
-                >
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </nav>
-        </aside>
-
-        {/* CONTEÚDO PRINCIPAL DIREITO */}
-        <main className="flex-1 p-6 md:p-8 overflow-y-auto bg-white">
+        </div>
+      </header>
+      <div className="page-container space-y-5">
+        <nav
+          aria-label="Seções do paciente"
+          className="flex max-w-full gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1.5"
+        >
+          {visibleTabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              aria-current={activeTab === tab.id ? "page" : undefined}
+              onClick={() => setActiveTab(tab.id)}
+              className={
+                "min-h-10 shrink-0 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-colors " +
+                (activeTab === tab.id
+                  ? "bg-primary-soft text-primary"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground")
+              }
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+        <main className="min-w-0 rounded-xl border border-border bg-card p-4 md:p-6">
           {/* ============================================================ */}
           {/* ABA: INFORMAÇÕES (Fiel ao design do screenshot) */}
           {/* ============================================================ */}
           {activeTab === "informacoes" && (
-            <div className="space-y-6 max-w-4xl">
-              <h2 className="text-[18px] font-bold text-[#0F172A]">Informações</h2>
-
-              <div className="space-y-4.5">
-                {/* 1. Nome completo */}
-                <div className="flex items-start gap-3.5">
-                  <div className="h-8.5 w-8.5 rounded-full bg-[#F3E8FF] text-[#7B3AF5] flex items-center justify-center shrink-0">
-                    <User className="h-4 w-4" />
+            <section>
+              <h2 className="mb-5 text-lg font-semibold">Informações cadastrais</h2>
+              <dl className="grid grid-cols-1 gap-x-10 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
+                {[
+                  ["Nome completo", data.name],
+                  ["Data de nascimento", data.birth_date],
+                  [
+                    "Sexo / gênero",
+                    data.gender === "F"
+                      ? "Feminino"
+                      : data.gender === "M"
+                        ? "Masculino"
+                        : data.gender,
+                  ],
+                  ["Telefone", data.phone],
+                  ["E-mail", data.email],
+                  ["CPF", data.cpf],
+                  ["Convênio", data.insurance],
+                  [
+                    "Endereço",
+                    [data.address, data.neighborhood, data.city, data.state, data.cep]
+                      .filter(Boolean)
+                      .join(", "),
+                  ],
+                  ["Cadastrado em", data.created_at],
+                  ["Status", data.active ? "Ativo" : "Inativo"],
+                ].map(([label, value]) => (
+                  <div key={label} className="min-w-0">
+                    <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+                    <dd className="mt-1 break-words text-sm text-foreground">
+                      {value || "Não informado"}
+                    </dd>
                   </div>
-                  <div>
-                    <p className="text-[12.5px] font-bold text-[#1E293B]">Nome completo</p>
-                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">{data.name}</p>
-                  </div>
-                </div>
-
-                {/* 2. Data de nascimento */}
-                <div className="flex items-start gap-3.5">
-                  <div className="h-8.5 w-8.5 rounded-full bg-[#F3E8FF] text-[#7B3AF5] flex items-center justify-center shrink-0">
-                    <CalIcon className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-[12.5px] font-bold text-[#1E293B]">Data de nascimento</p>
-                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">
-                      {data.birth_date
-                        ? `${data.birth_date}${data.age ? ` (${data.age})` : ""}`
-                        : "Não informada"}
-                    </p>
-                  </div>
-                </div>
-
-                {/* 3. Sexo */}
-                <div className="flex items-start gap-3.5">
-                  <div className="h-8.5 w-8.5 rounded-full bg-[#F3E8FF] text-[#7B3AF5] flex items-center justify-center shrink-0">
-                    <User className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-[12.5px] font-bold text-[#1E293B]">Sexo</p>
-                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">
-                      {data.gender === "F"
-                        ? "Feminino"
-                        : data.gender === "M"
-                          ? "Masculino"
-                          : data.gender === "O"
-                            ? "Outro"
-                            : data.gender || "Não informado"}
-                    </p>
-                  </div>
-                </div>
-
-                {/* 4. Email */}
-                <div className="flex items-start gap-3.5">
-                  <div className="h-8.5 w-8.5 rounded-full bg-[#F3E8FF] text-[#7B3AF5] flex items-center justify-center shrink-0">
-                    <Mail className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-[12.5px] font-bold text-[#1E293B]">Email</p>
-                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">
-                      {data.email || "Não informado"}
-                    </p>
-                  </div>
-                </div>
-
-                {/* 5. Telefone */}
-                <div className="flex items-start gap-3.5">
-                  <div className="h-8.5 w-8.5 rounded-full bg-[#F3E8FF] text-[#7B3AF5] flex items-center justify-center shrink-0">
-                    <Phone className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-[12.5px] font-bold text-[#1E293B]">Telefone</p>
-                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5 flex items-center gap-1.5">
-                      <span>{data.phone || "Não informado"}</span>
-                      {data.phone && <span className="inline-block text-[#10B981]">💬</span>}
-                    </p>
-                  </div>
-                </div>
-
-                {/* 6. Notificações */}
-                <div className="flex items-start gap-3.5">
-                  <div className="h-8.5 w-8.5 rounded-full bg-[#F3E8FF] text-[#7B3AF5] flex items-center justify-center shrink-0">
-                    <Bell className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-[12.5px] font-bold text-[#1E293B]">Notificações</p>
-                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">
-                      {data.notifications ||
-                        (data.phone ? "WhatsApp / SMS ativo" : "Não recebe notificações")}
-                    </p>
-                  </div>
-                </div>
-
-                {/* 7. Endereço */}
-                <div className="flex items-start gap-3.5">
-                  <div className="h-8.5 w-8.5 rounded-full bg-[#F3E8FF] text-[#7B3AF5] flex items-center justify-center shrink-0">
-                    <MapPin className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-[12.5px] font-bold text-[#1E293B]">Endereço</p>
-                    {data.address || data.neighborhood || data.city || data.state || data.cep ? (
-                      <div className="text-[13.5px] text-[#7B3AF5] font-medium mt-0.5 leading-snug">
-                        {data.address && <p>{data.address}</p>}
-                        {(data.neighborhood || data.city || data.state) && (
-                          <p>
-                            {[
-                              data.neighborhood,
-                              [data.city, data.state].filter(Boolean).join(" - "),
-                            ]
-                              .filter(Boolean)
-                              .join(", ")}
-                          </p>
-                        )}
-                        {data.cep && <p>CEP: {data.cep}</p>}
-                        <p>{data.country || "Brasil"}</p>
-                      </div>
-                    ) : (
-                      <p className="text-[13.5px] text-slate-400 font-medium mt-0.5">
-                        Endereço não informado
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* 8. CPF */}
-                <div className="flex items-start gap-3.5">
-                  <div className="h-8.5 w-8.5 rounded-full bg-[#F3E8FF] text-[#7B3AF5] flex items-center justify-center shrink-0">
-                    <FileText className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-[12.5px] font-bold text-[#1E293B]">CPF</p>
-                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">
-                      {data.cpf || "Não informado"}
-                    </p>
-                  </div>
-                </div>
-
-                {/* 9. Observações */}
-                <div className="flex items-start gap-3.5">
-                  <div className="h-8.5 w-8.5 rounded-full bg-[#F3E8FF] text-[#7B3AF5] flex items-center justify-center shrink-0">
-                    <ClipboardList className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-[12.5px] font-bold text-[#1E293B]">Observações</p>
-                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">
-                      {data.notes || "Nenhuma observação registrada."}
-                    </p>
-                  </div>
-                </div>
-
-                {/* 10. Cadastrado em */}
-                <div className="flex items-start gap-3.5">
-                  <div className="h-8.5 w-8.5 rounded-full bg-[#F3E8FF] text-[#7B3AF5] flex items-center justify-center shrink-0">
-                    <Clock className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-[12.5px] font-bold text-[#1E293B]">Cadastrado em</p>
-                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">
-                      {data.created_at || "—"}
-                    </p>
-                  </div>
-                </div>
-
-                {/* 11. Status */}
-                <div className="flex items-start gap-3.5">
-                  <div className="h-8.5 w-8.5 rounded-full bg-[#F3E8FF] text-[#7B3AF5] flex items-center justify-center shrink-0">
-                    <CheckCircle2 className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-[12.5px] font-bold text-[#1E293B]">Status</p>
-                    <p className="text-[13.5px] text-[#475569] font-medium mt-0.5">
-                      {data.active ? "Ativo" : "Inativo"}
-                    </p>
-                  </div>
-                </div>
+                ))}
+              </dl>
+              <div className="mt-6 border-t border-border pt-5">
+                <h3 className="text-sm font-medium">Observações</h3>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+                  {data.notes || "Nenhuma observação registrada."}
+                </p>
               </div>
-
-              {/* Link Editar informações */}
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (onEdit) onEdit();
-                    else toast.info("Editar informações do paciente");
-                  }}
-                  className="inline-flex items-center gap-1.5 text-[13.5px] font-bold text-[#7B3AF5] hover:underline cursor-pointer transition-colors"
-                >
-                  <Pencil className="h-4 w-4" />
-                  <span>Editar informações</span>
-                </button>
-              </div>
-            </div>
+            </section>
           )}
 
           {/* ============================================================ */}
@@ -865,17 +602,17 @@ export function PatientFullProfileView({
           {/* ============================================================ */}
           {(activeTab === "prontuario" || activeTab === "timeline") && (
             <div className="space-y-6 max-w-4xl">
-              <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-slate-100">
+              <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-border-soft">
                 <div>
-                  <h2 className="text-[18px] font-bold text-[#0F172A] flex items-center gap-2">
-                    <FileText className="h-5 w-5 text-purple-600" />
+                  <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-primary" />
                     {activeTab === "timeline"
                       ? "Linha do Tempo de Atendimentos"
                       : "Prontuário Clínico & Atendimentos"}
                   </h2>
-                  <p className="text-[12.5px] text-slate-500 mt-0.5">
+                  <p className="text-sm text-muted-foreground mt-0.5">
                     Histórico unificado de atendimentos, consultas e evoluções de{" "}
-                    <strong className="text-slate-700">{data.name}</strong>.
+                    <strong className="text-foreground/80">{data.name}</strong>.
                   </p>
                 </div>
 
@@ -891,7 +628,7 @@ export function PatientFullProfileView({
                         } as any,
                       });
                     }}
-                    className="inline-flex items-center gap-1.5 h-10 px-3.5 rounded-xl border border-purple-200 bg-purple-50/70 text-purple-700 hover:bg-purple-100 text-[13px] font-bold transition-all cursor-pointer shadow-2xs"
+                    className="inline-flex items-center gap-1.5 h-10 px-3.5 rounded-xl border border-primary/25 bg-primary-soft/70 text-primary hover:bg-primary-soft text-sm font-semibold transition-all cursor-pointer shadow-2xs"
                     title="Abrir tela cheia de atendimento para este paciente"
                   >
                     <ExternalLink size={14} />
@@ -903,7 +640,7 @@ export function PatientFullProfileView({
                       type="button"
                       onClick={handleSaveProntuario}
                       disabled={isSavingRecord || !anamnese.trim()}
-                      className="inline-flex items-center gap-1.5 h-10 px-4.5 rounded-xl bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 text-[13px] font-bold shadow-sm transition-all cursor-pointer"
+                      className="inline-flex items-center gap-1.5 h-10 px-4.5 rounded-full bg-primary text-white hover:bg-primary-hover disabled:opacity-50 text-sm font-semibold shadow-sm transition-all cursor-pointer"
                     >
                       <Save size={15} />
                       <span>{isSavingRecord ? "Salvando..." : "Salvar Atendimento"}</span>
@@ -914,18 +651,19 @@ export function PatientFullProfileView({
 
               {/* Editor de Novo Atendimento (inicia limpo sem duplicar a ficha ou texto anterior) */}
               {activeTab === "prontuario" && (
-                <div className="rounded-2xl border border-purple-100 bg-white p-5 shadow-xs space-y-3">
-                  <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-100">
+                <div className="rounded-2xl border border-primary/15 bg-card p-5 shadow-xs space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-border-soft">
                     <div className="flex items-center gap-2.5">
-                      <div className="h-7 w-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center">
+                      <div className="h-7 w-7 rounded-lg bg-primary-soft text-primary flex items-center justify-center">
                         <ClipboardList size={16} />
                       </div>
                       <div>
-                        <h3 className="text-[14.5px] font-bold text-slate-800">
+                        <h3 className="text-sm font-semibold text-foreground">
                           Novo Atendimento / Evolução Clínica
                         </h3>
-                        <p className="text-[11.5px] text-slate-400">
-                          Registre queixa, sintomas, exame clínico e conduta terapêutica desta consulta.
+                        <p className="text-xs text-muted-foreground">
+                          Registre queixa, sintomas, exame clínico e conduta terapêutica desta
+                          consulta.
                         </p>
                       </div>
                     </div>
@@ -938,7 +676,7 @@ export function PatientFullProfileView({
                             setAnamnese(lastClinicalRecord.complaint || "");
                             toast.info("Anotação da consulta anterior carregada no editor.");
                           }}
-                          className="text-[11.5px] font-semibold text-purple-600 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                          className="text-xs font-semibold text-primary hover:text-primary-hover bg-primary-soft hover:bg-primary-soft border border-primary/25 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
                           title="Importar texto da consulta anterior"
                         >
                           📋 Importar última consulta
@@ -954,7 +692,7 @@ export function PatientFullProfileView({
                             placeholder: "Descreva a consulta do paciente...",
                           })
                         }
-                        className="text-[11.5px] font-semibold text-white bg-gradient-to-r from-orange-500 via-pink-500 to-purple-600 px-3 py-1 rounded-lg flex items-center gap-1.5 shadow-2xs hover:brightness-105 cursor-pointer"
+                        className="flex cursor-pointer items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
                       >
                         <Sparkles size={12} />
                         <span>Preencher com IA</span>
@@ -964,14 +702,14 @@ export function PatientFullProfileView({
                         <button
                           type="button"
                           onClick={() => setAnamnese("")}
-                          className="text-[11px] text-slate-400 hover:text-rose-600 font-medium px-1 cursor-pointer"
+                          className="text-xs text-muted-foreground hover:text-destructive font-medium px-1 cursor-pointer"
                           title="Limpar editor"
                         >
                           Limpar
                         </button>
                       )}
 
-                      <span className="text-[11px] text-slate-400 font-medium ml-1">
+                      <span className="text-xs text-muted-foreground font-medium ml-1">
                         {anamnese.length} caracteres
                       </span>
                     </div>
@@ -982,25 +720,23 @@ export function PatientFullProfileView({
                     value={anamnese}
                     onChange={(e) => setAnamnese(e.target.value)}
                     placeholder="Descreva a anamnese ou evolução da consulta atual (motivo da consulta, sintomas, hipóteses diagnósticas e conduta médica)..."
-                    className="w-full rounded-xl border border-slate-200 p-4 text-[13.5px] text-slate-800 placeholder:text-slate-400 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/15 outline-none transition-all resize-y min-h-[160px] font-sans leading-relaxed"
+                    className="w-full rounded-xl border border-border p-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15 outline-none transition-all resize-y min-h-[160px] font-sans leading-relaxed"
                   />
                 </div>
               )}
 
               {/* Histórico Completo de Atendimentos e Consultas do Paciente */}
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-5 space-y-4 shadow-2xs">
+              <div className="rounded-2xl border border-border bg-muted/30 p-5 space-y-4 shadow-2xs">
                 <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
-                    <History className="h-4.5 w-4.5 text-purple-600" />
-                    <span>
-                      Histórico Completo de Atendimentos ({clinicalHistory.length})
-                    </span>
+                  <div className="flex items-center gap-2 text-foreground font-semibold text-sm">
+                    <History className="h-4.5 w-4.5 text-primary" />
+                    <span>Histórico Completo de Atendimentos ({clinicalHistory.length})</span>
                   </div>
 
                   <button
                     type="button"
                     onClick={() => refreshHistory()}
-                    className="text-xs text-slate-500 hover:text-purple-600 flex items-center gap-1 font-medium transition-colors cursor-pointer"
+                    className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1 font-medium transition-colors cursor-pointer"
                     title="Atualizar lista de atendimentos"
                   >
                     <RefreshCw size={12} className={loadingHistory ? "animate-spin" : ""} />
@@ -1011,14 +747,14 @@ export function PatientFullProfileView({
                 {/* Filtros e Busca Rápida no Histórico */}
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
                   {/* Pílulas de filtro por tipo */}
-                  <div className="flex items-center gap-1.5 flex-wrap text-[12px]">
+                  <div className="flex items-center gap-1.5 flex-wrap text-xs">
                     <button
                       type="button"
                       onClick={() => setHistoryFilter("todos")}
                       className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
                         historyFilter === "todos"
-                          ? "bg-purple-600 text-white shadow-2xs"
-                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                          ? "bg-primary text-white shadow-2xs"
+                          : "bg-card text-muted-foreground border border-border hover:bg-muted"
                       }`}
                     >
                       Todos ({clinicalHistory.length})
@@ -1028,8 +764,8 @@ export function PatientFullProfileView({
                       onClick={() => setHistoryFilter("prontuario")}
                       className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
                         historyFilter === "prontuario"
-                          ? "bg-purple-600 text-white shadow-2xs"
-                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                          ? "bg-primary text-white shadow-2xs"
+                          : "bg-card text-muted-foreground border border-border hover:bg-muted"
                       }`}
                     >
                       🩺 Prontuários ({prontuariosCount})
@@ -1039,8 +775,8 @@ export function PatientFullProfileView({
                       onClick={() => setHistoryFilter("consulta")}
                       className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
                         historyFilter === "consulta"
-                          ? "bg-purple-600 text-white shadow-2xs"
-                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                          ? "bg-primary text-white shadow-2xs"
+                          : "bg-card text-muted-foreground border border-border hover:bg-muted"
                       }`}
                     >
                       📅 Consultas ({consultasCount})
@@ -1050,8 +786,8 @@ export function PatientFullProfileView({
                       onClick={() => setHistoryFilter("evolucao")}
                       className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
                         historyFilter === "evolucao"
-                          ? "bg-purple-600 text-white shadow-2xs"
-                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                          ? "bg-primary text-white shadow-2xs"
+                          : "bg-card text-muted-foreground border border-border hover:bg-muted"
                       }`}
                     >
                       📈 Evoluções ({evolucoesCount})
@@ -1062,14 +798,14 @@ export function PatientFullProfileView({
                   <div className="relative min-w-[220px]">
                     <Search
                       size={14}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
                     />
                     <input
                       type="text"
                       value={historySearch}
                       onChange={(e) => setHistorySearch(e.target.value)}
                       placeholder="Filtrar histórico..."
-                      className="w-full h-8.5 pl-8.5 pr-3 rounded-lg border border-slate-200 bg-white text-[12.5px] placeholder:text-slate-400 focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 outline-none transition-all"
+                      className="w-full h-8.5 pl-8.5 pr-3 rounded-lg border border-border bg-card text-sm placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none transition-all"
                     />
                   </div>
                 </div>
@@ -1080,32 +816,32 @@ export function PatientFullProfileView({
                     {filteredHistory.map((item) => (
                       <div
                         key={item.id}
-                        className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-2.5 transition-all hover:border-purple-200"
+                        className="p-4 rounded-xl bg-card border border-border shadow-2xs space-y-2.5 transition-all hover:border-primary/25"
                       >
-                        <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-100">
+                        <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-border-soft">
                           <div className="flex items-center gap-2 flex-wrap">
                             {item.kind === "prontuario" && (
-                              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-md bg-purple-100 text-purple-700">
+                              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-primary-soft text-primary">
                                 🩺 Prontuário Clínico
                               </span>
                             )}
                             {item.kind === "consulta" && (
-                              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-md bg-blue-100 text-blue-700">
+                              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-info/15 text-info">
                                 📅 {item.type || "Consulta"}
                               </span>
                             )}
                             {item.kind === "evolucao" && (
-                              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-md bg-emerald-100 text-emerald-700">
+                              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-success/15 text-success">
                                 📈 Evolução
                               </span>
                             )}
 
-                            <span className="font-bold text-slate-800 text-[13px]">
+                            <span className="font-semibold text-foreground text-sm">
                               {item.formattedDate} {item.time ? `às ${item.time}` : ""}
                             </span>
 
                             {item.doctorName && (
-                              <span className="text-[11.5px] text-slate-500 font-medium">
+                              <span className="text-xs text-muted-foreground font-medium">
                                 • {item.doctorName}
                               </span>
                             )}
@@ -1113,13 +849,13 @@ export function PatientFullProfileView({
 
                           <div className="flex items-center gap-2">
                             {item.status && (
-                              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                              <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-muted text-muted-foreground">
                                 {item.status}
                               </span>
                             )}
 
                             {item.durationSeconds ? (
-                              <span className="text-[11.5px] text-slate-600 font-medium bg-slate-100 px-2 py-0.5 rounded-md">
+                              <span className="text-xs text-muted-foreground font-medium bg-muted px-2 py-0.5 rounded-md">
                                 ⏱️ {Math.round(item.durationSeconds / 60)} min
                               </span>
                             ) : null}
@@ -1132,7 +868,7 @@ export function PatientFullProfileView({
                                   toast.success("Conteúdo carregado no editor de atendimento.");
                                   window.scrollTo({ top: 0, behavior: "smooth" });
                                 }}
-                                className="text-[11.5px] font-semibold text-purple-600 hover:text-purple-800 hover:underline cursor-pointer"
+                                className="text-xs font-semibold text-primary hover:text-primary-hover hover:underline cursor-pointer"
                                 title="Carregar este atendimento no editor acima"
                               >
                                 Carregar no editor
@@ -1146,7 +882,7 @@ export function PatientFullProfileView({
                                   navigator.clipboard.writeText(item.complaint || "");
                                   toast.success("Texto do atendimento copiado.");
                                 }}
-                                className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-100 cursor-pointer"
+                                className="text-muted-foreground hover:text-muted-foreground p-1 rounded hover:bg-muted cursor-pointer"
                                 title="Copiar texto"
                               >
                                 <Copy size={13} />
@@ -1157,7 +893,7 @@ export function PatientFullProfileView({
                             <button
                               type="button"
                               onClick={() => handleOpenEdit(item)}
-                              className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-slate-600 hover:text-purple-600 bg-slate-100 hover:bg-purple-50 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-primary bg-muted hover:bg-primary-soft px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
                               title="Editar anotações deste atendimento"
                             >
                               <Pencil size={12} />
@@ -1168,7 +904,7 @@ export function PatientFullProfileView({
                             <button
                               type="button"
                               onClick={() => handleOpenDelete(item)}
-                              className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-slate-500 hover:text-rose-600 bg-slate-100 hover:bg-rose-50 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-destructive bg-muted hover:bg-destructive/10 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
                               title="Excluir este prontuário"
                             >
                               <Trash2 size={12} />
@@ -1179,25 +915,25 @@ export function PatientFullProfileView({
 
                         {/* Conteúdo Clínico */}
                         {item.complaint ? (
-                          <div className="text-[13px] text-slate-700 whitespace-pre-wrap leading-relaxed bg-slate-50/70 p-3 rounded-lg border border-slate-100">
+                          <div className="text-sm text-foreground/80 whitespace-pre-wrap leading-relaxed bg-muted/42 p-3 rounded-lg border border-border-soft">
                             {item.complaint}
                           </div>
                         ) : (
-                          <p className="text-[12px] text-slate-400 italic">
+                          <p className="text-xs text-muted-foreground italic">
                             Consulta registrada sem anotações adicionais.
                           </p>
                         )}
 
                         {/* Conduta se cadastrada separadamente */}
                         {item.conduct && (
-                          <div className="text-[12px] text-purple-900 bg-purple-50/60 p-2.5 rounded-lg border border-purple-100">
+                          <div className="text-xs text-primary-hover bg-primary-soft/60 p-2.5 rounded-lg border border-primary/15">
                             <strong>Conduta terapêutica:</strong> {item.conduct}
                           </div>
                         )}
 
                         {/* Diagnóstico se cadastrado */}
                         {item.diagnosis && (
-                          <div className="text-[12px] text-slate-600">
+                          <div className="text-xs text-muted-foreground">
                             <strong>Diagnóstico:</strong> {item.diagnosis}
                           </div>
                         )}
@@ -1206,13 +942,13 @@ export function PatientFullProfileView({
                   </div>
                 ) : (
                   <div className="py-8 text-center space-y-2">
-                    <FileText className="h-8 w-8 text-slate-300 mx-auto" />
-                    <p className="text-[13px] font-medium text-slate-600">
+                    <FileText className="h-8 w-8 text-muted-foreground/60 mx-auto" />
+                    <p className="text-sm font-medium text-muted-foreground">
                       {historySearch
                         ? `Nenhum registro encontrado para "${historySearch}".`
                         : `Nenhum atendimento registrado ainda para ${data.name}.`}
                     </p>
-                    <p className="text-[12px] text-slate-400 max-w-sm mx-auto">
+                    <p className="text-xs text-muted-foreground max-w-sm mx-auto">
                       {activeTab === "prontuario"
                         ? 'Você pode registrar o primeiro atendimento deste paciente utilizando o campo de Anamnese acima ou clicando em "Abrir Prontuário Completo".'
                         : "Os atendimentos e consultas aparecerão aqui conforme forem realizados."}
@@ -1225,18 +961,12 @@ export function PatientFullProfileView({
 
           {/* ABA FINANCEIRO */}
           {activeTab === "financeiro" && (
-            <PatientFinanceTab
-              patientId={data.id || ""}
-              patientName={data.name}
-            />
+            <PatientFinanceTab patientId={data.id || ""} patientName={data.name} />
           )}
 
           {/* ABA PACOTES */}
           {activeTab === "pacotes" && (
-            <PatientPackagesTab
-              patientId={data.id || ""}
-              patientName={data.name}
-            />
+            <PatientPackagesTab patientId={data.id || ""} patientName={data.name} />
           )}
 
           {/* OUTRAS ABAS */}
@@ -1246,11 +976,11 @@ export function PatientFullProfileView({
             activeTab !== "financeiro" &&
             activeTab !== "pacotes" && (
               <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
-                <div className="h-14 w-14 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center">
+                <div className="h-14 w-14 rounded-full bg-muted text-muted-foreground flex items-center justify-center">
                   <FolderOpen className="h-7 w-7" />
                 </div>
-                <h3 className="text-[16px] font-bold text-[#0F172A]">{activeTabLabel}</h3>
-                <p className="text-[13px] text-[#64748B]">
+                <h3 className="text-base font-semibold text-foreground">{activeTabLabel}</h3>
+                <p className="text-sm text-muted-foreground">
                   Nenhum registro encontrado para este paciente nesta seção no momento.
                 </p>
               </div>
@@ -1267,134 +997,141 @@ export function PatientFullProfileView({
       />
 
       {/* Modal de Edição de Prontuário Clínico */}
-      {editModalOpen && editingItem && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-200 p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2.5">
-                <div className="h-9 w-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center">
-                  <Pencil size={16} />
-                </div>
-                <div>
-                  <h3 className="text-[16px] font-bold text-slate-900">
-                    Editar Prontuário Clínico
-                  </h3>
-                  <p className="text-[12px] text-slate-500">
-                    Atendimento de {editingItem.formattedDate} • {data.name}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setEditModalOpen(false);
-                  setEditingItem(null);
-                }}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+      <Dialog
+        open={editModalOpen && !!editingItem}
+        onOpenChange={(open) => {
+          if (open || isUpdating) return;
+          setEditModalOpen(false);
+          setEditingItem(null);
+        }}
+      >
+        <DialogContent className="max-w-2xl" onInteractOutside={(event) => event.preventDefault()}>
+          <DialogHeader className="flex-row items-center gap-2.5 space-y-0 border-b border-border-soft pb-3">
+            <div
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
+              aria-hidden="true"
+            >
+              <Pencil size={16} />
+            </div>
+            <div>
+              <DialogTitle className="text-base">Editar Prontuário Clínico</DialogTitle>
+              <DialogDescription className="text-xs">
+                Atendimento de {editingItem?.formattedDate} • {data.name}
+              </DialogDescription>
+            </div>
+          </DialogHeader>
+
+          <div className="space-y-3.5">
+            <div className="space-y-1.5">
+              <label
+                htmlFor="edit-record-complaint"
+                className="text-sm font-semibold text-foreground/80"
               >
-                <X size={18} />
-              </button>
+                Anamnese, Queixa & Evolução Clínica
+              </label>
+              <textarea
+                id="edit-record-complaint"
+                rows={8}
+                value={editComplaint}
+                onChange={(e) => setEditComplaint(e.target.value)}
+                placeholder="Anotações clínicas do atendimento..."
+                className="prose-clinical w-full min-h-[180px] max-w-none resize-y rounded-xl border border-input bg-card p-3.5 text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/15"
+              />
             </div>
 
-            <div className="space-y-3.5">
-              <div className="space-y-1.5">
-                <label className="text-[13px] font-bold text-slate-700">
-                  Anamnese, Queixa & Evolução Clínica
-                </label>
-                <textarea
-                  rows={8}
-                  value={editComplaint}
-                  onChange={(e) => setEditComplaint(e.target.value)}
-                  placeholder="Anotações clínicas do atendimento..."
-                  className="w-full rounded-xl border border-slate-200 p-3.5 text-[13px] text-slate-800 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/15 outline-none transition-all resize-y min-h-[180px] leading-relaxed"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[13px] font-bold text-slate-700">
-                  Conduta Terapêutica (opcional)
-                </label>
-                <textarea
-                  rows={3}
-                  value={editConduct}
-                  onChange={(e) => setEditConduct(e.target.value)}
-                  placeholder="Orientações, prescrições e condutas tomadas..."
-                  className="w-full rounded-xl border border-slate-200 p-3 text-[13px] text-slate-800 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/15 outline-none transition-all resize-y"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => {
-                  setEditModalOpen(false);
-                  setEditingItem(null);
-                }}
-                className="px-4 py-2 rounded-xl text-[13px] font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+            <div className="space-y-1.5">
+              <label
+                htmlFor="edit-record-conduct"
+                className="text-sm font-semibold text-foreground/80"
               >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveEdit}
-                disabled={isUpdating || !editComplaint.trim()}
-                className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-[13px] font-bold shadow-sm transition-all cursor-pointer"
-              >
-                <Save size={14} />
-                <span>{isUpdating ? "Salvando..." : "Salvar Alterações"}</span>
-              </button>
+                Conduta Terapêutica (opcional)
+              </label>
+              <textarea
+                id="edit-record-conduct"
+                rows={3}
+                value={editConduct}
+                onChange={(e) => setEditConduct(e.target.value)}
+                placeholder="Orientações, prescrições e condutas tomadas..."
+                className="w-full resize-y rounded-xl border border-input bg-card p-3 text-sm text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/15"
+              />
             </div>
           </div>
-        </div>
-      )}
+
+          <DialogFooter className="border-t border-border-soft pt-3">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setEditModalOpen(false);
+                setEditingItem(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSaveEdit}
+              disabled={isUpdating || !editComplaint.trim()}
+            >
+              <Save size={14} />
+              <span>{isUpdating ? "Salvando..." : "Salvar Alterações"}</span>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal de Confirmação de Exclusão de Prontuário */}
-      {deleteModalOpen && deletingItem && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-200 p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-start gap-3.5">
-              <div className="h-10 w-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
-                <AlertTriangle size={20} />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-[16px] font-bold text-slate-900">
-                  Excluir este prontuário?
-                </h3>
-                <p className="text-[13px] text-slate-500 leading-relaxed">
-                  Tem certeza de que deseja excluir o atendimento de{" "}
-                  <strong className="text-slate-800">{deletingItem.formattedDate}</strong> de{" "}
-                  <strong className="text-slate-800">{data.name}</strong>? Esta ação removerá o
-                  registro do histórico do paciente.
-                </p>
-              </div>
+      <AlertDialog
+        open={deleteModalOpen && !!deletingItem}
+        onOpenChange={(open) => {
+          if (open || isDeleting) return;
+          setDeleteModalOpen(false);
+          setDeletingItem(null);
+        }}
+      >
+        <AlertDialogContent>
+          <div className="flex items-start gap-3.5">
+            <div
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-destructive/15 text-destructive"
+              aria-hidden="true"
+            >
+              <AlertTriangle size={20} />
             </div>
-
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => {
-                  setDeleteModalOpen(false);
-                  setDeletingItem(null);
-                }}
-                disabled={isDeleting}
-                className="px-4 py-2 rounded-xl text-[13px] font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmDelete}
-                disabled={isDeleting}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-[13px] font-bold shadow-sm transition-all cursor-pointer"
-              >
-                <Trash2 size={14} />
-                <span>{isDeleting ? "Excluindo..." : "Sim, excluir"}</span>
-              </button>
-            </div>
+            <AlertDialogHeader className="space-y-1">
+              <AlertDialogTitle className="text-base">Excluir este prontuário?</AlertDialogTitle>
+              <AlertDialogDescription className="leading-relaxed">
+                Tem certeza de que deseja excluir o atendimento de{" "}
+                <strong className="text-foreground">{deletingItem?.formattedDate}</strong> de{" "}
+                <strong className="text-foreground">{data.name}</strong>? Esta ação removerá o
+                registro do histórico do paciente.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
           </div>
-        </div>
-      )}
+
+          <AlertDialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setDeleteModalOpen(false);
+                setDeletingItem(null);
+              }}
+              disabled={isDeleting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+            >
+              <Trash2 size={14} />
+              <span>{isDeleting ? "Excluindo..." : "Sim, excluir"}</span>
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -148,15 +148,18 @@ const REMINDER_KIND = [
 ];
 
 const TAG_PRESETS = [
-  { label: "Urgente", cls: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30" },
+  {
+    label: "Urgente",
+    cls: "bg-destructive/10 text-destructive dark:text-rose-400 border-destructive/30",
+  },
   {
     label: "Cliente VIP",
-    cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30",
+    cls: "bg-warning/10 text-warning dark:text-amber-400 border-warning/30",
   },
-  { label: "Audiência", cls: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30" },
+  { label: "Audiência", cls: "bg-info/10 text-info dark:text-blue-400 border-info/30" },
   {
     label: "Tribunal",
-    cls: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30",
+    cls: "bg-muted-foreground/7 text-muted-foreground dark:text-muted-foreground border-muted-foreground/18",
   },
   { label: "Online", cls: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/30" },
   { label: "Presencial", cls: "bg-primary/10 text-primary dark:text-primary border-primary/30" },
@@ -186,17 +189,29 @@ const Section = memo(function Section({
   icon: Icon,
   children,
   actions,
+  collapsible = false,
 }: {
   title: string;
   icon?: LucideIcon;
   children: React.ReactNode;
   actions?: React.ReactNode;
+  collapsible?: boolean;
 }) {
+  if (collapsible)
+    return (
+      <details className="rounded-xl border border-border bg-card p-4 md:p-5">
+        <summary className="cursor-pointer text-sm font-semibold text-foreground">{title}</summary>
+        <div className="mt-4">{children}</div>
+      </details>
+    );
   return (
-    <section className="rounded-2xl border border-border/70 bg-card/60 p-5 md:p-6 shadow-sm transition-all hover:shadow-md">
-      <header className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold tracking-tight text-foreground flex items-center gap-2">
-          {Icon && <Icon className="h-4 w-4 text-primary" />}
+    <section
+      data-step={title}
+      className="scroll-mt-4 rounded-xl border border-border bg-card p-4 md:p-5"
+    >
+      <header className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 text-base font-semibold text-foreground">
+          {Icon && <Icon className="size-4 text-primary" />}
           {title}
         </h3>
         {actions}
@@ -214,9 +229,9 @@ const FieldLabel = memo(function FieldLabel({
   required?: boolean;
 }) {
   return (
-    <Label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+    <Label className="text-sm font-medium text-foreground">
       {children}
-      {required && <span className="text-rose-400 ml-0.5">*</span>}
+      {required && <span className="text-destructive/80 ml-0.5">*</span>}
     </Label>
   );
 });
@@ -944,7 +959,8 @@ export function NovoAgendamentoDialog({
           type === "atendimento" && !isIncludedInPlan
             ? Math.max(0, (totalAmt > 0 ? totalAmt : sinalAmt) - sinalAmt)
             : 0,
-        downPaymentMethod: type === "atendimento" && !isIncludedInPlan ? downPaymentMethod : undefined,
+        downPaymentMethod:
+          type === "atendimento" && !isIncludedInPlan ? downPaymentMethod : undefined,
         city: type === "atendimento" ? city : undefined,
         consultationType: type === "atendimento" ? consultationType : undefined,
       };
@@ -1019,33 +1035,38 @@ export function NovoAgendamentoDialog({
 
           if (eventError) {
             console.warn("Aviso ao salvar evento no Supabase:", eventError);
-          } else if (type === "atendimento" && !isIncludedInPlan && (totalAmt > 0 || sinalAmt > 0)) {
+          } else if (
+            type === "atendimento" &&
+            !isIncludedInPlan &&
+            (totalAmt > 0 || sinalAmt > 0)
+          ) {
             try {
-              const { data: titleId, error: titleErr } = await supabase.rpc("create_event_financial_title", {
-                p_event_id: insertedId,
-                p_amount: totalAmt > 0 ? totalAmt : sinalAmt,
-                p_due_date: day,
-              });
-              if (titleErr) throw titleErr;
+              // 1. Tenta gravar atomicamente título + sinal com conta financeira real (UUID)
+              const { data: scheduleData, error: scheduleErr } = await supabase.rpc(
+                "schedule_appointment_finance",
+                {
+                  p_event_id: insertedId,
+                  p_amount: totalAmt > 0 ? totalAmt : sinalAmt,
+                  p_sinal: sinalAmt,
+                  p_sinal_method: downPaymentMethod || "pix",
+                  p_due_date: day,
+                },
+              );
 
-              // Se houver sinal pago, liquida imediatamente no financeiro do Supabase
-              if (titleId && sinalAmt > 0) {
-                try {
-                  await supabase.rpc("record_financial_payment", {
-                    p_id: crypto.randomUUID(),
-                    p_transaction_id: titleId,
-                    p_amount: sinalAmt,
-                    p_paid_on: day,
-                    p_method: downPaymentMethod || "pix",
-                    p_account_id: "acc-bb",
-                    p_payer_name: selectedClient?.name || selectedClientObj?.name || null,
-                  });
-                } catch (payErr) {
-                  console.warn("Aviso ao liquidar sinal no Supabase:", payErr);
-                }
+              if (scheduleErr) {
+                // Fallback legado se a migration ainda não foi executada no banco
+                const { data: titleId, error: titleErr } = await supabase.rpc(
+                  "create_event_financial_title",
+                  {
+                    p_event_id: insertedId,
+                    p_amount: totalAmt > 0 ? totalAmt : sinalAmt,
+                    p_due_date: day,
+                  },
+                );
+                if (titleErr) throw titleErr;
               }
             } catch (finErr) {
-              console.warn("Aviso ao gerar cobrança remota:", finErr);
+              console.warn("Aviso ao gerar cobrança do agendamento no Supabase:", finErr);
             }
           }
         } catch (error) {
@@ -1069,7 +1090,9 @@ export function NovoAgendamentoDialog({
           .catch(() => {});
 
         if (isIncludedInPlan) {
-          toast.success("Agendamento salvo e vinculado ao plano de tratamento do paciente (sem cobrança duplicada).");
+          toast.success(
+            "Agendamento salvo e vinculado ao plano de tratamento do paciente (sem cobrança duplicada).",
+          );
         }
       })();
 
@@ -1137,14 +1160,57 @@ export function NovoAgendamentoDialog({
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
   }, [locName, locAddress, locCity, locState]);
 
+  // Etapas do formulário: lidas das seções renderizadas (variam conforme o tipo).
+  // Ref de callback: o corpo só existe depois que o portal do Dialog monta.
+  const [stepsBody, setStepsBody] = useState<HTMLDivElement | null>(null);
+  const [steps, setSteps] = useState<string[]>([]);
+  const [activeStep, setActiveStep] = useState(0);
+  useEffect(() => {
+    if (!open) return;
+    const body = stepsBody;
+    if (!body) return;
+    let nodes: HTMLElement[] = [];
+    const collect = () => {
+      nodes = Array.from(body.querySelectorAll<HTMLElement>("[data-step]"));
+      const next = nodes.map((node) => node.dataset.step ?? "");
+      setSteps((prev) => (prev.join("|") === next.join("|") ? prev : next));
+    };
+    const onScroll = () => {
+      const top = body.getBoundingClientRect().top;
+      let index = 0;
+      nodes.forEach((node, i) => {
+        if (node.getBoundingClientRect().top - top <= 32) index = i;
+      });
+      if (body.scrollTop + body.clientHeight >= body.scrollHeight - 4) index = nodes.length - 1;
+      setActiveStep(Math.max(0, index));
+    };
+    collect();
+    onScroll();
+    const observer = new MutationObserver(() => {
+      collect();
+      onScroll();
+    });
+    observer.observe(body, { childList: true, subtree: true });
+    body.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      observer.disconnect();
+      body.removeEventListener("scroll", onScroll);
+    };
+  }, [open, type, stepsBody]);
+  const goToStep = (index: number) => {
+    const node = stepsBody?.querySelectorAll<HTMLElement>("[data-step]")[index];
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    node?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+  };
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-4xl p-0 gap-0 overflow-hidden max-h-[92vh] flex flex-col rounded-2xl border-border/70 [&>button.absolute]:hidden">
+        <DialogContent className="max-w-4xl p-0 gap-0 overflow-hidden max-h-[92dvh] flex flex-col [&>button.absolute]:hidden">
           {/* Header */}
-          <div className="flex items-center justify-between px-6 md:px-8 py-5 border-b border-border/70 bg-gradient-to-b from-background to-background/60">
+          <div className="flex items-center justify-between border-b border-hairline bg-card px-4 py-4 md:px-6">
             <div>
-              <DialogTitle className="text-2xl font-bold tracking-tight">
+              <DialogTitle className="text-2xl font-semibold tracking-tight">
                 {type === "bloqueio"
                   ? "Novo bloqueio de horário"
                   : type === "lembrete"
@@ -1162,14 +1228,56 @@ export function NovoAgendamentoDialog({
               aria-label="Fechar"
               className="group grid place-items-center h-10 w-10 rounded-full hover:bg-primary/10 transition-all cursor-pointer"
             >
-              <X className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-transform duration-300 group-hover:rotate-90 group-hover:scale-110" />
+              <X className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-transform duration-300 " />
             </button>
           </div>
 
+          {/* Etapas: mostram o caminho do formulário e levam direto a cada seção. */}
+          {steps.length > 1 && (
+            <nav
+              aria-label="Etapas do agendamento"
+              className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-hairline bg-glass-strong px-4 py-2 glass-blur md:px-6"
+            >
+              {steps.map((step, index) => {
+                const current = index === activeStep;
+                return (
+                  <button
+                    key={`${step}-${index}`}
+                    type="button"
+                    aria-current={current ? "step" : undefined}
+                    onClick={() => goToStep(index)}
+                    className={`inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                      current
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground"
+                    }`}
+                  >
+                    <span
+                      className={`grid size-5 place-items-center rounded-full border text-xs tabular-nums ${
+                        current
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : index < activeStep
+                            ? "border-transparent bg-foreground/10 text-foreground"
+                            : "border-border"
+                      }`}
+                      aria-hidden="true"
+                    >
+                      {index + 1}
+                    </span>
+                    {step}
+                  </button>
+                );
+              })}
+            </nav>
+          )}
+
           {/* Scroll body */}
-          <div className="overflow-y-auto flex-1 px-6 md:px-8 py-6 space-y-5 bg-gradient-to-b from-background/40 to-background/80">
+          <div
+            ref={setStepsBody}
+            className="min-h-0 overflow-y-auto flex-1 px-4 md:px-6 py-4 space-y-4 bg-surface"
+          >
             {/* Tipo */}
-            <div className="space-y-1.5">
+            <div data-step="Tipo" className="scroll-mt-4 space-y-1.5">
               <FieldLabel required>Tipo</FieldLabel>
               <div className="flex flex-wrap gap-2 p-1.5 rounded-xl border border-border/70 bg-background">
                 {TYPES.map((t) => (
@@ -1219,7 +1327,7 @@ export function NovoAgendamentoDialog({
                               className={cn(
                                 "w-full h-11 rounded-xl border border-border/70 bg-background px-3 flex items-center justify-between text-sm transition text-left",
                                 allClinic &&
-                                  "opacity-50 cursor-not-allowed bg-gray-50 dark:bg-muted/10",
+                                  "opacity-50 cursor-not-allowed bg-muted/60 dark:bg-muted/10",
                               )}
                             >
                               <div className="flex flex-wrap gap-1.5 items-center overflow-hidden">
@@ -1234,7 +1342,7 @@ export function NovoAgendamentoDialog({
                                     return (
                                       <span
                                         key={id}
-                                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-semibold uppercase tracking-wider bg-[#F4EBFF] text-[#7F56D9] border border-[#D6BBFB]"
+                                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-semibold uppercase tracking-wider bg-primary-soft text-primary border border-primary/25"
                                       >
                                         {member.full_name}
                                         <span
@@ -1246,7 +1354,7 @@ export function NovoAgendamentoDialog({
                                               prev.filter((x) => x !== id),
                                             );
                                           }}
-                                          className="hover:text-red-500 transition-colors ml-1 cursor-pointer"
+                                          className="hover:text-destructive transition-colors ml-1 cursor-pointer"
                                         >
                                           <X className="h-3 w-3" />
                                         </span>
@@ -1269,7 +1377,7 @@ export function NovoAgendamentoDialog({
                                     <X className="h-4 w-4" />
                                   </span>
                                 )}
-                                <span className="text-muted-foreground text-[10px]">▼</span>
+                                <span className="text-muted-foreground text-xs">▼</span>
                               </div>
                             </button>
                           </PopoverTrigger>
@@ -1318,17 +1426,17 @@ export function NovoAgendamentoDialog({
                           onClick={() => setAllClinic(!allClinic)}
                           className={cn(
                             "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                            allClinic ? "bg-[#7C3AED]" : "bg-[#EAECF0]",
+                            allClinic ? "bg-primary" : "bg-surface-2",
                           )}
                         >
                           <span
                             className={cn(
-                              "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                              "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-card shadow ring-0 transition duration-200 ease-in-out",
                               allClinic ? "translate-x-5" : "translate-x-0",
                             )}
                           />
                         </button>
-                        <span className="text-sm font-medium text-[#344054]">Clínica toda</span>
+                        <span className="text-sm font-medium text-foreground/80">Clínica toda</span>
                       </div>
                     </div>
 
@@ -1396,17 +1504,19 @@ export function NovoAgendamentoDialog({
                             onClick={() => setAllDay(!allDay)}
                             className={cn(
                               "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                              allDay ? "bg-[#7C3AED]" : "bg-[#EAECF0]",
+                              allDay ? "bg-primary" : "bg-surface-2",
                             )}
                           >
                             <span
                               className={cn(
-                                "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                                "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-card shadow ring-0 transition duration-200 ease-in-out",
                                 allDay ? "translate-x-5" : "translate-x-0",
                               )}
                             />
                           </button>
-                          <span className="text-sm font-medium text-[#344054]">Dia inteiro</span>
+                          <span className="text-sm font-medium text-foreground/80">
+                            Dia inteiro
+                          </span>
                         </div>
                       </div>
 
@@ -1468,7 +1578,7 @@ export function NovoAgendamentoDialog({
                                     return (
                                       <span
                                         key={id}
-                                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-semibold uppercase tracking-wider bg-[#F4EBFF] text-[#7F56D9] border border-[#D6BBFB]"
+                                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-semibold uppercase tracking-wider bg-primary-soft text-primary border border-primary/25"
                                       >
                                         {member.full_name}
                                         <span
@@ -1480,7 +1590,7 @@ export function NovoAgendamentoDialog({
                                               prev.filter((x) => x !== id),
                                             );
                                           }}
-                                          className="hover:text-red-500 transition-colors ml-1 cursor-pointer"
+                                          className="hover:text-destructive transition-colors ml-1 cursor-pointer"
                                         >
                                           <X className="h-3 w-3" />
                                         </span>
@@ -1503,7 +1613,7 @@ export function NovoAgendamentoDialog({
                                     <X className="h-4 w-4" />
                                   </span>
                                 )}
-                                <span className="text-muted-foreground text-[10px]">▼</span>
+                                <span className="text-muted-foreground text-xs">▼</span>
                               </div>
                             </button>
                           </PopoverTrigger>
@@ -1611,17 +1721,19 @@ export function NovoAgendamentoDialog({
                             onClick={() => setAllDay(!allDay)}
                             className={cn(
                               "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                              allDay ? "bg-[#7C3AED]" : "bg-[#EAECF0]",
+                              allDay ? "bg-primary" : "bg-surface-2",
                             )}
                           >
                             <span
                               className={cn(
-                                "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                                "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-card shadow ring-0 transition duration-200 ease-in-out",
                                 allDay ? "translate-x-5" : "translate-x-0",
                               )}
                             />
                           </button>
-                          <span className="text-sm font-medium text-[#344054]">Dia inteiro</span>
+                          <span className="text-sm font-medium text-foreground/80">
+                            Dia inteiro
+                          </span>
                         </div>
                       </div>
 
@@ -1737,7 +1849,7 @@ export function NovoAgendamentoDialog({
                                   return (
                                     <span
                                       key={id}
-                                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-semibold uppercase tracking-wider bg-[#F4EBFF] text-[#7F56D9] border border-[#D6BBFB]"
+                                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-semibold uppercase tracking-wider bg-primary-soft text-primary border border-primary/25"
                                     >
                                       {member.full_name}
                                       <span
@@ -1747,7 +1859,7 @@ export function NovoAgendamentoDialog({
                                           e.stopPropagation();
                                           setSelectedProfs((prev) => prev.filter((x) => x !== id));
                                         }}
-                                        className="hover:text-red-500 transition-colors ml-1 cursor-pointer"
+                                        className="hover:text-destructive transition-colors ml-1 cursor-pointer"
                                       >
                                         <X className="h-3 w-3" />
                                       </span>
@@ -1770,7 +1882,7 @@ export function NovoAgendamentoDialog({
                                   <X className="h-4 w-4" />
                                 </span>
                               )}
-                              <span className="text-muted-foreground text-[10px]">▼</span>
+                              <span className="text-muted-foreground text-xs">▼</span>
                             </div>
                           </button>
                         </PopoverTrigger>
@@ -1827,7 +1939,7 @@ export function NovoAgendamentoDialog({
                           <SelectItem value="__none">Nenhum (Somente consulta simples)</SelectItem>
                           {Object.entries(groupedProceduresList).map(([cat, items]) => (
                             <SelectGroup key={cat}>
-                              <SelectLabel className="font-bold text-xs text-primary uppercase tracking-wider px-2 py-1.5 bg-muted/40">
+                              <SelectLabel className="font-semibold text-xs text-primary uppercase tracking-wider px-2 py-1.5 bg-muted/40">
                                 {cat}
                               </SelectLabel>
                               {items.map((p) => (
@@ -1852,17 +1964,17 @@ export function NovoAgendamentoDialog({
                         onClick={() => setAllowOtherProcedures(!allowOtherProcedures)}
                         className={cn(
                           "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                          allowOtherProcedures ? "bg-primary" : "bg-[#EAECF0]",
+                          allowOtherProcedures ? "bg-primary" : "bg-surface-2",
                         )}
                       >
                         <span
                           className={cn(
-                            "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                            "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-card shadow ring-0 transition duration-200 ease-in-out",
                             allowOtherProcedures ? "translate-x-5" : "translate-x-0",
                           )}
                         />
                       </button>
-                      <span className="text-sm font-medium text-[#344054]">
+                      <span className="text-sm font-medium text-foreground/80">
                         Permitir agendamentos de outros procedimentos nesta data
                       </span>
                     </div>
@@ -1883,7 +1995,7 @@ export function NovoAgendamentoDialog({
                           <button
                             type="button"
                             onClick={() => setQuickPatientOpen(true)}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#F5F3FF] border border-[#DDD6FE] text-[#7C3AED] hover:bg-[#EDE9FE] text-xs font-semibold transition-colors cursor-pointer"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary-soft border border-primary/25 text-primary hover:bg-primary/15 text-xs font-semibold transition-colors cursor-pointer"
                             title="Cadastrar novo paciente"
                           >
                             <UserPlus className="h-3.5 w-3.5" />
@@ -1908,17 +2020,17 @@ export function NovoAgendamentoDialog({
                               }}
                               className={cn(
                                 "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                                isNewPatient ? "bg-[#7C3AED]" : "bg-[#EAECF0]",
+                                isNewPatient ? "bg-primary" : "bg-surface-2",
                               )}
                             >
                               <span
                                 className={cn(
-                                  "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                                  "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-card shadow ring-0 transition duration-200 ease-in-out",
                                   isNewPatient ? "translate-x-4" : "translate-x-0",
                                 )}
                               />
                             </button>
-                            <span className="text-xs font-medium text-[#344054]">1ª Vez</span>
+                            <span className="text-xs font-medium text-foreground/80">1ª Vez</span>
                           </div>
                         </div>
                       </div>
@@ -1936,29 +2048,29 @@ export function NovoAgendamentoDialog({
                       {clientId && (
                         <div className="mt-2.5 p-3 rounded-xl border border-primary/20 bg-primary/5 flex flex-col gap-1.5">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                            <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                               <User className="h-3.5 w-3.5 text-primary" /> Ficha do Paciente
                             </span>
                             <div className="flex items-center gap-2">
                               <span
                                 className={cn(
-                                  "text-[10px] font-bold px-2 py-0.5 rounded-full",
+                                  "text-xs font-semibold px-2 py-0.5 rounded-full",
                                   isNewPatient
-                                    ? "bg-amber-100 text-amber-800"
-                                    : "bg-emerald-100 text-emerald-800",
+                                    ? "bg-warning/15 text-warning"
+                                    : "bg-success/15 text-success",
                                 )}
                               >
                                 {isNewPatient
                                   ? "Novo Paciente (1ª Consulta)"
                                   : "Paciente Recorrente"}
                               </span>
-                              <span className="text-[10px] font-semibold bg-white border border-border px-2 py-0.5 rounded-full text-muted-foreground">
+                              <span className="text-xs font-semibold bg-card border border-border px-2 py-0.5 rounded-full text-muted-foreground">
                                 {patientHistory.length} consulta(s) anterior(es)
                               </span>
                             </div>
                           </div>
                           {patientHistory.length > 0 && (
-                            <div className="text-[11px] text-muted-foreground mt-0.5">
+                            <div className="text-xs text-muted-foreground mt-0.5">
                               Último atendimento:{" "}
                               <span className="font-semibold text-foreground">
                                 {patientHistory[0].date.toLocaleDateString("pt-BR")} —{" "}
@@ -2038,7 +2150,7 @@ export function NovoAgendamentoDialog({
                           <button
                             type="button"
                             onClick={() => setShowNewDoctorModal(true)}
-                            className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                            className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
                           >
                             <UserPlus size={12} />+ Novo Médico
                           </button>
@@ -2070,7 +2182,7 @@ export function NovoAgendamentoDialog({
                                   <span className="flex flex-col">
                                     <span className="text-sm">{m.full_name ?? "Sem nome"}</span>
                                     {m.role && (
-                                      <span className="text-[10px] text-muted-foreground">
+                                      <span className="text-xs text-muted-foreground">
                                         {m.role}
                                       </span>
                                     )}
@@ -2135,218 +2247,8 @@ export function NovoAgendamentoDialog({
                         </div>
                       </div>
                     </div>
-
-                    {/* Cobertura de Plano de Tratamento */}
-                    {patientTreatments.length > 0 && (
-                      <div className="p-3.5 rounded-xl border border-sky-300/80 bg-sky-500/10 space-y-2.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 font-bold text-xs text-sky-800 dark:text-sky-300 uppercase tracking-wider">
-                            <TagIcon className="h-4 w-4 text-sky-600 dark:text-sky-400" />
-                            <span>Plano / Pacote Ativo do Paciente</span>
-                          </div>
-                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-sky-200/80 dark:bg-sky-950 text-sky-800 dark:text-sky-200">
-                            {patientTreatments.length === 1
-                              ? "1 plano ativo"
-                              : `${patientTreatments.length} planos ativos`}
-                          </span>
-                        </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">
-                          O paciente está sob protocolo contínuo. Escolha se esta consulta é uma etapa coberta pelo plano ou um atendimento com cobrança avulsa.
-                        </p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                          <div className="space-y-1">
-                            <FieldLabel>Enquadramento da Consulta</FieldLabel>
-                            <Select
-                              value={planCoverage}
-                              onValueChange={(v: "incluso" | "avulso" | "extra") => setPlanCoverage(v)}
-                            >
-                              <SelectTrigger className="h-10 rounded-xl bg-background font-medium border-sky-400/50">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="incluso">✨ Incluso no Plano (Sem débito avulso)</SelectItem>
-                                <SelectItem value="avulso">💵 Consulta Avulsa (Gera cobrança)</SelectItem>
-                                <SelectItem value="extra">➕ Procedimento Extra (Gera cobrança)</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          {patientTreatments.length > 1 ? (
-                            <div className="space-y-1">
-                              <FieldLabel>Vincular ao Tratamento</FieldLabel>
-                              <Select value={linkedTreatmentId} onValueChange={setLinkedTreatmentId}>
-                                <SelectTrigger className="h-10 rounded-xl bg-background font-medium border-sky-400/50">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {patientTreatments.map((t) => (
-                                    <SelectItem key={t.id} value={t.id}>
-                                      {t.title}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          ) : (
-                            <div className="space-y-1">
-                              <FieldLabel>Plano Vinculado</FieldLabel>
-                              <div className="h-10 px-3 rounded-xl bg-background/80 border border-sky-300/40 text-xs font-semibold flex items-center text-foreground truncate">
-                                {patientTreatments[0]?.title}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        {planCoverage === "incluso" && (
-                          <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2 font-medium">
-                            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                            <span>Consulta inclusa no pacote do paciente. Nenhuma cobrança financeira adicional será gerada.</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Procedimento e Valores / Sinal */}
-                    <div className="space-y-3 p-4 rounded-xl border border-border/70 bg-muted/20">
-                      <div className="flex items-center justify-between">
-                        <div className="text-xs font-bold text-foreground uppercase tracking-wider">
-                          Procedimento & Financeiro {planCoverage === "incluso" ? "(Coberto pelo Plano)" : "(Sinal / Restante)"}
-                        </div>
-                        {planCoverage === "incluso" && (
-                          <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
-                            Sem cobrança avulsa
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                          <FieldLabel>Procedimento / Serviço</FieldLabel>
-                          <Select
-                            value={selectedProcedure || "__none"}
-                            onValueChange={(v) => {
-                              const val = v === "__none" ? "" : v;
-                              setSelectedProcedure(val);
-                              if (val && planCoverage !== "incluso") {
-                                const found =
-                                  procedures.find((p) => p.id === val) ||
-                                  (allProceduresList.find((p) => p.id === val) as any);
-                                if (found && found.price) {
-                                  setProcedurePrice(found.price);
-                                }
-                              }
-                            }}
-                          >
-                            <SelectTrigger className="h-11 rounded-xl bg-background font-medium border-primary/40">
-                              <SelectValue placeholder="Selecionar procedimento na lista..." />
-                            </SelectTrigger>
-                            <SelectContent className="max-h-[320px]">
-                              <SelectItem value="__none">Nenhum (Somente agendamento)</SelectItem>
-                              {Object.entries(groupedProceduresList).map(([cat, items]) => (
-                                <SelectGroup key={cat}>
-                                  <SelectLabel className="font-bold text-xs text-primary uppercase tracking-wider px-2 py-1.5 bg-muted/40">
-                                    {cat}
-                                  </SelectLabel>
-                                  {items.map((p) => (
-                                    <SelectItem
-                                      key={p.id}
-                                      value={p.id}
-                                      className="cursor-pointer font-normal pl-4"
-                                    >
-                                      {p.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectGroup>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <FieldLabel>Valor Total (R$)</FieldLabel>
-                          {planCoverage === "incluso" ? (
-                            <Input
-                              type="text"
-                              disabled
-                              value="Incluso no Pacote (R$ 0,00)"
-                              className="h-11 rounded-xl bg-muted text-muted-foreground font-semibold cursor-not-allowed"
-                            />
-                          ) : (
-                            <FinancialNumberInput
-                              placeholder="0,00"
-                              value={procedurePrice}
-                              onChange={setProcedurePrice}
-                              className="h-11 rounded-xl bg-background font-semibold"
-                            />
-                          )}
-                        </div>
-                      </div>
-
-                      {planCoverage !== "incluso" && (
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
-                          <div className="space-y-1.5">
-                            <FieldLabel>Sinal Pago (R$)</FieldLabel>
-                            <FinancialNumberInput
-                              placeholder="0,00"
-                              value={downPayment}
-                              onChange={setDownPayment}
-                              className="h-11 rounded-xl bg-background border-emerald-500/50 text-emerald-700 font-semibold"
-                            />
-                          </div>
-
-                          <div className="space-y-1.5">
-                            <FieldLabel>Forma do Sinal</FieldLabel>
-                            <Select value={downPaymentMethod} onValueChange={setDownPaymentMethod}>
-                              <SelectTrigger className="h-11 rounded-xl bg-background">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="pix">Pix</SelectItem>
-                                <SelectItem value="cartao_credito">Cartão de Crédito</SelectItem>
-                                <SelectItem value="cartao_debito">Cartão de Débito</SelectItem>
-                                <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                                <SelectItem value="boleto">Boleto Bancário</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          <div className="space-y-1.5">
-                            <FieldLabel>Restante A Cobrar (R$)</FieldLabel>
-                            <Input
-                              type="text"
-                              readOnly
-                              value={
-                                (Number(procedurePrice) || 0) > 0 || (Number(downPayment) || 0) > 0
-                                  ? new Intl.NumberFormat("pt-BR", {
-                                      style: "currency",
-                                      currency: "BRL",
-                                    }).format(
-                                      Math.max(
-                                        0,
-                                        (Number(procedurePrice) || 0) - (Number(downPayment) || 0),
-                                      ),
-                                    )
-                                  : "R$ 0,00"
-                              }
-                              className="h-11 rounded-xl bg-amber-500/10 border-amber-500/50 text-amber-900 font-bold cursor-not-allowed"
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Observações */}
-                    <div className="space-y-1.5">
-                      <FieldLabel>Observações</FieldLabel>
-                      <DebouncedTextarea
-                        value={notes}
-                        onChange={setNotes}
-                        placeholder="Digite observações sobre este agendamento..."
-                        rows={3}
-                        className="rounded-xl resize-none"
-                      />
-                    </div>
                   </div>
                 </Section>
-
                 <Section title="Data e horário" icon={Clock}>
                   <div className="grid gap-4">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -2407,6 +2309,236 @@ export function NovoAgendamentoDialog({
                           término). Em breve.
                         </div>
                       )}
+                    </div>
+                  </div>
+                </Section>
+                <Section title="Plano, cobrança e observações" icon={FileText}>
+                  <div className="grid gap-4">
+                    {/* Cobertura de Plano de Tratamento */}
+                    {patientTreatments.length > 0 && (
+                      <div className="p-3.5 rounded-xl border border-sky-500/32 bg-sky-500/10 space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 font-semibold text-xs text-sky-800 dark:text-sky-300 uppercase tracking-wider">
+                            <TagIcon className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+                            <span>Plano / Pacote Ativo do Paciente</span>
+                          </div>
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-sky-500/20 dark:bg-sky-950 text-sky-800 dark:text-sky-200">
+                            {patientTreatments.length === 1
+                              ? "1 plano ativo"
+                              : `${patientTreatments.length} planos ativos`}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          O paciente está sob protocolo contínuo. Escolha se esta consulta é uma
+                          etapa coberta pelo plano ou um atendimento com cobrança avulsa.
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                          <div className="space-y-1">
+                            <FieldLabel>Enquadramento da Consulta</FieldLabel>
+                            <Select
+                              value={planCoverage}
+                              onValueChange={(v: "incluso" | "avulso" | "extra") =>
+                                setPlanCoverage(v)
+                              }
+                            >
+                              <SelectTrigger className="h-10 rounded-xl bg-background font-medium border-sky-400/50">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="incluso">
+                                  ✨ Incluso no Plano (Sem débito avulso)
+                                </SelectItem>
+                                <SelectItem value="avulso">
+                                  💵 Consulta Avulsa (Gera cobrança)
+                                </SelectItem>
+                                <SelectItem value="extra">
+                                  ➕ Procedimento Extra (Gera cobrança)
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          {patientTreatments.length > 1 ? (
+                            <div className="space-y-1">
+                              <FieldLabel>Vincular ao Tratamento</FieldLabel>
+                              <Select
+                                value={linkedTreatmentId}
+                                onValueChange={setLinkedTreatmentId}
+                              >
+                                <SelectTrigger className="h-10 rounded-xl bg-background font-medium border-sky-400/50">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {patientTreatments.map((t) => (
+                                    <SelectItem key={t.id} value={t.id}>
+                                      {t.title}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          ) : (
+                            <div className="space-y-1">
+                              <FieldLabel>Plano Vinculado</FieldLabel>
+                              <div className="h-10 px-3 rounded-xl bg-background/80 border border-sky-500/16 text-xs font-semibold flex items-center text-foreground truncate">
+                                {patientTreatments[0]?.title}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        {planCoverage === "incluso" && (
+                          <div className="p-2.5 rounded-lg bg-success/10 border border-success/30 text-success dark:text-emerald-300 text-xs flex items-center gap-2 font-medium">
+                            <CheckCircle2 className="h-4 w-4 shrink-0 text-success dark:text-emerald-400" />
+                            <span>
+                              Consulta inclusa no pacote do paciente. Nenhuma cobrança financeira
+                              adicional será gerada.
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Procedimento e Valores / Sinal */}
+                    <div className="space-y-3 p-4 rounded-xl border border-border/70 bg-muted/20">
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-semibold text-foreground uppercase tracking-wider">
+                          Procedimento & Financeiro{" "}
+                          {planCoverage === "incluso"
+                            ? "(Coberto pelo Plano)"
+                            : "(Sinal / Restante)"}
+                        </div>
+                        {planCoverage === "incluso" && (
+                          <span className="text-xs font-semibold text-success dark:text-emerald-400 bg-success/10 px-2 py-0.5 rounded-md">
+                            Sem cobrança avulsa
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <FieldLabel>Procedimento / Serviço</FieldLabel>
+                          <Select
+                            value={selectedProcedure || "__none"}
+                            onValueChange={(v) => {
+                              const val = v === "__none" ? "" : v;
+                              setSelectedProcedure(val);
+                              if (val && planCoverage !== "incluso") {
+                                const found =
+                                  procedures.find((p) => p.id === val) ||
+                                  (allProceduresList.find((p) => p.id === val) as any);
+                                if (found && found.price) {
+                                  setProcedurePrice(found.price);
+                                }
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="h-11 rounded-xl bg-background font-medium border-primary/40">
+                              <SelectValue placeholder="Selecionar procedimento na lista..." />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-[320px]">
+                              <SelectItem value="__none">Nenhum (Somente agendamento)</SelectItem>
+                              {Object.entries(groupedProceduresList).map(([cat, items]) => (
+                                <SelectGroup key={cat}>
+                                  <SelectLabel className="font-semibold text-xs text-primary uppercase tracking-wider px-2 py-1.5 bg-muted/40">
+                                    {cat}
+                                  </SelectLabel>
+                                  {items.map((p) => (
+                                    <SelectItem
+                                      key={p.id}
+                                      value={p.id}
+                                      className="cursor-pointer font-normal pl-4"
+                                    >
+                                      {p.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectGroup>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <FieldLabel>Valor Total (R$)</FieldLabel>
+                          {planCoverage === "incluso" ? (
+                            <Input
+                              type="text"
+                              disabled
+                              value="Incluso no Pacote (R$ 0,00)"
+                              className="h-11 rounded-xl bg-muted text-muted-foreground font-semibold cursor-not-allowed"
+                            />
+                          ) : (
+                            <FinancialNumberInput
+                              placeholder="0,00"
+                              value={procedurePrice}
+                              onChange={setProcedurePrice}
+                              className="h-11 rounded-xl bg-background font-semibold"
+                            />
+                          )}
+                        </div>
+                      </div>
+
+                      {planCoverage !== "incluso" && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+                          <div className="space-y-1.5">
+                            <FieldLabel>Sinal Pago (R$)</FieldLabel>
+                            <FinancialNumberInput
+                              placeholder="0,00"
+                              value={downPayment}
+                              onChange={setDownPayment}
+                              className="h-11 rounded-xl bg-background border-success/50 text-success font-semibold"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <FieldLabel>Forma do Sinal</FieldLabel>
+                            <Select value={downPaymentMethod} onValueChange={setDownPaymentMethod}>
+                              <SelectTrigger className="h-11 rounded-xl bg-background">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="pix">Pix</SelectItem>
+                                <SelectItem value="cartao_credito">Cartão de Crédito</SelectItem>
+                                <SelectItem value="cartao_debito">Cartão de Débito</SelectItem>
+                                <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                                <SelectItem value="boleto">Boleto Bancário</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <FieldLabel>Restante A Cobrar (R$)</FieldLabel>
+                            <Input
+                              type="text"
+                              readOnly
+                              value={
+                                (Number(procedurePrice) || 0) > 0 || (Number(downPayment) || 0) > 0
+                                  ? new Intl.NumberFormat("pt-BR", {
+                                      style: "currency",
+                                      currency: "BRL",
+                                    }).format(
+                                      Math.max(
+                                        0,
+                                        (Number(procedurePrice) || 0) - (Number(downPayment) || 0),
+                                      ),
+                                    )
+                                  : "R$ 0,00"
+                              }
+                              className="h-11 rounded-xl bg-warning/10 border-warning/50 text-warning font-semibold cursor-not-allowed"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Observações */}
+                    <div className="space-y-1.5">
+                      <FieldLabel>Observações</FieldLabel>
+                      <DebouncedTextarea
+                        value={notes}
+                        onChange={setNotes}
+                        placeholder="Digite observações sobre este agendamento..."
+                        rows={3}
+                        className="rounded-xl resize-none"
+                      />
                     </div>
                   </div>
                 </Section>
@@ -2482,11 +2614,7 @@ export function NovoAgendamentoDialog({
                       <PopoverTrigger asChild>
                         <Button
                           size="sm"
-                          className={cn(
-                            "rounded-xl h-9",
-                            GREEN.grad,
-                            "text-white hover:opacity-90",
-                          )}
+                          className={cn(" h-9", GREEN.grad, "text-white hover:opacity-90")}
                         >
                           <Plus className="h-4 w-4 mr-1" /> Adicionar participante
                         </Button>
@@ -2521,7 +2649,7 @@ export function NovoAgendamentoDialog({
                   ) : (
                     <div className="overflow-hidden rounded-xl border border-border/70">
                       <table className="w-full text-sm">
-                        <thead className="bg-muted/50 text-[11px] uppercase tracking-wider text-muted-foreground">
+                        <thead className="bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
                           <tr>
                             <th className="text-left px-4 py-2.5 font-medium">Nome</th>
                             <th className="text-left px-4 py-2.5 font-medium">Cargo</th>
@@ -2548,7 +2676,7 @@ export function NovoAgendamentoDialog({
                                   onClick={() =>
                                     setParticipants((prev) => prev.filter((x) => x.id !== p.id))
                                   }
-                                  className="p-1.5 rounded-lg hover:bg-rose-500/10 text-muted-foreground hover:text-rose-500 transition"
+                                  className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition"
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </button>
@@ -2561,7 +2689,7 @@ export function NovoAgendamentoDialog({
                   )}
                 </Section>
 
-                <Section title="Documentos" icon={Paperclip}>
+                <Section collapsible title="Documentos" icon={Paperclip}>
                   <div
                     onDragOver={(e) => {
                       e.preventDefault();
@@ -2605,9 +2733,7 @@ export function NovoAgendamentoDialog({
                           <FileText className="h-5 w-5 text-primary shrink-0" />
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium truncate">{f.name}</p>
-                            <p className="text-[11px] text-muted-foreground">
-                              {formatSize(f.size)}
-                            </p>
+                            <p className="text-xs text-muted-foreground">{formatSize(f.size)}</p>
                           </div>
                           <button
                             className="p-1.5 rounded-lg hover:bg-muted transition"
@@ -2620,7 +2746,7 @@ export function NovoAgendamentoDialog({
                               e.stopPropagation();
                               setFiles((prev) => prev.filter((x) => x.id !== f.id));
                             }}
-                            className="p-1.5 rounded-lg hover:bg-rose-500/10 hover:text-rose-500 transition text-muted-foreground"
+                            className="p-1.5 rounded-lg hover:bg-destructive/10 hover:text-destructive transition text-muted-foreground"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -2637,7 +2763,7 @@ export function NovoAgendamentoDialog({
                     <Button
                       size="sm"
                       variant="outline"
-                      className="rounded-xl h-9"
+                      className=" h-9"
                       onClick={() =>
                         setReminders((prev) => [
                           ...prev,
@@ -2658,7 +2784,7 @@ export function NovoAgendamentoDialog({
                       {reminders.map((r) => (
                         <div
                           key={r.id}
-                          className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center"
+                          className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 items-center"
                         >
                           <Select
                             value={r.when}
@@ -2702,7 +2828,7 @@ export function NovoAgendamentoDialog({
                             onClick={() =>
                               setReminders((prev) => prev.filter((x) => x.id !== r.id))
                             }
-                            className="h-10 w-10 grid place-items-center rounded-xl hover:bg-rose-500/10 hover:text-rose-500 text-muted-foreground transition"
+                            className="h-10 w-10 grid place-items-center rounded-xl hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -2719,7 +2845,7 @@ export function NovoAgendamentoDialog({
                     <Button
                       size="sm"
                       variant="outline"
-                      className="rounded-xl h-9"
+                      className=" h-9"
                       onClick={() =>
                         setChecklist((prev) => [
                           ...prev,
@@ -2740,7 +2866,7 @@ export function NovoAgendamentoDialog({
                       {checklist.map((it) => (
                         <div
                           key={it.id}
-                          className="grid grid-cols-[auto_1fr_140px_1fr_auto] gap-2 items-center"
+                          className="grid grid-cols-1 sm:grid-cols-[auto_1fr_140px_1fr_auto] gap-2 items-center"
                         >
                           <Checkbox
                             checked={it.done}
@@ -2802,7 +2928,7 @@ export function NovoAgendamentoDialog({
                             onClick={() =>
                               setChecklist((prev) => prev.filter((x) => x.id !== it.id))
                             }
-                            className="h-10 w-10 grid place-items-center rounded-xl hover:bg-rose-500/10 hover:text-rose-500 text-muted-foreground transition"
+                            className="h-10 w-10 grid place-items-center rounded-xl hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -2812,7 +2938,7 @@ export function NovoAgendamentoDialog({
                   )}
                 </Section>
 
-                <Section title="Anexos rápidos" icon={Paperclip}>
+                <Section collapsible title="Anexos rápidos" icon={Paperclip}>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                     <QuickAttach
                       icon={Camera}
@@ -2842,42 +2968,34 @@ export function NovoAgendamentoDialog({
 
           {/* Footer */}
           {type === "bloqueio" || type === "lembrete" || type === "evento" ? (
-            <div className="border-t border-border/70 px-6 md:px-8 py-4 flex items-center justify-center bg-background/95 backdrop-blur">
+            <div className="flex items-center justify-center border-t border-hairline bg-glass-strong px-4 py-3 glass-blur md:px-6">
               <Button
                 onClick={() => save.mutate(false)}
                 disabled={save.isPending}
-                className={cn(
-                  "rounded-xl h-[46px] px-8 text-white font-semibold border-0 bg-[#7C3AED] hover:bg-[#6D28D9] transition-all duration-200 hover:scale-[1.02]",
-                )}
+                size="lg"
+                className="px-8 font-semibold"
               >
                 {save.isPending ? "Salvando..." : "Salvar"}
               </Button>
             </div>
           ) : (
-            <div className="border-t border-border/70 px-6 md:px-8 py-4 flex items-center justify-end gap-2 bg-background/95 backdrop-blur">
-              <Button
-                variant="ghost"
-                onClick={() => onOpenChange(false)}
-                className="rounded-xl h-11 px-5"
-              >
+            <div className="flex items-center justify-end gap-2 border-t border-hairline bg-glass-strong px-4 py-3 glass-blur md:px-6">
+              <Button variant="ghost" onClick={() => onOpenChange(false)} className="h-11 px-5">
                 Cancelar
               </Button>
               <Button
                 variant="outline"
                 onClick={() => save.mutate(true)}
                 disabled={save.isPending}
-                className="rounded-xl h-11 px-5"
+                className="h-11 px-5"
               >
                 Salvar rascunho
               </Button>
               <Button
                 onClick={() => save.mutate(false)}
                 disabled={save.isPending}
-                className={cn(
-                  "rounded-[14px] h-[46px] px-6 text-white font-semibold border-0",
-                  GREEN.grad,
-                  "shadow-lg shadow-primary/25 transition-all duration-200 hover:shadow-xl hover:shadow-primary/40 hover:scale-[1.02]",
-                )}
+                size="lg"
+                className={cn("px-6 font-semibold", GREEN.grad, "hover:bg-primary-hover")}
               >
                 {save.isPending ? "Salvando..." : "Salvar Agendamento"}
               </Button>
@@ -3018,7 +3136,7 @@ function NewDoctorDialog({
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md rounded-2xl p-6 bg-background">
-        <DialogTitle className="text-lg font-bold text-foreground">
+        <DialogTitle className="text-lg font-semibold text-foreground">
           Cadastrar Médico / Profissional
         </DialogTitle>
         <DialogDescription className="text-xs text-muted-foreground">
@@ -3082,13 +3200,13 @@ function NewDoctorDialog({
           </div>
 
           <div className="flex justify-end gap-2 pt-2 border-t border-border/40">
-            <Button type="button" variant="outline" onClick={onClose} className="rounded-xl h-10">
+            <Button type="button" variant="outline" onClick={onClose} className=" h-10">
               Cancelar
             </Button>
             <Button
               type="submit"
               disabled={saving}
-              className="rounded-xl h-10 bg-primary text-primary-foreground font-bold"
+              className=" h-10 bg-primary text-primary-foreground font-semibold"
             >
               {saving ? "Salvando..." : "Salvar Médico"}
             </Button>
@@ -3111,7 +3229,7 @@ function Avatar({ name, url }: { name?: string | null; url?: string | null }) {
     .toUpperCase();
   if (url) return <img src={url} alt={name ?? ""} className="h-6 w-6 rounded-full object-cover" />;
   return (
-    <span className="h-6 w-6 rounded-full grid place-items-center text-[10px] font-semibold text-white bg-primary">
+    <span className="h-6 w-6 rounded-full grid place-items-center text-xs font-semibold text-white bg-primary">
       {initials}
     </span>
   );
@@ -3120,7 +3238,7 @@ function Avatar({ name, url }: { name?: string | null; url?: string | null }) {
 function Info({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
       <p className="text-sm font-medium truncate">{value}</p>
     </div>
   );
@@ -3212,9 +3330,9 @@ const ClientPicker = memo(function ClientPicker({
   return (
     <div ref={dropdownRef} className="relative w-full">
       {current ? (
-        <div className="w-full h-12 px-3.5 rounded-2xl border-2 border-primary/60 bg-violet-50/80 flex items-center justify-between transition-all">
+        <div className="w-full h-12 px-3.5 rounded-2xl border-2 border-primary/60 bg-primary-soft/80 flex items-center justify-between transition-all">
           <div className="flex items-center gap-3 min-w-0 flex-1">
-            <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground font-bold text-xs flex items-center justify-center shrink-0">
+            <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground font-semibold text-xs flex items-center justify-center shrink-0">
               {current.name
                 .split(" ")
                 .map((n) => n[0])
@@ -3223,11 +3341,11 @@ const ClientPicker = memo(function ClientPicker({
                 .toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold text-foreground truncate leading-tight">
+              <p className="text-sm font-semibold text-foreground truncate leading-tight">
                 {current.name}
               </p>
               {(current.cpf || current.phone) && (
-                <p className="text-[11px] text-muted-foreground truncate">
+                <p className="text-xs text-muted-foreground truncate">
                   {[current.cpf && `CPF: ${current.cpf}`, current.phone && `Tel: ${current.phone}`]
                     .filter(Boolean)
                     .join(" · ")}
@@ -3257,7 +3375,7 @@ const ClientPicker = memo(function ClientPicker({
                 onChange("", null);
                 setQuery("");
               }}
-              className="h-7 w-7 rounded-full hover:bg-rose-100 hover:text-rose-600 grid place-items-center text-muted-foreground transition cursor-pointer"
+              className="h-7 w-7 rounded-full hover:bg-destructive/15 hover:text-destructive grid place-items-center text-muted-foreground transition cursor-pointer"
               title="Remover paciente"
             >
               <X className="h-4 w-4" />
@@ -3309,10 +3427,10 @@ const ClientPicker = memo(function ClientPicker({
 
       {/* Autocomplete Results Dropdown */}
       {open && !current && (
-        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-[200] max-h-[300px] overflow-y-auto rounded-2xl border-2 border-primary/30 bg-background p-1.5 shadow-2xl space-y-1 animate-in fade-in-0 zoom-in-95 duration-100">
-          <div className="px-3 py-1.5 text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center justify-between border-b border-border/40 mb-1">
+        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-(--z-popover) max-h-[300px] space-y-1 overflow-y-auto rounded-2xl border border-hairline bg-glass-strong p-1.5 shadow-(--glass-shadow-lg) glass-blur-strong animate-in fade-in-0 zoom-in-95 duration-100">
+          <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between border-b border-border/40 mb-1">
             <span>Pacientes cadastrados</span>
-            <span className="text-primary font-bold">{filteredClients.length}</span>
+            <span className="text-primary font-semibold">{filteredClients.length}</span>
           </div>
 
           {filteredClients.length === 0 ? (
@@ -3337,16 +3455,16 @@ const ClientPicker = memo(function ClientPicker({
                     setOpen(false);
                     setQuery("");
                   }}
-                  className="w-full text-left p-2.5 rounded-xl flex items-center gap-3 hover:bg-violet-50/70 border border-transparent transition-colors cursor-pointer"
+                  className="w-full text-left p-2.5 rounded-xl flex items-center gap-3 hover:bg-primary-soft/70 border border-transparent transition-colors cursor-pointer"
                 >
-                  <div className="h-9 w-9 rounded-full bg-primary/15 text-primary font-bold text-xs flex items-center justify-center shrink-0">
+                  <div className="h-9 w-9 rounded-full bg-primary/15 text-primary font-semibold text-xs flex items-center justify-center shrink-0">
                     {initials}
                   </div>
 
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-foreground truncate">{c.name}</p>
                     {(c.cpf || c.phone) && (
-                      <p className="text-[11px] text-muted-foreground truncate">
+                      <p className="text-xs text-muted-foreground truncate">
                         {[c.cpf && `CPF: ${c.cpf}`, c.phone && `Tel: ${c.phone}`]
                           .filter(Boolean)
                           .join(" · ")}

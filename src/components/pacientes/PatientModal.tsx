@@ -275,39 +275,40 @@ export function PatientModal({
   };
 
   const inp =
-    "w-full h-10 px-3 rounded-lg border border-[#E5E7EB] bg-white text-[13px] text-[#111827] focus:outline-none focus:border-[#8B47FF] focus:ring-2 focus:ring-[#8B47FF]/10 transition-all";
+    "w-full h-10 px-3 rounded-lg border border-border bg-card text-sm text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all";
 
   return (
-    <Dialog open={open} onOpenChange={(openState) => !openState && onClose()}>
-      <DialogContent className="max-w-[580px] w-[calc(100vw-32px)] bg-white rounded-2xl p-6 shadow-2xl z-[9999] border border-border/80 [&>button.absolute]:hidden">
-        <DialogHeader className="flex flex-row items-center justify-between pb-3 border-b border-slate-100 space-y-0 text-left">
+    <Dialog open={open} onOpenChange={(openState) => !openState && !saving && onClose()}>
+      <DialogContent className="max-w-[580px] w-[calc(100vw-32px)] [&>button.absolute]:hidden">
+        <DialogHeader className="flex flex-row items-center justify-between pb-3 border-b border-border-soft space-y-0 text-left">
           <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-xl bg-[#F5F3FF] text-[#8B47FF] flex items-center justify-center font-bold">
+            <div className="h-9 w-9 rounded-xl bg-primary-soft text-primary flex items-center justify-center font-semibold">
               {patient?.id ? <UserCheck size={20} /> : <UserPlus size={20} />}
             </div>
             <div>
-              <DialogTitle className="text-[16px] font-bold text-[#111827]">
+              <DialogTitle className="text-base font-semibold text-foreground">
                 {patient?.id ? "Editar paciente" : "Novo paciente"}
               </DialogTitle>
-              <DialogDescription className="text-[11.5px] text-[#6B7280]">
-                Preencha os dados cadastrais completos do paciente
+              <DialogDescription className="text-xs text-muted-foreground">
+                Identificação, contato e informações complementares. Nome obrigatório.
               </DialogDescription>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-[#9CA3AF] hover:text-slate-700 cursor-pointer p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+            aria-label="Fechar cadastro"
+            className="text-muted-foreground hover:text-foreground/80 cursor-pointer p-1.5 rounded-lg hover:bg-muted transition-colors"
           >
             <X size={18} />
           </button>
         </DialogHeader>
 
         <form onSubmit={save} className="space-y-4 pt-1">
-          <div className="grid grid-cols-2 gap-3 max-h-[62vh] overflow-y-auto pr-1">
-            <div className="col-span-2">
-              <label className="text-[12px] text-[#6B7280] font-semibold block mb-1">
-                Nome completo <span className="text-rose-500">*</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[62dvh] overflow-y-auto pr-1">
+            <div className="sm:col-span-2">
+              <label className="text-xs text-muted-foreground font-semibold block mb-1">
+                Nome completo <span className="text-destructive">*</span>
               </label>
               <input
                 value={f.name}
@@ -319,7 +320,7 @@ export function PatientModal({
             </div>
 
             <div>
-              <label className="text-[12px] text-[#6B7280] font-semibold block mb-1">
+              <label className="text-xs text-muted-foreground font-semibold block mb-1">
                 Telefone / WhatsApp
               </label>
               <input
@@ -333,16 +334,16 @@ export function PatientModal({
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-[12px] text-[#6B7280] font-semibold block">CPF</label>
+                <label className="text-xs text-muted-foreground font-semibold block">CPF</label>
                 {f.cpf &&
                   f.cpf.replace(/\D/g, "").length === 11 &&
                   (isValidCPF(f.cpf) ? (
-                    <span className="text-[11px] text-emerald-600 font-medium flex items-center gap-1">
-                      <CheckCircle2 size={12} className="text-emerald-500" /> Válido
+                    <span className="text-xs text-success font-medium flex items-center gap-1">
+                      <CheckCircle2 size={12} className="text-success" /> Válido
                     </span>
                   ) : (
-                    <span className="text-[11px] text-rose-500 font-medium flex items-center gap-1">
-                      <AlertCircle size={12} className="text-rose-500" /> Inválido
+                    <span className="text-xs text-destructive font-medium flex items-center gap-1">
+                      <AlertCircle size={12} className="text-destructive" /> Inválido
                     </span>
                   ))}
               </div>
@@ -354,19 +355,21 @@ export function PatientModal({
                 className={cn(
                   inp,
                   cpfError &&
-                    "border-rose-400 focus:border-rose-500 focus:ring-rose-500/10 bg-rose-50/20",
+                    "border-destructive/50 focus:border-destructive focus:ring-destructive/10 bg-destructive/2",
                 )}
                 placeholder="000.000.000-00"
               />
               {cpfError && (
-                <p className="text-[11.5px] text-rose-500 font-medium mt-1 flex items-center gap-1">
+                <p className="text-xs text-destructive font-medium mt-1 flex items-center gap-1">
                   <AlertCircle size={12} /> {cpfError}
                 </p>
               )}
             </div>
 
-            <div className="col-span-2">
-              <label className="text-[12px] text-[#6B7280] font-semibold block mb-1">E-mail</label>
+            <div className="sm:col-span-2">
+              <label className="text-xs text-muted-foreground font-semibold block mb-1">
+                E-mail
+              </label>
               <input
                 type="email"
                 value={f.email}
@@ -377,7 +380,7 @@ export function PatientModal({
             </div>
 
             <div>
-              <label className="text-[12px] text-[#6B7280] font-semibold block mb-1">
+              <label className="text-xs text-muted-foreground font-semibold block mb-1">
                 Data de nascimento
               </label>
               <BeautifulDatePicker
@@ -388,7 +391,7 @@ export function PatientModal({
             </div>
 
             <div>
-              <label className="text-[12px] text-[#6B7280] font-semibold block mb-1">
+              <label className="text-xs text-muted-foreground font-semibold block mb-1">
                 Sexo / Gênero
               </label>
               <select value={f.gender} onChange={set("gender")} className={inp}>
@@ -399,8 +402,8 @@ export function PatientModal({
               </select>
             </div>
 
-            <div className="col-span-2">
-              <label className="text-[12px] text-[#6B7280] font-semibold block mb-1">
+            <div className="sm:col-span-2">
+              <label className="text-xs text-muted-foreground font-semibold block mb-1">
                 Convênio
               </label>
               <input
@@ -411,8 +414,8 @@ export function PatientModal({
               />
             </div>
 
-            <div className="col-span-2 pt-2 border-t border-slate-100">
-              <label className="text-[12px] text-[#6B7280] font-semibold block mb-1">
+            <div className="sm:col-span-2 pt-2 border-t border-border-soft">
+              <label className="text-xs text-muted-foreground font-semibold block mb-1">
                 Endereço (Rua e número)
               </label>
               <input
@@ -424,7 +427,9 @@ export function PatientModal({
             </div>
 
             <div>
-              <label className="text-[12px] text-[#6B7280] font-semibold block mb-1">Cidade</label>
+              <label className="text-xs text-muted-foreground font-semibold block mb-1">
+                Cidade
+              </label>
               <input
                 value={f.city}
                 onChange={set("city")}
@@ -435,7 +440,7 @@ export function PatientModal({
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[12px] text-[#6B7280] font-semibold block mb-1">UF</label>
+                <label className="text-xs text-muted-foreground font-semibold block mb-1">UF</label>
                 <input
                   value={f.state}
                   onChange={set("state")}
@@ -445,7 +450,9 @@ export function PatientModal({
                 />
               </div>
               <div>
-                <label className="text-[12px] text-[#6B7280] font-semibold block mb-1">CEP</label>
+                <label className="text-xs text-muted-foreground font-semibold block mb-1">
+                  CEP
+                </label>
                 <input
                   value={f.zip_code}
                   onChange={set("zip_code")}
@@ -455,32 +462,32 @@ export function PatientModal({
               </div>
             </div>
 
-            <div className="col-span-2">
-              <label className="text-[12px] text-[#6B7280] font-semibold block mb-1">
+            <div className="sm:col-span-2">
+              <label className="text-xs text-muted-foreground font-semibold block mb-1">
                 Observações
               </label>
               <textarea
                 value={f.notes}
                 onChange={set("notes")}
                 rows={2}
-                className="w-full px-3 py-2 rounded-lg border border-[#E5E7EB] bg-white text-[13px] text-[#111827] focus:outline-none focus:border-[#8B47FF] focus:ring-2 focus:ring-[#8B47FF]/10 resize-none transition-all"
+                className="w-full px-3 py-2 rounded-lg border border-border bg-card text-sm text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 resize-none transition-all"
                 placeholder="Anotações gerais sobre o paciente..."
               />
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+          <div className="flex justify-end gap-2 pt-3 border-t border-border-soft">
             <button
               type="button"
               onClick={onClose}
-              className="h-10 px-4 rounded-lg border border-[#E5E7EB] text-[13px] font-semibold text-[#374151] hover:bg-slate-50 cursor-pointer"
+              className="h-10 px-4 rounded-full border border-border text-sm font-semibold text-foreground/80 hover:bg-muted/60 cursor-pointer"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={saving || !f.name.trim()}
-              className="h-10 px-5 rounded-lg bg-[#8B47FF] hover:bg-[#7836ea] text-white text-[13px] font-semibold disabled:opacity-60 transition-colors cursor-pointer shadow-sm"
+              className="h-10 px-5 rounded-full bg-primary hover:bg-primary-hover text-white text-sm font-semibold disabled:opacity-60 transition-colors cursor-pointer shadow-sm"
             >
               {saving ? "Salvando…" : "Salvar informações"}
             </button>

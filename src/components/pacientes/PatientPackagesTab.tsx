@@ -16,7 +16,6 @@ import {
   DollarSign,
   Activity,
   FileText,
-  X,
   Stethoscope,
   Sparkles,
   Wallet,
@@ -31,6 +30,13 @@ import {
 } from "@/features/acompanhamentos/followup-utils";
 import { getFinancialSnapshot, refreshFinance } from "@/features/finance/finance-api";
 import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface PatientPackagesTabProps {
   patientId: string;
@@ -62,26 +68,26 @@ export type TreatmentItem = {
 const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; icon: any }> = {
   em_andamento: {
     label: "Em andamento",
-    bg: "bg-emerald-50 border-emerald-200",
-    text: "text-emerald-700",
+    bg: "bg-success/10 border-success/25",
+    text: "text-success",
     icon: Activity,
   },
   pausado: {
     label: "Pausado",
-    bg: "bg-amber-50 border-amber-200",
-    text: "text-amber-700",
+    bg: "bg-warning/10 border-warning/25",
+    text: "text-warning",
     icon: PauseCircle,
   },
   finalizado: {
     label: "Finalizado",
-    bg: "bg-blue-50 border-blue-200",
-    text: "text-blue-700",
+    bg: "bg-info/10 border-info/25",
+    text: "text-info",
     icon: CheckCircle2,
   },
   cancelado: {
     label: "Cancelado",
-    bg: "bg-rose-50 border-rose-200",
-    text: "text-rose-700",
+    bg: "bg-destructive/10 border-destructive/25",
+    text: "text-destructive",
     icon: XCircle,
   },
 };
@@ -283,7 +289,9 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
 
           if (finError) {
             console.warn("Aviso ao gerar parcelas financeiras:", finError);
-            toast.info("Plano criado. As condições financeiras podem ser conferidas na aba Financeiro.");
+            toast.info(
+              "Plano criado. As condições financeiras podem ser conferidas na aba Financeiro.",
+            );
           } else {
             // Ajustar títulos gerados: Saldo Livre e Baixa imediata de Entrada recebida
             const { data: createdTxs } = await supabase
@@ -295,7 +303,8 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
               // 1. Se for modalidade de Saldo Livre, identificar o título do saldo e marcá-lo como Saldo Livre
               if (isLivre && balance > 0) {
                 const balanceTx = createdTxs.find(
-                  (tx: any) => tx.installments?.number !== 0 && !tx.description?.includes("Entrada"),
+                  (tx: any) =>
+                    tx.installments?.number !== 0 && !tx.description?.includes("Entrada"),
                 );
                 if (balanceTx) {
                   await supabase
@@ -357,8 +366,8 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20 text-slate-500 text-sm gap-2">
-        <div className="h-4 w-4 rounded-full border-2 border-purple-600 border-t-transparent animate-spin" />
+      <div className="flex items-center justify-center py-20 text-muted-foreground text-sm gap-2">
+        <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
         <span>Carregando pacotes e tratamentos...</span>
       </div>
     );
@@ -367,20 +376,20 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
   return (
     <div className="space-y-6">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-100">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border-soft">
         <div>
-          <h2 className="text-[17px] font-bold text-slate-900 flex items-center gap-2">
-            <Package className="h-5 w-5 text-purple-600" />
+          <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+            <Package className="h-5 w-5 text-primary" />
             Pacotes & Planos de Tratamento
           </h2>
-          <p className="text-[13px] text-slate-500">
+          <p className="text-sm text-muted-foreground">
             Controle de protocolos contínuos, sessões contratadas e evolução clínica do paciente.
           </p>
         </div>
         <button
           type="button"
           onClick={handleOpenModal}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-[13px] font-bold shadow-xs hover:shadow transition-all cursor-pointer shrink-0"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-semibold shadow-xs hover:shadow transition-all cursor-pointer shrink-0"
         >
           <Plus size={16} />
           <span>Novo Pacote / Tratamento</span>
@@ -389,50 +398,50 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
 
       {/* Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-1">
+        <div className="p-4 rounded-2xl bg-card border border-border shadow-xs space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-[12px] font-semibold text-slate-500 uppercase tracking-wider">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Total de Pacotes
             </span>
-            <div className="h-8 w-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+            <div className="h-8 w-8 rounded-lg bg-primary-soft text-primary flex items-center justify-center">
               <Package size={16} />
             </div>
           </div>
-          <p className="text-2xl font-black text-slate-900">{metrics.total}</p>
-          <p className="text-[11.5px] text-slate-400">
+          <p className="text-2xl font-semibold text-foreground">{metrics.total}</p>
+          <p className="text-xs text-muted-foreground">
             Valor total: <strong>{currency(metrics.totalValueSum)}</strong>
           </p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-1">
+        <div className="p-4 rounded-2xl bg-card border border-border shadow-xs space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-[12px] font-semibold text-emerald-600 uppercase tracking-wider">
+            <span className="text-xs font-semibold text-success uppercase tracking-wider">
               Em Andamento
             </span>
-            <div className="h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <div className="h-8 w-8 rounded-lg bg-success/10 text-success flex items-center justify-center">
               <Activity size={16} />
             </div>
           </div>
-          <p className="text-2xl font-black text-emerald-600">{metrics.inProgress}</p>
-          <p className="text-[11.5px] text-slate-400">Protocolos ativos no momento</p>
+          <p className="text-2xl font-semibold text-success">{metrics.inProgress}</p>
+          <p className="text-xs text-muted-foreground">Protocolos ativos no momento</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-1">
+        <div className="p-4 rounded-2xl bg-card border border-border shadow-xs space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-[12px] font-semibold text-blue-600 uppercase tracking-wider">
+            <span className="text-xs font-semibold text-info uppercase tracking-wider">
               Concluídos
             </span>
-            <div className="h-8 w-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+            <div className="h-8 w-8 rounded-lg bg-info/10 text-info flex items-center justify-center">
               <CheckCircle2 size={16} />
             </div>
           </div>
-          <p className="text-2xl font-black text-blue-600">{metrics.completed}</p>
-          <p className="text-[11.5px] text-slate-400">Tratamentos finalizados com sucesso</p>
+          <p className="text-2xl font-semibold text-info">{metrics.completed}</p>
+          <p className="text-xs text-muted-foreground">Tratamentos finalizados com sucesso</p>
         </div>
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl w-fit overflow-x-auto">
+      <div className="flex items-center gap-1.5 p-1 bg-muted rounded-xl w-fit overflow-x-auto">
         {(
           [
             { id: "todos", label: "Todos os pacotes" },
@@ -446,10 +455,10 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
             type="button"
             onClick={() => setStatusFilter(filter.id)}
             className={cn(
-              "px-3.5 py-1.5 text-[12px] font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap",
+              "px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap",
               statusFilter === filter.id
-                ? "bg-white text-purple-700 shadow-xs"
-                : "text-slate-600 hover:text-slate-900",
+                ? "bg-card text-primary shadow-xs"
+                : "text-muted-foreground hover:text-foreground",
             )}
           >
             {filter.label}
@@ -460,10 +469,10 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
       {/* Treatments List */}
       <div className="space-y-3.5">
         {filteredTreatments.length === 0 ? (
-          <div className="text-center py-16 bg-slate-50/60 rounded-2xl border border-dashed border-slate-200">
-            <Package className="h-10 w-10 text-slate-300 mx-auto mb-2" />
-            <p className="text-[14px] font-bold text-slate-700">Nenhum pacote registrado</p>
-            <p className="text-[12.5px] text-slate-500 mt-0.5">
+          <div className="text-center py-16 bg-muted/36 rounded-2xl border border-dashed border-border">
+            <Package className="h-10 w-10 text-muted-foreground/60 mx-auto mb-2" />
+            <p className="text-sm font-semibold text-foreground/80">Nenhum pacote registrado</p>
+            <p className="text-sm text-muted-foreground mt-0.5">
               {treatments.length === 0
                 ? "Este paciente ainda não possui nenhum pacote ou acompanhamento clínico ativo."
                 : "Nenhum pacote corresponde ao filtro selecionado."}
@@ -472,7 +481,7 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
               <button
                 type="button"
                 onClick={handleOpenModal}
-                className="mt-4 inline-flex items-center gap-1.5 text-[13px] font-bold text-purple-600 hover:underline cursor-pointer"
+                className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline cursor-pointer"
               >
                 <Plus size={14} />
                 <span>Adicionar primeiro pacote</span>
@@ -487,19 +496,19 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
             return (
               <div
                 key={item.id}
-                className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs hover:border-purple-200 transition-all space-y-3"
+                className="p-5 rounded-2xl bg-card border border-border shadow-xs hover:border-primary/25 transition-all space-y-3"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-start gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 mt-0.5">
+                    <div className="h-10 w-10 rounded-xl bg-primary-soft text-primary flex items-center justify-center shrink-0 mt-0.5">
                       <Sparkles size={18} />
                     </div>
                     <div>
                       <div className="flex items-center gap-2.5 flex-wrap">
-                        <h4 className="text-[15px] font-bold text-slate-900">{item.title}</h4>
+                        <h4 className="text-[15px] font-semibold text-foreground">{item.title}</h4>
                         <span
                           className={cn(
-                            "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border",
+                            "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border",
                             st.bg,
                             st.text,
                           )}
@@ -509,15 +518,15 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-3 text-[12px] text-slate-500 mt-1 flex-wrap">
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1 flex-wrap">
                         {item.doctors?.name && (
                           <span className="flex items-center gap-1">
-                            <Stethoscope size={13} className="text-purple-600" />
+                            <Stethoscope size={13} className="text-primary" />
                             <span>Dr(a). {item.doctors.name}</span>
                           </span>
                         )}
                         <span className="flex items-center gap-1">
-                          <Calendar size={13} className="text-slate-400" />
+                          <Calendar size={13} className="text-muted-foreground" />
                           <span>
                             {formatClinicalDate(item.start_date)}
                             {item.end_date && ` → ${formatClinicalDate(item.end_date)}`}
@@ -527,22 +536,25 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                  <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border-soft">
                     <div className="text-left sm:text-right">
-                      <p className="text-[11px] font-bold text-slate-400 uppercase">Valor Contratado</p>
-                      <p className="text-[15px] font-black text-purple-700">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase">
+                        Valor Contratado
+                      </p>
+                      <p className="text-[15px] font-semibold text-primary">
                         {currency(item.total_value)}
                       </p>
                       {item.installments_count > 1 && (
-                        <p className="text-[11px] text-slate-400">
-                          {item.installments_count}x de {currency(item.total_value / item.installments_count)}
+                        <p className="text-xs text-muted-foreground">
+                          {item.installments_count}x de{" "}
+                          {currency(item.total_value / item.installments_count)}
                         </p>
                       )}
                     </div>
 
                     <Link
                       to={`/acompanhamentos/${item.id}`}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-[12.5px] font-bold transition-all cursor-pointer shrink-0"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary-soft hover:bg-primary-soft text-primary text-sm font-semibold transition-all cursor-pointer shrink-0"
                     >
                       <span>Abrir Acompanhamento</span>
                       <ChevronRight size={14} />
@@ -551,8 +563,8 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
                 </div>
 
                 {item.objective && (
-                  <div className="p-3 bg-slate-50 rounded-xl text-[12.5px] text-slate-600 border border-slate-100">
-                    <strong className="text-slate-800">Objetivo Clínico:</strong> {item.objective}
+                  <div className="p-3 bg-muted/60 rounded-xl text-sm text-muted-foreground border border-border-soft">
+                    <strong className="text-foreground">Objetivo Clínico:</strong> {item.objective}
                   </div>
                 )}
               </div>
@@ -562,442 +574,439 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
       </div>
 
       {/* Modal de Novo Pacote / Tratamento */}
-      {modalOpen && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="relative w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-200 p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2.5">
-                <div className="h-9 w-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center">
-                  <Package size={18} />
-                </div>
-                <div>
-                  <h3 className="text-[16px] font-bold text-slate-900">
-                    Novo Pacote / Plano de Tratamento
-                  </h3>
-                  <p className="text-[12px] text-slate-500">
-                    Vincular protocolo clínico ou pacote ao paciente
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                <X size={18} />
-              </button>
+      <Dialog
+        open={modalOpen}
+        onOpenChange={(open) => {
+          if (!open && !isSaving) setModalOpen(false);
+        }}
+      >
+        <DialogContent className="max-w-xl" onInteractOutside={(event) => event.preventDefault()}>
+          <DialogHeader className="flex-row items-center gap-2.5 space-y-0 border-b border-border-soft pb-3">
+            <div
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
+              aria-hidden="true"
+            >
+              <Package size={18} />
+            </div>
+            <div>
+              <DialogTitle className="text-base">Novo Pacote / Plano de Tratamento</DialogTitle>
+              <DialogDescription className="text-xs">
+                Vincular protocolo clínico ou pacote ao paciente
+              </DialogDescription>
+            </div>
+          </DialogHeader>
+
+          <form onSubmit={handleSaveTreatment} className="space-y-4">
+            {/* Paciente Vinculado */}
+            <div className="p-3 bg-muted/60 rounded-xl border border-border/80 flex items-center gap-2.5 text-foreground/80 text-sm">
+              <User size={16} className="text-primary shrink-0" />
+              <span>
+                Paciente: <strong>{patientName}</strong>
+              </span>
             </div>
 
-            <form onSubmit={handleSaveTreatment} className="space-y-4">
-              {/* Paciente Vinculado */}
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center gap-2.5 text-slate-700 text-[13px]">
-                <User size={16} className="text-purple-600 shrink-0" />
-                <span>
-                  Paciente: <strong>{patientName}</strong>
-                </span>
-              </div>
+            {/* Nome do Pacote/Tratamento */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground/80">
+                Nome do Pacote / Tratamento <span className="text-destructive">*</span>
+              </label>
+              <input
+                required
+                placeholder="Ex: Harmonização Facial (5 sessões), Protocolo Capilar, Ortodontia..."
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-border text-sm text-foreground focus:border-primary focus:ring-2 focus:ring-primary/15 outline-none transition-all"
+              />
+            </div>
 
-              {/* Nome do Pacote/Tratamento */}
+            {/* Data de Início e Profissional */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div className="space-y-1.5">
-                <label className="text-[12px] font-bold text-slate-700">
-                  Nome do Pacote / Tratamento <span className="text-rose-500">*</span>
+                <label className="text-xs font-semibold text-foreground/80">
+                  Data de Início <span className="text-destructive">*</span>
                 </label>
                 <input
+                  type="date"
                   required
-                  placeholder="Ex: Harmonização Facial (5 sessões), Protocolo Capilar, Ortodontia..."
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-[13px] text-slate-800 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/15 outline-none transition-all"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-border text-sm text-foreground focus:border-primary focus:ring-2 focus:ring-primary/15 outline-none transition-all"
                 />
               </div>
 
-              {/* Data de Início e Profissional */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div className="space-y-1.5">
-                  <label className="text-[12px] font-bold text-slate-700">
-                    Data de Início <span className="text-rose-500">*</span>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground/80">
+                  Profissional / Médico
+                </label>
+                <select
+                  value={doctorId}
+                  onChange={(e) => setDoctorId(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-border text-sm text-foreground focus:border-primary focus:ring-2 focus:ring-primary/15 outline-none transition-all"
+                >
+                  <option value="">Selecione o profissional...</option>
+                  {doctors.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      Dr(a). {d.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Vigência / Duração do Plano */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground/80">
+                Vigência do Plano de Acompanhamento
+              </label>
+              <select
+                value={protocolDays}
+                onChange={(e) => setProtocolDays(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-border text-sm text-foreground focus:border-primary focus:ring-2 focus:ring-primary/15 outline-none transition-all"
+              >
+                <option value="months_1">1 mês de calendário</option>
+                <option value="months_2">2 meses de calendário</option>
+                <option value="months_3">3 meses de calendário (ex: 16/06 a 16/09)</option>
+                <option value="months_6">6 meses de calendário</option>
+                <option value="months_12">12 meses (1 ano)</option>
+                <option value="30">30 dias corridos</option>
+                <option value="60">60 dias corridos</option>
+                <option value="90">90 dias corridos</option>
+                <option value="custom">Data de término personalizada…</option>
+              </select>
+
+              {protocolDays === "custom" && (
+                <div className="pt-2">
+                  <label className="text-xs font-semibold text-primary">
+                    Data Final Acordada <span className="text-destructive">*</span>
                   </label>
                   <input
                     type="date"
                     required
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-[13px] text-slate-800 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/15 outline-none transition-all"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    className="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-primary/35 bg-primary-soft/40 text-sm text-foreground focus:border-primary focus:ring-2 focus:ring-primary/15 outline-none transition-all"
                   />
                 </div>
+              )}
+            </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-[12px] font-bold text-slate-700">
-                    Profissional / Médico
-                  </label>
-                  <select
-                    value={doctorId}
-                    onChange={(e) => setDoctorId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-[13px] text-slate-800 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/15 outline-none transition-all"
-                  >
-                    <option value="">Selecione o profissional...</option>
-                    {doctors.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        Dr(a). {d.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Vigência / Duração do Plano */}
-              <div className="space-y-1.5">
-                <label className="text-[12px] font-bold text-slate-700">
-                  Vigência do Plano de Acompanhamento
-                </label>
-                <select
-                  value={protocolDays}
-                  onChange={(e) => setProtocolDays(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-[13px] text-slate-800 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/15 outline-none transition-all"
-                >
-                  <option value="months_1">1 mês de calendário</option>
-                  <option value="months_2">2 meses de calendário</option>
-                  <option value="months_3">3 meses de calendário (ex: 16/06 a 16/09)</option>
-                  <option value="months_6">6 meses de calendário</option>
-                  <option value="months_12">12 meses (1 ano)</option>
-                  <option value="30">30 dias corridos</option>
-                  <option value="60">60 dias corridos</option>
-                  <option value="90">90 dias corridos</option>
-                  <option value="custom">Data de término personalizada…</option>
-                </select>
-
-                {protocolDays === "custom" && (
-                  <div className="pt-2">
-                    <label className="text-[12px] font-bold text-purple-700">
-                      Data Final Acordada <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      value={customEndDate}
-                      onChange={(e) => setCustomEndDate(e.target.value)}
-                      className="w-full mt-1 px-3.5 py-2.5 rounded-xl border border-purple-300 bg-purple-50/40 text-[13px] text-slate-800 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/15 outline-none transition-all"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Condições Financeiras: Valores, Entrada, Parcelas e Forma */}
-              <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11.5px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                    <Wallet size={14} className="text-purple-600" />
-                    Condições Financeiras do Contrato
-                  </span>
-                  {(() => {
-                    const v = parseFloat(totalValue.replace(/\./g, "").replace(",", ".")) || 0;
-                    const d = parseFloat(downPayment.replace(/\./g, "").replace(",", ".")) || 0;
-                    const b = Math.max(0, v - d);
-                    return v > 0 ? (
-                      <span className="text-[12px] font-bold text-slate-600">
-                        Saldo a receber:{" "}
-                        <strong className={b > 0 ? "text-purple-700" : "text-emerald-600"}>
-                          {currency(b)}
-                        </strong>
-                      </span>
-                    ) : null;
-                  })()}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                  <div className="space-y-1">
-                    <label className="text-[12px] font-bold text-slate-700">
-                      Valor Total Contratado (R$) <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      placeholder="0,00"
-                      value={totalValue}
-                      onChange={(e) => setTotalValue(e.target.value)}
-                      className="w-full px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-[13px] text-slate-800 font-semibold focus:border-purple-600 focus:ring-2 focus:ring-purple-600/15 outline-none transition-all"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[12px] font-bold text-slate-700">
-                      Entrada / Pagamento Inicial (R$)
-                    </label>
-                    <input
-                      placeholder="0,00 (opcional)"
-                      value={downPayment}
-                      onChange={(e) => setDownPayment(e.target.value)}
-                      className="w-full px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-[13px] text-slate-800 font-semibold focus:border-purple-600 focus:ring-2 focus:ring-purple-600/15 outline-none transition-all"
-                    />
-                  </div>
-                </div>
-
-                {/* Bloco de Entrada detalhada quando informada */}
-                {(() => {
-                  const d = parseFloat(downPayment.replace(/\./g, "").replace(",", ".")) || 0;
-                  if (d <= 0) return null;
-
-                  return (
-                    <div className="p-3.5 bg-white rounded-xl border border-purple-100 shadow-xs space-y-3">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <label className="text-[12px] font-bold text-purple-900">
-                          Situação da Entrada ({currency(d)})
-                        </label>
-                        <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
-                          <button
-                            type="button"
-                            onClick={() => setDownStatus("received_now")}
-                            className={cn(
-                              "px-2.5 py-1 text-[11.5px] font-bold rounded-md transition-all cursor-pointer",
-                              downStatus === "received_now"
-                                ? "bg-emerald-600 text-white shadow-xs"
-                                : "text-slate-600 hover:text-slate-900",
-                            )}
-                          >
-                            ✓ Pagamento recebido agora
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDownStatus("pending")}
-                            className={cn(
-                              "px-2.5 py-1 text-[11.5px] font-bold rounded-md transition-all cursor-pointer",
-                              downStatus === "pending"
-                                ? "bg-amber-600 text-white shadow-xs"
-                                : "text-slate-600 hover:text-slate-900",
-                            )}
-                          >
-                            ⏳ Entrada prevista
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <label className="text-[11.5px] font-bold text-slate-600">
-                            Forma de Pagamento da Entrada
-                          </label>
-                          <select
-                            value={downMethod}
-                            onChange={(e) => setDownMethod(e.target.value)}
-                            className="w-full px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-[12.5px] text-slate-800 outline-none focus:border-purple-600"
-                          >
-                            <option value="pix">Pix</option>
-                            <option value="dinheiro">Dinheiro</option>
-                            <option value="cartao_credito">Cartão de Crédito</option>
-                            <option value="cartao_debito">Cartão de Débito</option>
-                            <option value="transferencia">Transferência Bancária</option>
-                            <option value="boleto">Boleto</option>
-                          </select>
-                        </div>
-
-                        {downStatus === "received_now" ? (
-                          <div className="space-y-1">
-                            <label className="text-[11.5px] font-bold text-slate-600">
-                              Conta de Destino da Baixa
-                            </label>
-                            <select
-                              value={downAccountId}
-                              onChange={(e) => setDownAccountId(e.target.value)}
-                              className="w-full px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-[12.5px] text-slate-800 outline-none focus:border-purple-600"
-                            >
-                              {(financeData?.accounts || [])
-                                .filter((a) => a.active)
-                                .map((acc) => (
-                                  <option key={acc.id} value={acc.id}>
-                                    {acc.name} ({acc.bank_name || "Caixa"})
-                                  </option>
-                                ))}
-                            </select>
-                          </div>
-                        ) : (
-                          <div className="space-y-1">
-                            <label className="text-[11.5px] font-bold text-slate-600">
-                              Previsão de Recebimento
-                            </label>
-                            <p className="text-[12px] text-slate-500 py-1.5">
-                              Ficará pendente com vencimento na data inicial ({formatClinicalDate(startDate)}).
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Modalidade do Saldo Restante */}
+            {/* Condições Financeiras: Valores, Entrada, Parcelas e Forma */}
+            <div className="p-4 bg-muted/48 rounded-2xl border border-border/80 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-foreground/80 uppercase tracking-wider flex items-center gap-1.5">
+                  <Wallet size={14} className="text-primary" />
+                  Condições Financeiras do Contrato
+                </span>
                 {(() => {
                   const v = parseFloat(totalValue.replace(/\./g, "").replace(",", ".")) || 0;
                   const d = parseFloat(downPayment.replace(/\./g, "").replace(",", ".")) || 0;
                   const b = Math.max(0, v - d);
-
-                  if (v <= 0) return null;
-                  if (b <= 0) {
-                    return (
-                      <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-800 text-[12.5px]">
-                        ✓ <strong>Plano 100% coberto pela entrada.</strong> O valor total será baixado/quitado na contratação.
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div className="space-y-2.5 pt-1">
-                      <label className="text-[12px] font-bold text-slate-700 block">
-                        Como será pago o saldo restante ({currency(b)})?
-                      </label>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {/* Opção B: Pagamentos livres */}
-                        <div
-                          onClick={() => setRemainingModality("livre")}
-                          className={cn(
-                            "p-3 rounded-xl border-2 cursor-pointer transition-all space-y-1.5",
-                            remainingModality === "livre"
-                              ? "border-purple-600 bg-purple-50/50 shadow-xs"
-                              : "border-slate-200 bg-white hover:border-slate-300",
-                          )}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-[12.5px] font-bold text-slate-900 flex items-center gap-1.5">
-                              Pagamentos livres
-                            </span>
-                            <span
-                              className={cn(
-                                "h-4 w-4 rounded-full border-2 flex items-center justify-center text-[10px]",
-                                remainingModality === "livre"
-                                  ? "border-purple-600 bg-purple-600 text-white"
-                                  : "border-slate-300",
-                              )}
-                            >
-                              {remainingModality === "livre" && "✓"}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-500 leading-tight">
-                            Sem datas fixas. Paciente paga aos poucos nas visitas. Não gera cobranças
-                            vencidas nem parcelas artificiais.
-                          </p>
-                        </div>
-
-                        {/* Opção A: Parcelado com vencimentos */}
-                        <div
-                          onClick={() => setRemainingModality("parcelado")}
-                          className={cn(
-                            "p-3 rounded-xl border-2 cursor-pointer transition-all space-y-1.5",
-                            remainingModality === "parcelado"
-                              ? "border-purple-600 bg-purple-50/50 shadow-xs"
-                              : "border-slate-200 bg-white hover:border-slate-300",
-                          )}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-[12.5px] font-bold text-slate-900 flex items-center gap-1.5">
-                              Parcelas com vencimento
-                            </span>
-                            <span
-                              className={cn(
-                                "h-4 w-4 rounded-full border-2 flex items-center justify-center text-[10px]",
-                                remainingModality === "parcelado"
-                                  ? "border-purple-600 bg-purple-600 text-white"
-                                  : "border-slate-300",
-                              )}
-                            >
-                              {remainingModality === "parcelado" && "✓"}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-500 leading-tight">
-                            Datas e valores pré-definidos no calendário financeiro da clínica.
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Campos específicos da modalidade Parcelada */}
-                      {remainingModality === "parcelado" && (
-                        <div className="p-3 bg-white rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          <div className="space-y-1">
-                            <label className="text-[11.5px] font-bold text-slate-600">
-                              Nº de Parcelas
-                            </label>
-                            <select
-                              value={installmentsCount}
-                              onChange={(e) => setInstallmentsCount(e.target.value)}
-                              className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-[12.5px] text-slate-800 outline-none focus:border-purple-600"
-                            >
-                              {[1, 2, 3, 4, 5, 6, 10, 12].map((n) => (
-                                <option key={n} value={n}>
-                                  {n}x de {currency(b / n)}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-[11.5px] font-bold text-slate-600">
-                              1º Vencimento
-                            </label>
-                            <input
-                              type="date"
-                              required
-                              value={firstDueDate}
-                              onChange={(e) => setFirstDueDate(e.target.value)}
-                              className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-[12.5px] text-slate-800 outline-none focus:border-purple-600"
-                            />
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-[11.5px] font-bold text-slate-600">
-                              Forma Prevista
-                            </label>
-                            <select
-                              value={remainingMethod}
-                              onChange={(e) => setRemainingMethod(e.target.value)}
-                              className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-[12.5px] text-slate-800 outline-none focus:border-purple-600"
-                            >
-                              <option value="pix">Pix</option>
-                              <option value="cartao_credito">Cartão de Crédito</option>
-                              <option value="cartao_debito">Cartão de Débito</option>
-                              <option value="boleto">Boleto Bancário</option>
-                              <option value="dinheiro">Dinheiro</option>
-                              <option value="transferencia">Transferência</option>
-                            </select>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
+                  return v > 0 ? (
+                    <span className="text-xs font-semibold text-muted-foreground">
+                      Saldo a receber:{" "}
+                      <strong className={b > 0 ? "text-primary" : "text-success"}>
+                        {currency(b)}
+                      </strong>
+                    </span>
+                  ) : null;
                 })()}
               </div>
 
-              {/* Objetivo Clínico */}
-              <div className="space-y-1.5">
-                <label className="text-[12px] font-bold text-slate-700">
-                  Objetivo Clínico / Procedimento
-                </label>
-                <input
-                  placeholder="Ex: Melhora do contorno facial, redução de rugas estáticas..."
-                  value={objective}
-                  onChange={(e) => setObjective(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-[13px] text-slate-800 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/15 outline-none transition-all"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground/80">
+                    Valor Total Contratado (R$) <span className="text-destructive">*</span>
+                  </label>
+                  <input
+                    placeholder="0,00"
+                    value={totalValue}
+                    onChange={(e) => setTotalValue(e.target.value)}
+                    className="w-full px-3.5 py-2 rounded-xl bg-card border border-border text-sm text-foreground font-semibold focus:border-primary focus:ring-2 focus:ring-primary/15 outline-none transition-all"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground/80">
+                    Entrada / Pagamento Inicial (R$)
+                  </label>
+                  <input
+                    placeholder="0,00 (opcional)"
+                    value={downPayment}
+                    onChange={(e) => setDownPayment(e.target.value)}
+                    className="w-full px-3.5 py-2 rounded-xl bg-card border border-border text-sm text-foreground font-semibold focus:border-primary focus:ring-2 focus:ring-primary/15 outline-none transition-all"
+                  />
+                </div>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setModalOpen(false)}
-                  disabled={isSaving}
-                  className="px-4 py-2 rounded-xl text-[13px] font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-[13px] font-bold shadow-sm transition-all cursor-pointer"
-                >
-                  <Plus size={14} />
-                  <span>{isSaving ? "Salvando..." : "Criar Pacote"}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+              {/* Bloco de Entrada detalhada quando informada */}
+              {(() => {
+                const d = parseFloat(downPayment.replace(/\./g, "").replace(",", ".")) || 0;
+                if (d <= 0) return null;
+
+                return (
+                  <div className="p-3.5 bg-card rounded-xl border border-primary/15 shadow-xs space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <label className="text-xs font-semibold text-primary-hover">
+                        Situação da Entrada ({currency(d)})
+                      </label>
+                      <div className="flex items-center gap-1 p-1 bg-muted rounded-lg">
+                        <button
+                          type="button"
+                          onClick={() => setDownStatus("received_now")}
+                          className={cn(
+                            "px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
+                            downStatus === "received_now"
+                              ? "bg-success text-white shadow-xs"
+                              : "text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          ✓ Pagamento recebido agora
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDownStatus("pending")}
+                          className={cn(
+                            "px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
+                            downStatus === "pending"
+                              ? "bg-warning text-white shadow-xs"
+                              : "text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          ⏳ Entrada prevista
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-muted-foreground">
+                          Forma de Pagamento da Entrada
+                        </label>
+                        <select
+                          value={downMethod}
+                          onChange={(e) => setDownMethod(e.target.value)}
+                          className="w-full px-3 py-1.5 rounded-lg bg-muted/60 border border-border text-sm text-foreground outline-none focus:border-primary"
+                        >
+                          <option value="pix">Pix</option>
+                          <option value="dinheiro">Dinheiro</option>
+                          <option value="cartao_credito">Cartão de Crédito</option>
+                          <option value="cartao_debito">Cartão de Débito</option>
+                          <option value="transferencia">Transferência Bancária</option>
+                          <option value="boleto">Boleto</option>
+                        </select>
+                      </div>
+
+                      {downStatus === "received_now" ? (
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-muted-foreground">
+                            Conta de Destino da Baixa
+                          </label>
+                          <select
+                            value={downAccountId}
+                            onChange={(e) => setDownAccountId(e.target.value)}
+                            className="w-full px-3 py-1.5 rounded-lg bg-muted/60 border border-border text-sm text-foreground outline-none focus:border-primary"
+                          >
+                            {(financeData?.accounts || [])
+                              .filter((a) => a.active)
+                              .map((acc) => (
+                                <option key={acc.id} value={acc.id}>
+                                  {acc.name} ({acc.bank_name || "Caixa"})
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-muted-foreground">
+                            Previsão de Recebimento
+                          </label>
+                          <p className="text-xs text-muted-foreground py-1.5">
+                            Ficará pendente com vencimento na data inicial (
+                            {formatClinicalDate(startDate)}).
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Modalidade do Saldo Restante */}
+              {(() => {
+                const v = parseFloat(totalValue.replace(/\./g, "").replace(",", ".")) || 0;
+                const d = parseFloat(downPayment.replace(/\./g, "").replace(",", ".")) || 0;
+                const b = Math.max(0, v - d);
+
+                if (v <= 0) return null;
+                if (b <= 0) {
+                  return (
+                    <div className="p-3 bg-success/10 rounded-xl border border-success/25 text-success text-sm">
+                      ✓ <strong>Plano 100% coberto pela entrada.</strong> O valor total será
+                      baixado/quitado na contratação.
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-2.5 pt-1">
+                    <label className="text-xs font-semibold text-foreground/80 block">
+                      Como será pago o saldo restante ({currency(b)})?
+                    </label>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Opção B: Pagamentos livres */}
+                      <div
+                        onClick={() => setRemainingModality("livre")}
+                        className={cn(
+                          "p-3 rounded-xl border-2 cursor-pointer transition-all space-y-1.5",
+                          remainingModality === "livre"
+                            ? "border-primary bg-primary-soft/50 shadow-xs"
+                            : "border-border bg-card hover:border-input",
+                        )}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                            Pagamentos livres
+                          </span>
+                          <span
+                            className={cn(
+                              "h-4 w-4 rounded-full border-2 flex items-center justify-center text-xs",
+                              remainingModality === "livre"
+                                ? "border-primary bg-primary text-white"
+                                : "border-input",
+                            )}
+                          >
+                            {remainingModality === "livre" && "✓"}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-tight">
+                          Sem datas fixas. Paciente paga aos poucos nas visitas. Não gera cobranças
+                          vencidas nem parcelas artificiais.
+                        </p>
+                      </div>
+
+                      {/* Opção A: Parcelado com vencimentos */}
+                      <div
+                        onClick={() => setRemainingModality("parcelado")}
+                        className={cn(
+                          "p-3 rounded-xl border-2 cursor-pointer transition-all space-y-1.5",
+                          remainingModality === "parcelado"
+                            ? "border-primary bg-primary-soft/50 shadow-xs"
+                            : "border-border bg-card hover:border-input",
+                        )}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                            Parcelas com vencimento
+                          </span>
+                          <span
+                            className={cn(
+                              "h-4 w-4 rounded-full border-2 flex items-center justify-center text-xs",
+                              remainingModality === "parcelado"
+                                ? "border-primary bg-primary text-white"
+                                : "border-input",
+                            )}
+                          >
+                            {remainingModality === "parcelado" && "✓"}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-tight">
+                          Datas e valores pré-definidos no calendário financeiro da clínica.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Campos específicos da modalidade Parcelada */}
+                    {remainingModality === "parcelado" && (
+                      <div className="p-3 bg-card rounded-xl border border-border grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-muted-foreground">
+                            Nº de Parcelas
+                          </label>
+                          <select
+                            value={installmentsCount}
+                            onChange={(e) => setInstallmentsCount(e.target.value)}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-muted/60 border border-border text-sm text-foreground outline-none focus:border-primary"
+                          >
+                            {[1, 2, 3, 4, 5, 6, 10, 12].map((n) => (
+                              <option key={n} value={n}>
+                                {n}x de {currency(b / n)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-muted-foreground">
+                            1º Vencimento
+                          </label>
+                          <input
+                            type="date"
+                            required
+                            value={firstDueDate}
+                            onChange={(e) => setFirstDueDate(e.target.value)}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-muted/60 border border-border text-sm text-foreground outline-none focus:border-primary"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-muted-foreground">
+                            Forma Prevista
+                          </label>
+                          <select
+                            value={remainingMethod}
+                            onChange={(e) => setRemainingMethod(e.target.value)}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-muted/60 border border-border text-sm text-foreground outline-none focus:border-primary"
+                          >
+                            <option value="pix">Pix</option>
+                            <option value="cartao_credito">Cartão de Crédito</option>
+                            <option value="cartao_debito">Cartão de Débito</option>
+                            <option value="boleto">Boleto Bancário</option>
+                            <option value="dinheiro">Dinheiro</option>
+                            <option value="transferencia">Transferência</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Objetivo Clínico */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground/80">
+                Objetivo Clínico / Procedimento
+              </label>
+              <input
+                placeholder="Ex: Melhora do contorno facial, redução de rugas estáticas..."
+                value={objective}
+                onChange={(e) => setObjective(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-border text-sm text-foreground focus:border-primary focus:ring-2 focus:ring-primary/15 outline-none transition-all"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-border-soft">
+              <button
+                type="button"
+                onClick={() => setModalOpen(false)}
+                disabled={isSaving}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-primary hover:bg-primary-hover disabled:opacity-50 text-white text-sm font-semibold shadow-sm transition-all cursor-pointer"
+              >
+                <Plus size={14} />
+                <span>{isSaving ? "Salvando..." : "Criar Pacote"}</span>
+              </button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

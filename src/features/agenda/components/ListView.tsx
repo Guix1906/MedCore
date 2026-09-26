@@ -44,7 +44,7 @@ export function ListView({
                 <div className="flex items-center gap-2 flex-wrap">
                   <KindIcon kind={a.kind} className={cn("h-3.5 w-3.5", c.text)} />
                   <p className="font-medium text-foreground truncate">{a.title}</p>
-                  <span className={cn("text-[10px] px-1.5 py-0.5 rounded border", c.chip)}>
+                  <span className={cn("text-xs px-1.5 py-0.5 rounded border", c.chip)}>
                     {c.label}
                   </span>
                 </div>

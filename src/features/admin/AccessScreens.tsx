@@ -55,10 +55,10 @@ function InvitationCard({ invitation }: { invitation: PendingInvitation }) {
   };
 
   return (
-    <li className="flex flex-col gap-3 rounded-xl border border-violet-200 bg-violet-50/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+    <li className="flex flex-col gap-3 rounded-xl border border-primary/25 bg-primary-soft/60 p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
-        <p className="text-sm font-semibold text-slate-900">{invitation.companyName}</p>
-        <p className="text-xs text-slate-600">
+        <p className="text-sm font-semibold text-foreground">{invitation.companyName}</p>
+        <p className="text-xs text-muted-foreground">
           Perfil {invitation.roleName} · convite de {invitation.invitedByName}
           {invitation.expiresAt ? ` · válido até ${formatDate(invitation.expiresAt)}` : ""}
         </p>
@@ -80,9 +80,9 @@ export function PendingInvitationsBanner({ invitations }: { invitations: Pending
   return (
     <section
       aria-label="Convites pendentes"
-      className="mx-4 mt-4 rounded-2xl border border-violet-200 bg-white p-4 shadow-sm md:mx-6"
+      className="mx-4 mt-4 rounded-2xl border border-primary/25 bg-card p-4 shadow-sm md:mx-6"
     >
-      <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-violet-700">
+      <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-primary">
         <MailOpen size={16} aria-hidden="true" />
         Você tem{" "}
         {invitations.length === 1
@@ -163,19 +163,19 @@ export function BlockedAccessScreen({
 
   return (
     <div className="flex min-h-[calc(100vh-64px)] items-start justify-center p-4 md:items-center md:p-8">
-      <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-50 text-violet-600">
+      <div className="w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-soft text-primary">
           <Icon size={24} aria-hidden="true" />
         </div>
-        <h1 className="text-lg font-semibold text-slate-900">{copy.title}</h1>
-        <p className="mt-1 text-sm text-slate-600">{copy.description}</p>
+        <h1 className="text-lg font-semibold text-foreground">{copy.title}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">{copy.description}</p>
         {access.companyName && access.status !== "none" && (
-          <p className="mt-2 text-xs text-slate-500">Clínica: {access.companyName}</p>
+          <p className="mt-2 text-xs text-muted-foreground">Clínica: {access.companyName}</p>
         )}
 
         {access.invitations.length > 0 && (
           <div className="mt-5">
-            <p className="mb-2 text-sm font-semibold text-slate-800">Convites para você</p>
+            <p className="mb-2 text-sm font-semibold text-foreground">Convites para você</p>
             <ul className="space-y-2">
               {access.invitations.map((invitation) => (
                 <InvitationCard key={invitation.id} invitation={invitation} />
@@ -186,7 +186,7 @@ export function BlockedAccessScreen({
 
         {otherCompanies.length > 0 && (
           <div className="mt-5">
-            <p className="mb-2 text-sm font-semibold text-slate-800">Você também tem acesso a</p>
+            <p className="mb-2 text-sm font-semibold text-foreground">Você também tem acesso a</p>
             <div className="flex flex-wrap gap-2">
               {otherCompanies.map((company) => (
                 <Button
@@ -228,13 +228,13 @@ export function NoAccessScreen({
     <div className="flex min-h-[calc(100vh-64px)] items-start justify-center p-4 md:items-center md:p-8">
       <div
         role="alert"
-        className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm"
+        className="w-full max-w-md rounded-2xl border border-border bg-card p-6 text-center shadow-sm"
       >
-        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-warning/10 text-warning">
           <ShieldAlert size={24} aria-hidden="true" />
         </div>
-        <h1 className="text-lg font-semibold text-slate-900">Sem acesso a {moduleLabel}</h1>
-        <p className="mt-1 text-sm text-slate-600">
+        <h1 className="text-lg font-semibold text-foreground">Sem acesso a {moduleLabel}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Seu perfil não inclui este módulo. Se precisar dele, peça a liberação ao administrador da
           clínica.
         </p>
@@ -243,7 +243,7 @@ export function NoAccessScreen({
             <Link to={fallbackPath}>Ir para o início</Link>
           </Button>
         ) : (
-          <p className="mt-4 text-xs text-slate-500">
+          <p className="mt-4 text-xs text-muted-foreground">
             Nenhum módulo está liberado para o seu perfil no momento.
           </p>
         )}

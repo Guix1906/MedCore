@@ -27,15 +27,13 @@ export const PillSelect = memo(function PillSelect({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button className="h-9 px-3.5 rounded-full border border-border bg-card hover:bg-accent hover:border-border text-sm text-foreground inline-flex items-center gap-1.5 transition-colors">
-          <span className="text-muted-foreground text-[11px] uppercase tracking-wider">
-            {label}:
-          </span>{" "}
+          <span className="text-muted-foreground text-xs uppercase tracking-wider">{label}:</span>{" "}
           {current}
           <ChevronRight className="h-3 w-3 rotate-90 text-muted-foreground" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="bg-muted border-border text-foreground">
-        <DropdownMenuLabel className="text-[11px] uppercase tracking-wider text-muted-foreground">
+        <DropdownMenuLabel className="text-xs uppercase tracking-wider text-muted-foreground">
           {label}
         </DropdownMenuLabel>
         <DropdownMenuSeparator className="bg-border" />

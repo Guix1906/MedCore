@@ -5,8 +5,8 @@ import AppShell from "@/components/AppShell";
 export const Route = createFileRoute("/_authenticated/prontuario")({
   head: () => ({
     meta: [
-      { title: "Prontuário • ClinicMed" },
-      { name: "description", content: "Prontuário eletrônico ClinicMed." },
+      { title: "Prontuário • MedCore" },
+      { name: "description", content: "Prontuário eletrônico MedCore." },
     ],
   }),
   validateSearch: (search: Record<string, unknown>) => ({

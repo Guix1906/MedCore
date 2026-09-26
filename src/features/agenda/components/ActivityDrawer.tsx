@@ -42,7 +42,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { KIND_COLOR, type Activity } from "@/components/agenda/agenda-types";
 import { pad2 } from "@/lib/date-utils";
 import { AddToGoogleCalendarButton } from "./AddToGoogleCalendarButton";
@@ -89,9 +90,9 @@ function initialsOf(name: string | null | undefined) {
 
 function Row({ icon: Icon, children }: { icon: React.ElementType; children: React.ReactNode }) {
   return (
-    <div className="px-5 py-3 flex items-start gap-3 border-b border-[#F1F1F4]">
-      <Icon className="h-4 w-4 mt-0.5 text-[#94A3B8] shrink-0" />
-      <div className="min-w-0 flex-1 text-[13px] text-[#0F172A]">{children}</div>
+    <div className="px-5 py-3 flex items-start gap-3 border-b border-border-soft">
+      <Icon className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+      <div className="min-w-0 flex-1 text-sm text-foreground">{children}</div>
     </div>
   );
 }
@@ -107,7 +108,7 @@ function StatusIconBadge({ kind, color }: { kind: "clock" | "x" | "check"; color
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="w-4 h-4 text-slate-700"
+          className="w-4 h-4 text-foreground/80"
         >
           <circle cx="12" cy="12" r="9" />
           <polyline points="12 7 12 12 15 15" />
@@ -121,7 +122,7 @@ function StatusIconBadge({ kind, color }: { kind: "clock" | "x" | "check"; color
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="w-4 h-4 text-slate-700"
+          className="w-4 h-4 text-foreground/80"
         >
           <circle cx="12" cy="12" r="9" />
           <path d="M9.5 9.5l5 5m0-5l-5 5" />
@@ -135,7 +136,7 @@ function StatusIconBadge({ kind, color }: { kind: "clock" | "x" | "check"; color
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="w-4 h-4 text-slate-700"
+          className="w-4 h-4 text-foreground/80"
         >
           <circle cx="12" cy="12" r="9" />
           <path d="M8.5 12l2.5 2.5 4.5-4.5" />
@@ -237,27 +238,27 @@ function StatusSelectDropdown({
         type="button"
         onClick={() => setOpen(!open)}
         className={cn(
-          "w-full h-11 px-3 bg-white rounded-xl flex items-center justify-between transition-all shadow-2xs cursor-pointer select-none",
+          "w-full h-11 px-3 bg-card rounded-xl flex items-center justify-between transition-all shadow-2xs cursor-pointer select-none",
           open
-            ? "border-2 border-[#7C3AED] ring-3 ring-[#7C3AED]/20"
-            : "border border-slate-200 hover:border-slate-300",
+            ? "border-2 border-primary ring-3 ring-primary/20"
+            : "border border-border hover:border-input",
         )}
       >
         <div className="flex items-center gap-2 min-w-0">
           <StatusIconBadge kind={selectedOption.kind} color={selectedOption.color} />
-          <span className="text-[13px] font-medium text-slate-800 truncate">
+          <span className="text-sm font-medium text-foreground truncate">
             {selectedOption.label}
           </span>
         </div>
         {open ? (
-          <ChevronUp className="h-4 w-4 text-slate-500 shrink-0" />
+          <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" />
         ) : (
-          <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" />
+          <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
         )}
       </button>
 
       {open && (
-        <div className="absolute top-[calc(100%+4px)] left-0 right-0 z-50 bg-white border-2 border-[#7C3AED] rounded-2xl shadow-2xl py-1 overflow-hidden animate-in fade-in-0 zoom-in-95 duration-100 min-w-[200px]">
+        <div className="absolute top-[calc(100%+4px)] left-0 right-0 z-50 min-w-[200px] overflow-hidden rounded-xl border border-hairline bg-glass-strong py-1 shadow-(--glass-shadow-lg) glass-blur-strong animate-in fade-in-0 zoom-in-95 duration-100">
           <div className="max-h-[260px] overflow-y-auto custom-scrollbar">
             {STATUS_OPTIONS.map((opt) => {
               const isSelected = opt.value === value;
@@ -272,13 +273,13 @@ function StatusSelectDropdown({
                   className={cn(
                     "w-full px-3.5 py-2.5 flex items-center justify-between text-left transition-all cursor-pointer select-none",
                     isSelected
-                      ? "bg-[#8B5CF6] text-white font-bold"
-                      : "hover:bg-slate-50 text-slate-700 font-medium",
+                      ? "bg-primary text-primary-foreground font-semibold"
+                      : "hover:bg-muted/60 text-foreground/80 font-medium",
                   )}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     <StatusIconBadge kind={opt.kind} color={isSelected ? "#FFFFFF" : opt.color} />
-                    <span className="text-[13px] truncate">{opt.label}</span>
+                    <span className="text-sm truncate">{opt.label}</span>
                   </div>
                   {isSelected && <Check className="h-4 w-4 text-white shrink-0" />}
                 </button>
@@ -317,69 +318,68 @@ function ColorPickerDropdown({
   }, [color]);
 
   return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between hover:border-slate-300 transition shadow-2xs cursor-pointer"
-      >
-        <span
-          className="h-5 w-5 rounded-md border border-slate-200/80 shadow-2xs shrink-0"
-          style={{ backgroundColor: safeHex }}
-        />
-        <ChevronDown
-          className={cn(
-            "h-4 w-4 text-slate-400 shrink-0 transition-transform",
-            open && "rotate-180",
-          )}
-        />
-      </button>
-
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-12 z-50 p-3 bg-white border border-slate-200 rounded-2xl shadow-xl w-48 space-y-2.5 animate-in fade-in zoom-in-95">
-            <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              Selecione uma cor
-            </div>
-            <div className="grid grid-cols-4 gap-2">
-              {BRAND_COLORS.map((c) => (
-                <button
-                  key={c.hex}
-                  type="button"
-                  onClick={() => {
-                    onChange(c.hex);
-                    setOpen(false);
-                  }}
-                  className={cn(
-                    "h-7 w-7 rounded-lg border flex items-center justify-center transition hover:scale-110 cursor-pointer",
-                    safeHex.toLowerCase() === c.hex.toLowerCase()
-                      ? "ring-2 ring-purple-600 ring-offset-1 border-transparent"
-                      : "border-slate-200",
-                  )}
-                  style={{ backgroundColor: c.hex }}
-                  title={c.label}
-                >
-                  {safeHex.toLowerCase() === c.hex.toLowerCase() && (
-                    <Check className="h-3.5 w-3.5 text-white drop-shadow-sm" />
-                  )}
-                </button>
-              ))}
-            </div>
-            <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
-              <span className="text-xs text-slate-400 font-mono">Hex</span>
-              <input
-                type="text"
-                value={color}
-                onChange={(e) => onChange(e.target.value)}
-                placeholder="#7C3AED"
-                className="w-full h-7 px-2 text-xs font-mono bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:border-purple-500"
-              />
-            </div>
-          </div>
-        </>
-      )}
-    </div>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="Escolher cor do evento"
+          className="w-full h-11 px-3 bg-card border border-border rounded-xl flex items-center justify-between hover:border-input transition shadow-2xs cursor-pointer"
+        >
+          <span
+            className="h-5 w-5 rounded-md border border-border/80 shadow-2xs shrink-0"
+            style={{ backgroundColor: safeHex }}
+          />
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 text-muted-foreground shrink-0 transition-transform",
+              open && "rotate-180",
+            )}
+          />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" sideOffset={6} className="w-48 space-y-2.5 rounded-2xl p-3">
+        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          Selecione uma cor
+        </div>
+        <div className="grid grid-cols-4 gap-2">
+          {BRAND_COLORS.map((c) => (
+            <button
+              key={c.hex}
+              type="button"
+              onClick={() => {
+                onChange(c.hex);
+                setOpen(false);
+              }}
+              aria-label={c.label}
+              aria-pressed={safeHex.toLowerCase() === c.hex.toLowerCase()}
+              className={cn(
+                "h-7 w-7 rounded-full border flex items-center justify-center transition hover:scale-110 cursor-pointer",
+                safeHex.toLowerCase() === c.hex.toLowerCase()
+                  ? "ring-2 ring-primary ring-offset-1 ring-offset-card border-transparent"
+                  : "border-border",
+              )}
+              style={{ backgroundColor: c.hex }}
+              title={c.label}
+            >
+              {safeHex.toLowerCase() === c.hex.toLowerCase() && (
+                <Check className="h-3.5 w-3.5 text-white drop-shadow-sm" />
+              )}
+            </button>
+          ))}
+        </div>
+        <div className="pt-2 border-t border-border-soft flex items-center gap-2">
+          <span className="text-xs text-muted-foreground font-mono">Hex</span>
+          <input
+            type="text"
+            value={color}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="#7C3AED"
+            aria-label="Cor em hexadecimal"
+            className="w-full h-7 px-2 text-xs font-mono bg-muted/60 border border-border rounded-md focus:outline-none focus:border-primary"
+          />
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -400,7 +400,7 @@ export function EditAppointmentModal({
   ownerName: string | null;
   onSaved: () => void;
 }) {
-  const [patientName, setPatientName] = useState<string>("Guilherme");
+  const [patientName, setPatientName] = useState<string>("");
   const [professionalName, setProfessionalName] = useState<string>("Amanda Thais");
   const [status, setStatus] = useState<string>("Agendado");
   const [color, setColor] = useState<string>("#7C5CFC");
@@ -539,13 +539,13 @@ export function EditAppointmentModal({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-[460px] p-0 rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200 text-slate-800">
+      <DialogContent className="max-w-[460px] p-0 rounded-2xl bg-card shadow-2xl overflow-hidden border border-border text-foreground">
         <DialogDescription className="sr-only">Formulário Editar agendamento</DialogDescription>
 
         {/* 1. Header: Editar agendamento */}
-        <div className="px-6 py-4 flex items-center justify-between border-b border-slate-100 bg-white">
+        <div className="px-6 py-4 flex items-center justify-between border-b border-border-soft bg-card">
           <div className="flex items-center gap-2.5">
-            <DialogTitle className="text-[17px] font-bold text-slate-900 leading-none">
+            <DialogTitle className="text-lg font-semibold text-foreground leading-none">
               Editar agendamento
             </DialogTitle>
 
@@ -553,19 +553,19 @@ export function EditAppointmentModal({
             <div className="flex items-center gap-1.5 ml-1">
               <span
                 title="Cupom / Desconto"
-                className="h-7 w-7 rounded-full bg-slate-100 grid place-items-center text-slate-500 hover:bg-slate-200 transition cursor-pointer"
+                className="h-7 w-7 rounded-full bg-muted grid place-items-center text-muted-foreground hover:bg-surface-2 transition cursor-pointer"
               >
                 <Ticket className="h-3.5 w-3.5" />
               </span>
               <span
                 title="Financeiro"
-                className="h-7 w-7 rounded-full bg-emerald-100 grid place-items-center text-emerald-600 hover:bg-emerald-200 transition cursor-pointer"
+                className="h-7 w-7 rounded-full bg-success/15 grid place-items-center text-success hover:bg-success/25 transition cursor-pointer"
               >
                 <DollarSign className="h-3.5 w-3.5" />
               </span>
               <span
                 title="Atenção"
-                className="h-7 w-7 rounded-full bg-amber-100 grid place-items-center text-amber-600 hover:bg-amber-200 transition cursor-pointer"
+                className="h-7 w-7 rounded-full bg-warning/15 grid place-items-center text-warning hover:bg-warning/25 transition cursor-pointer"
               >
                 <AlertTriangle className="h-3.5 w-3.5" />
               </span>
@@ -574,15 +574,15 @@ export function EditAppointmentModal({
         </div>
 
         {/* 2. Form Body Scrollable */}
-        <div className="p-6 space-y-6 overflow-y-auto max-h-[75vh] bg-white">
+        <div className="p-6 space-y-6 overflow-y-auto max-h-[75vh] bg-card">
           {/* Seção 1: Dados básicos */}
           <div>
-            <h3 className="text-[15px] font-bold text-slate-900 mb-4">Dados básicos</h3>
+            <h3 className="text-[15px] font-semibold text-foreground mb-4">Dados básicos</h3>
 
             {/* Field: Paciente */}
             <div className="space-y-1.5 mb-4">
               <div className="flex items-center justify-between">
-                <label className="text-[13px] font-medium text-slate-600">Paciente</label>
+                <label className="text-sm font-medium text-muted-foreground">Paciente</label>
                 <button
                   type="button"
                   onClick={() => {
@@ -592,26 +592,26 @@ export function EditAppointmentModal({
                       toast.success(`Paciente ${np} adicionado`);
                     }
                   }}
-                  className="text-[13px] font-medium text-[#7C3AED] hover:underline flex items-center gap-1 cursor-pointer"
+                  className="text-sm font-medium text-primary hover:underline flex items-center gap-1 cursor-pointer"
                 >
                   + Adicionar
                 </button>
               </div>
 
               <div className="relative">
-                <div className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between hover:border-slate-300 transition shadow-2xs">
+                <div className="w-full h-11 px-3 bg-card border border-border rounded-xl flex items-center justify-between hover:border-input transition shadow-2xs">
                   <div className="flex items-center gap-2.5 min-w-0 w-full">
-                    <span className="h-7 w-7 rounded-full bg-[#E0E7FF] text-[#4F46E5] font-bold text-xs grid place-items-center shrink-0">
+                    <span className="h-7 w-7 rounded-full bg-primary/15 text-primary font-semibold text-xs grid place-items-center shrink-0">
                       {initialsOf(patientName)}
                     </span>
                     <input
                       type="text"
                       value={patientName}
                       onChange={(e) => setPatientName(e.target.value)}
-                      className="w-full bg-transparent text-[14px] font-medium text-slate-800 focus:outline-none"
+                      className="w-full bg-transparent text-sm font-medium text-foreground focus:outline-none"
                     />
                   </div>
-                  <ChevronDown className="h-4 w-4 text-slate-400 shrink-0 ml-1" />
+                  <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 ml-1" />
                 </div>
               </div>
             </div>
@@ -620,28 +620,28 @@ export function EditAppointmentModal({
             <div className="grid grid-cols-12 gap-3 mb-4">
               {/* Profissional */}
               <div className="col-span-5 space-y-1.5">
-                <label className="text-[13px] font-medium text-slate-600">Profissional</label>
+                <label className="text-sm font-medium text-muted-foreground">Profissional</label>
                 <div className="relative">
-                  <div className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between hover:border-slate-300 transition shadow-2xs">
+                  <div className="w-full h-11 px-3 bg-card border border-border rounded-xl flex items-center justify-between hover:border-input transition shadow-2xs">
                     <div className="flex items-center gap-2 min-w-0 w-full">
-                      <span className="h-6 w-6 rounded-full bg-purple-100 text-purple-700 font-bold text-[11px] grid place-items-center shrink-0">
+                      <span className="h-6 w-6 rounded-full bg-primary-soft text-primary font-semibold text-xs grid place-items-center shrink-0">
                         {initialsOf(professionalName)}
                       </span>
                       <input
                         type="text"
                         value={professionalName}
                         onChange={(e) => setProfessionalName(e.target.value)}
-                        className="w-full bg-transparent text-[13px] font-medium text-slate-800 focus:outline-none truncate"
+                        className="w-full bg-transparent text-sm font-medium text-foreground focus:outline-none truncate"
                       />
                     </div>
-                    <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" />
+                    <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
                   </div>
                 </div>
               </div>
 
               {/* Status */}
               <div className="col-span-4 space-y-1.5">
-                <label className="text-[13px] font-medium text-slate-600">Status</label>
+                <label className="text-sm font-medium text-muted-foreground">Status</label>
                 <StatusSelectDropdown
                   value={status}
                   onChange={(newStatus, newColor) => {
@@ -653,40 +653,42 @@ export function EditAppointmentModal({
 
               {/* Cor */}
               <div className="col-span-3 space-y-1.5">
-                <label className="text-[13px] font-medium text-slate-600">Cor</label>
+                <label className="text-sm font-medium text-muted-foreground">Cor</label>
                 <ColorPickerDropdown color={color} onChange={setColor} />
               </div>
             </div>
 
             {/* Observações */}
             <div className="space-y-1.5">
-              <label className="text-[13px] font-medium text-slate-600">Observações</label>
+              <label className="text-sm font-medium text-muted-foreground">Observações</label>
               <input
                 type="text"
                 placeholder="Digite"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="w-full h-11 px-3 bg-white border border-slate-200 rounded-xl text-[14px] text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#7C3AED] focus:ring-1 focus:ring-[#7C3AED] transition shadow-2xs"
+                className="w-full h-11 px-3 bg-card border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition shadow-2xs"
               />
             </div>
           </div>
 
           {/* Seção 2: Procedimentos/Produtos */}
-          <div className="pt-4 border-t border-slate-100">
-            <h3 className="text-[15px] font-bold text-slate-900 mb-3">Procedimentos/Produtos</h3>
+          <div className="pt-4 border-t border-border-soft">
+            <h3 className="text-[15px] font-semibold text-foreground mb-3">
+              Procedimentos/Produtos
+            </h3>
 
             {procedures.length > 0 && (
               <div className="space-y-2 mb-3">
                 {procedures.map((p, idx) => (
                   <div
                     key={p.id}
-                    className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                    className="flex items-center justify-between p-2.5 bg-muted/60 border border-border rounded-xl text-xs"
                   >
-                    <span className="font-medium text-slate-700">{p.name}</span>
+                    <span className="font-medium text-foreground/80">{p.name}</span>
                     <button
                       type="button"
                       onClick={() => setProcedures((prev) => prev.filter((_, i) => i !== idx))}
-                      className="text-red-500 hover:text-red-700"
+                      className="text-destructive hover:text-destructive"
                     >
                       <X className="h-3.5 w-3.5" />
                     </button>
@@ -698,22 +700,22 @@ export function EditAppointmentModal({
             <button
               type="button"
               onClick={handleAddProcedure}
-              className="text-[14px] font-medium text-[#7C3AED] hover:underline flex items-center gap-1.5 cursor-pointer"
+              className="text-sm font-medium text-primary hover:underline flex items-center gap-1.5 cursor-pointer"
             >
               + Adicionar Procedimentos/Produtos
             </button>
           </div>
 
           {/* Seção 3: Data */}
-          <div className="pt-4 border-t border-slate-100">
+          <div className="pt-4 border-t border-border-soft">
             <div
               className="flex items-center justify-between mb-4 cursor-pointer select-none"
               onClick={() => setDateSectionOpen(!dateSectionOpen)}
             >
-              <h3 className="text-[15px] font-bold text-slate-900">Data</h3>
+              <h3 className="text-[15px] font-semibold text-foreground">Data</h3>
               <ChevronUp
                 className={cn(
-                  "h-4 w-4 text-slate-500 transition-transform duration-200",
+                  "h-4 w-4 text-muted-foreground transition-transform duration-200",
                   !dateSectionOpen && "rotate-180",
                 )}
               />
@@ -725,7 +727,7 @@ export function EditAppointmentModal({
                 <div className="grid grid-cols-12 gap-3">
                   {/* Dia* */}
                   <div className="col-span-6 space-y-1.5">
-                    <label className="text-[13px] font-medium text-slate-600">Dia*</label>
+                    <label className="text-sm font-medium text-muted-foreground">Dia*</label>
                     <div className="relative flex items-center">
                       <input
                         type="text"
@@ -741,7 +743,7 @@ export function EditAppointmentModal({
                             setDayDate(`${parts[2]}-${parts[1]}-${parts[0]}`);
                           }
                         }}
-                        className="w-full h-11 px-3 pr-9 bg-white border border-slate-200 rounded-xl text-[13px] font-medium text-slate-800 focus:outline-none focus:border-[#7C3AED] transition shadow-2xs"
+                        className="w-full h-11 px-3 pr-9 bg-card border border-border rounded-xl text-sm font-medium text-foreground focus:outline-none focus:border-primary transition shadow-2xs"
                       />
                       <input
                         type="date"
@@ -749,49 +751,49 @@ export function EditAppointmentModal({
                         onChange={(e) => setDayDate(e.target.value)}
                         className="absolute right-2 opacity-0 w-7 h-7 cursor-pointer z-10"
                       />
-                      <Calendar className="h-4 w-4 text-slate-400 absolute right-3 pointer-events-none" />
+                      <Calendar className="h-4 w-4 text-muted-foreground absolute right-3 pointer-events-none" />
                     </div>
                   </div>
 
                   {/* Início* */}
                   <div className="col-span-3 space-y-1.5">
-                    <label className="text-[13px] font-medium text-slate-600">Início*</label>
+                    <label className="text-sm font-medium text-muted-foreground">Início*</label>
                     <div className="relative flex items-center">
                       <input
                         type="text"
                         value={startTime}
                         onChange={(e) => setStartTime(e.target.value)}
                         placeholder="09:15"
-                        className="w-full h-11 px-2.5 pr-8 bg-white border border-slate-200 rounded-xl text-[13px] font-medium text-slate-800 focus:outline-none focus:border-[#7C3AED] transition shadow-2xs"
+                        className="w-full h-11 px-2.5 pr-8 bg-card border border-border rounded-xl text-sm font-medium text-foreground focus:outline-none focus:border-primary transition shadow-2xs"
                       />
-                      <Clock className="h-4 w-4 text-slate-400 absolute right-2 pointer-events-none" />
+                      <Clock className="h-4 w-4 text-muted-foreground absolute right-2 pointer-events-none" />
                     </div>
                   </div>
 
                   {/* Fim* */}
                   <div className="col-span-3 space-y-1.5">
-                    <label className="text-[13px] font-medium text-slate-600">Fim*</label>
+                    <label className="text-sm font-medium text-muted-foreground">Fim*</label>
                     <div className="relative flex items-center">
                       <input
                         type="text"
                         value={endTime}
                         onChange={(e) => setEndTime(e.target.value)}
                         placeholder="11:00"
-                        className="w-full h-11 px-2.5 pr-8 bg-white border border-slate-200 rounded-xl text-[13px] font-medium text-slate-800 focus:outline-none focus:border-[#7C3AED] transition shadow-2xs"
+                        className="w-full h-11 px-2.5 pr-8 bg-card border border-border rounded-xl text-sm font-medium text-foreground focus:outline-none focus:border-primary transition shadow-2xs"
                       />
-                      <Clock className="h-4 w-4 text-slate-400 absolute right-2 pointer-events-none" />
+                      <Clock className="h-4 w-4 text-muted-foreground absolute right-2 pointer-events-none" />
                     </div>
                   </div>
                 </div>
 
                 {/* Recorrência* */}
                 <div className="space-y-1.5">
-                  <label className="text-[13px] font-medium text-slate-600">Recorrência*</label>
+                  <label className="text-sm font-medium text-muted-foreground">Recorrência*</label>
                   <div className="relative">
                     <select
                       value={recurrence}
                       onChange={(e) => setRecurrence(e.target.value)}
-                      className="w-full h-11 px-3 pr-8 bg-white border border-slate-200 rounded-xl text-[14px] font-medium text-slate-800 focus:outline-none focus:border-[#7C3AED] cursor-pointer appearance-none shadow-2xs"
+                      className="w-full h-11 px-3 pr-8 bg-card border border-border rounded-xl text-sm font-medium text-foreground focus:outline-none focus:border-primary cursor-pointer appearance-none shadow-2xs"
                     >
                       <option value="Não se repete">Não se repete</option>
                       <option value="Diariamente">Diariamente</option>
@@ -799,7 +801,7 @@ export function EditAppointmentModal({
                       <option value="Mensalmente">Mensalmente</option>
                       <option value="Anualmente">Anualmente</option>
                     </select>
-                    <ChevronDown className="h-4 w-4 text-slate-400 absolute right-3 top-3.5 pointer-events-none" />
+                    <ChevronDown className="h-4 w-4 text-muted-foreground absolute right-3 top-3.5 pointer-events-none" />
                   </div>
                 </div>
               </div>
@@ -808,12 +810,12 @@ export function EditAppointmentModal({
         </div>
 
         {/* 3. Bottom Action Footer: Centered Purple Salvar Button */}
-        <div className="p-4 border-t border-slate-100 bg-white flex items-center justify-center">
+        <div className="p-4 border-t border-border-soft bg-card flex items-center justify-center">
           <button
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="w-40 h-11 rounded-xl bg-[#7C3AED] hover:bg-[#6D28D9] active:scale-[0.98] text-white font-semibold text-[15px] shadow-md shadow-purple-500/20 transition-all flex items-center justify-center cursor-pointer"
+            className="w-40 h-11 rounded-xl bg-primary hover:bg-primary-hover active:scale-[0.98] text-white font-semibold text-[15px] shadow-md shadow-primary/20 transition-all flex items-center justify-center cursor-pointer"
           >
             {saving ? "Salvando..." : "Salvar"}
           </button>
@@ -867,13 +869,69 @@ export function ActivityDrawer({
     activity?.id && activity.id.includes(":") ? activity.id.split(":")[1] : activity?.id;
   const isEvent = activity?.source === "event" || activity?.kind === "evento";
 
+  // Baixa rápida de saldo restante diretamente na agenda
+  const [settleOpen, setSettleOpen] = useState(false);
+  const [settleMethod, setSettleMethod] = useState("pix");
+  const [settleAmount, setSettleAmount] = useState<string>("");
+  const [settling, setSettling] = useState(false);
+
+  const handleQuickSettle = async () => {
+    if (!eventRawId) return;
+    const value = parseFloat(settleAmount.replace(",", "."));
+    if (isNaN(value) || value <= 0) {
+      toast.error("Informe um valor válido para recebimento.");
+      return;
+    }
+    setSettling(true);
+    try {
+      let success = false;
+      try {
+        const { error: rpcErr } = await supabase.rpc("settle_appointment_remaining", {
+          p_event_id: eventRawId,
+          p_amount: value,
+          p_method: settleMethod,
+        });
+        if (!rpcErr) success = true;
+      } catch {}
+
+      if (!success && linkedTitle?.id) {
+        const { error: payErr } = await supabase.rpc("record_financial_payment", {
+          p_id: crypto.randomUUID(),
+          p_transaction_id: linkedTitle.id,
+          p_amount: value,
+          p_paid_on: new Date().toISOString().slice(0, 10),
+          p_method: settleMethod,
+          p_account_id: "00000000-0000-0000-0000-000000000001",
+          p_payer_name: clientName || null,
+        });
+        if (payErr) throw payErr;
+        success = true;
+      }
+
+      if (success) {
+        toast.success(`Recebimento de ${currency(value)} registrado com sucesso!`);
+        setSettleOpen(false);
+        await refetchTitle();
+        await refreshFinance(qc);
+      } else {
+        throw new Error("Não foi possível registrar o recebimento no banco de dados.");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao registrar o recebimento.");
+    } finally {
+      setSettling(false);
+    }
+  };
+
   const { data: linkedTitle, refetch: refetchTitle } = useQuery({
     queryKey: ["event-financial-title", eventRawId],
     enabled: !!eventRawId && !!isEvent,
     queryFn: async () => {
       if (!eventRawId) return null;
       try {
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(eventRawId);
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          eventRawId,
+        );
         if (isUuid) {
           const { data, error } = await supabase
             .from("transactions")
@@ -915,7 +973,7 @@ export function ActivityDrawer({
       const amt =
         (Number(meta?.procedurePrice) || 0) > 0
           ? Number(meta?.procedurePrice)
-          : (Number(meta?.downPayment) || 0);
+          : Number(meta?.downPayment) || 0;
       const dateStr = activity.start
         ? activity.start.toISOString().slice(0, 10)
         : new Date().toISOString().slice(0, 10);
@@ -985,10 +1043,10 @@ export function ActivityDrawer({
       <Sheet open={!!activity && !editModalOpen} onOpenChange={(v) => !v && onClose()}>
         <SheetContent
           side="right"
-          className="tela-detalhes-evento bg-white border-l border-[#E5E7EB] text-[#1F2937] w-full sm:max-w-[420px] p-0 flex flex-col gap-0 shadow-2xl"
+          className="tela-detalhes-evento bg-card border-l border-border text-foreground w-full sm:max-w-[420px] p-0 flex flex-col gap-0 shadow-2xl"
         >
-          <SheetHeader className="px-5 pt-5 pb-3 border-b border-[#E5E7EB] space-y-0">
-            <SheetTitle className="text-[17px] font-semibold text-[#0F172A] leading-none">
+          <SheetHeader className="px-5 pt-5 pb-3 border-b border-border space-y-0">
+            <SheetTitle className="text-lg font-semibold text-foreground leading-none">
               Detalhes do evento
             </SheetTitle>
             <SheetDescription className="sr-only">
@@ -998,7 +1056,7 @@ export function ActivityDrawer({
 
           <div className="flex-1 overflow-y-auto">
             {/* Título + data/horário */}
-            <div className="px-5 py-4 flex items-start gap-3 border-b border-[#F1F1F4]">
+            <div className="px-5 py-4 flex items-start gap-3 border-b border-border-soft">
               <span
                 aria-hidden="true"
                 className="mt-1 shrink-0 rounded-[6px]"
@@ -1008,15 +1066,15 @@ export function ActivityDrawer({
                 <button
                   type="button"
                   onClick={() => setPatientModalOpen(true)}
-                  className="text-left text-[15px] font-semibold text-[#0F172A] hover:text-[#7B3AF5] transition-colors leading-tight truncate block w-full cursor-pointer"
+                  className="text-left text-[15px] font-semibold text-foreground hover:text-primary transition-colors leading-tight truncate block w-full cursor-pointer"
                   title="Ver perfil completo do paciente"
                 >
                   {activity.title || kindLabel}
                 </button>
-                <div className="text-[12px] text-[#6B7280] mt-0.5">{kindLabel}</div>
-                <div className="text-[13px] text-[#6B7280] mt-1 tabular-nums">
+                <div className="text-xs text-muted-foreground mt-0.5">{kindLabel}</div>
+                <div className="text-sm text-muted-foreground mt-1 tabular-nums">
                   <span className="capitalize">{dateStr}</span>
-                  <span className="mx-1.5 text-[#CBD5E1]">•</span>
+                  <span className="mx-1.5 text-muted-foreground/60">•</span>
                   <span>
                     {startTime}
                     {endTime ? ` – ${endTime}` : ""}
@@ -1029,26 +1087,26 @@ export function ActivityDrawer({
             {ownerName && (
               <Row icon={User}>
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  <span className="text-xs uppercase tracking-wider text-muted-foreground">
                     Responsável
                   </span>
                 </div>
-                <div className="mt-0.5 font-semibold text-[#0F172A]">{ownerName}</div>
+                <div className="mt-0.5 font-semibold text-foreground">{ownerName}</div>
               </Row>
             )}
 
             {/* Cliente / caso */}
             {activity.caseTitle && (
-              <div className="px-5 py-3 flex items-center gap-3 border-b border-[#F1F1F4]">
-                <FileText className="h-4 w-4 text-[#94A3B8] shrink-0" />
+              <div className="px-5 py-3 flex items-center gap-3 border-b border-border-soft">
+                <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                 <div className="min-w-0 flex-1">
-                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  <div className="text-xs uppercase tracking-wider text-muted-foreground">
                     Cliente / processo
                   </div>
                   <button
                     type="button"
                     onClick={() => setPatientModalOpen(true)}
-                    className="text-left text-[13px] font-semibold text-[#0F172A] hover:text-[#7B3AF5] transition-colors truncate block w-full cursor-pointer"
+                    className="text-left text-sm font-semibold text-foreground hover:text-primary transition-colors truncate block w-full cursor-pointer"
                   >
                     {activity.caseTitle}
                   </button>
@@ -1056,7 +1114,7 @@ export function ActivityDrawer({
                 <button
                   type="button"
                   onClick={() => stub("WhatsApp")}
-                  className="h-7 w-7 rounded-full grid place-items-center text-[#94A3B8] hover:bg-[#F1F5F9] hover:text-[#10B981] transition cursor-pointer"
+                  className="h-7 w-7 rounded-full grid place-items-center text-muted-foreground hover:bg-muted hover:text-success transition cursor-pointer"
                   title="Enviar WhatsApp"
                 >
                   <MessageCircle className="h-4 w-4" />
@@ -1066,18 +1124,20 @@ export function ActivityDrawer({
 
             {/* Cobertura de Plano */}
             {meta?.planCoverage === "incluso" && (
-              <div className="px-5 py-3 flex items-center gap-3 border-b border-[#F1F1F4] bg-sky-50/50">
-                <Tag className="h-4 w-4 text-sky-600 shrink-0" />
+              <div className="px-5 py-3 flex items-center gap-3 border-b border-border-soft bg-sky-500/5">
+                <Tag className="h-4 w-4 text-sky-600 dark:text-sky-400 shrink-0" />
                 <div className="min-w-0 flex-1">
-                  <div className="text-[11px] uppercase tracking-wider text-sky-800 font-semibold">
+                  <div className="text-xs uppercase tracking-wider text-sky-800 dark:text-sky-300 font-semibold">
                     Enquadramento
                   </div>
-                  <div className="text-[13px] font-semibold text-sky-900 flex items-center gap-2">
+                  <div className="text-sm font-semibold text-sky-900 dark:text-sky-200 flex items-center gap-2">
                     <span>Incluso no Plano / Pacote</span>
                     {meta.linkedTreatmentId && (
                       <button
                         type="button"
-                        onClick={() => navigate({ to: `/acompanhamentos/${meta.linkedTreatmentId}` })}
+                        onClick={() =>
+                          navigate({ to: `/acompanhamentos/${meta.linkedTreatmentId}` })
+                        }
                         className="text-xs text-primary underline font-medium hover:opacity-85 cursor-pointer ml-1"
                       >
                         Ver acompanhamento →
@@ -1089,24 +1149,27 @@ export function ActivityDrawer({
             )}
 
             {/* Seção Financeira / Sinal */}
-            {(isEvent || (Number(meta?.procedurePrice) || 0) > 0 || (Number(meta?.downPayment) || 0) > 0 || linkedTitle) && (
-              <div className="px-5 py-3.5 border-b border-[#F1F1F4] bg-emerald-50/20 space-y-2">
+            {(isEvent ||
+              (Number(meta?.procedurePrice) || 0) > 0 ||
+              (Number(meta?.downPayment) || 0) > 0 ||
+              linkedTitle) && (
+              <div className="px-5 py-3.5 border-b border-border-soft bg-success/2 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <DollarSign className="h-4 w-4 text-emerald-600" />
-                    <span className="text-[11px] uppercase tracking-wider text-emerald-800 font-bold">
+                    <DollarSign className="h-4 w-4 text-success" />
+                    <span className="text-xs uppercase tracking-wider text-success font-semibold">
                       Cobrança & Sinal
                     </span>
                   </div>
                   {linkedTitle ? (
                     <span
                       className={cn(
-                        "px-2 py-0.5 rounded-full text-[11px] font-semibold",
+                        "px-2 py-0.5 rounded-full text-xs font-semibold",
                         linkedTitle.status === "pago"
-                          ? "bg-emerald-100 text-emerald-800"
+                          ? "bg-success/15 text-success"
                           : Number(linkedTitle.paid_amount || 0) > 0
-                            ? "bg-amber-100 text-amber-800"
-                            : "bg-blue-100 text-blue-800",
+                            ? "bg-warning/15 text-warning"
+                            : "bg-info/15 text-info",
                       )}
                     >
                       {linkedTitle.status === "pago"
@@ -1116,66 +1179,89 @@ export function ActivityDrawer({
                           : "Pendente"}
                     </span>
                   ) : (
-                    <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">
+                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-warning/15 text-warning">
                       Não gerado
                     </span>
                   )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="rounded-lg bg-white p-2 border border-emerald-100">
-                    <span className="text-slate-500 block text-[10.5px]">Valor Total</span>
-                    <strong className="text-slate-800 text-sm font-bold">
+                  <div className="rounded-lg bg-card p-2 border border-success/15">
+                    <span className="text-muted-foreground block text-xs">Valor Total</span>
+                    <strong className="text-foreground text-sm font-semibold">
                       {currency(linkedTitle?.amount ?? Number(meta?.procedurePrice) ?? 0)}
                     </strong>
                   </div>
-                  <div className="rounded-lg bg-white p-2 border border-emerald-100">
-                    <span className="text-slate-500 block text-[10.5px]">Sinal / Pago</span>
-                    <strong className="text-emerald-700 text-sm font-bold">
+                  <div className="rounded-lg bg-card p-2 border border-success/15">
+                    <span className="text-muted-foreground block text-xs">Sinal / Pago</span>
+                    <strong className="text-success text-sm font-semibold">
                       {currency(
-                        linkedTitle ? (linkedTitle.paid_amount ?? 0) : (Number(meta?.downPayment) ?? 0),
+                        linkedTitle
+                          ? (linkedTitle.paid_amount ?? 0)
+                          : (Number(meta?.downPayment) ?? 0),
                       )}
                     </strong>
                   </div>
                 </div>
 
                 {linkedTitle ? (
-                  <div className="pt-1 flex items-center justify-between gap-2 flex-wrap">
-                    <p className="text-[11.5px] text-slate-600">
-                      Saldo restante:{" "}
-                      <strong className="text-slate-900">
-                        {currency(
-                          Math.max(
-                            0,
-                            (linkedTitle.amount || 0) - (linkedTitle.paid_amount || 0),
-                          ),
-                        )}
-                      </strong>
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onClose();
-                        navigate({
-                          to: "/financeiro",
-                          search: { tab: "receber" } as any,
-                        });
-                      }}
-                      className="inline-flex items-center gap-1 text-xs font-semibold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
-                    >
-                      Dar baixa no sinal / Financeiro →
-                    </button>
+                  <div className="pt-2 flex flex-col gap-2">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <p className="text-xs text-muted-foreground">
+                        Saldo restante:{" "}
+                        <strong className="text-foreground font-semibold">
+                          {currency(
+                            Math.max(0, (linkedTitle.amount || 0) - (linkedTitle.paid_amount || 0)),
+                          )}
+                        </strong>
+                      </p>
+                      {Math.max(0, (linkedTitle.amount || 0) - (linkedTitle.paid_amount || 0)) > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const rem = Math.max(
+                              0,
+                              (linkedTitle.amount || 0) - (linkedTitle.paid_amount || 0),
+                            );
+                            setSettleAmount(rem.toFixed(2));
+                            setSettleOpen(true);
+                          }}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 rounded-lg shadow-sm transition-colors cursor-pointer"
+                        >
+                          <DollarSign size={13} />
+                          Receber saldo restante
+                        </button>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">
+                          <Check size={12} />
+                          Consulta Quitada
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          navigate({
+                            to: "/financeiro",
+                            search: { tab: "receber" } as any,
+                          });
+                        }}
+                        className="text-[11px] text-muted-foreground hover:text-primary transition-colors cursor-pointer underline"
+                      >
+                        Ver detalhes no Financeiro →
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="pt-1 flex items-center justify-between gap-2 flex-wrap">
-                    <p className="text-[11.5px] text-amber-800">
-                      Título pendente de geração.
-                    </p>
+                    <p className="text-xs text-warning">Título pendente de geração.</p>
                     <button
                       type="button"
                       disabled={generatingFinance}
                       onClick={handleGenerateFinance}
-                      className="inline-flex items-center gap-1 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50 px-2.5 py-1.5 rounded-lg shadow-2xs transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-white bg-primary hover:bg-primary-hover disabled:opacity-50 px-2.5 py-1.5 rounded-lg shadow-2xs transition-colors cursor-pointer"
                     >
                       {generatingFinance ? "Gerando..." : "Gerar cobrança no Financeiro"}
                     </button>
@@ -1185,15 +1271,13 @@ export function ActivityDrawer({
             )}
 
             {/* Status */}
-            <div className="px-5 py-3 flex items-center gap-3 border-b border-[#F1F1F4]">
+            <div className="px-5 py-3 flex items-center gap-3 border-b border-border-soft">
               <CheckCircle2
-                className={isDone ? "h-4 w-4 text-[#10B981]" : "h-4 w-4 text-[#CBD5E1]"}
+                className={isDone ? "h-4 w-4 text-success" : "h-4 w-4 text-muted-foreground/60"}
               />
               <div className="min-w-0 flex-1">
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                  Status
-                </div>
-                <div className="text-[13px] font-semibold text-[#0F172A]">
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">Status</div>
+                <div className="text-sm font-semibold text-foreground">
                   {isDone ? "Concluído" : (meta?.status ?? activity.status ?? "Pendente")}
                 </div>
               </div>
@@ -1202,16 +1286,14 @@ export function ActivityDrawer({
             {/* Local */}
             {activity.location && (
               <Row icon={MapPin}>
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                  Local
-                </div>
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">Local</div>
                 <div className="mt-0.5 whitespace-pre-wrap break-words">{activity.location}</div>
               </Row>
             )}
 
             {meta?.recurrence && meta.recurrence !== "none" && (
               <Row icon={Clock}>
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">
                   Recorrência
                 </div>
                 <div className="mt-0.5">{meta.recurrence}</div>
@@ -1221,14 +1303,14 @@ export function ActivityDrawer({
             {/* Participantes */}
             {meta?.participants && meta.participants.length > 0 && (
               <Row icon={Users}>
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">
                   Participantes
                 </div>
                 <div className="mt-1 flex flex-wrap gap-1.5">
                   {meta.participants.map((p) => (
                     <span
                       key={p.id}
-                      className="inline-flex items-center gap-1 rounded-full bg-[#F3F4F6] px-2.5 py-1 text-[12px] font-medium text-[#0F172A]"
+                      className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-foreground"
                     >
                       {p.name}
                     </span>
@@ -1240,14 +1322,14 @@ export function ActivityDrawer({
             {/* Lembretes */}
             {meta?.reminders && meta.reminders.length > 0 && (
               <Row icon={Bell}>
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">
                   Lembretes
                 </div>
                 <div className="mt-1 flex flex-wrap gap-1.5">
                   {meta.reminders.map((r: string | { id: string; label: string }, i: number) => (
                     <span
                       key={typeof r === "string" ? `${r}-${i}` : r.id}
-                      className="rounded-full bg-primary/10 text-primary px-2.5 py-1 text-[12px] font-medium"
+                      className="rounded-full bg-primary/10 text-primary px-2.5 py-1 text-xs font-medium"
                     >
                       {typeof r === "string" ? r : r.label}
                     </span>
@@ -1259,7 +1341,7 @@ export function ActivityDrawer({
             {/* Checklist */}
             {meta?.checklist && meta.checklist.length > 0 && (
               <Row icon={ListChecks}>
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">
                   Checklist
                 </div>
                 <ul className="mt-1.5 space-y-1">
@@ -1267,11 +1349,11 @@ export function ActivityDrawer({
                     <li key={it.id} className="flex items-start gap-2">
                       <span
                         className={`mt-1 inline-block h-3.5 w-3.5 rounded-[4px] border ${
-                          it.done ? "bg-primary border-primary" : "border-[#CBD5E1]"
+                          it.done ? "bg-primary border-primary" : "border-input"
                         }`}
                       />
                       <span
-                        className={`text-[13px] ${it.done ? "line-through text-muted-foreground" : "text-[#0F172A]"}`}
+                        className={`text-sm ${it.done ? "line-through text-muted-foreground" : "text-foreground"}`}
                       >
                         {it.text || "—"}
                       </span>
@@ -1284,14 +1366,12 @@ export function ActivityDrawer({
             {/* Tags */}
             {meta?.tags && meta.tags.length > 0 && (
               <Row icon={Tag}>
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                  Tags
-                </div>
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">Tags</div>
                 <div className="mt-1 flex flex-wrap gap-1.5">
                   {meta.tags.map((t) => (
                     <span
                       key={t}
-                      className="rounded-full bg-[#F3F4F6] px-2.5 py-1 text-[12px] font-medium text-[#0F172A]"
+                      className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-foreground"
                     >
                       {t}
                     </span>
@@ -1303,12 +1383,10 @@ export function ActivityDrawer({
             {/* Anexos */}
             {meta?.files && meta.files.length > 0 && (
               <Row icon={Paperclip}>
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                  Anexos
-                </div>
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">Anexos</div>
                 <ul className="mt-1 space-y-1">
                   {meta.files.map((f) => (
-                    <li key={f.id} className="text-[13px] text-[#0F172A] truncate">
+                    <li key={f.id} className="text-sm text-foreground truncate">
                       {f.name}
                     </li>
                   ))}
@@ -1319,7 +1397,7 @@ export function ActivityDrawer({
             {/* Observações */}
             {notes && (
               <Row icon={MessageCircle}>
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">
                   Observações
                 </div>
                 <p className="mt-0.5 whitespace-pre-wrap break-words">{notes}</p>
@@ -1327,30 +1405,30 @@ export function ActivityDrawer({
             )}
 
             {/* Ações */}
-            <div className="px-5 py-4 grid grid-cols-3 gap-2 border-b border-[#F1F1F4]">
+            <div className="px-5 py-4 grid grid-cols-3 gap-2 border-b border-border-soft">
               <button
                 type="button"
                 onClick={() => setEditModalOpen(true)}
-                className="flex flex-col items-center gap-1 py-1.5 rounded-md hover:bg-[#F8FAFC] transition text-[#0F172A] cursor-pointer"
+                className="flex flex-col items-center gap-1 py-1.5 rounded-md hover:bg-surface transition text-foreground cursor-pointer"
               >
                 <Pencil className="h-4 w-4" />
-                <span className="text-[12px] font-medium">Editar</span>
+                <span className="text-xs font-medium">Editar</span>
               </button>
               <button
                 type="button"
                 onClick={() => stub("Duplicar agendamento")}
-                className="flex flex-col items-center gap-1 py-1.5 rounded-md hover:bg-[#F8FAFC] transition text-[#0F172A] cursor-pointer"
+                className="flex flex-col items-center gap-1 py-1.5 rounded-md hover:bg-surface transition text-foreground cursor-pointer"
               >
                 <Copy className="h-4 w-4" />
-                <span className="text-[12px] font-medium">Duplicar</span>
+                <span className="text-xs font-medium">Duplicar</span>
               </button>
               <button
                 type="button"
                 onClick={() => onDelete(activity)}
-                className="flex flex-col items-center gap-1 py-1.5 rounded-md hover:bg-[#FEF2F2] transition text-[#DC2626] cursor-pointer"
+                className="flex flex-col items-center gap-1 py-1.5 rounded-md hover:bg-destructive/10 transition text-destructive cursor-pointer"
               >
                 <Trash2 className="h-4 w-4" />
-                <span className="text-[12px] font-medium">Excluir</span>
+                <span className="text-xs font-medium">Excluir</span>
               </button>
             </div>
 
@@ -1360,11 +1438,11 @@ export function ActivityDrawer({
           </div>
 
           {/* Botão Inferior: Iniciar Atendimento */}
-          <div className="p-4 border-t border-[#E5E7EB] bg-white">
+          <div className="p-4 border-t border-border bg-card">
             <button
               type="button"
               onClick={handleStartAttendance}
-              className="w-full h-11 rounded-xl bg-[#7B3AF5] hover:bg-[#6D28D9] active:scale-[0.98] text-white font-bold text-[14.5px] shadow-[0_4px_14px_rgba(123,58,245,0.35)] transition-all flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full h-11 rounded-xl bg-primary hover:bg-primary-hover active:scale-[0.98] text-white font-semibold text-sm shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               Iniciar atendimento
             </button>
@@ -1397,6 +1475,75 @@ export function ActivityDrawer({
           name: clientName,
         }}
       />
+
+      {/* Modal de Baixa Rápida de Saldo da Consulta */}
+      <Dialog open={settleOpen} onOpenChange={setSettleOpen}>
+        <DialogContent className="sm:max-w-[420px] p-6 bg-card border border-border">
+          <DialogHeader className="space-y-1">
+            <DialogTitle className="text-lg font-semibold text-foreground">
+              Receber saldo da consulta
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {clientName ? `Paciente: ${clientName}` : "Recebimento do atendimento"}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="rounded-xl bg-surface p-3.5 border border-border flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Saldo a receber</span>
+              <span className="text-lg font-bold text-foreground">
+                {currency(parseFloat(settleAmount || "0"))}
+              </span>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground">Forma de pagamento</label>
+              <select
+                value={settleMethod}
+                onChange={(e) => setSettleMethod(e.target.value)}
+                className="w-full h-10 px-3 text-sm rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+              >
+                <option value="pix">PIX</option>
+                <option value="cartao_credito">Cartão de Crédito</option>
+                <option value="cartao_debito">Cartão de Débito</option>
+                <option value="dinheiro">Dinheiro</option>
+                <option value="transferencia">Transferência Bancária</option>
+                <option value="boleto">Boleto Bancário</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground">Valor a registrar (R$)</label>
+              <input
+                type="text"
+                value={settleAmount}
+                onChange={(e) => setSettleAmount(e.target.value)}
+                placeholder="0,00"
+                className="w-full h-10 px-3 text-sm rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setSettleOpen(false)}
+              disabled={settling}
+              className="px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-surface rounded-lg transition-colors cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleQuickSettle}
+              disabled={settling}
+              className="px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              {settling ? "Confirmando..." : "Confirmar Recebimento"}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

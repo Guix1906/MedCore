@@ -1,8 +1,33 @@
+import { PageHeader } from "@/components/ui-app/PageHeader";
+import { SegmentedControl } from "@/components/ui-app/SegmentedControl";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type { DbRow, Json, IconType } from "@/lib/types";
+import { normalizeSearch } from "@/lib/global-search";
+import { cn } from "@/lib/utils";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, X, Trash2, Pencil, Save, MapPin } from "lucide-react";
+import {
+  Building2,
+  ClipboardList,
+  Landmark,
+  MapPin,
+  Pencil,
+  Plus,
+  Save,
+  Search,
+  ShieldCheck,
+  Tags,
+  Trash2,
+} from "lucide-react";
 import { useClinicCities } from "@/hooks/use-clinic-cities";
 import { confirmDialog } from "@/components/app/confirm-dialog";
 import { toast } from "sonner";
@@ -18,7 +43,7 @@ import type { PermissionKey } from "@/features/admin/permissions";
 export const Route = createFileRoute("/_authenticated/configuracoes")({
   head: () => ({
     meta: [
-      { title: "Configurações • ClinicMed" },
+      { title: "Configurações • MedCore" },
       { name: "description", content: "Configurações gerais da clínica, serviços e categorias." },
     ],
   }),
@@ -35,61 +60,236 @@ const TAB_PERMISSIONS: Record<Tab, PermissionKey[]> = {
   cidades: ["settings.manage"],
 };
 
+const SETTINGS_TAB_KEY = "medcore:settings-tab";
+
+const SECTIONS: {
+  key: Tab;
+  label: string;
+  description: string;
+  icon: ComponentType<{ className?: string }>;
+  tint: string;
+}[] = [
+  {
+    key: "clinica",
+    label: "Dados da clínica",
+    description: "Nome, contato, endereço e horário de funcionamento.",
+    icon: Building2,
+    tint: "bg-primary",
+  },
+  {
+    key: "servicos",
+    label: "Serviços e preços",
+    description: "Tabela de serviços com preço, duração e comissão.",
+    icon: ClipboardList,
+    tint: "bg-info",
+  },
+  {
+    key: "categorias",
+    label: "Categorias financeiras",
+    description: "Categorias usadas para classificar receitas e despesas.",
+    icon: Tags,
+    tint: "bg-warning",
+  },
+  {
+    key: "contas",
+    label: "Contas financeiras",
+    description: "Contas bancárias, caixas e meios de recebimento.",
+    icon: Landmark,
+    tint: "bg-success",
+  },
+  {
+    key: "cidades",
+    label: "Cidades de atendimento",
+    description:
+      "Cidades onde a clínica e o médico atendem. Ficam disponíveis no agendamento e no filtro da agenda.",
+    icon: MapPin,
+    tint: "bg-destructive",
+  },
+];
+
 function ConfiguracoesPage() {
   const { canAny } = usePermissions();
   const [selectedTab, setTab] = useState<Tab>("clinica");
   const [financeLocked, setFinanceLocked] = useState(false);
+  const [search, setSearch] = useState("");
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(SETTINGS_TAB_KEY);
+      if (saved && saved in TAB_PERMISSIONS) setTab(saved as Tab);
+    } catch {}
+  }, []);
+  const selectTab = (next: Tab) => {
+    setTab(next);
+    try {
+      window.localStorage.setItem(SETTINGS_TAB_KEY, next);
+    } catch {}
+  };
   const allowedTabs = (Object.keys(TAB_PERMISSIONS) as Tab[]).filter((key) =>
     canAny(TAB_PERMISSIONS[key]),
   );
   const tab = allowedTabs.includes(selectedTab) ? selectedTab : (allowedTabs[0] ?? "clinica");
   const showAdminLink = canAny(["users.view", "roles.manage", "audit.view"]);
+  const sections = SECTIONS.filter((section) => allowedTabs.includes(section.key));
+  const term = normalizeSearch(search);
+  const visibleSections = term
+    ? sections.filter((section) =>
+        normalizeSearch(`${section.label} ${section.description}`).includes(term),
+      )
+    : sections;
+  const current = sections.find((section) => section.key === tab);
   return (
     <AppShell title="Configurações">
-      <div className="p-6 space-y-4">
-        <div className="flex gap-1 border-b border-[#E5E7EB]">
-          {(
-            [
-              ["clinica", "Dados da clínica"],
-              ["servicos", "Serviços & preços"],
-              ["categorias", "Categorias financeiras"],
-              ["contas", "Contas financeiras"],
-              ["cidades", "Cidades de atendimento"],
-            ] as const
-          )
-            .filter(([k]) => allowedTabs.includes(k))
-            .map(([k, label]) => (
-              <button
-                key={k}
-                disabled={financeLocked}
-                onClick={() => setTab(k as Tab)}
-                className={`px-4 h-10 text-[13px] font-medium border-b-2 -mb-px transition-colors ${
-                  tab === k
-                    ? "border-[#8B47FF] text-[#8B47FF]"
-                    : "border-transparent text-[#6B7280] hover:text-[#111827]"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          {showAdminLink && (
-            <Link
-              to="/admin"
-              className="ml-auto self-center rounded-lg px-3 py-1.5 text-[13px] font-medium text-[#8B47FF] hover:bg-[#F5F3FF]"
-            >
-              Usuários e permissões →
-            </Link>
-          )}
+      <div className="page-container">
+        <PageHeader
+          title="Configurações"
+          description="Organize os dados da clínica, serviços e preferências de operação."
+        />
+        <div className="grid gap-5 lg:grid-cols-[256px_minmax(0,1fr)] lg:items-start">
+          <aside className="min-w-0 lg:sticky lg:top-[88px]">
+            <div className="hidden rounded-2xl border border-border bg-card p-2 shadow-xs lg:block">
+              <label className="relative mb-2 block">
+                <span className="sr-only">Buscar nas configurações</span>
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Buscar"
+                  className="h-9 w-full rounded-lg border border-transparent bg-muted pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:bg-card focus:outline-none"
+                />
+              </label>
+              <nav aria-label="Seções das configurações" className="space-y-0.5">
+                {visibleSections.map((section) => {
+                  const Icon = section.icon;
+                  const active = tab === section.key;
+                  return (
+                    <button
+                      key={section.key}
+                      type="button"
+                      disabled={financeLocked}
+                      aria-current={active ? "page" : undefined}
+                      onClick={() => selectTab(section.key)}
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                        active
+                          ? "bg-primary text-primary-foreground"
+                          : "text-foreground hover:bg-muted",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "grid size-7 shrink-0 place-items-center rounded-md text-white",
+                          active ? "bg-white/20" : section.tint,
+                        )}
+                        aria-hidden="true"
+                      >
+                        <Icon className="size-4" />
+                      </span>
+                      <span className="truncate">{section.label}</span>
+                    </button>
+                  );
+                })}
+                {visibleSections.length === 0 && (
+                  <p className="px-3 py-4 text-center text-xs text-muted-foreground">
+                    Nenhuma seção encontrada.
+                  </p>
+                )}
+              </nav>
+              {showAdminLink && (
+                <Link
+                  to="/admin"
+                  className="mt-2 flex items-center gap-3 rounded-lg border-t border-border-soft px-2.5 pb-2 pt-3 text-sm font-medium text-foreground hover:bg-muted"
+                >
+                  <span
+                    className="grid size-7 shrink-0 place-items-center rounded-md bg-muted-foreground/70 text-white"
+                    aria-hidden="true"
+                  >
+                    <ShieldCheck className="size-4" />
+                  </span>
+                  Usuários e permissões
+                </Link>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2 lg:hidden">
+              <SegmentedControl
+                aria-label="Seções das configurações"
+                semantics="navigation"
+                value={tab}
+                onChange={(next) => {
+                  if (!financeLocked) selectTab(next);
+                }}
+                options={sections.map((section) => ({
+                  value: section.key,
+                  label: section.label,
+                  disabled: financeLocked && section.key !== tab,
+                }))}
+              />
+              {showAdminLink && (
+                <Link
+                  to="/admin"
+                  className="shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10"
+                >
+                  Usuários e permissões →
+                </Link>
+              )}
+            </div>
+          </aside>
+          <section aria-labelledby="settings-section-title" className="min-w-0 space-y-4">
+            {current && (
+              <div>
+                <h2 id="settings-section-title" className="text-xl font-semibold text-foreground">
+                  {current.label}
+                </h2>
+                <p className="mt-0.5 text-sm text-muted-foreground">{current.description}</p>
+              </div>
+            )}
+            {tab === "clinica" && <ClinicSettings />}
+            {tab === "servicos" && <ServiceTypes />}
+            {tab === "categorias" && <FinanceCategories />}
+            {tab === "contas" && <FinancialAccountSettings onLockChange={setFinanceLocked} />}
+            {tab === "cidades" && <CitySettings />}
+          </section>
         </div>
-        {tab === "clinica" && <ClinicSettings />}
-        {tab === "servicos" && <ServiceTypes />}
-        {tab === "categorias" && <FinanceCategories />}
-        {tab === "contas" && <FinancialAccountSettings onLockChange={setFinanceLocked} />}
-        {tab === "cidades" && <CitySettings />}
       </div>
     </AppShell>
   );
 }
+
+function SettingsGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="space-y-1.5">
+      <h3 className="px-1 text-xs font-medium text-muted-foreground">{title}</h3>
+      <div className="divide-y divide-border-soft overflow-hidden rounded-xl border border-border bg-card shadow-xs">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+function SettingsRow({
+  label,
+  htmlFor,
+  children,
+}: {
+  label: string;
+  htmlFor: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="grid gap-1.5 px-4 py-3 sm:grid-cols-[190px_minmax(0,1fr)] sm:items-center sm:gap-4">
+      <label htmlFor={htmlFor} className="text-sm font-medium text-foreground">
+        {label}
+      </label>
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
+const settingsInput =
+  "h-9 w-full rounded-lg border border-input bg-card px-3 text-sm text-foreground shadow-xs transition-colors placeholder:text-muted-foreground focus:border-primary focus:outline-none";
 
 function ClinicSettings() {
   const queryClient = useQueryClient();
@@ -117,13 +317,13 @@ function ClinicSettings() {
 
   const [f, setF] = useState({
     id: null as string | null,
-    clinic_name: "ClinicMed Health Hub",
+    clinic_name: "",
     cnpj: "",
     phone: "",
     email: "",
     address: "",
     opening_hours: "Seg-Sex 08:00-18:00",
-    primary_color: "#8B47FF",
+    primary_color: "#6d3ff5",
   });
 
   useEffect(() => {
@@ -136,13 +336,12 @@ function ClinicSettings() {
         email: initialSettings.email ?? "",
         address: initialSettings.address ?? "",
         opening_hours: (initialSettings as any).opening_hours ?? "Seg-Sex 08:00-18:00",
-        primary_color: (initialSettings as any).primary_color ?? "#8B47FF",
+        primary_color: (initialSettings as any).primary_color ?? "#6d3ff5",
       });
     }
   }, [initialSettings]);
 
-  const inp =
-    "w-full h-10 px-3 rounded-lg border border-[#E5E7EB] text-[13px] focus:outline-none focus:border-[#8B47FF]";
+  const inp = settingsInput;
 
   const save = async () => {
     setSaving(true);
@@ -183,77 +382,87 @@ function ClinicSettings() {
   };
 
   return (
-    <div className="bg-white rounded-xl border border-[#E5E7EB] p-6 max-w-3xl">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="col-span-2">
-          <label className="text-[12px] text-[#6B7280]">Nome da clínica</label>
+    <div className="max-w-3xl space-y-5">
+      <SettingsGroup title="Identificação">
+        <SettingsRow label="Nome da clínica" htmlFor="clinic-name">
           <input
+            id="clinic-name"
             value={f.clinic_name}
             onChange={(e) => setF({ ...f, clinic_name: e.target.value })}
             className={inp}
           />
-        </div>
-        <div>
-          <label className="text-[12px] text-[#6B7280]">CNPJ</label>
+        </SettingsRow>
+        <SettingsRow label="CNPJ" htmlFor="clinic-cnpj">
           <input
+            id="clinic-cnpj"
             value={f.cnpj}
             onChange={(e) => setF({ ...f, cnpj: e.target.value })}
             className={inp}
           />
-        </div>
-        <div>
-          <label className="text-[12px] text-[#6B7280]">Telefone</label>
+        </SettingsRow>
+        <SettingsRow label="Cor de identificação" htmlFor="clinic-color">
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              id="clinic-color"
+              type="color"
+              aria-describedby="clinic-color-hint"
+              value={f.primary_color}
+              onChange={(e) => setF({ ...f, primary_color: e.target.value })}
+              className="h-9 w-16 cursor-pointer rounded-lg border border-input bg-card p-1"
+            />
+            <p id="clinic-color-hint" className="min-w-0 flex-1 text-xs text-muted-foreground">
+              Cor registrada no cadastro. A interface utiliza o tema MedCore.
+            </p>
+          </div>
+        </SettingsRow>
+      </SettingsGroup>
+      <SettingsGroup title="Contato">
+        <SettingsRow label="Telefone" htmlFor="clinic-phone">
           <input
+            id="clinic-phone"
             value={f.phone}
             onChange={(e) => setF({ ...f, phone: e.target.value })}
             className={inp}
           />
-        </div>
-        <div className="col-span-2">
-          <label className="text-[12px] text-[#6B7280]">E-mail</label>
+        </SettingsRow>
+        <SettingsRow label="E-mail" htmlFor="clinic-email">
           <input
+            id="clinic-email"
             type="email"
             value={f.email}
             onChange={(e) => setF({ ...f, email: e.target.value })}
             className={inp}
           />
-        </div>
-        <div className="col-span-2">
-          <label className="text-[12px] text-[#6B7280]">Endereço</label>
+        </SettingsRow>
+        <SettingsRow label="Endereço" htmlFor="clinic-address">
           <input
+            id="clinic-address"
             value={f.address}
             onChange={(e) => setF({ ...f, address: e.target.value })}
             className={inp}
           />
-        </div>
-        <div>
-          <label className="text-[12px] text-[#6B7280]">Horário de funcionamento</label>
+        </SettingsRow>
+      </SettingsGroup>
+      <SettingsGroup title="Funcionamento">
+        <SettingsRow label="Horário de funcionamento" htmlFor="clinic-hours">
           <input
+            id="clinic-hours"
             value={f.opening_hours}
             onChange={(e) => setF({ ...f, opening_hours: e.target.value })}
             className={inp}
             placeholder="Seg-Sex 08:00-18:00"
           />
-        </div>
-        <div>
-          <label className="text-[12px] text-[#6B7280]">Cor primária</label>
-          <input
-            type="color"
-            value={f.primary_color}
-            onChange={(e) => setF({ ...f, primary_color: e.target.value })}
-            className="w-full h-10 rounded-lg border border-[#E5E7EB]"
-          />
-        </div>
-      </div>
-      <div className="flex items-center gap-3 mt-5">
-        <button
-          onClick={save}
-          disabled={saving}
-          className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-[#8B47FF] text-white text-[13px] font-semibold disabled:opacity-60"
-        >
-          <Save size={15} /> {saving ? "Salvando…" : "Salvar"}
-        </button>
-        {msg && <span className="text-[12px] text-[#166534] font-medium">{msg}</span>}
+        </SettingsRow>
+      </SettingsGroup>
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        {msg && (
+          <span role="status" className="text-xs font-medium text-success">
+            {msg}
+          </span>
+        )}
+        <Button onClick={save} disabled={saving}>
+          <Save /> {saving ? "Salvando…" : "Salvar"}
+        </Button>
       </div>
     </div>
   );
@@ -313,50 +522,55 @@ function ServiceTypes() {
   return (
     <div className="space-y-3">
       <div className="flex justify-end">
-        <button
-          onClick={() => setOpenNew(true)}
-          className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-[#8B47FF] text-white text-[13px] font-semibold"
-        >
-          <Plus size={15} /> Novo serviço
-        </button>
+        <Button onClick={() => setOpenNew(true)}>
+          <Plus /> Novo serviço
+        </Button>
       </div>
-      <div className="bg-white rounded-xl border border-[#E5E7EB] overflow-hidden">
-        <table className="w-full text-[13px]">
-          <thead className="bg-[#F9FAFB] text-[#6B7280] text-left">
+      <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-xs">
+        <table className="mc-table">
+          <thead>
             <tr>
-              <th className="px-4 py-3 font-medium">Serviço</th>
-              <th className="px-4 py-3 font-medium text-right">Preço</th>
-              <th className="px-4 py-3 font-medium text-right">Duração</th>
-              <th className="px-4 py-3 font-medium text-right">Comissão</th>
-              <th className="px-4 py-3 text-right">Ações</th>
+              <th scope="col">Serviço</th>
+              <th scope="col" className="num">
+                Preço
+              </th>
+              <th scope="col" className="num">
+                Duração
+              </th>
+              <th scope="col" className="num">
+                Comissão
+              </th>
+              <th scope="col" className="num">
+                <span className="sr-only">Ações</span>
+              </th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id} className="border-t border-[#F3F4F6]">
-                <td className="px-4 py-3 font-medium text-[#111827]">{r.name}</td>
-                <td className="px-4 py-3 text-right">
-                  {r.price ? `R$ ${Number(r.price).toFixed(2)}` : "—"}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  {r.duration_minutes ? `${r.duration_minutes} min` : "—"}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  {r.commission_percent ? `${r.commission_percent}%` : "—"}
-                </td>
-                <td className="px-4 py-3 text-right">
+              <tr key={r.id}>
+                <td className="font-medium text-foreground">{r.name}</td>
+                <td className="num">{r.price ? `R$ ${Number(r.price).toFixed(2)}` : "—"}</td>
+                <td className="num">{r.duration_minutes ? `${r.duration_minutes} min` : "—"}</td>
+                <td className="num">{r.commission_percent ? `${r.commission_percent}%` : "—"}</td>
+                <td className="num">
                   <div className="inline-flex gap-1">
                     <button
+                      type="button"
                       onClick={() => setEditing(r)}
-                      className="h-8 w-8 rounded-md border border-[#E5E7EB] inline-flex items-center justify-center text-[#374151] hover:bg-[#F9FAFB]"
+                      aria-label={`Editar ${r.name}`}
+                      title="Editar"
+                      className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
-                      <Pencil size={13} />
+                      <Pencil size={14} />
                     </button>
                     <button
+                      type="button"
                       onClick={() => deleteService(r)}
-                      className="h-8 w-8 rounded-md border border-[#E5E7EB] inline-flex items-center justify-center text-[#991B1B] hover:bg-[#FEF2F2]"
+                      aria-label={`Excluir ${r.name}`}
+                      title="Excluir"
+                      className="inline-flex size-8 items-center justify-center rounded-full text-destructive transition-colors hover:bg-destructive/10"
                     >
-                      <Trash2 size={13} />
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </td>
@@ -364,7 +578,7 @@ function ServiceTypes() {
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-[#6B7280]">
+                <td colSpan={5} className="py-10 text-center text-muted-foreground">
                   Nenhum serviço cadastrado.
                 </td>
               </tr>
@@ -402,8 +616,7 @@ function ServiceModal({
     commission_percent: service?.commission_percent?.toString() ?? "",
   });
   const [saving, setSaving] = useState(false);
-  const inp =
-    "w-full h-10 px-3 rounded-lg border border-[#E5E7EB] text-[13px] focus:outline-none focus:border-[#8B47FF]";
+  const inp = cn(settingsInput, "mt-1 h-10");
 
   const save = async () => {
     if (!f.name.trim()) return;
@@ -429,23 +642,19 @@ function ServiceModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black/40 z-[9999] flex items-center justify-center"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="w-[460px] bg-white rounded-2xl p-6 shadow-2xl">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-[16px] font-bold text-[#111827]">
-            {service ? "Editar serviço" : "Novo serviço"}
-          </h2>
-          <button onClick={onClose} className="text-[#9CA3AF]">
-            <X size={18} />
-          </button>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-2">
-            <label className="text-[12px] text-[#6B7280]">Nome *</label>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-[460px]">
+        <DialogHeader>
+          <DialogTitle>{service ? "Editar serviço" : "Novo serviço"}</DialogTitle>
+          <DialogDescription>Preço, duração e comissão usados nos agendamentos.</DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <label htmlFor="service-name" className="text-xs text-muted-foreground">
+              Nome *
+            </label>
             <input
+              id="service-name"
               value={f.name}
               onChange={(e) => setF({ ...f, name: e.target.value })}
               className={inp}
@@ -453,48 +662,50 @@ function ServiceModal({
             />
           </div>
           <div>
-            <label className="text-[12px] text-[#6B7280]">Preço (R$)</label>
+            <label htmlFor="service-price" className="text-xs text-muted-foreground">
+              Preço (R$)
+            </label>
             <input
+              id="service-price"
               value={f.price}
               onChange={(e) => setF({ ...f, price: e.target.value })}
               className={inp}
             />
           </div>
           <div>
-            <label className="text-[12px] text-[#6B7280]">Duração (min)</label>
+            <label htmlFor="service-duration" className="text-xs text-muted-foreground">
+              Duração (min)
+            </label>
             <input
+              id="service-duration"
               type="number"
               value={f.duration_minutes}
               onChange={(e) => setF({ ...f, duration_minutes: e.target.value })}
               className={inp}
             />
           </div>
-          <div className="col-span-2">
-            <label className="text-[12px] text-[#6B7280]">Comissão (%)</label>
+          <div className="sm:col-span-2">
+            <label htmlFor="service-commission" className="text-xs text-muted-foreground">
+              Comissão (%)
+            </label>
             <input
+              id="service-commission"
               value={f.commission_percent}
               onChange={(e) => setF({ ...f, commission_percent: e.target.value })}
               className={inp}
             />
           </div>
         </div>
-        <div className="flex justify-end gap-2 mt-5">
-          <button
-            onClick={onClose}
-            className="h-10 px-4 rounded-lg border border-[#E5E7EB] text-[13px] font-semibold text-[#374151]"
-          >
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
             Cancelar
-          </button>
-          <button
-            onClick={save}
-            disabled={saving || !f.name.trim()}
-            className="h-10 px-4 rounded-lg bg-[#8B47FF] text-white text-[13px] font-semibold disabled:opacity-60"
-          >
+          </Button>
+          <Button onClick={save} disabled={saving || !f.name.trim()}>
             {saving ? "Salvando…" : "Salvar"}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -549,58 +760,60 @@ function FinanceCategories() {
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {(["income", "expense"] as const).map((t) => (
-        <div key={t} className="bg-white rounded-xl border border-[#E5E7EB] p-4">
-          <div className="text-[13px] font-bold text-[#111827] mb-3">
-            {t === "income" ? "Receitas" : "Despesas"}
-          </div>
-          <div className="space-y-1 mb-3">
-            {rows
-              .filter((r) => r.type === t)
-              .map((r) => (
-                <div
-                  key={r.id}
-                  className="flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-[#F9FAFB]"
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      {(["income", "expense"] as const).map((t) => {
+        const items = rows.filter((r) => r.type === t);
+        const title = t === "income" ? "Receitas" : "Despesas";
+        return (
+          <SettingsGroup key={t} title={title}>
+            {items.map((r) => (
+              <div key={r.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                <span className="min-w-0 truncate text-sm text-foreground">{r.name}</span>
+                <button
+                  type="button"
+                  onClick={() => del(r.id)}
+                  aria-label={`Excluir categoria ${r.name}`}
+                  title="Excluir"
+                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-destructive transition-colors hover:bg-destructive/10"
                 >
-                  <span className="text-[13px] text-[#374151]">{r.name}</span>
-                  <button
-                    onClick={() => del(r.id)}
-                    className="text-[#991B1B] hover:bg-[#FEF2F2] p-1 rounded"
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              ))}
-            {rows.filter((r) => r.type === t).length === 0 && (
-              <div className="text-[12px] text-[#6B7280] py-2 text-center">Sem categorias.</div>
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+            {items.length === 0 && (
+              <div className="px-4 py-3 text-center text-xs text-muted-foreground">
+                Sem categorias.
+              </div>
             )}
-          </div>
-          <div className="flex gap-2">
-            <input
-              value={newType === t ? newName : ""}
-              onChange={(e) => {
-                setNewType(t);
-                setNewName(e.target.value);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && newType === t) add();
-              }}
-              placeholder="Nova categoria…"
-              className="flex-1 h-9 px-3 rounded-lg border border-[#E5E7EB] text-[13px] focus:outline-none focus:border-[#8B47FF]"
-            />
-            <button
-              onClick={() => {
-                setNewType(t);
-                if (newType === t) add();
-              }}
-              className="h-9 px-3 rounded-lg bg-[#8B47FF] text-white text-[13px] font-semibold"
-            >
-              <Plus size={14} />
-            </button>
-          </div>
-        </div>
-      ))}
+            <div className="flex gap-2 bg-muted/40 px-3 py-2.5">
+              <input
+                value={newType === t ? newName : ""}
+                onChange={(e) => {
+                  setNewType(t);
+                  setNewName(e.target.value);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newType === t) add();
+                }}
+                placeholder="Nova categoria…"
+                aria-label={`Nova categoria de ${title.toLowerCase()}`}
+                className={cn(settingsInput, "flex-1")}
+              />
+              <Button
+                size="icon"
+                className="size-9"
+                aria-label={`Adicionar categoria de ${title.toLowerCase()}`}
+                onClick={() => {
+                  setNewType(t);
+                  if (newType === t) add();
+                }}
+              >
+                <Plus />
+              </Button>
+            </div>
+          </SettingsGroup>
+        );
+      })}
     </div>
   );
 }
@@ -635,18 +848,8 @@ function CitySettings() {
   };
 
   return (
-    <div className="bg-white rounded-xl border border-[#E5E7EB] p-6 max-w-2xl space-y-5">
-      <div>
-        <h2 className="text-[16px] font-semibold text-[#111827] flex items-center gap-2">
-          <MapPin className="text-[#8B47FF]" size={18} /> Cidades de Atendimento
-        </h2>
-        <p className="text-[12.5px] text-[#6B7280] mt-1">
-          Cadastre as cidades onde a clínica e o médico realizam atendimentos. Elas ficarão
-          disponíveis no agendamento e no filtro da agenda.
-        </p>
-      </div>
-
-      <div className="flex gap-2">
+    <div className="max-w-2xl space-y-5">
+      <div className="flex flex-col gap-2 sm:flex-row">
         <input
           value={newCity}
           onChange={(e) => setNewCity(e.target.value)}
@@ -654,42 +857,39 @@ function CitySettings() {
             if (e.key === "Enter") handleAdd();
           }}
           placeholder="Digite o nome da nova cidade (Ex: Campinas, Santos…)"
-          className="flex-1 h-10 px-3 rounded-lg border border-[#E5E7EB] text-[13px] focus:outline-none focus:border-[#8B47FF]"
+          aria-label="Nome da nova cidade"
+          className={cn(settingsInput, "h-10 flex-1")}
         />
-        <button
-          type="button"
-          onClick={handleAdd}
-          className="inline-flex items-center gap-1.5 h-10 px-4 rounded-lg bg-[#8B47FF] text-white text-[13px] font-semibold hover:opacity-90 transition"
-        >
-          <Plus size={16} /> Adicionar Cidade
-        </button>
+        <Button type="button" onClick={handleAdd}>
+          <Plus /> Adicionar cidade
+        </Button>
       </div>
 
-      <div className="border border-[#E5E7EB] rounded-xl overflow-hidden divide-y divide-[#E5E7EB]">
+      <SettingsGroup title="Cidades cadastradas">
         {cities.length === 0 ? (
-          <div className="p-4 text-center text-[13px] text-[#6B7280]">
+          <div className="p-4 text-center text-sm text-muted-foreground">
             Nenhuma cidade cadastrada.
           </div>
         ) : (
           cities.map((city) => (
-            <div
-              key={city}
-              className="flex items-center justify-between p-3 bg-white hover:bg-[#F9FAFB] transition"
-            >
-              <span className="text-[13.5px] font-medium text-[#111827] flex items-center gap-2">
-                <MapPin size={14} className="text-[#8B47FF]" /> {city}
+            <div key={city} className="flex items-center justify-between gap-3 px-4 py-2.5">
+              <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground">
+                <MapPin size={14} className="shrink-0 text-primary" aria-hidden="true" />
+                <span className="truncate">{city}</span>
               </span>
               <button
+                type="button"
                 onClick={() => handleRemove(city)}
-                className="text-[#991B1B] hover:bg-[#FEF2F2] p-1.5 rounded-lg transition"
-                title="Remover Cidade"
+                aria-label={`Remover ${city}`}
+                title="Remover cidade"
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-destructive transition-colors hover:bg-destructive/10"
               >
                 <Trash2 size={15} />
               </button>
             </div>
           ))
         )}
-      </div>
+      </SettingsGroup>
     </div>
   );
 }
@@ -700,7 +900,7 @@ function FinancialAccountSettings({ onLockChange }: { onLockChange: (locked: boo
     <>
       {query.isPending && <p>Carregando contas...</p>}
       {query.error && (
-        <p role="alert" className="text-red-700">
+        <p role="alert" className="text-destructive">
           {errorMessage(query.error)}{" "}
           <button className="underline" onClick={() => query.refetch()}>
             Tentar novamente

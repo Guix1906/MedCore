@@ -87,7 +87,7 @@ export default function TitleList({
       .filter((p) => p.transaction_id === t.id && !p.reversed_at)
       .sort((a, b) => b.paid_on.localeCompare(a.paid_on))[0];
     return (
-      <tr key={t.id} className="border-t hover:bg-slate-50/60">
+      <tr key={t.id} className="border-t hover:bg-muted/36">
         <td className="p-3">
           <button
             onClick={() => onSelect(t.id)}
@@ -97,8 +97,8 @@ export default function TitleList({
               ? t.patient_name || t.payer_name || "Avulso"
               : t.payer_name || "Favorecido não informado"}
           </button>
-          <p className="text-xs text-slate-500">{t.description}</p>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-muted-foreground">{t.description}</p>
+          <p className="text-xs text-muted-foreground">
             {t.treatment_id ? "Plano de acompanhamento" : t.category}
           </p>
         </td>
@@ -106,7 +106,7 @@ export default function TitleList({
           {isFreeBalance(t) ? (
             <>
               <span>Sem vencimento</span>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-foreground">
                 {lastPayment
                   ? `Último pagamento: ${formatClinicalDate(lastPayment.paid_on)}`
                   : "Nenhum pagamento"}
@@ -121,7 +121,7 @@ export default function TitleList({
         <td className="p-3 text-right font-semibold tabular-nums">{currency(balance)}</td>
         <td className="p-3">
           <span
-            className={`rounded-md px-2 py-1 text-xs ${overdue ? "bg-red-50 text-red-700" : balance === 0 && t.status !== "cancelado" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}
+            className={`rounded-md px-2 py-1 text-xs ${overdue ? "bg-destructive/10 text-destructive" : balance === 0 && t.status !== "cancelado" ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}
           >
             {titleStatus(t, today)}
           </span>
@@ -151,7 +151,7 @@ export default function TitleList({
                   !t.treatment_id &&
                   t.status !== "cancelado" &&
                   !finance.payments.some((p) => p.transaction_id === t.id) && (
-                    <DropdownMenuItem className="text-red-700" onSelect={() => onCancel(t.id)}>
+                    <DropdownMenuItem className="text-destructive" onSelect={() => onCancel(t.id)}>
                       Cancelar conta
                     </DropdownMenuItem>
                   )}
@@ -169,7 +169,7 @@ export default function TitleList({
           <h1 className="text-xl font-semibold">
             {receiving ? "Contas a Receber" : "Contas a Pagar"}
           </h1>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-muted-foreground">
             {receiving
               ? "Pacientes, cobranças e saldos pendentes."
               : "Fornecedores, despesas e pagamentos."}
@@ -180,7 +180,7 @@ export default function TitleList({
           {receiving ? "Nova conta a receber" : "Nova conta a pagar"}
         </Button>
       </header>
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border bg-white p-3">
+      <div className="flex flex-wrap items-end gap-3 rounded-xl border bg-card p-3">
         <label className="min-w-48 flex-1 text-sm">
           Busca
           <input
@@ -239,18 +239,18 @@ export default function TitleList({
       </div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {stats.map(([label, value]) => (
-          <div key={label} className="rounded-xl border bg-white px-4 py-3">
-            <p className="text-xs text-slate-500">{label}</p>
+          <div key={label} className="rounded-xl border bg-card px-4 py-3">
+            <p className="text-xs text-muted-foreground">{label}</p>
             <p className="text-lg font-semibold tabular-nums">{currency(value)}</p>
           </div>
         ))}
       </div>
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-muted-foreground">
         Resumo de todos os saldos da busca e clínica, independente da situação e do período de
         vencimento. As três faixas compõem o total em aberto.
       </p>
       {(start || end) && status !== "free" && free.length > 0 && (
-        <p className="text-sm text-amber-800">
+        <p className="text-sm text-warning">
           {free.length} saldo(s) sem vencimento fora do período.{" "}
           <button className="underline" onClick={() => setStatus("free")}>
             Ver saldos sem vencimento
@@ -258,13 +258,13 @@ export default function TitleList({
         </p>
       )}
       {!rangeValid && status !== "free" ? (
-        <p role="alert" className="text-red-700">
+        <p role="alert" className="text-destructive">
           A data inicial deve ser anterior ou igual à final.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border bg-white">
+        <div className="overflow-x-auto rounded-xl border bg-card">
           <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50">
+            <thead className="bg-muted/60">
               <tr>
                 {[
                   receiving ? "Paciente / origem" : "Fornecedor / descrição",
@@ -277,7 +277,7 @@ export default function TitleList({
                 ].map((label, i) => (
                   <th
                     key={label}
-                    className={`p-3 font-medium text-slate-500 ${i >= 2 && i <= 4 ? "text-right" : ""}`}
+                    className={`p-3 font-medium text-muted-foreground ${i >= 2 && i <= 4 ? "text-right" : ""}`}
                   >
                     {label}
                   </th>
@@ -290,7 +290,7 @@ export default function TitleList({
                   titles.map(renderTitle)
                 ) : (
                   <Fragment key={key}>
-                    <tr className="border-t bg-slate-50/70">
+                    <tr className="border-t bg-muted/42">
                       <td colSpan={7} className="p-3">
                         <button
                           className="flex w-full flex-wrap items-center justify-between gap-2 text-left"
@@ -322,7 +322,7 @@ export default function TitleList({
             </tbody>
           </table>
           {filtered.length === 0 && (
-            <p className="p-8 text-center text-sm text-slate-500">
+            <p className="p-8 text-center text-sm text-muted-foreground">
               Nenhuma conta para os filtros selecionados.
             </p>
           )}

@@ -10,27 +10,29 @@ export function HeaderFilters({
 }) {
   const [applied, setApplied] = useState(1);
   return (
-    <div className="rounded-[14px] border border-[#ECEFF5] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+    <div className="rounded-[14px] border border-border bg-card p-4 shadow-sm">
       <div className="mb-3 flex items-center gap-3">
-        <h2 className="text-[18px] font-bold leading-[1.35] tracking-[-0.01em] text-[#1B2A4A]">
+        <h2 className="text-lg font-semibold leading-[1.35] tracking-[-0.01em] text-foreground">
           Filtros
         </h2>
-        <span className="text-[14px] font-semibold text-[#6B7280]">{applied} filtro aplicado</span>
+        <span className="text-sm font-semibold text-muted-foreground">
+          {applied} filtro aplicado
+        </span>
         <button
           onClick={() => setApplied(0)}
-          className="text-[14px] font-semibold text-[#7C5CFA] hover:underline"
+          className="text-sm font-semibold text-primary hover:underline"
         >
           Limpar filtros
         </button>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <button className="flex items-center gap-2 rounded-lg border border-[#ECEFF5] bg-white px-3 py-2 text-[14.5px] font-semibold text-[#111827] transition-colors hover:border-[#D6D9E3]">
-          <CalendarRange className="h-3.5 w-3.5 text-[#6B7280]" />
-          Período: <span className="font-normal text-[#6B7280]">{period}</span>
+        <button className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:border-input">
+          <CalendarRange className="h-3.5 w-3.5 text-muted-foreground" />
+          Período: <span className="font-normal text-muted-foreground">{period}</span>
         </button>
         <button
           onClick={onAddFilter}
-          className="flex items-center gap-1.5 rounded-lg px-2 py-2 text-[14.5px] font-semibold text-[#7C5CFA] hover:bg-[#F5F3FF]"
+          className="flex items-center gap-1.5 rounded-lg px-2 py-2 text-sm font-semibold text-primary hover:bg-primary-soft"
         >
           <Plus className="h-3.5 w-3.5" />
           Adicionar filtro

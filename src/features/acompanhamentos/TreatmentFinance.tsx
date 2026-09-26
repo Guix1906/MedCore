@@ -7,8 +7,15 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { FinancialPlan } from "@/features/finance/finance-schema";
 import { confirmDialog } from "@/components/app/confirm-dialog";
-import { Clock, RefreshCw, X, ArrowRight, Wallet, CheckCircle2 } from "lucide-react";
+import { Clock, RefreshCw, ArrowRight, Wallet, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   currency,
   errorMessage,
@@ -18,7 +25,7 @@ import {
   paymentPreview,
 } from "./followup-utils";
 
-const input = "w-full rounded-lg border border-slate-200 p-2 text-sm";
+const input = "w-full rounded-lg border border-border p-2 text-sm";
 function Methods({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return (
     <select required className={input} value={value} onChange={(e) => onChange(e.target.value)}>
@@ -59,8 +66,11 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
     firstDue: plan.first_due_date || localDate(),
   });
 
-  const isInitiallyLivre = planTitles.some(isFreeBalance) || (plan as any).notes?.includes("saldo_livre");
-  const [modality, setModality] = useState<"parcelado" | "livre">(isInitiallyLivre ? "livre" : "parcelado");
+  const isInitiallyLivre =
+    planTitles.some(isFreeBalance) || (plan as any).notes?.includes("saldo_livre");
+  const [modality, setModality] = useState<"parcelado" | "livre">(
+    isInitiallyLivre ? "livre" : "parcelado",
+  );
 
   // Repactuation modal state
   const [repactOpen, setRepactOpen] = useState(false);
@@ -71,7 +81,12 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
   let preview: ReturnType<typeof paymentPreview> | undefined;
   let previewError = "";
   try {
-    preview = paymentPreview(form.total, form.discount, form.down, modality === "livre" ? 1 : Number(form.count));
+    preview = paymentPreview(
+      form.total,
+      form.discount,
+      form.down,
+      modality === "livre" ? 1 : Number(form.count),
+    );
   } catch (error) {
     previewError = errorMessage(error);
   }
@@ -260,7 +275,7 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
   return (
     <div className="space-y-4">
       {paid && (
-        <p className="text-sm text-amber-800">
+        <p className="text-sm text-warning">
           Este plano já possui recebimentos. As condições não podem ser regeneradas para preservar o
           histórico. Caso necessário, utilize a repactuação do saldo restante abaixo.
         </p>
@@ -268,16 +283,16 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
 
       {/* Banner de Saldo Livre e Ação Rápida de Repactuação */}
       {freeBalanceTitle && remaining(freeBalanceTitle) > 0 && (
-        <div className="p-4 rounded-2xl bg-purple-50/80 border border-purple-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="p-4 rounded-2xl bg-primary-soft/80 border border-primary/25 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <span className="text-[11px] font-bold text-purple-600 uppercase tracking-wider block">
+            <span className="text-xs font-semibold text-primary uppercase tracking-wider block">
               Modalidade Contratual Ativa
             </span>
-            <h4 className="text-[14px] font-bold text-purple-950 flex items-center gap-1.5 mt-0.5">
-              <Clock size={16} className="text-purple-600" />
+            <h4 className="text-sm font-semibold text-primary-hover flex items-center gap-1.5 mt-0.5">
+              <Clock size={16} className="text-primary" />
               Pagamentos Livres: Saldo em aberto de {currency(remaining(freeBalanceTitle))}
             </h4>
-            <p className="text-[12px] text-purple-700 mt-0.5">
+            <p className="text-xs text-primary mt-0.5">
               Este valor não vence por data e recebe baixas parciais conforme a rotina do paciente.
               Se preferir agendar vencimentos fixos, repactue apenas o saldo restante.
             </p>
@@ -286,7 +301,7 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
             <button
               type="button"
               onClick={() => setSelectedTitle(freeBalanceTitle.id)}
-              className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-xs transition cursor-pointer"
+              className="px-3.5 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-semibold rounded-xl shadow-xs transition cursor-pointer"
             >
               Receber Saldo
             </button>
@@ -297,7 +312,7 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
                 setRepactFirstDue(localDate());
                 setRepactOpen(true);
               }}
-              className="px-3.5 py-2 bg-white hover:bg-slate-50 text-purple-700 border border-purple-300 text-xs font-bold rounded-xl shadow-xs transition cursor-pointer"
+              className="px-3.5 py-2 bg-card hover:bg-muted/60 text-primary border border-primary/35 text-xs font-semibold rounded-xl shadow-xs transition cursor-pointer"
             >
               Repactuar em Parcelas
             </button>
@@ -414,10 +429,8 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
               )}
 
               {modality === "livre" && (
-                <div className="sm:col-span-2 flex items-center text-xs text-purple-700 bg-purple-50 p-2 rounded-lg border border-purple-200">
-                  <span>
-                    ✓ Saldo aberto único sem cobranças vencidas nem parcelas artificiais.
-                  </span>
+                <div className="sm:col-span-2 flex items-center text-xs text-primary bg-primary-soft p-2 rounded-lg border border-primary/25">
+                  <span>✓ Saldo aberto único sem cobranças vencidas nem parcelas artificiais.</span>
                 </div>
               )}
             </div>
@@ -425,7 +438,7 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
 
           <button
             disabled={!preview}
-            className="rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-semibold p-2.5 text-sm disabled:opacity-50 transition cursor-pointer"
+            className="rounded-xl bg-primary hover:bg-primary-hover text-white font-semibold p-2.5 text-sm disabled:opacity-50 transition cursor-pointer"
           >
             {busy ? "Salvando..." : "Salvar condições do plano"}
           </button>
@@ -438,11 +451,11 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
           {modality === "parcelado" &&
             preview.parts.length > 0 &&
             ` em ${preview.parts.length} parcela(s): ${preview.parts.map(currency).join(" + ")}`}
-          {modality === "livre" && preview.balance > 0 && " (saldo sem vencimento fixo)"}
-          . Total líquido: {currency(preview.total - preview.discount)}.
+          {modality === "livre" && preview.balance > 0 && " (saldo sem vencimento fixo)"}. Total
+          líquido: {currency(preview.total - preview.discount)}.
         </p>
       ) : (
-        <p role="alert" className="text-sm text-amber-800">
+        <p role="alert" className="text-sm text-warning">
           {previewError}
         </p>
       )}
@@ -452,7 +465,7 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead>
-              <tr className="border-b text-slate-500 text-xs uppercase">
+              <tr className="border-b text-muted-foreground text-xs uppercase">
                 <th className="py-2.5">Cobrança</th>
                 <th>Valor / liquidado / saldo</th>
                 <th>Vencimento</th>
@@ -466,19 +479,19 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
                 const title = planTitles.find((t) => t.installment_id === i.id);
                 const isFree = title && isFreeBalance(title);
                 return (
-                  <tr key={i.id} className="border-t hover:bg-slate-50/50">
+                  <tr key={i.id} className="border-t hover:bg-muted/30">
                     <td className="py-3">
                       {isFree ? (
                         <div>
-                          <span className="font-bold text-purple-700">Saldo Livre</span>
-                          <span className="block text-[11px] text-slate-500 font-normal">
+                          <span className="font-semibold text-primary">Saldo Livre</span>
+                          <span className="block text-xs text-muted-foreground font-normal">
                             Sem vencimento fixo
                           </span>
                         </div>
                       ) : i.number === 0 ? (
-                        <span className="font-semibold text-slate-900">Entrada</span>
+                        <span className="font-semibold text-foreground">Entrada</span>
                       ) : (
-                        <span className="font-medium text-slate-800">Parcela {i.number}</span>
+                        <span className="font-medium text-foreground">Parcela {i.number}</span>
                       )}
                     </td>
                     <td>
@@ -488,7 +501,7 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
                     </td>
                     <td>
                       {isFree ? (
-                        <span className="text-slate-500 italic text-[12px]">Sem vencimento</span>
+                        <span className="text-muted-foreground italic text-xs">Sem vencimento</span>
                       ) : (
                         formatClinicalDate(i.due_date)
                       )}
@@ -500,12 +513,12 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
                           className={cn(
                             "px-2 py-0.5 rounded-md text-xs font-semibold",
                             titleStatus(title, localDate()).includes("Quitado")
-                              ? "bg-emerald-50 text-emerald-700"
+                              ? "bg-success/10 text-success"
                               : titleStatus(title, localDate()).includes("sem vencimento")
-                                ? "bg-purple-50 text-purple-700"
+                                ? "bg-primary-soft text-primary"
                                 : titleStatus(title, localDate()).includes("Vencido")
-                                  ? "bg-rose-50 text-rose-700"
-                                  : "bg-slate-100 text-slate-700",
+                                  ? "bg-destructive/10 text-destructive"
+                                  : "bg-muted text-foreground/80",
                           )}
                         >
                           {titleStatus(title, localDate())}
@@ -519,7 +532,7 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
-                            className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg text-xs font-bold transition cursor-pointer"
+                            className="px-2.5 py-1 bg-primary-soft hover:bg-primary-soft text-primary rounded-lg text-xs font-semibold transition cursor-pointer"
                             onClick={() => setSelectedTitle(title.id)}
                           >
                             {remaining(title) > 0 ? "Receber / Baixas" : "Ver Baixas"}
@@ -532,117 +545,129 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
               })}
             </tbody>
           </table>
-          {plan.installments.length === 0 && <p className="py-4 text-slate-500">Nenhuma cobrança gerada.</p>}
+          {plan.installments.length === 0 && (
+            <p className="py-4 text-muted-foreground">Nenhuma cobrança gerada.</p>
+          )}
         </div>
       )}
 
       {/* Modal de Repactuação do Saldo Restante */}
-      {repactOpen && freeBalanceTitle && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center">
-                  <RefreshCw size={16} />
-                </div>
-                <div>
-                  <h3 className="text-[16px] font-bold text-slate-900">Repactuar Saldo Restante</h3>
-                  <p className="text-[12px] text-slate-500">Transformar saldo livre em parcelas com data</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setRepactOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-              >
-                <X size={18} />
-              </button>
+      <Dialog
+        open={repactOpen && !!freeBalanceTitle}
+        onOpenChange={(open) => {
+          if (!open && !busy) setRepactOpen(false);
+        }}
+      >
+        <DialogContent onInteractOutside={(event) => event.preventDefault()}>
+          <DialogHeader className="flex-row items-center gap-2 space-y-0 border-b border-border-soft pb-3">
+            <div
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
+              aria-hidden="true"
+            >
+              <RefreshCw size={16} />
             </div>
-
-            <div className="p-3.5 bg-purple-50 rounded-2xl border border-purple-100 text-[12.5px] space-y-1.5">
-              <div className="flex justify-between">
-                <span className="text-purple-700">Saldo em aberto a parcelar:</span>
-                <strong className="text-purple-950 font-black">{currency(remaining(freeBalanceTitle))}</strong>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-purple-700">Pagamentos já realizados (preservados):</span>
-                <strong className="text-emerald-700">{currency(freeBalanceTitle.paid_amount)}</strong>
-              </div>
-              <p className="text-[11px] text-purple-600/80 pt-1 border-t border-purple-200/60">
-                Nenhum histórico será apagado. O saldo livre anterior será encerrado e substituído
-                pelas novas parcelas programadas.
-              </p>
+            <div>
+              <DialogTitle className="text-base">Repactuar Saldo Restante</DialogTitle>
+              <DialogDescription className="text-xs">
+                Transformar saldo livre em parcelas com data
+              </DialogDescription>
             </div>
+          </DialogHeader>
+          {freeBalanceTitle && (
+            <>
+              <div className="p-3.5 bg-primary-soft rounded-2xl border border-primary/15 text-sm space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-primary">Saldo em aberto a parcelar:</span>
+                  <strong className="text-primary-hover font-semibold">
+                    {currency(remaining(freeBalanceTitle))}
+                  </strong>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-primary">Pagamentos já realizados (preservados):</span>
+                  <strong className="text-success">{currency(freeBalanceTitle.paid_amount)}</strong>
+                </div>
+                <p className="text-xs text-primary/80 pt-1 border-t border-primary/15">
+                  Nenhum histórico será apagado. O saldo livre anterior será encerrado e substituído
+                  pelas novas parcelas programadas.
+                </p>
+              </div>
 
-            <form onSubmit={handleRepactuate} className="space-y-3.5">
-              <div className="grid grid-cols-2 gap-3">
+              <form onSubmit={handleRepactuate} className="space-y-3.5">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-foreground/80">
+                      Quantidade de Parcelas
+                    </label>
+                    <select
+                      value={repactCount}
+                      onChange={(e) => setRepactCount(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-border text-sm bg-muted/60 focus:bg-card outline-none focus:border-primary"
+                    >
+                      {[1, 2, 3, 4, 5, 6, 10, 12].map((n) => (
+                        <option key={n} value={n}>
+                          {n}x de {currency(remaining(freeBalanceTitle) / n)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-foreground/80">
+                      1º Vencimento
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={repactFirstDue}
+                      onChange={(e) => setRepactFirstDue(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-border text-sm bg-muted/60 focus:bg-card outline-none focus:border-primary"
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-1">
-                  <label className="text-[12px] font-bold text-slate-700">Quantidade de Parcelas</label>
+                  <label className="text-xs font-semibold text-foreground/80">
+                    Forma de Pagamento
+                  </label>
                   <select
-                    value={repactCount}
-                    onChange={(e) => setRepactCount(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-[13px] bg-slate-50 focus:bg-white outline-none focus:border-purple-600"
+                    value={repactMethod}
+                    onChange={(e) => setRepactMethod(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-border text-sm bg-muted/60 focus:bg-card outline-none focus:border-primary"
                   >
-                    {[1, 2, 3, 4, 5, 6, 10, 12].map((n) => (
-                      <option key={n} value={n}>
-                        {n}x de {currency(remaining(freeBalanceTitle) / n)}
-                      </option>
-                    ))}
+                    <option value="pix">Pix</option>
+                    <option value="cartao_credito">Cartão de Crédito</option>
+                    <option value="cartao_debito">Cartão de Débito</option>
+                    <option value="boleto">Boleto Bancário</option>
+                    <option value="dinheiro">Dinheiro</option>
+                    <option value="transferencia">Transferência</option>
                   </select>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-[12px] font-bold text-slate-700">1º Vencimento</label>
-                  <input
-                    type="date"
-                    required
-                    value={repactFirstDue}
-                    onChange={(e) => setRepactFirstDue(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-[13px] bg-slate-50 focus:bg-white outline-none focus:border-purple-600"
-                  />
+                <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-border-soft">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setRepactOpen(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-muted transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={busy}
+                    className="px-5 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-semibold shadow-xs transition"
+                  >
+                    {busy ? "Repactuando..." : "Confirmar Repactuação"}
+                  </button>
                 </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[12px] font-bold text-slate-700">Forma de Pagamento</label>
-                <select
-                  value={repactMethod}
-                  onChange={(e) => setRepactMethod(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-[13px] bg-slate-50 focus:bg-white outline-none focus:border-purple-600"
-                >
-                  <option value="pix">Pix</option>
-                  <option value="cartao_credito">Cartão de Crédito</option>
-                  <option value="cartao_debito">Cartão de Débito</option>
-                  <option value="boleto">Boleto Bancário</option>
-                  <option value="dinheiro">Dinheiro</option>
-                  <option value="transferencia">Transferência</option>
-                </select>
-              </div>
-
-              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => setRepactOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={busy}
-                  className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-xs transition"
-                >
-                  {busy ? "Repactuando..." : "Confirmar Repactuação"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+              </form>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {ledger.error && (
-        <p role="alert" className="text-red-700">
+        <p role="alert" className="text-destructive">
           {errorMessage(ledger.error)}
         </p>
       )}
@@ -670,14 +695,14 @@ export default function TreatmentFinance() {
   });
   const plan = query.data?.find((p) => p.id === selected);
   return (
-    <section className="rounded-2xl border bg-white p-5 space-y-4" id="planos-acompanhamento">
-      <h2 className="text-lg font-bold">Financeiro dos planos de acompanhamento</h2>
-      <p className="text-sm text-slate-500">
+    <section className="rounded-2xl border bg-card p-5 space-y-4" id="planos-acompanhamento">
+      <h2 className="text-lg font-semibold">Financeiro dos planos de acompanhamento</h2>
+      <p className="text-sm text-muted-foreground">
         Entrada, saldo e recebimentos parciais vinculados ao paciente, com conta, data e histórico
         de cada baixa.
       </p>
       {query.error && (
-        <p role="alert" className="text-red-700">
+        <p role="alert" className="text-destructive">
           {errorMessage(query.error)}
         </p>
       )}

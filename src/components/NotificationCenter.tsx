@@ -1,266 +1,322 @@
-import TreatmentAlerts from "@/features/acompanhamentos/TreatmentAlerts";
-import { useEffect, useState } from "react";
+import {
+  BrandLoader,
+  EmptyState,
+  SegmentedControl,
+  type SegmentedOption,
+} from "@/components/ui-app";
+import { Button } from "@/components/ui/button";
+import { safeRedirectPath } from "@/features/admin/permissions";
+import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
+import { formatNotificationTime, groupByDay } from "@/lib/notification-groups";
+import { cn } from "@/lib/utils";
 import { notificationsService } from "@/services/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Archive, Check, Clock, Bell as BellIcon } from "lucide-react";
+import { Archive, Bell, Check, Clock, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-type Notif = {
+type Notification = {
   id: string;
   title: string;
   body: string | null;
-  type: string | null;
   category: string | null;
-  priority: string | null;
   action_url: string | null;
   read: boolean;
   archived: boolean;
   created_at: string;
 };
-
-const CAT_LABEL: Record<string, string> = {
+type NotificationData = { source: "php" | "supabase"; items: Notification[] };
+type Tab = "nao_lidas" | "todas" | "arquivadas";
+const categories: Record<string, string> = {
   agenda: "Agenda",
   financeiro: "Financeiro",
   exame: "Exames",
   sistema: "Sistema",
 };
 
-const PRIORITY_DOT: Record<string, string> = {
-  alta: "#EF4444",
-  normal: "#6C4CF7",
-  baixa: "#9CA3AF",
-};
-
-function timeAgo(iso: string) {
-  const d = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(d / 60000);
-  if (m < 1) return "agora";
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h`;
-  return `${Math.floor(h / 24)}d`;
-}
-
 export default function NotificationCenter({ onClose }: { onClose: () => void }) {
-  const [tab, setTab] = useState<"todas" | "nao_lidas" | "arquivadas">("nao_lidas");
-  const [items, setItems] = useState<Notif[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const phpNotifs = await notificationsService.getNotifications();
-      if (phpNotifs && Array.isArray(phpNotifs) && phpNotifs.length > 0) {
-        const formatted = phpNotifs.map((n) => ({
-          id: n.id,
-          title: n.title,
-          body: n.message,
-          type: n.type,
-          category: "sistema",
-          priority: "normal",
-          action_url: null,
-          read: n.read,
-          archived: false,
-          created_at: n.created_at,
-        }));
-        setItems(formatted as Notif[]);
-        setLoading(false);
-        return;
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [tab, setTab] = useState<Tab>("nao_lidas");
+  const [busy, setBusy] = useState(false);
+  const queryKey = ["notifications-center", user?.id];
+  const query = useQuery({
+    queryKey,
+    enabled: !!user?.id,
+    staleTime: 30_000,
+    queryFn: async (): Promise<NotificationData> => {
+      try {
+        const items = await notificationsService.getNotifications();
+        return {
+          source: "php",
+          items: items.map((item) => ({
+            id: item.id,
+            title: item.title,
+            body: item.message,
+            category: "sistema",
+            action_url: null,
+            read: item.read,
+            archived: false,
+            created_at: item.created_at,
+          })),
+        };
+      } catch {
+        const { data, error } = await supabase
+          .from("notifications")
+          .select("id,title,body,category,action_url,read,archived,created_at")
+          .order("created_at", { ascending: false })
+          .limit(50);
+        if (error) throw error;
+        return { source: "supabase", items: data ?? [] };
       }
-    } catch {}
-
-    const { data, error } = await supabase
-      .from("notifications")
-      .select("id,title,body,type,category,priority,action_url,read,archived,created_at")
-      .order("created_at", { ascending: false })
-      .limit(50);
-    if (!error && data) setItems(data as Notif[]);
-    setLoading(false);
-  };
-
+    },
+  });
   useEffect(() => {
-    load();
-    const ch = supabase
-      .channel("notifications-center")
-      .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, () =>
-        load(),
-      )
+    if (query.data?.source !== "supabase") return;
+    const channel = supabase
+      .channel(`notification-center-${user?.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, () => {
+        void queryClient.invalidateQueries({ queryKey: ["notifications-center", user?.id] });
+      })
       .subscribe();
     return () => {
-      supabase.removeChannel(ch);
+      void supabase.removeChannel(channel);
     };
-  }, []);
+  }, [query.data?.source, queryClient, user?.id]);
 
-  const filtered = items.filter((n) => {
-    if (tab === "nao_lidas") return !n.read && !n.archived;
-    if (tab === "arquivadas") return n.archived;
-    return !n.archived;
-  });
-
-  const unreadCount = items.filter((n) => !n.read && !n.archived).length;
-
-  const markAllRead = async () => {
-    const ids = items.filter((n) => !n.read && !n.archived).map((n) => n.id);
-    if (!ids.length) return;
+  const items = query.data?.items ?? [];
+  const unread = items.filter((item) => !item.read && !item.archived);
+  const filtered = items.filter((item) =>
+    tab === "arquivadas" ? item.archived : !item.archived && (tab !== "nao_lidas" || !item.read),
+  );
+  const groups = groupByDay(filtered);
+  const tabs: SegmentedOption<Tab>[] = [
+    { value: "nao_lidas", label: "Não lidas" },
+    { value: "todas", label: "Todas" },
+    ...(query.data?.source === "supabase"
+      ? [{ value: "arquivadas" as const, label: "Arquivadas" }]
+      : []),
+  ];
+  const update = async (ids: string[], action: "read" | "archive" | "snooze") => {
+    if (!ids.length || !query.data) return;
+    setBusy(true);
     try {
-      await notificationsService.markAsRead(ids);
-    } catch {
-      await supabase.from("notifications").update({ read: true }).in("id", ids);
+      if (query.data.source === "php") {
+        if (action === "snooze")
+          await notificationsService.snooze(ids[0], new Date(Date.now() + 3_600_000).toISOString());
+        else if (action === "read") await notificationsService.markAsRead(ids);
+        else throw new Error("Arquivamento indisponível nesta fonte.");
+      } else {
+        const payload =
+          action === "archive"
+            ? { archived: true, archived_at: new Date().toISOString() }
+            : action === "snooze"
+              ? { read: true, snoozed_until: new Date(Date.now() + 3_600_000).toISOString() }
+              : { read: true };
+        const { error } = await supabase.from("notifications").update(payload).in("id", ids);
+        if (error) throw error;
+      }
+      await queryClient.invalidateQueries({ queryKey });
+      toast.success(
+        action === "archive"
+          ? "Notificação arquivada"
+          : action === "snooze"
+            ? "Notificação adiada por 1 hora"
+            : "Notificações marcadas como lidas",
+      );
+    } catch (error) {
+      console.error("Não foi possível atualizar as notificações.", error);
+      toast.error("Não foi possível atualizar a notificação. Tente novamente.");
+    } finally {
+      setBusy(false);
     }
-    setItems((prev) => prev.map((it) => ({ ...it, read: true })));
-    toast.success("Todas marcadas como lidas");
-  };
-
-  const markRead = async (id: string) => {
-    try {
-      await notificationsService.markAsRead(id);
-    } catch {
-      await supabase.from("notifications").update({ read: true }).eq("id", id);
-    }
-    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, read: true } : it)));
-  };
-  const archive = async (id: string) => {
-    await supabase
-      .from("notifications")
-      .update({ archived: true, archived_at: new Date().toISOString() })
-      .eq("id", id);
-    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, archived: true } : it)));
-    toast.success("Notificação arquivada");
-  };
-  const snooze = async (id: string) => {
-    const when = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-    try {
-      await notificationsService.snooze(id, when);
-    } catch {
-      await supabase.from("notifications").update({ snoozed_until: when, read: true }).eq("id", id);
-    }
-    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, read: true } : it)));
-    toast.success("Adiada por 1h");
   };
 
   return (
-    <div className="absolute right-0 top-11 z-50 w-[380px] rounded-2xl bg-white border border-black/[0.06] shadow-2xl overflow-hidden animate-in fade-in">
-      <div className="px-4 py-3 border-b border-black/[0.06] flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <BellIcon size={16} className="text-[#6C4CF7]" />
-          <span className="text-[13.5px] font-semibold text-[#111827]">Notificações</span>
-          {unreadCount > 0 && (
-            <span className="ml-1 h-5 min-w-5 px-1.5 rounded-full bg-[#6C4CF7] text-white text-[11px] font-semibold flex items-center justify-center">
-              {unreadCount}
+    <section aria-label="Central de notificações">
+      <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <Bell size={18} className="text-primary" aria-hidden="true" />
+          <h2 className="text-base font-semibold">Notificações</h2>
+          {unread.length > 0 && (
+            <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-semibold tabular-nums text-primary-foreground">
+              {unread.length}
+              <span className="sr-only"> não lidas</span>
             </span>
           )}
         </div>
-        <button
-          onClick={markAllRead}
-          className="text-[12px] font-medium text-[#6C4CF7] hover:underline"
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8 rounded-full"
+          aria-label="Fechar notificações"
+          onClick={onClose}
         >
-          Marcar todas
-        </button>
+          <X />
+        </Button>
       </div>
-
-      <div className="px-2 pt-2 flex items-center gap-1 border-b border-black/[0.04]">
-        {(
-          [
-            ["nao_lidas", "Não lidas"],
-            ["todas", "Todas"],
-            ["arquivadas", "Arquivadas"],
-          ] as const
-        ).map(([k, label]) => (
-          <button
-            key={k}
-            onClick={() => setTab(k)}
-            className={`px-3 h-8 rounded-lg text-[12.5px] font-medium transition-colors ${
-              tab === k ? "bg-[#F3F0FF] text-[#6C4CF7]" : "text-[#6B7280] hover:bg-[#F9FAFB]"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
+      <div className="px-4 pb-3">
+        <SegmentedControl
+          value={tab}
+          onChange={setTab}
+          options={tabs}
+          aria-label="Filtrar notificações"
+          className="w-full"
+        />
       </div>
-
-      <div className="max-h-[420px] overflow-y-auto">
-        <TreatmentAlerts />
-        {loading ? (
-          <div className="p-6 text-center text-[13px] text-[#6B7280]">Carregando…</div>
-        ) : filtered.length === 0 ? (
-          <div className="p-8 text-center">
-            <BellIcon size={28} className="mx-auto text-[#D1D5DB] mb-2" />
-            <div className="text-[13px] text-[#6B7280]">Nada por aqui</div>
+      <div className="max-h-[min(440px,55dvh)] overflow-y-auto border-t border-hairline">
+        {query.isPending ? (
+          <div className="flex justify-center p-8">
+            <BrandLoader label="Carregando notificações…" />
           </div>
+        ) : query.error ? (
+          <div role="alert" className="p-4 text-sm">
+            <p>Não foi possível carregar as notificações.</p>
+            <Button variant="link" onClick={() => void query.refetch()} className="mt-2 px-0">
+              Tentar novamente
+            </Button>
+          </div>
+        ) : !filtered.length ? (
+          <EmptyState
+            title="Nenhuma notificação"
+            description="Novas atualizações aparecerão aqui."
+            illustration={<Bell size={22} />}
+            className="m-4 border-0 bg-transparent"
+          />
         ) : (
-          filtered.map((n) => (
-            <div
-              key={n.id}
-              className={`group px-4 py-3 border-b border-black/[0.04] hover:bg-[#FAFAFB] transition-colors ${!n.read ? "bg-[#FBFAFF]" : ""}`}
-            >
-              <div className="flex items-start gap-3">
-                <span
-                  className="mt-1.5 h-2 w-2 rounded-full shrink-0"
-                  style={{ background: PRIORITY_DOT[n.priority ?? "normal"] ?? "#6C4CF7" }}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <div className="text-[13px] font-semibold text-[#111827] truncate">
-                      {n.title}
-                    </div>
-                    {n.category && (
-                      <span className="text-[10.5px] font-medium text-[#6C4CF7] bg-[#F3F0FF] px-1.5 py-0.5 rounded">
-                        {CAT_LABEL[n.category] ?? n.category}
-                      </span>
-                    )}
-                  </div>
-                  {n.body && (
-                    <div className="text-[12.5px] text-[#6B7280] mt-0.5 line-clamp-2">{n.body}</div>
-                  )}
-                  <div className="flex items-center gap-3 mt-1.5">
-                    <span className="text-[11px] text-[#9CA3AF]">{timeAgo(n.created_at)}</span>
-                    {n.action_url && (
-                      <Link
-                        to={n.action_url}
-                        onClick={() => {
-                          markRead(n.id);
-                          onClose();
-                        }}
-                        className="text-[11.5px] font-medium text-[#6C4CF7] hover:underline"
-                      >
-                        Abrir
-                      </Link>
-                    )}
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  {!n.read && (
-                    <button
-                      onClick={() => markRead(n.id)}
-                      title="Marcar como lida"
-                      className="h-7 w-7 rounded-lg hover:bg-[#F3F0FF] flex items-center justify-center"
+          groups.map((group) => (
+            <div key={group.id} role="group" aria-labelledby={`notifications-${group.id}`}>
+              <h3
+                id={`notifications-${group.id}`}
+                className="px-4 pb-1 pt-3 text-xs font-semibold text-muted-foreground"
+              >
+                {group.label}
+              </h3>
+              <div className="divide-y divide-hairline">
+                {group.items.map((item) => {
+                  const url = safeRedirectPath(item.action_url);
+                  const category = item.category
+                    ? (categories[item.category] ?? item.category)
+                    : null;
+                  return (
+                    <article
+                      key={item.id}
+                      className="flex gap-3 px-4 py-3 transition-colors hover:bg-foreground/[0.03]"
                     >
-                      <Check size={14} className="text-[#6C4CF7]" />
-                    </button>
-                  )}
-                  <button
-                    onClick={() => snooze(n.id)}
-                    title="Adiar 1h"
-                    className="h-7 w-7 rounded-lg hover:bg-[#F3F0FF] flex items-center justify-center"
-                  >
-                    <Clock size={14} className="text-[#6B7280]" />
-                  </button>
-                  {!n.archived && (
-                    <button
-                      onClick={() => archive(n.id)}
-                      title="Arquivar"
-                      className="h-7 w-7 rounded-lg hover:bg-[#F3F0FF] flex items-center justify-center"
-                    >
-                      <Archive size={14} className="text-[#6B7280]" />
-                    </button>
-                  )}
-                </div>
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "mt-1.5 size-2 shrink-0 rounded-full",
+                          item.read ? "bg-transparent" : "bg-primary",
+                        )}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-3">
+                          <p
+                            className={cn(
+                              "min-w-0 break-words text-sm text-foreground",
+                              !item.read && "font-semibold",
+                            )}
+                          >
+                            {!item.read && <span className="sr-only">Não lida: </span>}
+                            {item.title}
+                          </p>
+                          <time
+                            dateTime={item.created_at}
+                            className="shrink-0 pt-px text-xs tabular-nums text-muted-foreground"
+                          >
+                            {formatNotificationTime(item.created_at, group.id)}
+                          </time>
+                        </div>
+                        {item.body && (
+                          <p className="mt-0.5 break-words text-sm text-muted-foreground">
+                            {item.body}
+                          </p>
+                        )}
+                        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                            {category && <span>{category}</span>}
+                            {url && (
+                              <Link
+                                to={url}
+                                onClick={() => {
+                                  void update([item.id], "read");
+                                  onClose();
+                                }}
+                                className="font-medium text-primary hover:underline"
+                              >
+                                Abrir
+                              </Link>
+                            )}
+                          </div>
+                          <div className="flex gap-1">
+                            {!item.read && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8 rounded-full"
+                                disabled={busy}
+                                onClick={() => void update([item.id], "read")}
+                                aria-label="Marcar como lida"
+                                title="Marcar como lida"
+                              >
+                                <Check />
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8 rounded-full"
+                              disabled={busy}
+                              onClick={() => void update([item.id], "snooze")}
+                              aria-label="Adiar por 1 hora"
+                              title="Adiar por 1 hora"
+                            >
+                              <Clock />
+                            </Button>
+                            {!item.archived && query.data?.source === "supabase" && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8 rounded-full"
+                                disabled={busy}
+                                onClick={() => void update([item.id], "archive")}
+                                aria-label="Arquivar"
+                                title="Arquivar"
+                              >
+                                <Archive />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             </div>
           ))
         )}
       </div>
-    </div>
+      {unread.length > 0 && (
+        <div className="border-t border-hairline px-4 py-2">
+          <Button
+            variant="link"
+            disabled={busy}
+            className="px-0"
+            onClick={() =>
+              void update(
+                unread.map((item) => item.id),
+                "read",
+              )
+            }
+          >
+            Marcar todas como lidas
+          </Button>
+        </div>
+      )}
+    </section>
   );
 }

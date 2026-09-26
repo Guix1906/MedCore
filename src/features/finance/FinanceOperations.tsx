@@ -99,7 +99,7 @@ export default function FinanceOperations({
           <p role="status">Carregando dados financeiros...</p>
         )}
         {(query.error || cashQuery.error) && (
-          <div role="alert" className="rounded-lg bg-red-50 p-3 text-red-800">
+          <div role="alert" className="rounded-lg bg-destructive/10 p-3 text-destructive">
             {errorMessage(query.error ?? cashQuery.error)}
             <p>Confira a conexão, as permissões e as migrações financeiras.</p>
             <button
@@ -127,12 +127,8 @@ export default function FinanceOperations({
             {mode === "conciliacao" && (
               <BankReconciliation finance={scoped} ops={ops} onOpenTitles={onOpenTitles} />
             )}
-            {mode === "dfc" && (
-              <DfcTab finance={scoped} onSelectTitle={onSelectTitle} />
-            )}
-            {mode === "dre" && (
-              <DreTab finance={scoped} onSelectTitle={onSelectTitle} />
-            )}
+            {mode === "dfc" && <DfcTab finance={scoped} onSelectTitle={onSelectTitle} />}
+            {mode === "dre" && <DreTab finance={scoped} onSelectTitle={onSelectTitle} />}
             {mode === "contas" && <FinancialAccounts finance={scoped} cash={cash} ops={ops} />}
           </div>
         )}

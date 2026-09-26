@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { ClinicalPhoto } from "./followup-schema";
 import { errorMessage, formatClinicalDate, localDate } from "./followup-utils";
 
-const input = "w-full rounded-lg border border-slate-200 p-2 text-sm";
+const input = "w-full rounded-lg border border-border p-2 text-sm";
 const bucket = "treatment-photos";
 
 function PrivateImage({ photo }: { photo: ClinicalPhoto }) {
@@ -35,9 +35,9 @@ function PrivateImage({ photo }: { photo: ClinicalPhoto }) {
     };
   }, [photo.storage_path]);
   return (
-    <figure className="rounded-xl border bg-white p-3 space-y-2">
+    <figure className="rounded-xl border bg-card p-3 space-y-2">
       {error ? (
-        <p role="alert" className="text-red-700 text-sm">
+        <p role="alert" className="text-destructive text-sm">
           Não foi possível carregar a foto: {error}
         </p>
       ) : url ? (
@@ -157,10 +157,10 @@ export default function ClinicalPhotos({
   if (!treatmentId && !patientId)
     return <p role="alert">Selecione um paciente salvo para visualizar as fotos.</p>;
   return (
-    <section className="rounded-2xl border bg-white p-5 space-y-4">
-      <h3 className="font-bold">Fotos clínicas e objetivo do paciente</h3>
+    <section className="rounded-2xl border bg-card p-5 space-y-4">
+      <h3 className="font-semibold">Fotos clínicas e objetivo do paciente</h3>
       {plans.error && (
-        <p role="alert" className="text-red-700">
+        <p role="alert" className="text-destructive">
           {errorMessage(plans.error)}
         </p>
       )}
@@ -229,23 +229,23 @@ export default function ClinicalPhotos({
         </label>
         <button
           disabled={busy || !selectedPlan}
-          className="rounded-xl bg-purple-600 text-white p-2 disabled:opacity-50 self-end"
+          className="rounded-xl bg-primary text-white p-2 disabled:opacity-50 self-end"
         >
           {busy ? "Salvando..." : "Adicionar foto"}
         </button>
       </form>
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-muted-foreground">
         Imagens privadas, vinculadas ao paciente pelo plano. Registros em ordem cronológica para
         comparação antes/depois.
       </p>
       {photos.error && (
-        <p role="alert" className="text-red-700">
+        <p role="alert" className="text-destructive">
           {errorMessage(photos.error)}
         </p>
       )}
       {photos.isFetching && <p>Carregando fotos...</p>}
       {!photos.error && !photos.isFetching && !photos.data?.length && (
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-muted-foreground">
           Nenhuma foto registrada. No prontuário, selecione um plano existente para adicionar fotos.
         </p>
       )}

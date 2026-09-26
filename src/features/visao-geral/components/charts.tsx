@@ -1,7 +1,7 @@
 import { Chart } from "@/components/ds";
 import { DashCard, CardTitle, EmptyHint } from "./cards";
 
-const AXIS = { colors: "#9CA3AF", fontSize: "11.5px", fontWeight: 600 };
+const AXIS = { colors: "#9CA3AF", fontSize: "12px", fontWeight: 600 };
 
 export function GaugeCard({
   title,
@@ -34,7 +34,7 @@ export function GaugeCard({
                   name: {
                     offsetY: 18,
                     color: "#9CA3AF",
-                    fontSize: "11.5px",
+                    fontSize: "12px",
                     fontWeight: 500,
                   },
                   value: {
@@ -106,7 +106,7 @@ export function MiniBarsCard({
   return (
     <DashCard delay={delay}>
       <CardTitle>{title}</CardTitle>
-      <button className="-mt-2 mb-2 block text-[14px] font-semibold text-[#7C5CFA] hover:underline">
+      <button className="-mt-2 mb-2 block text-sm font-semibold text-primary hover:underline">
         ver mais
       </button>
       {items.length === 0 ? (
@@ -115,16 +115,18 @@ export function MiniBarsCard({
         <ul className="space-y-2.5">
           {items.map((it) => (
             <li key={it.label} className="flex items-center gap-2">
-              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#F5F3FF] text-[11.5px] font-bold text-[#7C5CFA]">
+              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-primary-soft text-xs font-semibold text-primary">
                 {it.label.slice(0, 1).toUpperCase()}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[15px] font-bold leading-[1.35] tracking-[-0.01em] text-[#1B2A4A]">
+                <p className="truncate text-[15px] font-semibold leading-[1.35] tracking-[-0.01em] text-foreground">
                   {it.label}
                 </p>
-                <p className="text-[13.5px] font-semibold text-[#6B7280]">{it.value}</p>
+                <p className="text-sm font-semibold text-muted-foreground">{it.value}</p>
               </div>
-              <span className="shrink-0 text-[13.5px] font-bold text-[#6B7280]">{it.pct}%</span>
+              <span className="shrink-0 text-sm font-semibold text-muted-foreground">
+                {it.pct}%
+              </span>
             </li>
           ))}
         </ul>
@@ -144,7 +146,7 @@ export function BusiestDaysChart({ data }: { data: number[] }) {
         plotOptions: { bar: { columnWidth: "40%", borderRadius: 3 } },
         dataLabels: {
           enabled: true,
-          style: { fontSize: "11.5px", colors: ["#6B7280"] },
+          style: { fontSize: "12px", colors: ["#6B7280"] },
           offsetY: -16,
         },
         grid: { borderColor: "#F1F3F9" },

@@ -1,71 +1,83 @@
-import ClinicalPhotos from "@/features/acompanhamentos/ClinicalPhotos";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  forwardRef,
-  useImperativeHandle,
-  memo,
-  type ReactNode,
-} from "react";
-import { useNavigate } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { prontuarioService, patientsService } from "@/services/api";
-import { toast } from "sonner";
-import { AnimatePresence, motion } from "framer-motion";
-import {
-  Bold,
-  Italic,
-  Underline,
-  Strikethrough,
-  Type,
-  Highlighter,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
-  AlignJustify,
-  List,
-  ListOrdered,
-  RemoveFormatting,
-  Undo2,
-  Redo2,
-  ClipboardList,
-  Lock,
-  ChevronDown,
-  Timer,
-  Sparkles,
-  Check,
-  CloudUpload,
-  CircleDot,
-  Stethoscope,
-  Pill,
-  FileText,
-  Settings,
-  Download,
-  Eye,
-  Send,
-  PlusCircle,
-  AlertCircle,
-  AlertTriangle,
-  FileDigit,
-  ArrowLeft,
-  History,
-  Search,
-  Copy,
-  Calendar,
-} from "lucide-react";
-import { DUR, EASE_OUT, fadeUp, staggerContainer, dropdownVariants } from "@/lib/motion";
-import { createContext, useContext } from "react";
-import { ProntuarioHub } from "./ProntuarioHub";
 import {
   AiRecordAssistantModal,
   type AiSectionContext,
 } from "@/components/prontuario/AiRecordAssistantModal";
-import type { StructuredConsultationResult } from "@/lib/gemini";
+import ClinicalPhotos from "@/features/acompanhamentos/ClinicalPhotos";
 import { usePatientClinicalHistory } from "@/hooks/usePatientClinicalHistory";
+import { supabase } from "@/integrations/supabase/client";
+import type { StructuredConsultationResult } from "@/lib/gemini";
+import { DUR, EASE_OUT, fadeUp, staggerContainer } from "@/lib/motion";
+import { patientsService, prontuarioService } from "@/services/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { buttonVariants } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertCircle,
+  AlertTriangle,
+  AlignCenter,
+  AlignJustify,
+  AlignLeft,
+  AlignRight,
+  ArrowLeft,
+  Bold,
+  Check,
+  ChevronDown,
+  CircleDot,
+  ClipboardList,
+  CloudUpload,
+  Copy,
+  FileDigit,
+  FileText,
+  Highlighter,
+  History,
+  Italic,
+  List,
+  ListOrdered,
+  PlusCircle,
+  Redo2,
+  RemoveFormatting,
+  Search,
+  Settings,
+  Sparkles,
+  Strikethrough,
+  Timer,
+  Type,
+  Underline,
+  Undo2,
+} from "lucide-react";
+import {
+  createContext,
+  forwardRef,
+  memo,
+  useCallback,
+  useContext,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { toast } from "sonner";
+import { ProntuarioHub } from "./ProntuarioHub";
 
 export interface RichEditorHandle {
   insertText: (text: string) => void;
@@ -82,7 +94,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "anamnese", label: "Anamnese" },
   { key: "orcamento", label: "Orçamento" },
   { key: "plano", label: "Plano de tratamento" },
-  { key: "fotos", label: "Fotos e anexos" },
+  { key: "fotos", label: "Fotos clínicas" },
   { key: "injetaveis", label: "Injetáveis" },
 ];
 
@@ -159,8 +171,6 @@ export default function ProntuarioPage() {
     };
   }, [dbPatient, paramPatientName, paramPatientId]);
 
-  const [privacyOpen, setPrivacyOpen] = useState(false);
-  const [privacy, setPrivacy] = useState<"Privado" | "Compartilhado">("Privado");
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [isFinalizing, setIsFinalizing] = useState(false);
   const saveTimer = useRef<number | null>(null);
@@ -169,10 +179,8 @@ export default function ProntuarioPage() {
   const queixaRef = useRef<RichEditorHandle>(null);
 
   // Busca o histórico completo de atendimentos clínicos e consultas desse paciente
-  const {
-    data: clinicalHistory = [],
-    isLoading: loadingClinicalHistory,
-  } = usePatientClinicalHistory(patient.id, patient.name);
+  const { data: clinicalHistory = [], isLoading: loadingClinicalHistory } =
+    usePatientClinicalHistory(patient.id, patient.name);
 
   const [historySearch, setHistorySearch] = useState("");
   const [showHistoryTimeline, setShowHistoryTimeline] = useState(true);
@@ -250,6 +258,20 @@ export default function ProntuarioPage() {
   // Estado do modal de confirmação de cancelamento
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const handleCancel = () => setCancelModalOpen(true);
+  const [finalizeConfirmOpen, setFinalizeConfirmOpen] = useState(false);
+  const [isMac, setIsMac] = useState(false);
+
+  useEffect(() => {
+    setIsMac(/Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent));
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey) return;
+      if (event.key.toLowerCase() !== "s") return;
+      event.preventDefault();
+      if (!isFinalizing) setFinalizeConfirmOpen(true);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isFinalizing]);
 
   const secondsRef = useRef(0);
 
@@ -353,10 +375,10 @@ export default function ProntuarioPage() {
 
   return (
     <DirtyCtx.Provider value={markDirty}>
-      <div className="min-h-screen bg-background text-foreground">
-        <div className="flex w-full min-h-[calc(100vh-60px)] items-stretch gap-6 px-6 pb-32 pt-6">
+      <div className="min-h-[calc(100dvh-64px)] bg-surface text-foreground">
+        <div className="page-container flex flex-col lg:flex-row items-stretch gap-5 pb-40 lg:pb-28">
           {/* Sidebar */}
-          <aside className="-mt-6 w-[240px] shrink-0 border-r border-[#E5E7EB] pr-0 pt-6 min-h-[calc(100vh-80px)]">
+          <aside className="w-full shrink-0 rounded-xl border border-border bg-card p-4 lg:w-[220px] lg:self-start">
             <button
               type="button"
               onClick={() =>
@@ -365,22 +387,20 @@ export default function ProntuarioPage() {
                   search: { patientId: undefined, patientName: undefined },
                 })
               }
-              className="mb-3.5 flex items-center gap-1.5 text-[12px] font-semibold text-[#8B47FF] hover:text-[#7A3CE3] transition-colors cursor-pointer"
+              className="mb-3.5 flex items-center gap-1.5 text-xs font-semibold text-primary hover:text-primary-hover transition-colors cursor-pointer"
             >
               <ArrowLeft size={14} /> Voltar à central de hoje
             </button>
 
-            <div className="mb-4 flex items-center gap-3 pr-6">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[13px] font-semibold text-primary">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/15 text-sm font-semibold text-primary">
                 {patient.initials}
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13.5px] font-semibold tracking-tight text-foreground">
+              <div className="min-w-0 flex-1 rounded-xl border border-border bg-card p-4 md:p-5">
+                <h1 className="text-lg font-semibold leading-snug tracking-tight text-foreground">
                   {patient.name}
-                </div>
-                <div className="text-[12.5px] leading-tight text-muted-foreground">
-                  {patient.age}
-                </div>
+                </h1>
+                <div className="text-sm leading-tight text-muted-foreground">{patient.age}</div>
               </div>
               <button
                 onClick={copyPatient}
@@ -392,24 +412,30 @@ export default function ProntuarioPage() {
               </button>
             </div>
 
-            <nav className="-ml-2 flex flex-col gap-3 border-t border-[#E5E7EB] pl-0 pr-2 pt-3.5">
+            <nav className="flex max-w-full gap-2 overflow-x-auto border-t border-border pt-3 lg:flex-col">
               {TABS.map((t) => {
                 const active = t.key === tab;
                 return (
                   <button
                     key={t.key}
+                    disabled={t.key !== "anamnese" && t.key !== "fotos"}
+                    title={
+                      t.key !== "anamnese" && t.key !== "fotos"
+                        ? "Indisponível nesta tela"
+                        : undefined
+                    }
+                    aria-current={active ? "page" : undefined}
                     onClick={() => setTab(t.key)}
-                    className={`group relative flex items-center w-full rounded-[8px] px-3 py-2 text-left text-[14.5px] transition-all duration-150 focus-ring cursor-pointer ${
+                    className={`group relative flex shrink-0 items-center whitespace-nowrap disabled:opacity-40 w-auto lg:w-full rounded-lg px-3 py-2 text-left text-sm transition-all duration-150 focus-ring cursor-pointer ${
                       active
-                        ? "text-white font-bold"
-                        : "text-[#8B8C89] font-semibold hover:bg-[#7B3AF5]/10 hover:text-[#7B3AF5]"
+                        ? "text-white font-semibold"
+                        : "text-muted-foreground font-semibold hover:bg-primary/10 hover:text-primary"
                     }`}
                   >
                     {active && (
                       <motion.span
                         layoutId="prontuario-tab-active"
-                        className="absolute inset-0 rounded-[8px] shadow-sm"
-                        style={{ backgroundColor: "#7B3AF5" }}
+                        className="absolute inset-0 rounded-full bg-primary shadow-sm"
                         transition={{ type: "spring", stiffness: 400, damping: 35 }}
                       />
                     )}
@@ -459,17 +485,17 @@ export default function ProntuarioPage() {
 
                     {/* 2. Histórico Completo de Atendimentos Anteriores do Paciente */}
                     <motion.div variants={fadeUp}>
-                      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
-                        <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-100">
+                      <div className="rounded-2xl border border-border bg-card p-5 shadow-xs space-y-4">
+                        <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-border-soft">
                           <div className="flex items-center gap-2">
-                            <History className="h-5 w-5 text-purple-600" />
+                            <History className="h-5 w-5 text-primary" />
                             <div>
-                              <h3 className="text-[15px] font-bold text-slate-800">
+                              <h3 className="text-[15px] font-semibold text-foreground">
                                 Histórico de Atendimentos do Paciente ({clinicalHistory.length})
                               </h3>
-                              <p className="text-[12px] text-slate-500">
+                              <p className="text-xs text-muted-foreground">
                                 Todos os prontuários, consultas e evoluções anteriores de{" "}
-                                <strong className="text-slate-700">{patient.name}</strong>.
+                                <strong className="text-foreground/80">{patient.name}</strong>.
                               </p>
                             </div>
                           </div>
@@ -478,7 +504,7 @@ export default function ProntuarioPage() {
                             <button
                               type="button"
                               onClick={() => setShowHistoryTimeline(!showHistoryTimeline)}
-                              className="text-[12px] font-semibold text-purple-600 hover:text-purple-800 hover:underline cursor-pointer"
+                              className="text-xs font-semibold text-primary hover:text-primary-hover hover:underline cursor-pointer"
                             >
                               {showHistoryTimeline ? "Ocultar histórico" : "Exibir histórico"}
                             </button>
@@ -492,14 +518,14 @@ export default function ProntuarioPage() {
                               <div className="relative">
                                 <Search
                                   size={14}
-                                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
                                 />
                                 <input
                                   type="text"
                                   value={historySearch}
                                   onChange={(e) => setHistorySearch(e.target.value)}
                                   placeholder="Filtrar por queixa, conduta, médico ou diagnóstico..."
-                                  className="w-full h-8.5 pl-8.5 pr-3 rounded-lg border border-slate-200 bg-slate-50/50 text-[12.5px] placeholder:text-slate-400 focus:bg-white focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 outline-none transition-all"
+                                  className="w-full h-8.5 pl-8.5 pr-3 rounded-lg border border-border bg-muted/30 text-sm placeholder:text-muted-foreground focus:bg-card focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none transition-all"
                                 />
                               </div>
                             )}
@@ -509,32 +535,32 @@ export default function ProntuarioPage() {
                                 {filteredHistory.map((rec) => (
                                   <div
                                     key={rec.id}
-                                    className="p-4 rounded-xl bg-slate-50/60 border border-slate-200/90 shadow-2xs space-y-2.5 transition-all hover:border-purple-200 hover:bg-slate-50"
+                                    className="p-4 rounded-xl bg-muted/36 border border-border/90 shadow-2xs space-y-2.5 transition-all hover:border-primary/25 hover:bg-muted/60"
                                   >
-                                    <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-200/70">
+                                    <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-border/70">
                                       <div className="flex items-center gap-2 flex-wrap">
                                         {rec.kind === "prontuario" && (
-                                          <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-md bg-purple-100 text-purple-700">
+                                          <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-primary-soft text-primary">
                                             🩺 Prontuário
                                           </span>
                                         )}
                                         {rec.kind === "consulta" && (
-                                          <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-md bg-blue-100 text-blue-700">
+                                          <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-info/15 text-info">
                                             📅 {rec.type || "Consulta"}
                                           </span>
                                         )}
                                         {rec.kind === "evolucao" && (
-                                          <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-md bg-emerald-100 text-emerald-700">
+                                          <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-success/15 text-success">
                                             📈 Evolução
                                           </span>
                                         )}
 
-                                        <span className="font-bold text-slate-800 text-[13px]">
+                                        <span className="font-semibold text-foreground text-sm">
                                           {rec.formattedDate} {rec.time ? `às ${rec.time}` : ""}
                                         </span>
 
                                         {rec.doctorName && (
-                                          <span className="text-[11.5px] text-slate-500 font-medium">
+                                          <span className="text-xs text-muted-foreground font-medium">
                                             • {rec.doctorName}
                                           </span>
                                         )}
@@ -542,13 +568,13 @@ export default function ProntuarioPage() {
 
                                       <div className="flex items-center gap-2">
                                         {rec.status && (
-                                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
+                                          <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-card border border-border text-muted-foreground">
                                             {rec.status}
                                           </span>
                                         )}
 
                                         {rec.durationSeconds ? (
-                                          <span className="text-[11.5px] text-slate-600 font-medium bg-white border border-slate-200 px-2 py-0.5 rounded-md">
+                                          <span className="text-xs text-muted-foreground font-medium bg-card border border-border px-2 py-0.5 rounded-md">
                                             ⏱️ {Math.round(rec.durationSeconds / 60)} min
                                           </span>
                                         ) : null}
@@ -564,7 +590,7 @@ export default function ProntuarioPage() {
                                                 "Texto importado para o atendimento atual!",
                                               );
                                             }}
-                                            className="text-[11.5px] font-semibold text-purple-600 hover:text-purple-800 hover:underline cursor-pointer"
+                                            className="text-xs font-semibold text-primary hover:text-primary-hover hover:underline cursor-pointer"
                                             title="Inserir este texto nas anotações do atendimento atual"
                                           >
                                             Inserir no editor
@@ -576,9 +602,11 @@ export default function ProntuarioPage() {
                                             type="button"
                                             onClick={() => {
                                               navigator.clipboard.writeText(rec.complaint || "");
-                                              toast.success("Texto copiado para a área de transferência");
+                                              toast.success(
+                                                "Texto copiado para a área de transferência",
+                                              );
                                             }}
-                                            className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-200/60 cursor-pointer"
+                                            className="text-muted-foreground hover:text-muted-foreground p-1 rounded hover:bg-surface-2/60 cursor-pointer"
                                             title="Copiar texto"
                                           >
                                             <Copy size={13} />
@@ -588,23 +616,23 @@ export default function ProntuarioPage() {
                                     </div>
 
                                     {rec.complaint ? (
-                                      <div className="text-[13px] text-slate-700 whitespace-pre-wrap leading-relaxed bg-white p-3 rounded-lg border border-slate-200/80">
+                                      <div className="text-sm text-foreground/80 whitespace-pre-wrap leading-relaxed bg-card p-3 rounded-lg border border-border/80">
                                         {rec.complaint}
                                       </div>
                                     ) : (
-                                      <p className="text-[12px] text-slate-400 italic">
+                                      <p className="text-xs text-muted-foreground italic">
                                         Consulta registrada sem texto de anotações.
                                       </p>
                                     )}
 
                                     {rec.conduct && (
-                                      <div className="text-[12px] text-purple-900 bg-purple-50/70 p-2.5 rounded-lg border border-purple-100">
+                                      <div className="text-xs text-primary-hover bg-primary-soft/70 p-2.5 rounded-lg border border-primary/15">
                                         <strong>Conduta:</strong> {rec.conduct}
                                       </div>
                                     )}
 
                                     {rec.diagnosis && (
-                                      <div className="text-[12px] text-slate-600">
+                                      <div className="text-xs text-muted-foreground">
                                         <strong>Diagnóstico:</strong> {rec.diagnosis}
                                       </div>
                                     )}
@@ -613,8 +641,8 @@ export default function ProntuarioPage() {
                               </div>
                             ) : (
                               <div className="py-6 text-center space-y-1">
-                                <FileText className="h-7 w-7 text-slate-300 mx-auto" />
-                                <p className="text-[13px] font-medium text-slate-600">
+                                <FileText className="h-7 w-7 text-muted-foreground/60 mx-auto" />
+                                <p className="text-sm font-medium text-muted-foreground">
                                   {historySearch
                                     ? `Nenhum atendimento corresponde a "${historySearch}".`
                                     : `Nenhum atendimento anterior registrado para ${patient.name}.`}
@@ -666,141 +694,95 @@ export default function ProntuarioPage() {
         />
 
         {/* Modal de Confirmação de Cancelamento do Prontuário */}
-        <AnimatePresence>
-          {cancelModalOpen && (
-            <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
-              {/* Backdrop */}
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setCancelModalOpen(false)}
-                className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"
-              />
-
-              {/* Dialog */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                transition={{ duration: 0.2, ease: EASE_OUT }}
-                className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white p-6 shadow-2xl border border-slate-200"
+        <AlertDialog open={cancelModalOpen} onOpenChange={setCancelModalOpen}>
+          <AlertDialogContent>
+            <div className="flex items-start gap-4">
+              <div
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive"
+                aria-hidden="true"
               >
-                <div className="flex items-start gap-4">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600 border border-rose-100">
-                    <AlertTriangle className="h-6 w-6" />
-                  </div>
-
-                  <div className="space-y-1.5 flex-1">
-                    <h3 className="text-[17px] font-bold text-slate-900 tracking-tight">
-                      Cancelar atendimento?
-                    </h3>
-                    <p className="text-[13.5px] leading-relaxed text-slate-500">
-                      Tem certeza de que deseja descartar este atendimento? Todas as anotações
-                      clínicas e alterações não salvas serão perdidas.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-6 flex items-center justify-end gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setCancelModalOpen(false)}
-                    className="rounded-xl px-4 py-2.5 text-[14px] font-semibold text-slate-700 hover:bg-slate-100 transition-colors focus-ring"
-                  >
-                    Continuar atendimento
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCancelModalOpen(false);
-                      toast.info("Atendimento cancelado");
-                      navigate({ to: "/pacientes" });
-                    }}
-                    className="rounded-xl bg-rose-600 px-4 py-2.5 text-[14px] font-semibold text-white shadow-sm hover:bg-rose-700 transition-all active:scale-[0.98] focus-ring"
-                  >
-                    Sim, descartar
-                  </button>
-                </div>
-              </motion.div>
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <AlertDialogHeader className="flex-1 space-y-1.5">
+                <AlertDialogTitle className="tracking-tight">
+                  Cancelar atendimento?
+                </AlertDialogTitle>
+                <AlertDialogDescription className="leading-relaxed">
+                  Tem certeza de que deseja descartar este atendimento? Todas as anotações clínicas
+                  e alterações não salvas serão perdidas.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
             </div>
-          )}
-        </AnimatePresence>
+            <AlertDialogFooter className="mt-2">
+              <AlertDialogCancel>Continuar atendimento</AlertDialogCancel>
+              <AlertDialogAction
+                className={buttonVariants({ variant: "destructive" })}
+                onClick={() => {
+                  toast.info("Atendimento cancelado");
+                  navigate({ to: "/pacientes" });
+                }}
+              >
+                Sim, descartar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
-        {/* Footer bar */}
-        <footer className="fixed bottom-0 left-0 right-0 z-30 border-t border-[#E5E7EB] bg-white/95 backdrop-blur md:pl-[56px]">
-          <div className="flex h-14 w-full items-center px-6">
-            {/* Bloco lateral esquerdo com a linha divisória perfeitamente alinhada */}
-            <div className="h-full w-[240px] shrink-0 border-r border-[#E5E7EB]" />
+        {/* Confirmação do atalho ⌘S / Ctrl S: finalizar grava e encerra o atendimento. */}
+        <AlertDialog open={finalizeConfirmOpen} onOpenChange={setFinalizeConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Finalizar atendimento agora?</AlertDialogTitle>
+              <AlertDialogDescription>
+                As anotações serão gravadas no prontuário e o atendimento será encerrado.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Continuar editando</AlertDialogCancel>
+              <AlertDialogAction onClick={() => void handleFinalize()}>
+                Finalizar atendimento
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
-            {/* Bloco alinhado com os campos de edição principais */}
-            <div className="flex flex-1 items-center justify-between pl-10">
-              {/* Esquerda: Contador de tempo + Botão Privado ao lado */}
-              <div className="flex items-center gap-6">
-                <ConsultationTimer
-                  onTick={(s) => {
-                    secondsRef.current = s;
-                  }}
-                />
-
-                <div className="relative">
-                  <button
-                    onClick={() => setPrivacyOpen((v) => !v)}
-                    className="flex items-center gap-2 rounded-full border border-border-soft bg-muted px-3 py-1.5 text-[13px] font-medium text-foreground hover:bg-muted/70 focus-ring"
-                  >
-                    <Lock className="h-3.5 w-3.5" />
-                    {privacy}
-                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                  </button>
-                  <AnimatePresence>
-                    {privacyOpen && (
-                      <motion.div
-                        variants={dropdownVariants}
-                        initial="hidden"
-                        animate="show"
-                        exit="exit"
-                        style={{ transformOrigin: "bottom left" }}
-                        className="absolute bottom-[calc(100%+6px)] left-0 w-44 overflow-hidden rounded-xl border border-border-soft bg-white shadow-lg z-40"
-                      >
-                        {(["Privado", "Compartilhado"] as const).map((opt) => (
-                          <button
-                            key={opt}
-                            onClick={() => {
-                              setPrivacy(opt);
-                              setPrivacyOpen(false);
-                            }}
-                            className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] transition-colors hover:bg-muted ${
-                              privacy === opt ? "text-primary" : "text-foreground"
-                            }`}
-                          >
-                            <Lock className="h-3.5 w-3.5" />
-                            {opt}
-                          </button>
-                        ))}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              </div>
-
-              {/* Canto direito inferior: Cancelar + Finalizar Atendimento */}
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={handleCancel}
-                  className="text-[14.5px] font-medium text-muted-foreground hover:text-foreground focus-ring rounded-md px-2 py-1.5 cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleFinalize}
-                  disabled={isFinalizing}
-                  className="rounded-xl bg-primary px-5 py-2.5 text-[14.5px] font-semibold text-primary-foreground shadow-[0_8px_20px_-8px_rgba(139,71,255,0.55)] transition-all hover:bg-primary-hover focus-ring disabled:opacity-50 cursor-pointer"
-                >
-                  {isFinalizing ? "Finalizando e gravando..." : "Finalizar atendimento"}
-                </button>
-              </div>
+        <footer className="app-fixed-footer pointer-events-none fixed bottom-0 right-0 z-30 px-3 pb-3 md:px-6 md:pb-4">
+          <div className="pointer-events-auto mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 rounded-2xl border border-hairline bg-glass px-4 py-2.5 shadow-(--glass-shadow-lg) glass-blur">
+            <div className="flex items-center gap-4">
+              <ConsultationTimer
+                onTick={(seconds) => {
+                  secondsRef.current = seconds;
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                {saveState === "saving"
+                  ? "Gravando no servidor…"
+                  : "As anotações são gravadas ao finalizar."}
+              </p>
+            </div>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCancel}
+                disabled={isFinalizing}
+                className="h-10 rounded-full px-3 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleFinalize}
+                disabled={isFinalizing}
+                aria-keyshortcuts="Control+S Meta+S"
+                className="inline-flex h-10 items-center gap-2 rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground shadow-xs hover:bg-primary-hover disabled:opacity-50"
+              >
+                {isFinalizing ? "Gravando…" : "Finalizar atendimento"}
+                {!isFinalizing && (
+                  <kbd className="hidden rounded-md bg-primary-foreground/20 px-1.5 py-0.5 font-sans text-xs font-medium sm:inline">
+                    {isMac ? "⌘S" : "Ctrl S"}
+                  </kbd>
+                )}
+              </button>
             </div>
           </div>
         </footer>
@@ -814,14 +796,22 @@ export default function ProntuarioPage() {
 function SaveIndicator({ state }: { state: SaveState }) {
   const cfg =
     state === "saved"
-      ? { label: "Salvo no banco", icon: Check, cls: "text-emerald-600 bg-emerald-50 border-emerald-100" }
+      ? {
+          label: "Salvo no banco",
+          icon: Check,
+          cls: "text-success bg-success/10 border-success/15",
+        }
       : state === "saving"
         ? {
             label: "Gravando…",
             icon: CloudUpload,
             cls: "text-primary bg-primary/10 border-primary/20",
           }
-        : { label: "Em edição (não gravado)", icon: CircleDot, cls: "text-amber-600 bg-amber-50 border-amber-100" };
+        : {
+            label: "Em edição (não gravado)",
+            icon: CircleDot,
+            cls: "text-warning bg-warning/10 border-warning/15",
+          };
   const Icon = cfg.icon;
   return (
     <AnimatePresence mode="wait">
@@ -831,7 +821,7 @@ function SaveIndicator({ state }: { state: SaveState }) {
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -4 }}
         transition={{ duration: 0.18, ease: EASE_OUT }}
-        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11.5px] font-medium ${cfg.cls}`}
+        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${cfg.cls}`}
       >
         <Icon className={`h-3 w-3 ${state === "saving" ? "animate-pulse" : ""}`} />
         {cfg.label}
@@ -861,7 +851,7 @@ function Section({
           className="flex flex-1 items-center text-left transition-colors focus-ring"
           aria-expanded={open}
         >
-          <h2 className="text-[17px] font-bold tracking-tight text-foreground">{title}</h2>
+          <h2 className="text-lg font-semibold tracking-tight text-foreground">{title}</h2>
         </button>
 
         <div className="flex items-center gap-3">
@@ -872,9 +862,9 @@ function Section({
                 e.stopPropagation();
                 onAiFill();
               }}
-              className="group relative inline-flex items-center gap-1.5 h-9 px-3.5 rounded-[10px] text-[13.5px] font-semibold text-white shadow-sm hover:brightness-105 active:scale-[0.98] transition-all duration-200"
+              className="group relative inline-flex items-center gap-1.5 h-9 px-3.5 rounded-[10px] text-sm font-semibold text-white shadow-sm hover:brightness-105 active:scale-[0.98] transition-all duration-200"
               style={{
-                background: "linear-gradient(135deg, #FF7A59 0%, #D946EF 50%, #6366F1 100%)",
+                background: "var(--primary)",
               }}
               title={`Preencher ${title} com IA`}
             >
@@ -924,9 +914,9 @@ function EmptyTab({ title, description }: { title: string; description: string }
       initial={{ opacity: 0, y: 12, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: DUR.base, ease: EASE_OUT }}
-      className="border-[1.5px] border-dashed border-[#c9cdd6] bg-white p-16 text-center"
+      className="border-[1.5px] border-dashed border-input bg-card p-16 text-center"
     >
-      <h2 className="text-[17px] font-bold tracking-tight text-foreground">{title}</h2>
+      <h2 className="text-lg font-semibold tracking-tight text-foreground">{title}</h2>
       <p className="mt-2 text-sm text-muted-foreground">{description}</p>
     </motion.div>
   );
@@ -938,11 +928,11 @@ function MemedTab() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col items-center justify-center rounded-[8px] border-[1.5px] border-[#c9cdd6] bg-white p-12 text-center shadow-sm">
+      <div className="flex flex-col items-center justify-center rounded-[8px] border-[1.5px] border-input bg-card p-12 text-center shadow-sm">
         <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary">
           <FileDigit className="h-8 w-8" />
         </div>
-        <h2 className="text-[20px] font-bold tracking-tight text-foreground">
+        <h2 className="text-xl font-semibold tracking-tight text-foreground">
           Prescrição Digital Memed
         </h2>
         <p className="mt-2 max-w-md text-[15px] text-muted-foreground">
@@ -951,20 +941,20 @@ function MemedTab() {
         </p>
 
         {!active && (
-          <div className="mt-6 flex items-center gap-2 rounded-md bg-amber-50 px-3 py-2 text-[13px] font-medium text-amber-700">
+          <div className="mt-6 flex items-center gap-2 rounded-md bg-warning/10 px-3 py-2 text-sm font-medium text-warning">
             <AlertCircle className="h-4 w-4" />A integração com a Memed ainda não foi configurada.
           </div>
         )}
 
         {active && (
-          <div className="mt-6 flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2 text-[13px] font-medium text-emerald-700">
+          <div className="mt-6 flex items-center gap-2 rounded-md bg-success/10 px-3 py-2 text-sm font-medium text-success">
             <Check className="h-4 w-4" />✅ Integração ativa.
           </div>
         )}
 
         <div className="mt-8 flex flex-wrap justify-center gap-4">
           <button
-            className="flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-[14.5px] font-semibold text-primary-foreground shadow-[0_8px_20px_-8px_rgba(139,71,255,0.55)] transition-all hover:bg-primary-hover focus-ring"
+            className="flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary-hover focus-ring"
             onClick={() =>
               toast.info("Fluxo Memed", { description: "Ponto de integração preparado." })
             }
@@ -974,7 +964,7 @@ function MemedTab() {
           </button>
           <button
             onClick={() => setConfigOpen(true)}
-            className="flex items-center gap-2 rounded-xl border border-[#c9cdd6] bg-white px-6 py-3 text-[14.5px] font-semibold text-foreground transition-all hover:bg-muted focus-ring"
+            className="flex items-center gap-2 rounded-xl border border-input bg-card px-6 py-3 text-sm font-semibold text-foreground transition-all hover:bg-muted focus-ring"
           >
             <Settings className="h-5 w-5" />
             Configurar Integração
@@ -983,10 +973,10 @@ function MemedTab() {
       </div>
 
       <div className="space-y-4">
-        <h3 className="text-[17px] font-bold tracking-tight text-foreground">Receitas emitidas</h3>
-        <div className="rounded-[8px] border border-[#D9DCE3] bg-white overflow-hidden">
-          <table className="w-full text-left text-[14px]">
-            <thead className="border-b border-[#E5E7EB] bg-muted/30">
+        <h3 className="text-lg font-semibold tracking-tight text-foreground">Receitas emitidas</h3>
+        <div className="rounded-[8px] border border-border bg-card overflow-hidden">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-border bg-muted/30">
               <tr>
                 <th className="px-4 py-3 font-semibold text-foreground">Data</th>
                 <th className="px-4 py-3 font-semibold text-foreground">Paciente</th>
@@ -1009,87 +999,78 @@ function MemedTab() {
         </div>
       </div>
 
-      {configOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
-          >
-            <div className="border-b border-border-soft px-6 py-4 flex items-center justify-between">
-              <h3 className="text-[17px] font-bold text-foreground">Configurações Memed</h3>
-              <button
-                onClick={() => setConfigOpen(false)}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <PlusCircle className="h-5 w-5 rotate-45" />
-              </button>
-            </div>
-            <div className="max-h-[70vh] overflow-y-auto p-6 space-y-6">
-              <div className="space-y-4 pt-2">
-                <h4 className="text-[14px] font-bold text-foreground uppercase tracking-wider">
-                  Credenciais
-                </h4>
-                <div className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[13px] font-semibold text-foreground">API Key</label>
-                    <input
-                      type="text"
-                      placeholder="Insira sua API Key"
-                      className="w-full rounded-lg border border-[#c9cdd6] px-3 py-2.5 text-[14px] outline-none focus:border-primary transition-all"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[13px] font-semibold text-foreground">Secret Key</label>
-                    <input
-                      type="password"
-                      placeholder="••••••••"
-                      className="w-full rounded-lg border border-[#c9cdd6] px-3 py-2.5 text-[14px] outline-none focus:border-primary transition-all"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[13px] font-semibold text-foreground">
-                      Ambiente de Execução
-                    </label>
-                    <select className="w-full rounded-lg border border-[#c9cdd6] px-3 py-2.5 text-[14px] outline-none focus:border-primary bg-white transition-all">
-                      <option>Produção (integrations)</option>
-                      <option>Sandbox (homologação)</option>
-                    </select>
-                  </div>
-                  <label className="flex cursor-pointer items-center gap-3 py-2 px-1 hover:bg-muted/30 rounded-lg transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={active}
-                      onChange={(e) => setActive(e.target.checked)}
-                      className="h-4.5 w-4.5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
-                    />
-                    <span className="text-[14px] font-medium text-foreground">
-                      Ativar Módulo de Prescrição Digital
-                    </span>
-                  </label>
+      <Dialog open={configOpen} onOpenChange={setConfigOpen}>
+        <DialogContent className="max-w-md gap-0 overflow-hidden p-0">
+          <DialogHeader className="border-b border-border-soft px-6 py-4">
+            <DialogTitle>Configurações Memed</DialogTitle>
+            <DialogDescription className="sr-only">
+              Credenciais e ambiente da integração de prescrição digital.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[70vh] overflow-y-auto p-6 space-y-6">
+            <div className="space-y-4 pt-2">
+              <h4 className="text-sm font-semibold text-foreground uppercase tracking-wider">
+                Credenciais
+              </h4>
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-foreground">API Key</label>
+                  <input
+                    type="text"
+                    placeholder="Insira sua API Key"
+                    className="w-full rounded-lg border border-input px-3 py-2.5 text-sm outline-none focus:border-primary transition-all"
+                  />
                 </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-foreground">Secret Key</label>
+                  <input
+                    type="password"
+                    placeholder="••••••••"
+                    className="w-full rounded-lg border border-input px-3 py-2.5 text-sm outline-none focus:border-primary transition-all"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-foreground">
+                    Ambiente de Execução
+                  </label>
+                  <select className="w-full rounded-lg border border-input px-3 py-2.5 text-sm outline-none focus:border-primary bg-card transition-all">
+                    <option>Produção (integrations)</option>
+                    <option>Sandbox (homologação)</option>
+                  </select>
+                </div>
+                <label className="flex cursor-pointer items-center gap-3 py-2 px-1 hover:bg-muted/30 rounded-lg transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={active}
+                    onChange={(e) => setActive(e.target.checked)}
+                    className="h-4.5 w-4.5 rounded border-input text-primary focus:ring-primary cursor-pointer"
+                  />
+                  <span className="text-sm font-medium text-foreground">
+                    Ativar Módulo de Prescrição Digital
+                  </span>
+                </label>
               </div>
             </div>
-            <div className="flex items-center justify-end gap-3 bg-muted/30 px-6 py-4">
-              <button
-                onClick={() => setConfigOpen(false)}
-                className="text-[14px] font-medium text-muted-foreground hover:text-foreground"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={() => {
-                  toast.success("Configurações salvas");
-                  setConfigOpen(false);
-                }}
-                className="rounded-lg bg-primary px-4 py-2 text-[14px] font-semibold text-primary-foreground transition-all hover:bg-primary-hover"
-              >
-                Salvar Configuração
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      )}
+          </div>
+          <div className="flex items-center justify-end gap-3 bg-muted/30 px-6 py-4">
+            <button
+              onClick={() => setConfigOpen(false)}
+              className="text-sm font-medium text-muted-foreground hover:text-foreground"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={() => {
+                toast.success("Configurações salvas");
+                setConfigOpen(false);
+              }}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-all hover:bg-primary-hover"
+            >
+              Salvar Configuração
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1251,10 +1232,10 @@ const RichEditor = forwardRef<
 
   return (
     <div
-      className="w-full overflow-hidden rounded-[8px] border border-[#D9DCE3] bg-white"
+      className="w-full overflow-hidden rounded-[8px] border border-border bg-card"
       style={{ minHeight: 285 }}
     >
-      <div className="flex h-[56px] items-center gap-[6px] overflow-x-auto whitespace-nowrap border-b border-[#E5E7EB] bg-white px-[18px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex min-h-12 flex-wrap items-center gap-[6px] overflow-x-auto whitespace-nowrap border-b border-border bg-muted/40 px-3 py-2">
         {GROUP_1.map((b) => (
           <ToolBtn key={b.cmd} btn={b} active={active[b.cmd]} onClick={() => exec(b.cmd)} />
         ))}
@@ -1307,7 +1288,7 @@ const RichEditor = forwardRef<
       <div className="relative">
         {empty && (
           <div
-            className="pointer-events-none absolute left-[20px] top-[18px] text-[15px] font-normal leading-6 text-[#9CA3AF]"
+            className="pointer-events-none absolute left-[20px] top-[18px] text-[15px] font-normal leading-6 text-muted-foreground"
             aria-hidden
           >
             {placeholder}
@@ -1316,6 +1297,9 @@ const RichEditor = forwardRef<
         <div
           ref={ref}
           contentEditable
+          role="textbox"
+          aria-multiline="true"
+          aria-label="Anotações do atendimento"
           suppressContentEditableWarning
           onInput={updateEmpty}
           onKeyUp={() => {
@@ -1327,7 +1311,7 @@ const RichEditor = forwardRef<
             refreshActive();
           }}
           onBlur={saveSelection}
-          className="prose prose-sm max-w-none px-[20px] py-[18px] text-[15px] font-medium leading-6 text-[#7E8192] outline-none ring-0 focus:outline-none focus-visible:outline-none focus:ring-0 [&_ol]:list-decimal [&_ol]:pl-6 [&_ul]:list-disc [&_ul]:pl-6"
+          className="prose-clinical px-5 py-[18px] text-foreground outline-none ring-0 focus:outline-none focus-visible:outline-none focus:ring-0 [&_ol]:list-decimal [&_ol]:pl-6 [&_ul]:list-disc [&_ul]:pl-6"
           style={{ minHeight: Math.max(minHeight, 220) }}
         />
       </div>
@@ -1356,7 +1340,7 @@ function ToolBtn({
       className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] transition-colors focus-ring ${
         active
           ? "bg-primary/10 text-primary"
-          : "text-[#4B5563] hover:bg-[#F3F4F6] hover:text-[#111827]"
+          : "text-muted-foreground hover:bg-muted hover:text-foreground"
       }`}
     >
       <Icon className="h-[18px] w-[18px]" strokeWidth={2} />
@@ -1365,7 +1349,7 @@ function ToolBtn({
 }
 
 function Divider() {
-  return <span className="mx-[2px] h-[26px] w-px shrink-0 bg-[#E5E7EB]" />;
+  return <span className="mx-[2px] h-[26px] w-px shrink-0 bg-surface-2" />;
 }
 
 function formatTime(total: number) {

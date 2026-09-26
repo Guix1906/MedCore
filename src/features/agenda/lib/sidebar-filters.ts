@@ -1,8 +1,19 @@
+import { parseMeta } from "@/features/dashboard/dashboard-utils";
 import type { Activity } from "@/components/agenda/agenda-types";
 import { KIND_COLOR } from "@/components/agenda/agenda-types";
 import type { AgendaFilterOptions, AgendaFilterValues } from "@/components/agenda/AgendaSidebar";
 
 const STATUS_LABEL: Record<string, string> = {
+  agendado: "Agendado",
+  confirmado: "Confirmado",
+  concluido: "Concluído",
+  concluído: "Concluído",
+  cancelado: "Cancelado",
+  reservado: "Reservado",
+  nao_compareceu: "Não compareceu",
+  no_show: "Não compareceu",
+  pendente: "Pendente",
+  em_atendimento: "Em atendimento",
   pending: "Pendente",
   todo: "Pendente",
   in_progress: "Em andamento",
@@ -17,7 +28,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 export function statusLabel(status: string | null): string | null {
   if (!status) return null;
-  return STATUS_LABEL[status] ?? status.charAt(0).toUpperCase() + status.slice(1);
+  return STATUS_LABEL[status.toLowerCase()] ?? status.charAt(0).toUpperCase() + status.slice(1);
 }
 
 const uniqSorted = (values: (string | null | undefined)[]) =>
@@ -43,7 +54,9 @@ export function buildAgendaFilterOptions({
   const memberList = Array.from(memberNameById.values());
 
   return {
-    status: uniqSorted(activities.map((a) => statusLabel(a.status))),
+    status: uniqSorted(
+      activities.map((a) => statusLabel(parseMeta(a.description)?.status ?? a.status)),
+    ),
     profissional: uniqSorted(
       memberList.length > 0
         ? memberList

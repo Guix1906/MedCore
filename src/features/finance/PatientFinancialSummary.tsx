@@ -16,7 +16,7 @@ export default function PatientFinancialSummary({ patientId }: { patientId: stri
   if (query.isPending) return <p>Carregando financeiro...</p>;
   if (query.error)
     return (
-      <p role="alert" className="text-red-700">
+      <p role="alert" className="text-destructive">
         {errorMessage(query.error)}
       </p>
     );
@@ -39,7 +39,7 @@ export default function PatientFinancialSummary({ patientId }: { patientId: stri
           <p>
             {titleStatus(t, localDate())} · Pagador: {t.payer_name || "Não informado"}
           </p>
-          <button className="text-purple-700 underline" onClick={() => setSelected(t.id)}>
+          <button className="text-primary underline" onClick={() => setSelected(t.id)}>
             Baixas e histórico
           </button>
         </article>

@@ -6,7 +6,7 @@ import ClinicalPhotos from "./ClinicalPhotos";
 import TreatmentAlerts from "./TreatmentAlerts";
 import { errorMessage, formatClinicalDate, localDate, protocolDeadline } from "./followup-utils";
 
-const input = "w-full rounded-lg border border-slate-200 p-2 text-sm";
+const input = "w-full rounded-lg border border-border p-2 text-sm";
 const statusLabel: Record<string, string> = {
   em_andamento: "Em andamento",
   pausado: "Pausado",
@@ -135,21 +135,21 @@ export default function ClinicalFollowup({
   };
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl border bg-white p-4 text-sm space-y-1">
-        <p className="font-bold">{protocolDeadline(status, endDate)}</p>
+      <div className="rounded-2xl border bg-card p-4 text-sm space-y-1">
+        <p className="font-semibold">{protocolDeadline(status, endDate)}</p>
         <p>Prazo do protocolo: {formatClinicalDate(endDate)}</p>
         <p>
           Próximo retorno necessário: {formatClinicalDate(nextReturn)} (a cada {returnDays || 30}{" "}
           dias).
         </p>
-        <p className="text-slate-500">
+        <p className="text-muted-foreground">
           A previsão de retorno não substitui um agendamento. Marque abaixo somente quando o retorno
           tiver sido realizado.
         </p>
       </div>
       <TreatmentAlerts scope="clinical" treatmentId={treatmentId} />
-      <section className="rounded-2xl border bg-white p-5 space-y-4">
-        <h3 className="font-bold">Evolução clínica e peso</h3>
+      <section className="rounded-2xl border bg-card p-5 space-y-4">
+        <h3 className="font-semibold">Evolução clínica e peso</h3>
         <form onSubmit={save} className="grid sm:grid-cols-2 gap-3">
           <label className="text-sm">
             Data
@@ -212,23 +212,23 @@ export default function ClinicalFollowup({
           </label>
           <button
             disabled={busy}
-            className="rounded-xl bg-purple-600 text-white p-2 disabled:opacity-50"
+            className="rounded-xl bg-primary text-white p-2 disabled:opacity-50"
           >
             {busy ? "Salvando..." : "Salvar evolução"}
           </button>
         </form>
         {history.isPending && <p>Carregando histórico...</p>}
         {history.error && (
-          <p role="alert" className="text-red-700">
+          <p role="alert" className="text-destructive">
             {errorMessage(history.error)}
           </p>
         )}
         {history.data?.evolutions.length === 0 && (
-          <p className="text-sm text-slate-500">Nenhuma evolução registrada.</p>
+          <p className="text-sm text-muted-foreground">Nenhuma evolução registrada.</p>
         )}
         {history.data?.evolutions.map((e) => (
           <article key={e.id} className="border-t pt-3 text-sm space-y-1">
-            <p className="font-bold">
+            <p className="font-semibold">
               {formatClinicalDate(e.occurred_on)}
               {e.is_return && " - Retorno realizado"}
               {e.weight_kg !== null && ` - ${e.weight_kg} kg`}
@@ -236,7 +236,7 @@ export default function ClinicalFollowup({
             <p className="whitespace-pre-wrap">{e.notes}</p>
             {e.parameters && <p>Parâmetros: {e.parameters}</p>}
             {e.next_step && <p>Próxima conduta: {e.next_step}</p>}
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               Registrado em {new Date(e.created_at).toLocaleString("pt-BR")}
             </p>
           </article>

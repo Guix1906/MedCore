@@ -21,10 +21,10 @@ export default function TreatmentAlerts({
     refetchOnWindowFocus: true,
   });
   if (query.isPending)
-    return <p className="p-3 text-sm text-slate-500">Carregando alertas dos planos...</p>;
+    return <p className="p-3 text-sm text-muted-foreground">Carregando alertas dos planos...</p>;
   if (query.error)
     return (
-      <p role="alert" className="p-3 text-sm text-red-700">
+      <p role="alert" className="p-3 text-sm text-destructive">
         Falha nos alertas dos planos: {errorMessage(query.error)}
       </p>
     );
@@ -38,16 +38,16 @@ export default function TreatmentAlerts({
     .sort((a, b) => (a.target_date || "9999").localeCompare(b.target_date || "9999"));
   return (
     <section
-      className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-2"
+      className="rounded-2xl border border-warning/25 bg-warning/10 p-4 space-y-2"
       aria-label="Alertas de acompanhamento"
     >
       <h3 className="font-semibold text-sm">Alertas dos planos ({alerts.length})</h3>
       {alerts.length === 0 && (
-        <p className="text-sm text-slate-600">Nenhum alerta de vencimento ou conclusão.</p>
+        <p className="text-sm text-muted-foreground">Nenhum alerta de vencimento ou conclusão.</p>
       )}
       <div className="max-h-64 overflow-y-auto space-y-2">
         {alerts.map((a) => (
-          <div key={a.id} className="text-sm border-t border-amber-200 pt-2">
+          <div key={a.id} className="text-sm border-t border-warning/25 pt-2">
             <p className="font-medium">
               {a.patient_name} - {a.title}
             </p>
@@ -58,14 +58,14 @@ export default function TreatmentAlerts({
               {a.amount !== null && ` - ${currency(a.amount)}`}
             </p>
             {a.kind === "pagamento" ? (
-              <Link to="/financeiro" className="text-purple-700 underline">
+              <Link to="/financeiro" className="text-primary underline">
                 Abrir Financeiro
               </Link>
             ) : (
               <Link
                 to="/acompanhamentos/$id"
                 params={{ id: a.treatment_id }}
-                className="text-purple-700 underline"
+                className="text-primary underline"
               >
                 Abrir acompanhamento
               </Link>

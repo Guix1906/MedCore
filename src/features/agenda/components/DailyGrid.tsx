@@ -106,15 +106,15 @@ export function DailyGrid({
   };
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-white">
+    <div className="flex-1 flex flex-col min-h-0 bg-card">
       {/* All-day strip */}
       <div className="flex border-b border-border bg-muted/30 shrink-0">
-        <div className="w-16 shrink-0 px-2 py-2 text-[10px] uppercase tracking-wider text-muted-foreground border-r border-border">
+        <div className="w-16 shrink-0 px-2 py-2 text-xs uppercase tracking-wider text-muted-foreground border-r border-border">
           Dia todo
         </div>
         <div className="flex-1 p-2 flex flex-wrap gap-1.5 min-h-[40px]">
           {allDay.length === 0 ? (
-            <span className="text-[11px] text-muted-foreground/70 self-center pl-1">—</span>
+            <span className="text-xs text-muted-foreground/70 self-center pl-1">—</span>
           ) : (
             allDay.map((a) => (
               <ActivityChip key={a.id} a={a} onClick={() => onActivityClick(a)} compact />
@@ -124,7 +124,7 @@ export function DailyGrid({
       </div>
 
       {/* Hour grid */}
-      <div ref={containerRef} className="relative flex-1 min-h-0 overflow-y-auto bg-white">
+      <div ref={containerRef} className="relative flex-1 min-h-0 overflow-y-auto bg-card">
         <div
           className="relative"
           style={{ height: HOUR_H * 24 }}
@@ -177,7 +177,7 @@ export function DailyGrid({
             >
               {/* Linha vermelha esticada de ponta a ponta na tela */}
               <div
-                className="absolute left-0 right-0 bg-[#FF2D55] shadow-[0_0_8px_rgba(255,45,85,0.6)]"
+                className="absolute left-0 right-0 bg-[#FF2D55] shadow-sm"
                 style={{ height: 2, top: -1 }}
               />
               {/* Ponta da linha: Triângulo vermelho apontando para a direita no canto esquerdo */}
@@ -187,7 +187,7 @@ export function DailyGrid({
               />
               {/* Badge com horário atual */}
               <div
-                className="absolute left-2.5 -top-[10px] px-1.5 py-0.5 rounded-full bg-[#FF2D55] text-white text-[10px] font-bold tabular-nums shadow-sm flex items-center justify-center z-40 leading-tight"
+                className="absolute left-2.5 -top-[10px] px-1.5 py-0.5 rounded-full bg-[#FF2D55] text-white text-xs font-semibold tabular-nums shadow-sm flex items-center justify-center z-40 leading-tight"
                 style={{ minWidth: 42 }}
               >
                 {nowLabel}

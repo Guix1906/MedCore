@@ -1,40 +1,47 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
+import { BrandLogo } from "@/components/ui-app/BrandLogo";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { safeRedirectPath } from "@/features/admin/permissions";
 import { supabase } from "@/integrations/supabase/client";
 import { authService, getStoredToken } from "@/services/api";
-import { safeRedirectPath } from "@/features/admin/permissions";
-import { motion, AnimatePresence } from "framer-motion";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import {
-  ShieldCheck,
-  BarChart3,
-  Users,
-  Mail,
-  Lock,
+  ArrowRight,
+  CalendarDays,
   Eye,
   EyeOff,
-  ArrowRight,
-  Cloud,
-  Headphones,
-  User,
+  FileText,
   Loader2,
-  CheckCircle2,
-  Activity,
-  HeartPulse,
-  Stethoscope,
+  ShieldCheck,
+  Users,
 } from "lucide-react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { toast } from "sonner";
 
 type AuthSearch = { redirect?: string; modo?: "convite" | "nova-senha" };
+type AuthMode = "signin" | "signup" | "forgot" | "password";
 
-/** Mensagem de erro que o Supabase devolve no fragmento do link (ex.: link expirado). */
 function readLinkError(): string | null {
   if (typeof window === "undefined" || !window.location.hash.includes("error")) return null;
   const params = new URLSearchParams(window.location.hash.slice(1));
   if (!params.get("error") && !params.get("error_code")) return null;
   return params.get("error_code") === "otp_expired"
-    ? "Este link expirou ou já foi utilizado. Peça um novo convite ou use “Esqueci minha senha”."
-    : params.get("error_description")?.replace(/\+/g, " ") ||
-        "Não foi possível validar o link. Solicite um novo e-mail.";
+    ? "Este link expirou ou já foi utilizado. Peça um novo convite ou solicite outro link de recuperação."
+    : "Não foi possível validar o link. Solicite um novo e-mail.";
+}
+
+function errorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  if (/Invalid login|invalid credentials|credenciais|senha incorreta/i.test(message))
+    return "E-mail ou senha inválidos. Confira os dados e tente novamente.";
+  if (/Email not confirmed/i.test(message))
+    return "Confirme seu e-mail antes de entrar. Verifique também a pasta de spam.";
+  if (/already registered|já cadastrad/i.test(message))
+    return "Este e-mail já possui uma conta. Entre ou recupere sua senha.";
+  if (/rate limit|too many/i.test(message))
+    return "Muitas tentativas em pouco tempo. Aguarde alguns minutos e tente novamente.";
+  if (/As senhas|A senha deve/i.test(message)) return message;
+  return "Não foi possível concluir a solicitação. Verifique sua conexão e tente novamente.";
 }
 
 export const Route = createFileRoute("/auth")({
@@ -44,53 +51,20 @@ export const Route = createFileRoute("/auth")({
   }),
   head: () => ({
     meta: [
-      { title: "MedCore — Gestão Médica Inteligente & Premium" },
+      { title: "Acesse sua conta • MedCore" },
       {
         name: "description",
         content:
-          "Gestão completa para clínicas premium que cuidam de pessoas. Acesse sua conta no MedCore.",
+          "Agenda, pacientes e gestão da sua clínica em um só lugar. Acesse sua conta MedCore.",
       },
-      { property: "og:title", content: "MedCore — Gestão Médica Inteligente & Premium" },
-      {
-        property: "og:description",
-        content: "Gestão completa para clínicas que cuidam de pessoas.",
-      },
-      { property: "og:type", content: "website" },
     ],
   }),
   component: AuthPage,
 });
 
-function MedCoreLogo({ size = "normal" }: { size?: "normal" | "large" }) {
-  return (
-    <div className="flex items-center gap-3 select-none bg-transparent group cursor-pointer">
-      <div className="relative">
-        <div className="absolute inset-0 rounded-2xl bg-[#00A8CC]/30 blur-md group-hover:bg-[#00A8CC]/50 transition-all duration-300 animate-pulse" />
-        <img
-          src="/assets/medcore-symbol-transparent.png"
-          alt="MedCore Symbol"
-          className={`relative z-10 bg-transparent object-contain transition-transform duration-300 group-hover:scale-110 ${
-            size === "large" ? "h-14 sm:h-16 w-auto" : "h-10 sm:h-12 w-auto"
-          }`}
-        />
-      </div>
-      <div
-        className={`font-extrabold tracking-tight font-sans bg-transparent ${
-          size === "large" ? "text-3xl sm:text-4xl" : "text-2xl sm:text-3xl"
-        }`}
-      >
-        <span className="text-[#0F172A] bg-transparent">Med</span>
-        <span className="bg-gradient-to-r from-[#00A8CC] via-[#0284C7] to-[#2563EB] bg-clip-text text-transparent">
-          Core
-        </span>
-      </div>
-    </div>
-  );
-}
-
 function GoogleIcon() {
   return (
-    <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+    <svg className="size-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
       <path
         fill="#4285F4"
         d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
@@ -111,93 +85,58 @@ function GoogleIcon() {
   );
 }
 
-/** Ilustração médica discreta (Linha de ECG / Batimentos Cardíacos Animados + Estetoscópio em Vidro) */
-function DiscreteMedicalIllustration() {
-  return (
-    <div className="relative w-full py-2 my-1 pointer-events-none select-none">
-      <svg viewBox="0 0 500 80" className="w-full h-16 opacity-75" fill="none">
-        <defs>
-          <linearGradient id="ecg-line-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#00A8CC" stopOpacity="0.1" />
-            <stop offset="30%" stopColor="#00A8CC" stopOpacity="0.8" />
-            <stop offset="70%" stopColor="#0284C7" stopOpacity="0.9" />
-            <stop offset="100%" stopColor="#3B82F6" stopOpacity="0.1" />
-          </linearGradient>
-        </defs>
-        {/* Continuous Baseline Grid */}
-        <line
-          x1="0"
-          y1="40"
-          x2="500"
-          y2="40"
-          stroke="#0284C7"
-          strokeOpacity="0.15"
-          strokeDasharray="4 4"
-          strokeWidth="1"
-        />
-        {/* ECG Heartbeat Path */}
-        <motion.path
-          d="M 0 40 L 100 40 L 115 25 L 125 55 L 140 10 L 155 65 L 170 35 L 180 40 L 300 40 L 315 25 L 325 55 L 340 10 L 355 65 L 370 35 L 380 40 L 500 40"
-          stroke="url(#ecg-line-grad)"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          initial={{ pathLength: 0.2, pathOffset: 0 }}
-          animate={{ pathOffset: [0, 1] }}
-          transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
-        />
-      </svg>
-    </div>
-  );
-}
-
 function AuthPage() {
   const router = useRouter();
   const search = Route.useSearch();
   const target = search.redirect ?? "/dashboard";
-  const [mode, setMode] = useState<"signin" | "signup" | "forgot" | "password">(
-    search.modo ? "password" : "signin",
-  );
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [sessionEmail, setSessionEmail] = useState<string | null>(null);
-  const [linkError, setLinkError] = useState<string | null>(null);
-  const goToTarget = useCallback(() => {
-    router.history.push(target);
-  }, [router, target]);
+  const [mode, setMode] = useState<AuthMode>(search.modo ? "password" : "signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [sessionEmail, setSessionEmail] = useState<string | null>(null);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [busy, setBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
-
-  // Email format validation helper
-  const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const goToTarget = useCallback(() => router.history.push(target), [router, target]);
 
   useEffect(() => {
-    if (search.modo) {
-      // Convite ou redefinição: a sessão vem do próprio link enviado por e-mail.
-      const error = readLinkError();
-      if (error) setLinkError(error);
-      supabase.auth.getSession().then(({ data }) => {
-        if (data.session) {
-          setSessionEmail(data.session.user.email ?? null);
-          setLinkError(null);
-        } else if (!error) {
-          setLinkError("Link inválido ou expirado. Solicite um novo e-mail.");
-        }
-      });
-      return;
-    }
-    const token = getStoredToken();
-    if (token) {
+    let cancelled = false;
+    if (!search.modo && getStoredToken()) {
       goToTarget();
       return;
     }
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) goToTarget();
-    });
+    const linkFailure = search.modo ? readLinkError() : null;
+    if (linkFailure) setLinkError(linkFailure);
+    supabase.auth
+      .getSession()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          console.error("Não foi possível verificar a sessão.", error);
+          setFormError("Não foi possível verificar sua sessão. Tente novamente.");
+          return;
+        }
+        if (search.modo) {
+          if (data.session) {
+            setSessionEmail(data.session.user.email ?? null);
+            setLinkError(null);
+          } else if (!linkFailure) {
+            setLinkError("Link inválido ou expirado. Solicite um novo e-mail.");
+          }
+        } else if (data.session) goToTarget();
+      })
+      .catch((error: unknown) => {
+        console.error("Não foi possível verificar a sessão.", error);
+        if (!cancelled) setFormError("Não foi possível verificar sua sessão. Tente novamente.");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [search.modo, goToTarget]);
 
   useEffect(() => {
@@ -211,37 +150,57 @@ function AuthPage() {
     return () => sub.subscription.unsubscribe();
   }, [search.modo]);
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const changeMode = (next: AuthMode) => {
+    setMode(next);
+    setFormError(null);
+    setSuccessMessage(null);
+    setShowPassword(false);
+    setPassword("");
+    setConfirmPassword("");
+  };
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setFormError(null);
+    setSuccessMessage(null);
     setBusy(true);
     try {
       if (mode === "signin") {
         try {
-          await authService.signIn(email, password, rememberMe);
-        } catch (phpErr) {
-          // Fallback para supabase caso backend php não esteja rodando
-          const { error } = await supabase.auth.signInWithPassword({ email, password });
-          if (error) throw error;
-        }
-        toast.success("Bem-vindo de volta ao MedCore!");
-        router.invalidate();
-        goToTarget();
-      } else if (mode === "signup") {
-        try {
-          await authService.signUp(email, password, fullName);
-        } catch (phpErr) {
-          const { error } = await supabase.auth.signUp({
-            email,
+          await authService.signIn(email.trim(), password, rememberMe);
+        } catch {
+          const { error } = await supabase.auth.signInWithPassword({
+            email: email.trim(),
             password,
-            options: {
-              emailRedirectTo: window.location.origin,
-              data: { full_name: fullName },
-            },
           });
           if (error) throw error;
         }
+        toast.success("Bem-vindo de volta ao MedCore!");
+        await router.invalidate();
+        goToTarget();
+      } else if (mode === "signup") {
+        if (password.length < 8) throw new Error("A senha deve ter pelo menos 8 caracteres.");
+        try {
+          await authService.signUp(email.trim(), password, fullName.trim());
+        } catch {
+          const { data, error } = await supabase.auth.signUp({
+            email: email.trim(),
+            password,
+            options: {
+              emailRedirectTo: window.location.origin,
+              data: { full_name: fullName.trim() },
+            },
+          });
+          if (error) throw error;
+          if (!data.session) {
+            setSuccessMessage(
+              "Cadastro recebido. Verifique seu e-mail para confirmar a conta antes de entrar.",
+            );
+            return;
+          }
+        }
         toast.success("Conta criada com sucesso!");
-        router.invalidate();
+        await router.invalidate();
         goToTarget();
       } else if (mode === "password") {
         if (password.length < 8) throw new Error("A senha deve ter pelo menos 8 caracteres.");
@@ -253,19 +212,20 @@ function AuthPage() {
             ? "Senha definida. Bem-vindo(a) ao MedCore!"
             : "Senha atualizada com sucesso.",
         );
-        router.invalidate();
+        await router.invalidate();
         goToTarget();
       } else {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
           redirectTo: `${window.location.origin}/auth?modo=nova-senha`,
         });
         if (error) throw error;
-        toast.success("Instruções enviadas para o seu email!");
-        setMode("signin");
+        setSuccessMessage(
+          "Se este e-mail estiver cadastrado, você receberá um link para redefinir sua senha. Verifique também a pasta de spam.",
+        );
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erro desconhecido";
-      toast.error(msg.includes("Invalid login") ? "Email ou senha inválidos" : msg);
+    } catch (error) {
+      console.error("Falha na autenticação.", error);
+      setFormError(errorMessage(error));
     } finally {
       setBusy(false);
     }
@@ -273,508 +233,337 @@ function AuthPage() {
 
   const handleGoogleSignIn = async () => {
     setGoogleBusy(true);
+    setFormError(null);
     try {
-      toast.info("Conectando ao Google...");
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: `${window.location.origin}/dashboard` },
+        options: { redirectTo: `${window.location.origin}${target}` },
       });
       if (error) throw error;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erro no login com Google";
-      if (
-        msg.includes("not enabled") ||
-        msg.includes("Unsupported provider") ||
-        msg.includes("validation_failed")
-      ) {
-        toast.error(
-          "O provedor Google ainda não foi habilitado no seu painel do Supabase (Authentication -> Providers -> Google). Use o login por email/senha.",
-          { duration: 6000 },
-        );
-      } else {
-        toast.error(msg);
-      }
+    } catch (error) {
+      console.error("Falha no acesso com Google.", error);
+      const message = error instanceof Error ? error.message : "";
+      setFormError(
+        /not enabled|Unsupported provider|validation_failed/i.test(message)
+          ? "O acesso com Google não está disponível nesta clínica. Use seu e-mail e senha."
+          : errorMessage(error),
+      );
     } finally {
       setGoogleBusy(false);
     }
   };
 
+  const titles: Record<AuthMode, string> = {
+    signin: "Bem-vindo de volta",
+    signup: "Crie sua conta",
+    forgot: "Recupere seu acesso",
+    password: search.modo === "convite" ? "Defina sua senha" : "Crie uma nova senha",
+  };
+  const descriptions: Record<AuthMode, string> = {
+    signin: "Entre para acompanhar o dia a dia da sua clínica.",
+    signup: "Preencha seus dados para começar no MedCore.",
+    forgot: "Informe o e-mail da sua conta para receber as instruções.",
+    password: sessionEmail
+      ? `Conta: ${sessionEmail}`
+      : "Use o link recebido por e-mail para continuar.",
+  };
+
   return (
-    /* Fundo com gradiente azul/branco elegante e limpo */
-    <div className="h-screen max-h-screen relative w-full flex items-center justify-center p-3 sm:p-4 lg:p-6 overflow-hidden bg-gradient-to-br from-[#E0F2FE] via-[#F4F9FF] to-[#FFFFFF]">
-      {/* Luzes Suaves de Fundo (Radiant Ambient Blue Glow Orbs) */}
-      <div className="absolute -top-24 -right-24 w-[700px] h-[700px] bg-gradient-to-bl from-[#00A8CC]/25 via-sky-200/35 to-transparent rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute top-1/3 -left-32 w-[600px] h-[600px] bg-gradient-to-tr from-blue-200/40 via-indigo-100/25 to-transparent rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-32 right-1/4 w-[500px] h-[500px] bg-gradient-to-t from-cyan-100/40 to-transparent rounded-full blur-3xl pointer-events-none" />
-
-      {/* Símbolos Médicos Discretos Flutuantes no Fundo */}
-      <motion.div
-        animate={{ y: [0, -12, 0], rotate: [0, 6, 0] }}
-        transition={{ duration: 6.5, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute top-10 right-14 text-sky-400/30 pointer-events-none select-none drop-shadow-sm"
-      >
-        <Stethoscope className="w-14 h-14" strokeWidth={1.5} />
-      </motion.div>
-
-      <motion.div
-        animate={{ y: [0, 10, 0], rotate: [0, -4, 0] }}
-        transition={{ duration: 7, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-        className="absolute top-28 right-40 text-blue-400/25 pointer-events-none select-none"
-      >
-        <Activity className="w-10 h-10" strokeWidth={1.5} />
-      </motion.div>
-
-      {/* Gradiente Vetorial Suave no Canto Inferior Esquerdo */}
-      <motion.div
-        animate={{ y: [0, -5, 0] }}
-        transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute bottom-0 left-0 w-[450px] sm:w-[580px] lg:w-[700px] pointer-events-none select-none z-0"
-      >
-        <svg
-          viewBox="0 0 800 600"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          className="w-full h-auto"
-        >
-          <defs>
-            <linearGradient id="glass-wave-grad" x1="0%" y1="100%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#00A8CC" stopOpacity="0.85" />
-              <stop offset="45%" stopColor="#0284C7" stopOpacity="0.65" />
-              <stop offset="85%" stopColor="#3B82F6" stopOpacity="0.35" />
-              <stop offset="100%" stopColor="#93C5FD" stopOpacity="0.05" />
-            </linearGradient>
-            <linearGradient id="glass-line-grad" x1="0%" y1="100%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.7" />
-              <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.1" />
-            </linearGradient>
-          </defs>
-          <path
-            d="M -100 600 Q 150 420 320 490 T 700 380 Q 820 330 850 200 L 850 600 Z"
-            fill="url(#glass-wave-grad)"
-          />
-          <path
-            d="M -50 600 Q 180 440 340 500 T 720 390"
-            stroke="url(#glass-line-grad)"
-            strokeWidth="2"
-            fill="none"
-          />
-        </svg>
-      </motion.div>
-
-      {/* Main Container */}
-      <div className="w-full max-w-[1140px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 items-center relative z-10">
-        {/* COLUNA ESQUERDA: Marca, Ilustração Médica Discreta & Cards de Benefícios em Vidro */}
-        <motion.div
-          initial={{ opacity: 0, x: -35 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
-          className="lg:col-span-6 space-y-5 pr-0 lg:pr-2"
-        >
-          {/* Logo & Headline */}
-          <div>
-            <MedCoreLogo size="large" />
-            <p className="mt-3 text-base sm:text-[22px] text-[#334155] font-normal leading-snug tracking-tight">
-              Gestão completa para clínicas
-              <br />
-              <span className="font-semibold bg-gradient-to-r from-[#00A8CC] to-[#0284C7] bg-clip-text text-transparent">
-                que cuidam de pessoas com excelência.
-              </span>
-            </p>
-          </div>
-
-          {/* Ilustração médica discreta (Linha de batimentos ECG) */}
-          <DiscreteMedicalIllustration />
-
-          {/* 3 Cards de Vidro Translúcido (Glassmorphism) */}
-          <div className="space-y-3 pt-1">
-            {/* Benefício 1 */}
-            <motion.div
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.2 }}
-              whileHover={{ scale: 1.02, x: 6 }}
-              className="flex items-center gap-4 p-3.5 rounded-2xl bg-white/60 backdrop-blur-xl border border-white/80 shadow-[0_8px_30px_rgb(0,0,0,0.03)] hover:shadow-[0_12px_35px_rgba(0,168,204,0.15)] hover:bg-white/75 transition-all group cursor-default"
-            >
-              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-100/80 to-emerald-50 border border-emerald-200/60 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                <ShieldCheck className="w-5 h-5 text-emerald-600" strokeWidth={2} />
-              </div>
-              <div>
-                <h3 className="font-bold text-[#0F172A] text-sm sm:text-base group-hover:text-emerald-700 transition-colors">
-                  Seguro e confiável
-                </h3>
-                <p className="text-slate-500 text-xs font-normal mt-0.5">
-                  Conformidade total com a LGPD e criptografia médica avançada.
-                </p>
-              </div>
-            </motion.div>
-
-            {/* Benefício 2 */}
-            <motion.div
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.35 }}
-              whileHover={{ scale: 1.02, x: 6 }}
-              className="flex items-center gap-4 p-3.5 rounded-2xl bg-white/60 backdrop-blur-xl border border-white/80 shadow-[0_8px_30px_rgb(0,0,0,0.03)] hover:shadow-[0_12px_35px_rgba(2,132,199,0.15)] hover:bg-white/75 transition-all group cursor-default"
-            >
-              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-cyan-100/80 to-sky-50 border border-cyan-200/60 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                <BarChart3 className="w-5 h-5 text-[#00A8CC]" strokeWidth={2} />
-              </div>
-              <div>
-                <h3 className="font-bold text-[#0F172A] text-sm sm:text-base group-hover:text-[#00A8CC] transition-colors">
-                  Gestão inteligente
-                </h3>
-                <p className="text-slate-500 text-xs font-normal mt-0.5">
-                  Prontuários eletrônicos, agenda rápida e relatórios em tempo real.
-                </p>
-              </div>
-            </motion.div>
-
-            {/* Benefício 3 */}
-            <motion.div
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.5 }}
-              whileHover={{ scale: 1.02, x: 6 }}
-              className="flex items-center gap-4 p-3.5 rounded-2xl bg-white/60 backdrop-blur-xl border border-white/80 shadow-[0_8px_30px_rgb(0,0,0,0.03)] hover:shadow-[0_12px_35px_rgba(59,130,246,0.15)] hover:bg-white/75 transition-all group cursor-default"
-            >
-              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-100/80 to-indigo-50 border border-blue-200/60 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                <Users className="w-5 h-5 text-blue-600" strokeWidth={2} />
-              </div>
-              <div>
-                <h3 className="font-bold text-[#0F172A] text-sm sm:text-base group-hover:text-blue-700 transition-colors">
-                  Experiência simplificada
-                </h3>
-                <p className="text-slate-500 text-xs font-normal mt-0.5">
-                  Fluxos otimizados para recepção, médicos e pacientes.
-                </p>
-              </div>
-            </motion.div>
-          </div>
-        </motion.div>
-
-        {/* COLUNA DIREITA: Card Translúcido com Blur (Glassmorphism Puro) */}
-        <motion.div
-          initial={{ opacity: 0, y: 30, scale: 0.97 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.55, delay: 0.15, ease: "easeOut" }}
-          className="lg:col-span-6 flex flex-col items-center lg:items-end w-full"
-        >
-          {/* Card Translúcido com Blur & Campos Arredondados */}
-          <div className="w-full max-w-[440px] bg-white/75 backdrop-blur-3xl rounded-[32px] p-6 sm:p-8 shadow-[0_30px_80px_-15px_rgba(2,132,199,0.18)] border border-white/90 relative overflow-hidden">
-            {/* Barra de Reflexo do Vidro no Topo */}
-            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#00A8CC] via-[#0284C7] to-[#3B82F6]" />
-
-            {/* Símbolo do MedCore Centralizado com Halo Pulsante */}
-            <div className="flex justify-center mb-3">
-              <div className="relative group cursor-pointer">
-                <div className="absolute inset-0 rounded-full bg-gradient-to-r from-[#00A8CC] to-[#0284C7] opacity-40 blur-lg group-hover:opacity-75 transition-opacity duration-300 animate-pulse" />
-                <div className="w-16 h-16 rounded-full bg-white/80 backdrop-blur-md ring-[8px] ring-cyan-100/50 flex items-center justify-center shadow-lg relative z-10 transition-transform group-hover:scale-105 duration-300">
-                  <img
-                    src="/assets/medcore-symbol-transparent.png"
-                    alt="MedCore"
-                    className="w-8 h-8 object-contain bg-transparent transition-transform group-hover:rotate-6 duration-300"
-                  />
+    <div className="auth-canvas grid min-h-dvh lg:grid-cols-2">
+      <aside className="hidden flex-col justify-between p-12 lg:flex xl:p-16">
+        <BrandLogo />
+        <div className="mx-auto my-12 w-full max-w-lg">
+          <p className="mb-4 text-sm font-semibold text-primary">Cuidado em cada detalhe</p>
+          <h2 className="text-4xl font-semibold leading-tight tracking-tight text-foreground xl:text-5xl">
+            Mais clareza para gerir.
+            <br />
+            Mais tempo para cuidar.
+          </h2>
+          <p className="mt-5 max-w-md text-lg leading-relaxed text-muted-foreground">
+            Agenda, prontuários e gestão conectados em um único ambiente de trabalho.
+          </p>
+          <div className="mt-10 space-y-5">
+            {[
+              {
+                icon: CalendarDays,
+                title: "Uma rotina organizada",
+                text: "Agendamentos e atendimentos sempre à mão.",
+              },
+              {
+                icon: FileText,
+                title: "O paciente no centro",
+                text: "Histórico clínico e acompanhamentos no mesmo lugar.",
+              },
+              {
+                icon: Users,
+                title: "Sua equipe conectada",
+                text: "Informações e acessos organizados por função.",
+              },
+            ].map(({ icon: Icon, title, text }) => (
+              <div key={title} className="flex items-start gap-4">
+                <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-hairline bg-card/70 text-primary shadow-(--glass-shadow)">
+                  <Icon size={20} aria-hidden="true" />
+                </span>
+                <div>
+                  <p className="text-base font-semibold text-foreground">{title}</p>
+                  <p className="mt-0.5 text-sm text-muted-foreground">{text}</p>
                 </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <p className="text-sm text-muted-foreground">MedCore · Gestão clínica</p>
+      </aside>
+      <main className="flex min-w-0 flex-col items-center justify-center px-4 py-8 sm:px-8 lg:py-12">
+        <div className="w-full max-w-[440px] rounded-2xl border border-hairline bg-glass-strong p-6 shadow-(--glass-shadow-lg) glass-blur-strong sm:p-10">
+          <div className="mb-7">
+            <div className="mb-6 flex items-center justify-between">
+              <BrandLogo size="large" />
+              <div className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <ShieldCheck size={20} aria-hidden="true" />
               </div>
             </div>
-
-            {/* Título & Subtítulo */}
-            <h2 className="text-xl sm:text-2xl font-extrabold text-[#0F172A] text-center tracking-tight">
-              {mode === "signin"
-                ? "Acesse sua Clínica"
-                : mode === "signup"
-                  ? "Criar Conta Premium"
-                  : mode === "password"
-                    ? search.modo === "convite"
-                      ? "Defina sua senha"
-                      : "Crie uma nova senha"
-                    : "Recuperar Acesso"}
-            </h2>
-            <p className="text-xs text-slate-500 text-center mt-1 mb-5 font-medium">
-              {mode === "signin"
-                ? "Digite suas credenciais para acessar o painel"
-                : mode === "signup"
-                  ? "Preencha os dados abaixo para cadastrar sua equipe"
-                  : mode === "password"
-                    ? sessionEmail
-                      ? `Conta: ${sessionEmail}`
-                      : "Use o link recebido por e-mail para continuar"
-                    : "Informe seu email cadastrado para redefinir a senha"}
+            <h1 className="text-[28px] font-semibold leading-tight tracking-tight sm:text-display">
+              {titles[mode]}
+            </h1>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              {descriptions[mode]}
             </p>
-
-            {mode === "password" && linkError && (
-              <div
-                role="alert"
-                className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800"
-              >
-                {linkError}
-              </div>
-            )}
-
-            {/* Formulário com Campos Arredondados (Rounded Pill Inputs) */}
-            <form onSubmit={submit} className="space-y-3.5">
-              <AnimatePresence mode="wait">
-                {mode === "signup" && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.25 }}
-                  >
-                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1 ml-1">
-                      Nome completo
-                    </label>
-                    {/* Campo Arredondado em Formato de Pílula Glass */}
-                    <div className="flex items-center bg-white/80 hover:bg-white border border-sky-100 rounded-2xl px-4 py-3 transition-all focus-within:border-[#00A8CC] focus-within:ring-4 focus-within:ring-[#00A8CC]/20 focus-within:bg-white shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
-                      <User className="w-4 h-4 text-sky-500 mr-2.5 shrink-0" />
-                      <input
-                        type="text"
-                        value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
-                        required
-                        className="w-full bg-transparent text-xs sm:text-sm text-slate-800 placeholder-slate-400 outline-none font-medium"
-                        placeholder="Dr. João Silva"
-                      />
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Campo Email Arredondado (Rounded Pill Input) */}
-              {mode !== "password" && (
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1 ml-1">
-                    Email profissional
+          </div>
+          {mode === "password" && linkError && (
+            <div
+              role="alert"
+              className="mb-5 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive"
+            >
+              {linkError}
+            </div>
+          )}
+          {formError && (
+            <div
+              id="auth-error"
+              role="alert"
+              className="mb-5 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive"
+            >
+              {formError}
+            </div>
+          )}
+          {successMessage && (
+            <div
+              role="status"
+              className="mb-5 rounded-xl border border-success/20 bg-success/5 p-4 text-sm leading-relaxed text-success"
+            >
+              {successMessage}
+            </div>
+          )}
+          <form
+            onSubmit={submit}
+            className="space-y-5"
+            aria-busy={busy}
+            aria-describedby={formError ? "auth-error" : undefined}
+          >
+            <fieldset disabled={busy || googleBusy} className="space-y-5 disabled:opacity-70">
+              {mode === "signup" && (
+                <div className="space-y-2">
+                  <label htmlFor="full-name" className="text-sm font-medium">
+                    Nome completo
                   </label>
-                  <div className="flex items-center bg-white/80 hover:bg-white border border-sky-100 focus-within:border-sky-300 rounded-2xl px-4 py-3 transition-all bg-white shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
-                    <Mail className="w-4 h-4 text-sky-500 mr-2.5 shrink-0" />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                      className="w-full bg-transparent text-xs sm:text-sm text-slate-800 placeholder-slate-400 outline-none font-medium"
-                      placeholder="guigos191@gmail.com"
-                    />
-                    {isValidEmail && (
-                      <motion.div
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        className="flex items-center gap-1 bg-emerald-50 text-emerald-600 px-2.5 py-0.5 rounded-full text-[10px] font-bold shrink-0 ml-1.5 border border-emerald-200/60"
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                        <span>Válido</span>
-                      </motion.div>
-                    )}
-                  </div>
+                  <Input
+                    id="full-name"
+                    name="name"
+                    autoComplete="name"
+                    value={fullName}
+                    onChange={(event) => setFullName(event.target.value)}
+                    required
+                    placeholder="Seu nome completo"
+                    className="h-11"
+                  />
                 </div>
               )}
-
-              {/* Campo Senha Arredondado (Rounded Pill Input) */}
+              {mode !== "password" && (
+                <div className="space-y-2">
+                  <label htmlFor="auth-email" className="text-sm font-medium">
+                    E-mail
+                  </label>
+                  <Input
+                    id="auth-email"
+                    name="email"
+                    type="email"
+                    autoComplete="username"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    required
+                    placeholder="seu@email.com"
+                    className="h-11"
+                  />
+                </div>
+              )}
               {mode !== "forgot" && (
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1 ml-1">
+                <div className="space-y-2">
+                  <label htmlFor="auth-password" className="text-sm font-medium">
                     {mode === "password" ? "Nova senha" : "Senha"}
                   </label>
-                  <div className="flex items-center bg-white/80 hover:bg-white border border-sky-100 focus-within:border-sky-300 rounded-2xl px-4 py-3 transition-all bg-white shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
-                    <Lock className="w-4 h-4 text-sky-500 mr-2.5 shrink-0" />
-                    <input
+                  <div className="relative">
+                    <Input
+                      id="auth-password"
+                      name="password"
                       type={showPassword ? "text" : "password"}
+                      autoComplete={mode === "signin" ? "current-password" : "new-password"}
                       value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      onChange={(event) => setPassword(event.target.value)}
                       required
-                      className="w-full bg-transparent text-xs sm:text-sm text-slate-800 placeholder-slate-400 outline-none font-medium focus:outline-none focus:ring-0"
-                      placeholder="••••••••••••"
+                      minLength={mode === "signin" ? undefined : 8}
+                      placeholder="Digite sua senha"
+                      className="h-11 pr-12"
+                      aria-describedby={mode !== "signin" ? "password-hint" : undefined}
                     />
                     <button
                       type="button"
-                      aria-label="Alternar visibilidade da senha"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setShowPassword((prev) => !prev);
-                      }}
-                      className="text-slate-400 hover:text-sky-600 ml-2 shrink-0 p-1.5 rounded-lg transition-colors cursor-pointer focus:outline-none select-none"
+                      onClick={() => setShowPassword((value) => !value)}
+                      aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                      aria-pressed={showPassword}
+                      className="absolute right-1 top-1 flex size-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
                     >
-                      {showPassword ? (
-                        <EyeOff className="w-4 h-4 text-sky-600" />
-                      ) : (
-                        <Eye className="w-4 h-4 text-slate-500 hover:text-sky-600" />
-                      )}
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
                   </div>
+                  {mode !== "signin" && (
+                    <p id="password-hint" className="text-xs text-muted-foreground">
+                      Use pelo menos 8 caracteres.
+                    </p>
+                  )}
                 </div>
               )}
-
               {mode === "password" && (
-                <div>
-                  <label
-                    htmlFor="confirm-password"
-                    className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1 ml-1"
-                  >
+                <div className="space-y-2">
+                  <label htmlFor="confirm-password" className="text-sm font-medium">
                     Confirmar senha
                   </label>
-                  <div className="flex items-center bg-white/80 hover:bg-white border border-sky-100 focus-within:border-sky-300 rounded-2xl px-4 py-3 transition-all">
-                    <Lock className="w-4 h-4 text-sky-500 mr-2.5 shrink-0" />
-                    <input
-                      id="confirm-password"
-                      type={showPassword ? "text" : "password"}
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      required
-                      minLength={8}
-                      autoComplete="new-password"
-                      className="w-full bg-transparent text-xs sm:text-sm text-slate-800 placeholder-slate-400 outline-none font-medium"
-                      placeholder="Repita a nova senha"
-                    />
-                  </div>
-                  <p className="mt-1 ml-1 text-[11px] text-slate-500">Mínimo de 8 caracteres.</p>
+                  <Input
+                    id="confirm-password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    required
+                    minLength={8}
+                    placeholder="Repita a nova senha"
+                    className="h-11"
+                  />
                 </div>
               )}
-
-              {/* Opções de Lembrar-me / Esqueci Senha */}
               {mode === "signin" && (
-                <div className="flex items-center justify-between pt-0.5 text-xs px-1">
-                  <label className="flex items-center gap-2 cursor-pointer select-none text-slate-600 font-medium text-[11px] sm:text-xs hover:text-slate-800 transition-colors">
+                <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+                  <label className="flex items-center gap-2 text-muted-foreground">
                     <input
                       type="checkbox"
                       checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      className="w-3.5 h-3.5 rounded-md border-slate-300 text-[#00A8CC] focus:ring-[#00A8CC] accent-[#00A8CC] cursor-pointer"
+                      onChange={(event) => setRememberMe(event.target.checked)}
+                      className="size-4 accent-primary"
                     />
                     Lembrar-me
                   </label>
                   <button
                     type="button"
-                    onClick={() => setMode("forgot")}
-                    className="text-[#0284C7] font-semibold text-[11px] sm:text-xs hover:underline focus:outline-none focus-visible:ring-1 focus-visible:ring-[#0284C7]"
+                    onClick={() => changeMode("forgot")}
+                    className="font-medium text-primary hover:underline"
                   >
                     Esqueci minha senha
                   </button>
                 </div>
               )}
-
-              {/* Botão Entrar Arredondado (Pill Action Button) com Gradiente Azul */}
-              <motion.button
-                whileHover={{ scale: 1.015 }}
-                whileTap={{ scale: 0.985 }}
+              <Button
                 type="submit"
-                disabled={busy}
-                className="w-full mt-4 bg-gradient-to-r from-[#00A8CC] via-[#0284C7] to-[#2563EB] hover:brightness-110 active:scale-[0.99] text-white font-bold text-xs sm:text-sm py-3 rounded-2xl shadow-lg shadow-[#0284C7]/25 transition-all flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer overflow-hidden relative group"
+                className="h-11 w-full rounded-full"
+                disabled={
+                  busy || googleBusy || (mode === "password" && (!sessionEmail || !!linkError))
+                }
               >
-                {busy ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Conectando...</span>
-                  </>
-                ) : (
-                  <>
-                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                    <span>
-                      {mode === "signin"
-                        ? "Entrar na Clínica"
-                        : mode === "signup"
-                          ? "Criar Conta"
-                          : mode === "password"
-                            ? "Salvar senha"
-                            : "Enviar instruções"}
-                    </span>
-                  </>
-                )}
-              </motion.button>
-            </form>
-
-            {/* Divisor "ou" */}
-            {mode === "signin" && (
-              <>
-                <div className="flex items-center my-4">
-                  <div className="flex-1 h-[1px] bg-sky-200/60" />
-                  <span className="px-3 text-xs text-slate-400 font-medium">ou</span>
-                  <div className="flex-1 h-[1px] bg-sky-200/60" />
-                </div>
-
-                {/* Botão Entrar com Google Arredondado em Vidro */}
-                <motion.button
-                  whileHover={{ scale: 1.01 }}
-                  whileTap={{ scale: 0.985 }}
-                  type="button"
-                  disabled={busy || googleBusy}
-                  onClick={handleGoogleSignIn}
-                  className="w-full bg-white/90 hover:bg-white border border-sky-100 text-slate-700 font-semibold text-xs sm:text-sm py-2.5 rounded-2xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
-                >
-                  {googleBusy ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin text-slate-500" />
-                      <span>Conectando ao Google...</span>
-                    </>
-                  ) : (
-                    <>
-                      <GoogleIcon />
-                      <span>Entrar com Google</span>
-                    </>
-                  )}
-                </motion.button>
-              </>
-            )}
-
-            {/* Alternar Modo (Cadastre-se / Entrar) */}
-            <p className="mt-4 sm:mt-5 text-center text-xs text-slate-500 font-medium">
-              {mode === "password" ? (
-                sessionEmail ? (
-                  search.modo === "convite" ? (
-                    <button
-                      type="button"
-                      onClick={goToTarget}
-                      className="text-[#0284C7] font-bold hover:underline"
-                    >
-                      Definir a senha depois
-                    </button>
-                  ) : null
-                ) : (
+                {busy ? <Loader2 className="animate-spin" /> : null}
+                {busy
+                  ? "Aguarde…"
+                  : mode === "signin"
+                    ? "Entrar"
+                    : mode === "signup"
+                      ? "Criar conta"
+                      : mode === "password"
+                        ? "Salvar senha"
+                        : "Enviar instruções"}
+                {!busy && <ArrowRight />}
+              </Button>
+            </fieldset>
+          </form>
+          {mode === "signin" && (
+            <>
+              <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground">
+                <span className="h-px flex-1 bg-hairline" />
+                ou continue com
+                <span className="h-px flex-1 bg-hairline" />
+              </div>
+              <Button
+                variant="outline"
+                className="h-11 w-full rounded-full"
+                disabled={busy || googleBusy}
+                onClick={() => void handleGoogleSignIn()}
+              >
+                {googleBusy ? <Loader2 className="animate-spin" /> : <GoogleIcon />}
+                {googleBusy ? "Conectando…" : "Google"}
+              </Button>
+            </>
+          )}
+          <div className="mt-7 text-center text-sm text-muted-foreground">
+            {mode === "password" ? (
+              sessionEmail ? (
+                search.modo === "convite" && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setLinkError(null);
-                      setMode("forgot");
-                    }}
-                    className="text-[#0284C7] font-bold hover:underline"
+                    disabled={busy}
+                    onClick={goToTarget}
+                    className="font-medium text-primary hover:underline"
                   >
-                    Solicitar novo link
+                    Definir a senha depois
                   </button>
                 )
-              ) : mode === "signin" ? (
-                <>
-                  Sua clínica ainda não usa o MedCore?{" "}
-                  <button
-                    type="button"
-                    onClick={() => setMode("signup")}
-                    className="text-[#0284C7] font-bold hover:underline"
-                  >
-                    Cadastre-se
-                  </button>
-                </>
               ) : (
-                <>
-                  Já tem uma conta cadastrada?{" "}
-                  <button
-                    type="button"
-                    onClick={() => setMode("signin")}
-                    className="text-[#0284C7] font-bold hover:underline"
-                  >
-                    Entrar
-                  </button>
-                </>
-              )}
-            </p>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    setLinkError(null);
+                    changeMode("forgot");
+                  }}
+                  className="font-medium text-primary hover:underline"
+                >
+                  Solicitar novo link
+                </button>
+              )
+            ) : mode === "signin" ? (
+              <>
+                Ainda não tem uma conta?{" "}
+                <button
+                  type="button"
+                  disabled={busy || googleBusy}
+                  onClick={() => changeMode("signup")}
+                  className="font-medium text-primary hover:underline"
+                >
+                  Cadastre-se
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => changeMode("signin")}
+                className="font-medium text-primary hover:underline"
+              >
+                Voltar para o login
+              </button>
+            )}
           </div>
-
-          {/* Rodapé Premium */}
-          <div className="w-full max-w-[440px] text-center mt-3 sm:mt-4 text-[11px] sm:text-xs text-slate-400 font-medium tracking-tight">
-            MedCore © 2026 — Gestão Inteligente para Clínicas Premium &nbsp;|&nbsp; v2.0.0
-          </div>
-        </motion.div>
-      </div>
+        </div>
+        <p className="mt-8 text-center text-xs text-muted-foreground">
+          MedCore © {new Date().getFullYear()} · Gestão clínica
+        </p>
+      </main>
     </div>
   );
 }

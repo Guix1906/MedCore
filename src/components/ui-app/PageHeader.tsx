@@ -1,21 +1,11 @@
-import type { ReactNode } from "react";
-import { Sparkles } from "lucide-react";
+import type { ComponentType, ReactNode } from "react";
 import { cn } from "@/utils/cn";
 
-/**
- * Cabeçalho padrão de página do app.
- *
- * - "Eyebrow": pequeno rótulo em caps com ícone à esquerda.
- * - Título grande (h1) usando a fonte display.
- * - Slot `actions` à direita para botões/menus.
- *
- * Não altera cores nem espaçamentos existentes das páginas —
- * é a extração literal do padrão já usado em Agenda.
- */
 export type PageHeaderProps = {
   eyebrow?: string;
   title: string;
-  icon?: React.ComponentType<{ className?: string }>;
+  description?: ReactNode;
+  icon?: ComponentType<{ className?: string }>;
   actions?: ReactNode;
   className?: string;
 };
@@ -23,23 +13,35 @@ export type PageHeaderProps = {
 export function PageHeader({
   eyebrow,
   title,
-  icon: Icon = Sparkles,
+  description,
+  icon: Icon,
   actions,
   className,
 }: PageHeaderProps) {
   return (
-    <div className={cn("flex items-start justify-between gap-4 mb-6 flex-wrap", className)}>
-      <div>
-        {eyebrow && (
-          <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-muted-foreground mb-1.5">
-            <Icon className="h-3.5 w-3.5 text-primary" /> {eyebrow}
-          </div>
+    <header className={cn("mb-6 flex flex-wrap items-start justify-between gap-4", className)}>
+      <div className="flex min-w-0 items-start gap-3">
+        {Icon && (
+          <span
+            className="mt-0.5 hidden size-11 shrink-0 items-center justify-center rounded-xl border border-primary/10 bg-primary-soft text-primary sm:flex"
+            aria-hidden="true"
+          >
+            <Icon className="size-5" />
+          </span>
         )}
-        <h1 className="font-display text-4xl md:text-5xl font-normal tracking-tight text-balance">
-          {title}
-        </h1>
+        <div className="min-w-0">
+          {eyebrow && <p className="mb-1 text-xs font-medium text-muted-foreground">{eyebrow}</p>}
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground md:text-[28px]">
+            {title}
+          </h1>
+          {description && (
+            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              {description}
+            </p>
+          )}
+        </div>
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
-    </div>
+      {actions && <div className="flex max-w-full flex-wrap items-center gap-2">{actions}</div>}
+    </header>
   );
 }

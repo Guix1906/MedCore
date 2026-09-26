@@ -229,15 +229,15 @@ const BASELINE_PAYMENTS: FinancialPayment[] = [
 
 const DEFAULT_ACCOUNTS: FinancialAccount[] = [
   {
-    id: "acc-bb",
-    name: "BANCO DO BRASIL",
+    id: "00000000-0000-0000-0000-000000000001",
+    name: "BANCO DO BRASIL / PIX",
     type: "corrente",
     company_id: null,
     active: true,
     balance_kind: "available",
   },
   {
-    id: "acc-caixa",
+    id: "00000000-0000-0000-0000-000000000002",
     name: "Caixa Geral / Tesouraria",
     type: "caixa",
     company_id: null,

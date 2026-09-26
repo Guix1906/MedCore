@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui-app/PageHeader";
 import { getFinancialReportingRows } from "@/features/finance/finance-api";
 import { errorMessage, localDate } from "@/features/acompanhamentos/followup-utils";
 import type { DbRow, Json, IconType } from "@/lib/types";
@@ -16,21 +17,12 @@ import {
   Activity,
   PieChart as PieIcon,
 } from "lucide-react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip as RTooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  LineChart,
-  Line,
-  CartesianGrid,
-  Legend,
-} from "recharts";
+import type { ApexOptions } from "apexcharts";
+import { Card as DSCard, CardHeader, KPICard } from "@/components/ds/Card";
+import { Chart, CHART_COLORS } from "@/components/ds/Chart";
+import { SegmentedControl } from "@/components/ui-app/SegmentedControl";
+import { StickyToolbar } from "@/components/ui-app/StickyToolbar";
+import { Button } from "@/components/ui/button";
 import AppShell from "@/components/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -46,11 +38,11 @@ export const Route = createFileRoute("/_authenticated/relatorios")({
 
 type Category = "financeiro" | "clinico" | "operacional" | "estoque";
 
-const CATEGORIES: { id: Category; label: string; icon: IconType; color: string }[] = [
-  { id: "financeiro", label: "Financeiro", icon: DollarSign, color: "#10B981" },
-  { id: "clinico", label: "Clínico", icon: Activity, color: "#8B47FF" },
-  { id: "operacional", label: "Operacional", icon: Calendar, color: "#3B82F6" },
-  { id: "estoque", label: "Estoque", icon: Package, color: "#F59E0B" },
+const CATEGORIES: { id: Category; label: string; icon: IconType }[] = [
+  { id: "financeiro", label: "Financeiro", icon: DollarSign },
+  { id: "clinico", label: "Clínico", icon: Activity },
+  { id: "operacional", label: "Operacional", icon: Calendar },
+  { id: "estoque", label: "Estoque", icon: Package },
 ];
 
 const PERIODS = [
@@ -175,9 +167,9 @@ function RelatoriosPage() {
     const f = patients.filter((p) => p.gender === "feminino").length;
     const o = patients.length - m - f;
     return [
-      { name: "Feminino", value: f, color: "#EC4899" },
-      { name: "Masculino", value: m, color: "#3B82F6" },
-      { name: "Outro", value: o, color: "#94A3B8" },
+      { name: "Feminino", value: f, color: CHART_COLORS.primarySoft },
+      { name: "Masculino", value: m, color: CHART_COLORS.secondary },
+      { name: "Outro", value: o, color: CHART_COLORS.neutral },
     ].filter((x) => x.value > 0);
   }, [patients]);
 
@@ -203,13 +195,17 @@ function RelatoriosPage() {
     const map = new Map<string, number>();
     appointments.forEach((a) => map.set(a.status, (map.get(a.status) || 0) + 1));
     const colors: Record<string, string> = {
-      confirmado: "#10B981",
-      pendente: "#F59E0B",
-      cancelado: "#EF4444",
-      concluido: "#8B47FF",
-      agendado: "#3B82F6",
+      confirmado: CHART_COLORS.success,
+      pendente: CHART_COLORS.warning,
+      cancelado: CHART_COLORS.danger,
+      concluido: CHART_COLORS.primary,
+      agendado: CHART_COLORS.secondary,
     };
-    return Array.from(map, ([name, value]) => ({ name, value, color: colors[name] || "#94A3B8" }));
+    return Array.from(map, ([name, value]) => ({
+      name,
+      value,
+      color: colors[name] || CHART_COLORS.neutral,
+    }));
   }, [appointments]);
 
   const opByDay = useMemo(() => {
@@ -285,69 +281,50 @@ function RelatoriosPage() {
 
   return (
     <AppShell title="Relatórios">
-      <div className="p-6 space-y-6 bg-slate-50 min-h-full">
-        {/* Header */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-900 flex items-center gap-2">
-              <BarChart3 className="text-violet-600" size={24} /> Relatórios
-            </h1>
-            <p className="text-sm text-slate-500">Análises consolidadas por área</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="inline-flex bg-white border border-slate-200 rounded-lg p-0.5">
-              {PERIODS.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => setPeriodId(p.id)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                    periodId === p.id
-                      ? "bg-violet-600 text-white"
-                      : "text-slate-600 hover:bg-slate-100"
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-            <button
-              disabled={loading || !!reportError}
-              onClick={exportCSV}
-              className="inline-flex items-center gap-2 px-3 py-2 text-xs font-medium bg-white border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-700"
-            >
-              <Download size={14} /> Exportar CSV
-            </button>
-          </div>
-        </div>
+      <div className="page-container space-y-5">
+        <PageHeader
+          title="Relatórios"
+          description="Análises por área, com o período de consulta e exportação explícitos."
+          icon={BarChart3}
+          className="mb-0"
+          actions={
+            <>
+              <SegmentedControl
+                aria-label="Período do relatório"
+                value={periodId}
+                onChange={setPeriodId}
+                options={PERIODS.map((p) => ({ value: p.id, label: p.label }))}
+              />
+              <Button variant="outline" disabled={loading || !!reportError} onClick={exportCSV}>
+                <Download /> Exportar CSV…
+              </Button>
+            </>
+          }
+        />
 
-        {/* Category tabs */}
-        <div className="flex flex-wrap gap-2">
-          {CATEGORIES.map((c) => {
-            const Icon = c.icon;
-            const active = cat === c.id;
-            return (
-              <button
-                key={c.id}
-                onClick={() => setCat(c.id)}
-                className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
-                  active
-                    ? "bg-white border-violet-300 text-violet-700 shadow-sm"
-                    : "bg-white/50 border-slate-200 text-slate-600 hover:bg-white"
-                }`}
-                style={active ? { borderColor: c.color, color: c.color } : {}}
-              >
-                <Icon size={16} /> {c.label}
-              </button>
-            );
-          })}
-        </div>
+        <StickyToolbar className="mb-0" label="Categorias de relatório">
+          <SegmentedControl
+            aria-label="Categoria do relatório"
+            value={cat}
+            onChange={setCat}
+            options={CATEGORIES.map(({ id, label, icon: Icon }) => ({
+              value: id,
+              label: (
+                <>
+                  <Icon aria-hidden="true" />
+                  {label}
+                </>
+              ),
+            }))}
+          />
+        </StickyToolbar>
 
         {reportError ? (
-          <p role="alert" className="text-red-700">
+          <p role="alert" className="text-destructive">
             {errorMessage(reportError)}. Relatório indisponível; nenhum total foi estimado.
           </p>
         ) : loading ? (
-          <div className="text-center py-20 text-slate-400 text-sm">Carregando…</div>
+          <div className="py-20 text-center text-sm text-muted-foreground">Carregando…</div>
         ) : cat === "financeiro" ? (
           <FinanceiroView data={finData} kpis={finKpis} byCategory={finByCategory} />
         ) : cat === "clinico" ? (
@@ -362,46 +339,47 @@ function RelatoriosPage() {
   );
 }
 
+const KPI_ACCENT = {
+  violet: "primary",
+  green: "success",
+  rose: "danger",
+  amber: "warning",
+  blue: "info",
+} as const;
+
 function Kpi({ label, value, hint, tone = "violet", icon: Icon }: DbRow) {
-  const tones: Record<string, string> = {
-    violet: "bg-violet-50 text-violet-600",
-    green: "bg-emerald-50 text-emerald-600",
-    rose: "bg-rose-50 text-rose-600",
-    amber: "bg-amber-50 text-amber-600",
-    blue: "bg-blue-50 text-blue-600",
-  };
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center gap-3">
-      <div className={`w-11 h-11 rounded-xl grid place-items-center ${tones[tone]}`}>
-        <Icon size={20} />
-      </div>
-      <div className="min-w-0">
-        <div className="text-[11px] uppercase tracking-wide text-slate-500 font-medium">
-          {label}
-        </div>
-        <div className="text-xl font-semibold text-slate-900 leading-tight truncate">{value}</div>
-        {hint && <div className="text-[11px] text-slate-400">{hint}</div>}
-      </div>
-    </div>
+    <KPICard
+      label={label}
+      value={value}
+      hint={hint}
+      accent={KPI_ACCENT[tone as keyof typeof KPI_ACCENT] ?? "primary"}
+      icon={<Icon className="size-4" />}
+    />
   );
 }
 
 function Card({ title, subtitle, children }: DbRow) {
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-5">
-      <div className="mb-4">
-        <h3 className="font-semibold text-slate-900">{title}</h3>
-        {subtitle && <p className="text-xs text-slate-500">{subtitle}</p>}
-      </div>
+    <DSCard>
+      <CardHeader title={title} subtitle={subtitle} />
       {children}
-    </div>
+    </DSCard>
   );
 }
+
+const donutOptions = (labels: string[], colors: string[]): ApexOptions => ({
+  labels,
+  colors,
+  stroke: { width: 0 },
+  legend: { position: "bottom", horizontalAlign: "center" },
+  plotOptions: { pie: { donut: { size: "62%" } } },
+});
 
 function FinanceiroView({ data, kpis, byCategory }: DbRow) {
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi label="Recebido" value={brl(kpis.receita)} tone="green" icon={TrendingUp} />
         <Kpi label="Pago" value={brl(kpis.despesa)} tone="rose" icon={DollarSign} />
         <Kpi label="Resultado de caixa" value={brl(kpis.saldo)} tone="violet" icon={BarChart3} />
@@ -412,42 +390,48 @@ function FinanceiroView({ data, kpis, byCategory }: DbRow) {
           icon={FileText}
         />
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <Card
             title="Receita x Despesa"
             subtitle="Baixas efetivas por mês; não representa lucro ou saldo bancário"
           >
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={data}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#64748b" }} />
-                <YAxis
-                  tick={{ fontSize: 11, fill: "#64748b" }}
-                  tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`}
-                />
-                <RTooltip formatter={(v: number | string) => brl(Number(v))} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="receita" fill="#10B981" radius={[6, 6, 0, 0]} maxBarSize={40} />
-                <Bar dataKey="despesa" fill="#EF4444" radius={[6, 6, 0, 0]} maxBarSize={40} />
-              </BarChart>
-            </ResponsiveContainer>
+            <Chart
+              type="bar"
+              height={280}
+              summary="Receitas e despesas pagas por mês no período."
+              series={[
+                { name: "Receita", data: data.map((d: DbRow) => Number(d.receita) || 0) },
+                { name: "Despesa", data: data.map((d: DbRow) => Number(d.despesa) || 0) },
+              ]}
+              options={{
+                colors: [CHART_COLORS.success, CHART_COLORS.danger],
+                plotOptions: {
+                  bar: { borderRadius: 6, borderRadiusApplication: "end", columnWidth: "45%" },
+                },
+                xaxis: { categories: data.map((d: DbRow) => d.month) },
+                yaxis: { labels: { formatter: (v) => `R$${(Number(v) / 1000).toFixed(0)}k` } },
+                tooltip: { y: { formatter: (v) => brl(Number(v)) } },
+              }}
+            />
           </Card>
         </div>
         <Card title="Por categoria" subtitle="Top 8">
           <div className="space-y-2">
             {byCategory.length === 0 && (
-              <div className="text-sm text-slate-400 text-center py-8">Sem dados</div>
+              <div className="py-8 text-center text-sm text-muted-foreground">Sem dados</div>
             )}
             {byCategory.map((c: DbRow, i: number) => {
               const max = byCategory[0].value;
               return (
                 <div key={c.name}>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-slate-700 truncate max-w-[60%]">{c.name}</span>
-                    <span className="text-slate-500 font-medium">{brl(c.value)}</span>
+                  <div className="mb-1 flex justify-between text-xs">
+                    <span className="max-w-[60%] truncate text-foreground/80">{c.name}</span>
+                    <span className="font-medium tabular-nums text-muted-foreground">
+                      {brl(c.value)}
+                    </span>
                   </div>
-                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-2 overflow-hidden rounded-full bg-muted">
                     <div
                       className="h-full rounded-full"
                       style={{
@@ -469,43 +453,40 @@ function FinanceiroView({ data, kpis, byCategory }: DbRow) {
 function ClinicoView({ kpis, byGender, byAge }: DbRow) {
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi label="Pacientes" value={kpis.totalPacientes} tone="violet" icon={Users} />
         <Kpi label="Novos" value={kpis.novos} tone="green" icon={TrendingUp} hint="no período" />
         <Kpi label="Tratamentos ativos" value={kpis.tratativos} tone="blue" icon={Activity} />
         <Kpi label="Concluídos" value={kpis.concluidos} tone="amber" icon={FileText} />
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card title="Pacientes por sexo">
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
-              <Pie
-                data={byGender}
-                dataKey="value"
-                nameKey="name"
-                innerRadius={60}
-                outerRadius={100}
-                paddingAngle={4}
-              >
-                {byGender.map((g: DbRow) => (
-                  <Cell key={g.name} fill={g.color} />
-                ))}
-              </Pie>
-              <RTooltip />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-            </PieChart>
-          </ResponsiveContainer>
+          <Chart
+            type="donut"
+            height={260}
+            summary={`Pacientes por sexo: ${byGender.map((g: DbRow) => `${g.name} ${g.value}`).join(", ")}.`}
+            series={byGender.map((g: DbRow) => Number(g.value) || 0)}
+            options={donutOptions(
+              byGender.map((g: DbRow) => g.name),
+              byGender.map((g: DbRow) => g.color),
+            )}
+          />
         </Card>
         <Card title="Faixa etária">
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={byAge}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#64748b" }} />
-              <YAxis tick={{ fontSize: 11, fill: "#64748b" }} />
-              <RTooltip />
-              <Bar dataKey="value" fill="#8B47FF" radius={[6, 6, 0, 0]} maxBarSize={50} />
-            </BarChart>
-          </ResponsiveContainer>
+          <Chart
+            type="bar"
+            height={260}
+            summary="Quantidade de pacientes por faixa etária."
+            series={[{ name: "Pacientes", data: byAge.map((a: DbRow) => Number(a.value) || 0) }]}
+            options={{
+              colors: [CHART_COLORS.primary],
+              plotOptions: {
+                bar: { borderRadius: 6, borderRadiusApplication: "end", columnWidth: "50%" },
+              },
+              xaxis: { categories: byAge.map((a: DbRow) => a.name) },
+              yaxis: { labels: { formatter: (v) => String(Math.round(Number(v))) } },
+            }}
+          />
         </Card>
       </div>
     </div>
@@ -515,7 +496,7 @@ function ClinicoView({ kpis, byGender, byAge }: DbRow) {
 function OperacionalView({ kpis, byStatus, byDay }: DbRow) {
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi label="Agendamentos" value={kpis.total} tone="violet" icon={Calendar} />
         <Kpi label="Confirmados" value={kpis.confirmados} tone="green" icon={TrendingUp} />
         <Kpi label="Cancelados" value={kpis.cancelados} tone="rose" icon={FileText} />
@@ -526,38 +507,37 @@ function OperacionalView({ kpis, byStatus, byDay }: DbRow) {
           icon={PieIcon}
         />
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <Card title="Agendamentos por dia">
-            <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={byDay}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#64748b" }} />
-                <YAxis tick={{ fontSize: 11, fill: "#64748b" }} />
-                <RTooltip />
-                <Line
-                  type="monotone"
-                  dataKey="value"
-                  stroke="#8B47FF"
-                  strokeWidth={2.5}
-                  dot={{ r: 3 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            <Chart
+              type="line"
+              height={280}
+              summary="Quantidade de agendamentos por dia no período."
+              series={[
+                { name: "Agendamentos", data: byDay.map((d: DbRow) => Number(d.value) || 0) },
+              ]}
+              options={{
+                colors: [CHART_COLORS.primary],
+                stroke: { curve: "smooth", width: 2.5 },
+                markers: { size: 3, strokeWidth: 0 },
+                xaxis: { categories: byDay.map((d: DbRow) => d.date) },
+                yaxis: { labels: { formatter: (v) => String(Math.round(Number(v))) } },
+              }}
+            />
           </Card>
         </div>
         <Card title="Por status">
-          <ResponsiveContainer width="100%" height={280}>
-            <PieChart>
-              <Pie data={byStatus} dataKey="value" nameKey="name" outerRadius={100}>
-                {byStatus.map((s: DbRow) => (
-                  <Cell key={s.name} fill={s.color} />
-                ))}
-              </Pie>
-              <RTooltip />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-            </PieChart>
-          </ResponsiveContainer>
+          <Chart
+            type="pie"
+            height={280}
+            summary={`Agendamentos por status: ${byStatus.map((s: DbRow) => `${s.name} ${s.value}`).join(", ")}.`}
+            series={byStatus.map((s: DbRow) => Number(s.value) || 0)}
+            options={donutOptions(
+              byStatus.map((s: DbRow) => s.name),
+              byStatus.map((s: DbRow) => s.color),
+            )}
+          />
         </Card>
       </div>
     </div>
@@ -573,14 +553,14 @@ function EstoqueView({ kpis, critical, movements }: DbRow) {
       .filter((m: DbRow) => m.type === "saida")
       .reduce((s: number, m: DbRow) => s + Number(m.quantity || 0), 0);
     return [
-      { name: "Entradas", value: entrada, color: "#10B981" },
-      { name: "Saídas", value: saida, color: "#EF4444" },
+      { name: "Entradas", value: entrada, color: CHART_COLORS.success },
+      { name: "Saídas", value: saida, color: CHART_COLORS.danger },
     ];
   }, [movements]);
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi label="Itens" value={kpis.total} tone="violet" icon={Package} />
         <Kpi label="Estoque baixo" value={kpis.baixo} tone="rose" icon={FileText} />
         <Kpi label="Valor total" value={brl(kpis.valor)} tone="green" icon={DollarSign} />
@@ -592,29 +572,37 @@ function EstoqueView({ kpis, critical, movements }: DbRow) {
           hint="no período"
         />
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <Card title="Itens em nível crítico" subtitle="Estoque ≤ mínimo">
             {critical.length === 0 ? (
-              <div className="text-sm text-slate-400 text-center py-8">Nenhum item crítico 🎉</div>
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                Nenhum item crítico 🎉
+              </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="text-xs text-slate-500 uppercase border-b border-slate-100">
+                <table className="mc-table">
+                  <thead>
                     <tr>
-                      <th className="text-left py-2">Item</th>
-                      <th className="text-right py-2">Qtd</th>
-                      <th className="text-right py-2">Mínimo</th>
-                      <th className="text-right py-2">Custo</th>
+                      <th scope="col">Item</th>
+                      <th scope="col" className="num">
+                        Qtd
+                      </th>
+                      <th scope="col" className="num">
+                        Mínimo
+                      </th>
+                      <th scope="col" className="num">
+                        Custo
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {critical.map((i: DbRow) => (
-                      <tr key={i.id} className="border-b border-slate-50">
-                        <td className="py-2 text-slate-700">{i.name}</td>
-                        <td className="py-2 text-right font-medium text-rose-600">{i.quantity}</td>
-                        <td className="py-2 text-right text-slate-500">{i.min_quantity}</td>
-                        <td className="py-2 text-right text-slate-500">
+                      <tr key={i.id}>
+                        <td className="text-foreground/80">{i.name}</td>
+                        <td className="num font-medium text-destructive">{i.quantity}</td>
+                        <td className="num text-muted-foreground">{i.min_quantity}</td>
+                        <td className="num text-muted-foreground">
                           {brl(Number(i.unit_cost || 0))}
                         </td>
                       </tr>
@@ -626,17 +614,16 @@ function EstoqueView({ kpis, critical, movements }: DbRow) {
           </Card>
         </div>
         <Card title="Entradas x Saídas">
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
-              <Pie data={inOut} dataKey="value" nameKey="name" innerRadius={50} outerRadius={95}>
-                {inOut.map((s) => (
-                  <Cell key={s.name} fill={s.color} />
-                ))}
-              </Pie>
-              <RTooltip />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-            </PieChart>
-          </ResponsiveContainer>
+          <Chart
+            type="donut"
+            height={260}
+            summary={`Movimentações de estoque: entradas ${inOut[0].value}, saídas ${inOut[1].value}.`}
+            series={inOut.map((s) => s.value)}
+            options={donutOptions(
+              inOut.map((s) => s.name),
+              inOut.map((s) => s.color),
+            )}
+          />
         </Card>
       </div>
     </div>

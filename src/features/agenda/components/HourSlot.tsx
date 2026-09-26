@@ -27,7 +27,7 @@ export const HourSlot = memo(
         className="flex absolute left-0 right-0 border-b border-foreground/25"
         style={{ top: hour * hourHeight, height: hourHeight }}
       >
-        <div className="w-16 shrink-0 pr-1 pt-1 text-[11px] font-normal tabular-nums text-slate-600 text-right border-r border-foreground/25">
+        <div className="w-16 shrink-0 pr-1 pt-1 text-xs font-normal tabular-nums text-muted-foreground text-right border-r border-foreground/25">
           {pad2(hour)}:00
         </div>
         <button

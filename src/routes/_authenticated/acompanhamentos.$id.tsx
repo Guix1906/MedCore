@@ -31,7 +31,6 @@ import {
   PauseCircle,
   Trash2,
   Edit3,
-  X,
   Send,
   Sparkles,
   FileText,
@@ -49,6 +48,13 @@ import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
 import { confirmDialog } from "@/components/app/confirm-dialog";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/_authenticated/acompanhamentos/$id")({
   head: () => ({ meta: [{ title: "Acompanhamento Clínico • MedCore" }] }),
@@ -59,10 +65,26 @@ type Treatment = DbRow;
 type Medication = DbRow;
 
 const STATUS_LABEL: Record<string, { label: string; bg: string; fg: string }> = {
-  em_andamento: { label: "Em andamento", bg: "#DCFCE7", fg: "#166534" },
-  pausado: { label: "Pausado", bg: "#FEF3C7", fg: "#92400E" },
-  finalizado: { label: "Finalizado", bg: "#DBEAFE", fg: "#1E40AF" },
-  cancelado: { label: "Cancelado", bg: "#FEE2E2", fg: "#991B1B" },
+  em_andamento: {
+    label: "Em andamento",
+    bg: "color-mix(in srgb, var(--success) 14%, transparent)",
+    fg: "var(--success)",
+  },
+  pausado: {
+    label: "Pausado",
+    bg: "color-mix(in srgb, var(--warning) 14%, transparent)",
+    fg: "var(--warning)",
+  },
+  finalizado: {
+    label: "Finalizado",
+    bg: "color-mix(in srgb, var(--info) 14%, transparent)",
+    fg: "var(--info)",
+  },
+  cancelado: {
+    label: "Cancelado",
+    bg: "color-mix(in srgb, var(--destructive) 14%, transparent)",
+    fg: "var(--destructive)",
+  },
 };
 
 const daysBetween = (a: string | Date, b: string | Date) =>
@@ -171,8 +193,8 @@ function TreatmentDetailPage() {
 
   if (loadError)
     return (
-      <AppShell>
-        <div role="alert" className="p-8 text-red-700">
+      <AppShell title="Detalhes do acompanhamento">
+        <div role="alert" className="p-8 text-destructive">
           {loadError}
           <button className="ml-4 underline" onClick={load}>
             Tentar novamente
@@ -183,10 +205,10 @@ function TreatmentDetailPage() {
 
   if (loading || !treatment) {
     return (
-      <AppShell>
+      <AppShell title="Detalhes do acompanhamento">
         <div className="p-8 max-w-[1400px] mx-auto">
-          <div className="h-8 w-64 rounded-lg bg-slate-100 animate-pulse mb-6" />
-          <div className="h-40 rounded-2xl bg-slate-100 animate-pulse" />
+          <div className="h-8 w-64 rounded-lg bg-muted animate-pulse mb-6" />
+          <div className="h-40 rounded-2xl bg-muted animate-pulse" />
         </div>
       </AppShell>
     );
@@ -273,24 +295,24 @@ function TreatmentDetailPage() {
   };
 
   return (
-    <AppShell>
-      <div className="p-6 md:p-8 max-w-[1400px] mx-auto space-y-5">
+    <AppShell title="Detalhes do acompanhamento">
+      <div className="page-container space-y-5">
         {/* Top bar com Voltar & Atalhos */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <button
             onClick={() => navigate({ to: "/acompanhamentos" })}
-            className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-slate-600 hover:text-purple-700 transition cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-primary transition cursor-pointer"
           >
             <ArrowLeft size={14} /> Voltar para acompanhamentos
           </button>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Link
               to="/prontuario"
               search={
                 { patientName: treatment.patients?.name, patientId: treatment.patient_id } as any
               }
-              className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700 text-[12.5px] font-bold transition"
+              className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl border border-primary/25 bg-primary-soft hover:bg-primary-soft text-primary text-sm font-semibold transition"
             >
               <FileText size={14} />
               <span>Abrir Prontuário do Paciente</span>
@@ -298,7 +320,7 @@ function TreatmentDetailPage() {
 
             <button
               onClick={sendWhatsAppSchedule}
-              className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[12.5px] font-bold shadow-sm transition active:scale-98 cursor-pointer"
+              className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full bg-success hover:bg-success/90 text-white text-sm font-semibold shadow-sm transition active:scale-98 cursor-pointer"
             >
               <Send size={13} />
               <span>Enviar Cronograma (WhatsApp)</span>
@@ -307,39 +329,39 @@ function TreatmentDetailPage() {
         </div>
 
         {/* Header do Acompanhamento */}
-        <div className="bg-white rounded-3xl border border-slate-200/90 p-5 md:p-6 shadow-sm">
+        <div className="bg-card rounded-xl border border-border/90 p-5 md:p-6 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex items-center gap-4 min-w-0">
               <div
                 className="h-14 w-14 rounded-2xl flex items-center justify-center shrink-0 shadow-xs"
                 style={{
-                  background: (treatment.color || "#8B47FF") + "20",
-                  color: treatment.color || "#8B47FF",
+                  background: (treatment.color || "#6d3ff5") + "20",
+                  color: treatment.color || "#6d3ff5",
                 }}
               >
                 <Activity size={26} />
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2.5 flex-wrap">
-                  <h1 className="text-[20px] md:text-[22px] font-bold text-[#0F172A] truncate">
+                  <h1 className="text-2xl md:text-[28px] font-semibold text-foreground">
                     {treatment.title}
                   </h1>
                   <span
-                    className="text-[11.5px] font-bold px-3 py-1 rounded-full"
+                    className="text-xs font-semibold px-3 py-1 rounded-full"
                     style={{ background: st.bg, color: st.fg }}
                   >
                     {st.label}
                   </span>
                 </div>
-                <div className="text-[13px] text-slate-500 mt-1 flex items-center gap-3.5 flex-wrap font-medium">
-                  <span className="inline-flex items-center gap-1.5 text-slate-800 font-semibold">
-                    <UserIcon size={14} className="text-purple-600" /> {treatment.patients?.name}
+                <div className="text-sm text-muted-foreground mt-1 flex items-center gap-3.5 flex-wrap font-medium">
+                  <span className="inline-flex items-center gap-1.5 text-foreground font-semibold">
+                    <UserIcon size={14} className="text-primary" /> {treatment.patients?.name}
                   </span>
                   {treatment.doctors?.name && (
-                    <span className="text-slate-600">• Dr(a). {treatment.doctors.name}</span>
+                    <span className="text-muted-foreground">• Dr(a). {treatment.doctors.name}</span>
                   )}
                   <span className="inline-flex items-center gap-1.5">
-                    <CalIcon size={14} className="text-slate-400" /> Início:{" "}
+                    <CalIcon size={14} className="text-muted-foreground" /> Início:{" "}
                     {new Date(treatment.start_date).toLocaleDateString("pt-BR")}
                   </span>
                 </div>
@@ -351,7 +373,7 @@ function TreatmentDetailPage() {
               {treatment.status === "em_andamento" && (
                 <button
                   onClick={() => setStatus("pausado")}
-                  className="h-9 px-3.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 text-[12.5px] font-bold inline-flex items-center gap-1.5 transition cursor-pointer"
+                  className="h-9 px-3.5 rounded-xl bg-warning/10 hover:bg-warning/15 text-warning text-sm font-semibold inline-flex items-center gap-1.5 transition cursor-pointer"
                 >
                   <PauseCircle size={15} /> Pausar
                 </button>
@@ -359,7 +381,7 @@ function TreatmentDetailPage() {
               {treatment.status === "pausado" && (
                 <button
                   onClick={() => setStatus("em_andamento")}
-                  className="h-9 px-3.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[12.5px] font-bold inline-flex items-center gap-1.5 transition cursor-pointer"
+                  className="h-9 px-3.5 rounded-xl bg-success/10 hover:bg-success/15 text-success text-sm font-semibold inline-flex items-center gap-1.5 transition cursor-pointer"
                 >
                   <CheckCircle2 size={15} /> Retomar
                 </button>
@@ -367,7 +389,7 @@ function TreatmentDetailPage() {
               {treatment.status !== "finalizado" && treatment.status !== "cancelado" && (
                 <button
                   onClick={() => setStatus("finalizado")}
-                  className="h-9 px-3.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-800 text-[12.5px] font-bold inline-flex items-center gap-1.5 transition cursor-pointer"
+                  className="h-9 px-3.5 rounded-xl bg-info/10 hover:bg-info/15 text-info text-sm font-semibold inline-flex items-center gap-1.5 transition cursor-pointer"
                 >
                   <CheckCircle2 size={15} /> Concluir Protocolo
                 </button>
@@ -376,15 +398,15 @@ function TreatmentDetailPage() {
           </div>
 
           {treatment.objective && (
-            <div className="mt-4 pt-3.5 border-t border-slate-100 text-[13px] text-slate-700 leading-relaxed bg-slate-50/70 p-3 rounded-xl">
-              <span className="font-bold text-slate-900">Objetivo Clínico:</span>{" "}
+            <div className="mt-4 pt-3.5 border-t border-border-soft text-sm text-foreground/80 leading-relaxed bg-muted/42 p-3 rounded-xl">
+              <span className="font-semibold text-foreground">Objetivo Clínico:</span>{" "}
               {treatment.objective}
             </div>
           )}
         </div>
 
         {/* Barra de Abas */}
-        <div className="flex items-center gap-2 border-b border-slate-200">
+        <div className="flex max-w-full items-center gap-2 overflow-x-auto border-b border-border">
           {(
             [
               { id: "resumo", label: "Resumo", icon: Activity },
@@ -399,19 +421,22 @@ function TreatmentDetailPage() {
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                className={`relative inline-flex items-center gap-2 h-11 px-4 text-[13.5px] font-bold transition cursor-pointer ${
-                  active ? "text-[#8B47FF]" : "text-slate-500 hover:text-slate-900"
+                className={`relative inline-flex shrink-0 whitespace-nowrap items-center gap-2 h-11 px-4 text-sm font-semibold transition cursor-pointer ${
+                  active ? "text-primary" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <Icon size={16} />
                 <span>{t.label}</span>
                 {t.id === "resumo" && (
-                  <Sparkles size={13} className={active ? "text-purple-600" : "text-slate-400"} />
+                  <Sparkles
+                    size={13}
+                    className={active ? "text-primary" : "text-muted-foreground"}
+                  />
                 )}
                 {active && (
                   <motion.div
                     layoutId="tab-underline-detail"
-                    className="absolute left-0 right-0 -bottom-px h-0.5 bg-[#8B47FF] rounded-full"
+                    className="absolute left-0 right-0 -bottom-px h-0.5 bg-primary rounded-full"
                   />
                 )}
               </button>
@@ -469,27 +494,28 @@ function TreatmentDetailPage() {
               />
             )}
             {tab === "financeiro" && (
-              <div className="bg-white rounded-3xl border border-slate-200/90 p-5 md:p-6 shadow-sm space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+              <div className="bg-card rounded-xl border border-border/90 p-5 md:p-6 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border-soft">
                   <div>
-                    <h2 className="text-[17px] font-bold text-slate-900 flex items-center gap-2">
-                      <Wallet className="h-5 w-5 text-purple-600" />
+                    <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                      <Wallet className="h-5 w-5 text-primary" />
                       Financeiro do Acompanhamento
                     </h2>
-                    <p className="text-[13px] text-slate-500">
+                    <p className="text-sm text-muted-foreground">
                       Entrada, parcelas e histórico de recebimentos vinculados a este plano.
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[12px] font-semibold text-slate-500">
-                      Contratado: <strong className="text-slate-900">{currency(planFinancials.total)}</strong>
+                    <span className="text-xs font-semibold text-muted-foreground">
+                      Contratado:{" "}
+                      <strong className="text-foreground">{currency(planFinancials.total)}</strong>
                     </span>
-                    <span className="text-slate-300">•</span>
-                    <span className="text-[12px] font-semibold text-emerald-600">
+                    <span className="text-muted-foreground/60">•</span>
+                    <span className="text-xs font-semibold text-success">
                       Recebido: <strong>{currency(planFinancials.paid)}</strong>
                     </span>
-                    <span className="text-slate-300">•</span>
-                    <span className="text-[12px] font-semibold text-amber-600">
+                    <span className="text-muted-foreground/60">•</span>
+                    <span className="text-xs font-semibold text-warning">
                       Saldo: <strong>{currency(planFinancials.open)}</strong>
                     </span>
                   </div>
@@ -499,18 +525,18 @@ function TreatmentDetailPage() {
                   <PlanPayments plan={currentPlan} />
                 ) : (
                   <div className="py-12 text-center space-y-3">
-                    <div className="h-12 w-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mx-auto">
+                    <div className="h-12 w-12 rounded-2xl bg-primary-soft text-primary flex items-center justify-center mx-auto">
                       <Wallet size={24} />
                     </div>
-                    <h3 className="text-[16px] font-bold text-slate-900">
+                    <h3 className="text-base font-semibold text-foreground">
                       Condições financeiras não configuradas
                     </h3>
-                    <p className="text-[13px] text-slate-500 max-w-md mx-auto">
+                    <p className="text-sm text-muted-foreground max-w-md mx-auto">
                       Este plano ainda não possui parcelas ou entrada configuradas no Financeiro.
                     </p>
                     <Link
                       to="/financeiro"
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 text-white text-[13px] font-bold hover:bg-purple-700 transition cursor-pointer"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-hover transition cursor-pointer"
                     >
                       <span>Configurar no Financeiro Geral</span>
                       <ChevronRight size={15} />
@@ -557,34 +583,38 @@ function ResumoTab({
       label: "Dias restantes",
       value: `${kpis.remainingDays} dias`,
       sub: `${kpis.progress}% do prazo (${kpis.passedDays} de ${kpis.totalDays} dias)`,
-      color: "#8B47FF",
+      color: "var(--primary)",
     },
     {
       label: "Próximo retorno previsto",
       value: kpis.nextReturn ? formatClinicalDate(kpis.nextReturn) : "A definir",
       sub: kpis.nextReturn ? "Previsão clínica" : "Sem data marcada",
-      color: "#0EA5E9",
+      color: "var(--info)",
     },
     {
       label: "Medicações ativas",
       value: `${kpis.activeMeds} itens`,
       sub: "No cronograma do paciente",
-      color: "#10B981",
+      color: "var(--success)",
     },
   ];
 
   return (
     <div className="space-y-5">
       {/* Resumo Financeiro Direto no Plano */}
-      <div className="bg-white rounded-3xl p-5 md:p-6 border border-slate-200/90 shadow-xs space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+      <div className="bg-card rounded-xl p-5 md:p-6 border border-border/90 shadow-xs space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border-soft">
           <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center">
+            <div className="h-9 w-9 rounded-xl bg-primary-soft text-primary flex items-center justify-center">
               <Wallet size={18} />
             </div>
             <div>
-              <h3 className="text-[15px] font-bold text-slate-900">Financeiro do Acompanhamento</h3>
-              <p className="text-[12px] text-slate-500">Condições contratadas e saldos deste plano</p>
+              <h3 className="text-[15px] font-semibold text-foreground">
+                Financeiro do Acompanhamento
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Condições contratadas e saldos deste plano
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -592,7 +622,7 @@ function ResumoTab({
               <button
                 type="button"
                 onClick={onOpenFinance}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-[12px] font-bold shadow-xs transition cursor-pointer"
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground shadow-xs transition hover:bg-primary-hover"
               >
                 <span>Receber Pagamento</span>
               </button>
@@ -600,7 +630,7 @@ function ResumoTab({
             <button
               type="button"
               onClick={onOpenFinance}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-[12px] font-bold transition cursor-pointer self-start sm:self-auto"
+              className="inline-flex cursor-pointer items-center gap-1.5 self-start rounded-full bg-primary/10 px-3.5 py-1.5 text-xs font-semibold text-primary transition hover:bg-primary/15 sm:self-auto"
             >
               <span>Gerenciar Condições</span>
               <ChevronRight size={14} />
@@ -609,21 +639,35 @@ function ResumoTab({
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
-          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-            <span className="text-[11px] font-bold text-slate-400 uppercase block">Contratado</span>
-            <span className="text-[16px] font-black text-slate-900">{currency(financials.total)}</span>
+          <div className="p-3 bg-muted/60 rounded-xl border border-border-soft">
+            <span className="text-xs font-semibold text-muted-foreground uppercase block">
+              Contratado
+            </span>
+            <span className="text-base font-semibold text-foreground">
+              {currency(financials.total)}
+            </span>
           </div>
-          <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-100/80">
-            <span className="text-[11px] font-bold text-emerald-600 uppercase block">Total Recebido</span>
-            <span className="text-[16px] font-black text-emerald-700">{currency(financials.paid)}</span>
+          <div className="p-3 bg-success/6 rounded-xl border border-success/12">
+            <span className="text-xs font-semibold text-success uppercase block">
+              Total Recebido
+            </span>
+            <span className="text-base font-semibold text-success">
+              {currency(financials.paid)}
+            </span>
           </div>
-          <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-100/80">
-            <span className="text-[11px] font-bold text-amber-600 uppercase block">Saldo em Aberto</span>
-            <span className="text-[16px] font-black text-amber-700">{currency(financials.open)}</span>
+          <div className="p-3 bg-warning/6 rounded-xl border border-warning/12">
+            <span className="text-xs font-semibold text-warning uppercase block">
+              Saldo em Aberto
+            </span>
+            <span className="text-base font-semibold text-warning">
+              {currency(financials.open)}
+            </span>
           </div>
-          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-            <span className="text-[11px] font-bold text-slate-400 uppercase block">Vencimento / Modalidade</span>
-            <span className="text-[13px] font-bold text-slate-800">
+          <div className="p-3 bg-muted/60 rounded-xl border border-border-soft">
+            <span className="text-xs font-semibold text-muted-foreground uppercase block">
+              Vencimento / Modalidade
+            </span>
+            <span className="text-sm font-semibold text-foreground">
               {financials.hasFreeBalance
                 ? "Pagamentos Livres (Sem vencimento)"
                 : financials.nextDueDate
@@ -640,29 +684,26 @@ function ResumoTab({
       </p>
 
       {/* Card do Copiloto Clínico IA */}
-      <div
-        className="rounded-3xl p-5 md:p-6 text-slate-900 border border-purple-100 shadow-sm relative overflow-hidden"
-        style={{
-          background: "linear-gradient(135deg, #FAF5FF 0%, #FFFFFF 60%, #F0FDFA 100%)",
-        }}
-      >
+      <div className="relative overflow-hidden rounded-xl border border-primary/15 bg-card p-5 text-foreground shadow-xs md:p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-r from-[#FF7A59] via-[#D946EF] to-[#6366F1] text-white flex items-center justify-center shadow-sm">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[linear-gradient(135deg,#ff7a59,#d946ef_50%,#6366f1)] text-white shadow-sm">
               <Sparkles size={18} />
             </div>
             <div>
-              <h3 className="text-[15px] font-bold text-slate-900">Resumo do acompanhamento</h3>
-              <p className="text-[12px] text-slate-500">Prazos e medicações cadastradas</p>
+              <h3 className="text-[15px] font-semibold text-foreground">
+                Resumo do acompanhamento
+              </h3>
+              <p className="text-xs text-muted-foreground">Prazos e medicações cadastradas</p>
             </div>
           </div>
 
-          <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-100 text-purple-800">
+          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-primary-soft text-primary-hover">
             Dados do plano
           </span>
         </div>
 
-        <div className="mt-4 p-4 rounded-2xl bg-white/90 border border-purple-100/70 text-[13px] text-slate-700 leading-relaxed space-y-2">
+        <div className="mt-4 p-4 rounded-2xl bg-card/90 border border-primary/11 text-sm text-foreground/80 leading-relaxed space-y-2">
           <p>
             📍 <b>Status do Tratamento:</b> O paciente encontra-se no{" "}
             <b>
@@ -675,12 +716,14 @@ function ResumoTab({
             🩺 <b>Próximo Passo Clínico:</b>{" "}
             {kpis.nextReturn ? (
               <span>
-                Retorno previsto para <b>{formatClinicalDate(kpis.nextReturn)}</b> (estimativa clínica). Recomenda-se
-                avaliar a adesão medicamentosa e registrar fotos de evolução na aba dedicada.
+                Retorno previsto para <b>{formatClinicalDate(kpis.nextReturn)}</b> (estimativa
+                clínica). Recomenda-se avaliar a adesão medicamentosa e registrar fotos de evolução
+                na aba dedicada.
               </span>
             ) : (
               <span>
-                Sem retorno previsto cadastrado. Recomenda-se definir uma data estimada de retorno para o checkpoint clínico.
+                Sem retorno previsto cadastrado. Recomenda-se definir uma data estimada de retorno
+                para o checkpoint clínico.
               </span>
             )}
           </p>
@@ -695,17 +738,17 @@ function ResumoTab({
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.04 }}
-            className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm"
+            className="bg-card rounded-2xl border border-border/80 p-5 shadow-sm"
           >
-            <div className="text-[11.5px] font-bold uppercase tracking-wider text-slate-400">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               {c.label}
             </div>
-            <div className="text-[24px] font-extrabold mt-1.5" style={{ color: c.color }}>
+            <div className="text-2xl font-semibold mt-1.5" style={{ color: c.color }}>
               {c.value}
             </div>
-            <div className="text-[12px] text-slate-500 mt-1 font-medium">{c.sub}</div>
+            <div className="text-xs text-muted-foreground mt-1 font-medium">{c.sub}</div>
             {c.label === "Dias restantes" && (
-              <div className="mt-3.5 h-2 rounded-full bg-slate-100 overflow-hidden">
+              <div className="mt-3.5 h-2 rounded-full bg-muted overflow-hidden">
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${kpis.progress}%` }}
@@ -806,10 +849,10 @@ function MedicacoesTab({
             <button
               key={f.id}
               onClick={() => setFilter(f.id)}
-              className={`h-8.5 px-3.5 rounded-xl text-[12.5px] font-semibold transition cursor-pointer ${
+              className={`h-8.5 px-3.5 rounded-xl text-sm font-semibold transition cursor-pointer ${
                 filter === f.id
-                  ? "bg-[#8B47FF] text-white shadow-xs"
-                  : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                  ? "bg-primary text-white shadow-xs"
+                  : "bg-card border border-border text-foreground/80 hover:bg-muted/60"
               }`}
             >
               {f.label}
@@ -820,7 +863,7 @@ function MedicacoesTab({
         <div className="flex items-center gap-2">
           <button
             onClick={onSendWhatsApp}
-            className="h-10 px-3.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[12.5px] font-bold inline-flex items-center gap-1.5 transition cursor-pointer"
+            className="h-10 px-3.5 rounded-full bg-success/10 hover:bg-success/15 text-success text-sm font-semibold inline-flex items-center gap-1.5 transition cursor-pointer"
           >
             <Send size={14} />
             <span>Disparar no WhatsApp</span>
@@ -828,7 +871,7 @@ function MedicacoesTab({
 
           <button
             onClick={() => setOpenNew(true)}
-            className="h-10 px-4 rounded-xl bg-[#8B47FF] hover:bg-[#7A3AE6] text-white text-[13px] font-bold inline-flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+            className="h-10 px-4 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-semibold inline-flex items-center gap-1.5 shadow-sm transition cursor-pointer"
           >
             <Plus size={15} /> Nova medicação
           </button>
@@ -836,18 +879,18 @@ function MedicacoesTab({
       </div>
 
       {filtered.length === 0 ? (
-        <div className="text-center py-20 bg-white rounded-3xl border border-slate-200/80 shadow-sm">
-          <Pill size={44} className="mx-auto text-slate-300" strokeWidth={1.5} />
-          <div className="mt-3 text-[16px] font-bold text-slate-800">
+        <div className="text-center py-20 bg-card rounded-xl border border-border/80 shadow-sm">
+          <Pill size={44} className="mx-auto text-muted-foreground/60" strokeWidth={1.5} />
+          <div className="mt-3 text-base font-semibold text-foreground">
             Nenhuma medicação no filtro
           </div>
-          <div className="text-[13px] text-slate-500 mt-1">
+          <div className="text-sm text-muted-foreground mt-1">
             Adicione medicações e organize por horários do dia.
           </div>
         </div>
       ) : (
         <div className="relative pl-5">
-          <div className="absolute left-1.5 top-0 bottom-0 w-px bg-slate-200" />
+          <div className="absolute left-1.5 top-0 bottom-0 w-px bg-surface-2" />
           <div className="space-y-3">
             {filtered.map((m, i) => {
               const PIcon = PERIOD_ICON[m.period] ?? Clock;
@@ -860,54 +903,56 @@ function MedicacoesTab({
                   transition={{ delay: i * 0.04 }}
                   className="relative"
                 >
-                  <div className="absolute -left-[13px] top-5 h-3.5 w-3.5 rounded-full bg-white border-2 border-[#8B47FF]" />
+                  <div className="absolute -left-[13px] top-5 h-3.5 w-3.5 rounded-full bg-card border-2 border-primary" />
                   <div
-                    className={`bg-white rounded-2xl border border-slate-200/90 p-4.5 shadow-sm transition ${
-                      suspenso ? "opacity-60 bg-slate-50" : ""
+                    className={`bg-card rounded-2xl border border-border/90 p-4.5 shadow-sm transition ${
+                      suspenso ? "opacity-60 bg-muted/60" : ""
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-start gap-3 min-w-0">
-                        <div className="h-10 w-10 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shrink-0">
+                        <div className="h-10 w-10 rounded-xl bg-primary-soft text-primary flex items-center justify-center shrink-0">
                           <PIcon size={18} />
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <div className="text-[15px] font-bold text-[#0F172A]">{m.name}</div>
+                            <div className="text-[15px] font-semibold text-foreground">
+                              {m.name}
+                            </div>
                             {m.period && (
-                              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-700">
+                              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-primary-soft text-primary">
                                 {PERIOD_LABEL[m.period] ?? m.period}
                               </span>
                             )}
                             {suspenso && (
-                              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800">
+                              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-destructive/15 text-destructive">
                                 Suspenso
                               </span>
                             )}
                           </div>
 
-                          <div className="text-[13px] text-slate-600 mt-1 flex flex-wrap gap-x-4 gap-y-0.5 font-medium">
+                          <div className="text-sm text-muted-foreground mt-1 flex flex-wrap gap-x-4 gap-y-0.5 font-medium">
                             {m.dose && (
                               <span>
-                                <b className="text-slate-800">Dose:</b> {m.dose}
+                                <b className="text-foreground">Dose:</b> {m.dose}
                                 {m.unit ? ` ${m.unit}` : ""}
                               </span>
                             )}
                             {m.route && (
                               <span>
-                                <b className="text-slate-800">Via:</b> {m.route}
+                                <b className="text-foreground">Via:</b> {m.route}
                               </span>
                             )}
                             {m.frequency && (
                               <span>
-                                <b className="text-slate-800">Frequência:</b> {m.frequency}
+                                <b className="text-foreground">Frequência:</b> {m.frequency}
                               </span>
                             )}
                           </div>
 
                           {m.notes && (
-                            <div className="text-[12.5px] text-slate-700 mt-2 bg-slate-50 rounded-xl p-2.5 border border-slate-100">
-                              <span className="font-semibold text-slate-800">Orientação:</span>{" "}
+                            <div className="text-sm text-foreground/80 mt-2 bg-muted/60 rounded-xl p-2.5 border border-border-soft">
+                              <span className="font-semibold text-foreground">Orientação:</span>{" "}
                               {m.notes}
                             </div>
                           )}
@@ -917,14 +962,14 @@ function MedicacoesTab({
                       <div className="flex gap-1">
                         <button
                           onClick={() => toggle(m)}
-                          className="h-8 w-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-800 transition cursor-pointer"
+                          className="h-8 w-8 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition cursor-pointer"
                           title={suspenso ? "Reativar" : "Suspender"}
                         >
                           {suspenso ? <CheckCircle2 size={16} /> : <PauseCircle size={16} />}
                         </button>
                         <button
                           onClick={() => remove(m)}
-                          className="h-8 w-8 rounded-lg hover:bg-rose-50 flex items-center justify-center text-rose-600 transition cursor-pointer"
+                          className="h-8 w-8 rounded-lg hover:bg-destructive/10 flex items-center justify-center text-destructive transition cursor-pointer"
                           title="Remover"
                         >
                           <Trash2 size={16} />
@@ -996,25 +1041,16 @@ function NewMedicationModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-xs flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-6 py-4.5 border-b border-slate-100">
-          <div className="text-[16px] font-bold text-slate-900">Nova Medicação no Cronograma</div>
-          <button
-            onClick={onClose}
-            className="h-8 w-8 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center"
-          >
-            <X size={18} />
-          </button>
-        </div>
-        <div className="p-6 grid grid-cols-2 gap-3.5">
-          <div className="col-span-2">
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-lg gap-0 p-0">
+        <DialogHeader className="border-b border-border-soft px-6 py-4">
+          <DialogTitle className="text-base">Nova Medicação no Cronograma</DialogTitle>
+          <DialogDescription className="sr-only">
+            Dados da medicação que entra no cronograma do acompanhamento.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="sm:col-span-2">
             <Lbl>Nome da Medicação *</Lbl>
             <input
               className={inp}
@@ -1069,7 +1105,7 @@ function NewMedicationModal({
               onChange={(e) => setF({ ...f, frequency: e.target.value })}
             />
           </div>
-          <div className="col-span-2">
+          <div className="sm:col-span-2">
             <Lbl>Turno / Período do Dia</Lbl>
             <select
               className={inp}
@@ -1088,7 +1124,7 @@ function NewMedicationModal({
               ))}
             </select>
           </div>
-          <div className="col-span-2">
+          <div className="sm:col-span-2">
             <Lbl>Instruções / Recomendações de Uso</Lbl>
             <textarea
               rows={2}
@@ -1099,29 +1135,31 @@ function NewMedicationModal({
             />
           </div>
         </div>
-        <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-2 bg-white">
+        <div className="px-6 py-4 border-t border-border-soft flex justify-end gap-2 bg-card">
           <button
             onClick={onClose}
-            className="h-10 px-4 rounded-xl bg-slate-100 text-[13px] font-semibold text-slate-700"
+            className="h-10 px-4 rounded-full bg-muted text-sm font-semibold text-foreground/80"
           >
             Cancelar
           </button>
           <button
             disabled={saving}
             onClick={submit}
-            className="h-10 px-5 rounded-xl bg-[#8B47FF] hover:bg-[#7A3AE6] text-white text-[13px] font-bold disabled:opacity-50"
+            className="h-10 px-5 rounded-full bg-primary hover:bg-primary-hover text-white text-sm font-semibold disabled:opacity-50"
           >
             {saving ? "Salvando…" : "Adicionar ao Cronograma"}
           </button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 const inp =
-  "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:border-purple-500";
+  "w-full rounded-xl border border-border px-3 py-2 text-sm focus:outline-none focus:border-primary";
 
 function Lbl({ children }: { children: React.ReactNode }) {
-  return <label className="text-[12px] font-bold text-slate-700 block mb-1.5">{children}</label>;
+  return (
+    <label className="text-xs font-semibold text-foreground/80 block mb-1.5">{children}</label>
+  );
 }

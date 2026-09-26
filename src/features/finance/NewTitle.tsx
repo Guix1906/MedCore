@@ -62,7 +62,7 @@ export default function NewTitle({
           </DialogDescription>
         </DialogHeader>
         {categories.error && (
-          <p role="alert" className="text-sm text-red-700">
+          <p role="alert" className="text-sm text-destructive">
             Não foi possível carregar as categorias: {errorMessage(categories.error)}{" "}
             <button onClick={() => categories.refetch()} className="underline">
               Tentar novamente
@@ -154,7 +154,7 @@ export default function NewTitle({
               onChange={(e) => setPayer(e.target.value)}
             />
           </label>
-          <p className="text-xs text-slate-500 sm:col-span-2">
+          <p className="text-xs text-muted-foreground sm:col-span-2">
             Planos, entrada e parcelamento são configurados em Acompanhamentos. Não recadastre
             cobranças já geradas pela agenda ou pelos planos. Categorias são cadastradas em
             Configurações.

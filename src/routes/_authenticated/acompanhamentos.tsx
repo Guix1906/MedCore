@@ -1,3 +1,5 @@
+import { PageHeader } from "@/components/ui-app/PageHeader";
+import { KPICard } from "@/components/ds/Card";
 import TreatmentAlerts from "@/features/acompanhamentos/TreatmentAlerts";
 import { changeTreatmentStatus } from "@/features/acompanhamentos/ClinicalFollowup";
 import { localDate, protocolDeadline } from "@/features/acompanhamentos/followup-utils";
@@ -40,6 +42,7 @@ import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
 import { confirmDialog } from "@/components/app/confirm-dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { patientsService, companyService } from "@/services/api";
 import { getStoredLocalPatients, mergeWithLocalPatients } from "@/lib/local-patients";
 import { PatientModal } from "@/components/pacientes/PatientModal";
@@ -80,11 +83,14 @@ export type Treatment = {
   doctors?: { name: string } | null;
 };
 
+// Fundo de status: 14% do token sobre qualquer superfície (claro ou escuro).
+const tint = (token: string) => `color-mix(in srgb, var(${token}) 14%, transparent)`;
+
 const STATUS_LABEL: Record<Treatment["status"], { label: string; bg: string; fg: string }> = {
-  em_andamento: { label: "Em andamento", bg: "#DCFCE7", fg: "#166534" },
-  pausado: { label: "Pausado", bg: "#FEF3C7", fg: "#92400E" },
-  finalizado: { label: "Finalizado", bg: "#DBEAFE", fg: "#1E40AF" },
-  cancelado: { label: "Cancelado", bg: "#FEE2E2", fg: "#991B1B" },
+  em_andamento: { label: "Em andamento", bg: tint("--success"), fg: "var(--success)" },
+  pausado: { label: "Pausado", bg: tint("--warning"), fg: "var(--warning)" },
+  finalizado: { label: "Finalizado", bg: tint("--info"), fg: "var(--info)" },
+  cancelado: { label: "Cancelado", bg: tint("--destructive"), fg: "var(--destructive)" },
 };
 
 const COLORS = ["#8B47FF", "#6C4CF7", "#10B981", "#F59E0B", "#EC4899", "#0EA5E9", "#EF4444"];
@@ -202,7 +208,7 @@ function AcompanhamentosPage() {
         title: "Em Andamento (1ª metade)",
         subtitle: "Até 50% do prazo do plano",
         badge: `${c1.length}`,
-        color: "#8B47FF",
+        color: "var(--primary)",
         items: c1,
       },
       {
@@ -210,7 +216,7 @@ function AcompanhamentosPage() {
         title: "Em Andamento (Reta final)",
         subtitle: "Mais de 50% do prazo do plano",
         badge: `${c2.length}`,
-        color: "#0EA5E9",
+        color: "var(--info)",
         items: c2,
       },
       {
@@ -218,7 +224,7 @@ function AcompanhamentosPage() {
         title: "Pausados & Em Espera",
         subtitle: "Pausado ou aguardando paciente",
         badge: `${c3.length}`,
-        color: "#F59E0B",
+        color: "var(--warning)",
         items: c3,
       },
       {
@@ -226,7 +232,7 @@ function AcompanhamentosPage() {
         title: "Concluídos & Alta",
         subtitle: "Protocolos finalizados",
         badge: `${c4.length}`,
-        color: "#10B981",
+        color: "var(--success)",
         items: c4,
       },
     ];
@@ -251,31 +257,26 @@ function AcompanhamentosPage() {
   }
 
   return (
-    <AppShell>
-      <div className="p-6 md:p-8 max-w-[1400px] mx-auto space-y-6">
+    <AppShell title="Acompanhamentos">
+      <div className="page-container space-y-5">
         {/* Cabeçalho */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-[#111827] tracking-tight">Acompanhamentos</h1>
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 text-purple-700">
-                Copiloto Clínico
-              </span>
-            </div>
-            <p className="text-[13.5px] text-[#6B7280] mt-1">
-              Fases de tratamento, medicações, evolução, fotos e retornos por paciente.
-            </p>
-          </div>
+          <PageHeader
+            title="Acompanhamentos"
+            icon={Activity}
+            description="Planos, evolução e próximos retornos de cada paciente."
+            className="mb-0"
+          />
 
           <div className="flex items-center gap-2.5">
             {/* Alternador Cards / Kanban */}
-            <div className="flex items-center bg-[#F3F4F6] p-1 rounded-xl border border-black/[0.04]">
+            <div className="flex items-center bg-muted p-1 rounded-xl border border-black/[0.04]">
               <button
                 onClick={() => setViewMode("cards")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px] font-semibold transition cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition cursor-pointer ${
                   viewMode === "cards"
-                    ? "bg-white text-[#111827] shadow-sm"
-                    : "text-[#6B7280] hover:text-[#111827]"
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
                 title="Visão em Cards"
               >
@@ -284,10 +285,10 @@ function AcompanhamentosPage() {
               </button>
               <button
                 onClick={() => setViewMode("kanban")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px] font-semibold transition cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition cursor-pointer ${
                   viewMode === "kanban"
-                    ? "bg-white text-[#111827] shadow-sm"
-                    : "text-[#6B7280] hover:text-[#111827]"
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
                 title="Visão em Fases / Kanban"
               >
@@ -298,7 +299,7 @@ function AcompanhamentosPage() {
 
             <button
               onClick={() => setOpenNew(true)}
-              className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-[#8B47FF] hover:bg-[#7A3AE6] text-white text-[13.5px] font-bold shadow-md shadow-purple-500/20 active:scale-98 transition cursor-pointer"
+              className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-semibold shadow-md shadow-primary/20 active:scale-98 transition cursor-pointer"
             >
               <Plus size={16} />
               <span>Novo acompanhamento</span>
@@ -307,73 +308,58 @@ function AcompanhamentosPage() {
         </div>
 
         {listError && (
-          <p role="alert" className="text-red-700">
+          <p role="alert" className="text-destructive">
             Erro ao carregar acompanhamentos: {listError.message}
           </p>
         )}
         <TreatmentAlerts scope="clinical" />
 
         {/* KPIs */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-          {[
-            { label: "Total cadastrados", value: kpis.total, color: "#8B47FF", icon: Activity },
-            { label: "Em andamento", value: kpis.ativos, color: "#10B981", icon: TrendingUp },
-            { label: "Finalizados", value: kpis.finalizados, color: "#1E40AF", icon: CheckCircle2 },
-            {
-              label: "Retornos necessários",
-              value: rows.filter(
+        <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
+          <KPICard
+            label="Total cadastrados"
+            value={kpis.total}
+            icon={<Activity className="size-4" />}
+          />
+          <KPICard
+            label="Em andamento"
+            value={kpis.ativos}
+            icon={<TrendingUp className="size-4" />}
+            accent="success"
+          />
+          <KPICard
+            label="Finalizados"
+            value={kpis.finalizados}
+            icon={<CheckCircle2 className="size-4" />}
+            accent="info"
+          />
+          <KPICard
+            label="Retornos necessários"
+            value={
+              rows.filter(
                 (t) =>
                   t.status === "em_andamento" &&
                   t.next_return_date &&
                   t.next_return_date <= localDate(),
-              ).length,
-              color: "#F59E0B",
-              icon: Sparkles,
-            },
-          ].map((k, i) => {
-            const Icon = k.icon;
-            return (
-              <motion.div
-                key={k.label}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
-                className="bg-white rounded-2xl border border-slate-200/80 p-4.5 shadow-sm flex items-center justify-between"
-              >
-                <div>
-                  <div className="text-[11.5px] font-bold uppercase tracking-wider text-slate-500">
-                    {k.label}
-                  </div>
-                  <div
-                    className="text-[22px] font-extrabold text-[#111827] mt-1"
-                    style={{ color: typeof k.value === "number" ? k.color : "#111827" }}
-                  >
-                    {k.value}
-                  </div>
-                </div>
-                <div
-                  className="h-11 w-11 rounded-2xl flex items-center justify-center shrink-0"
-                  style={{ background: k.color + "15", color: k.color }}
-                >
-                  <Icon size={20} />
-                </div>
-              </motion.div>
-            );
-          })}
+              ).length
+            }
+            icon={<Sparkles className="size-4" />}
+            accent="warning"
+          />
         </div>
 
         {/* Barra de Filtros e Busca */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 shadow-sm flex flex-wrap items-center gap-2.5">
-          <div className="relative flex-1 min-w-[240px]">
+        <div className="bg-card rounded-2xl border border-border/80 p-3.5 shadow-sm flex flex-wrap items-center gap-2.5">
+          <div className="relative flex-1 min-w-[180px]">
             <Search
               size={16}
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground"
             />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Buscar por paciente, médico ou título do tratamento…"
-              className="w-full h-10 pl-10 pr-3 rounded-xl bg-slate-50 border border-slate-200 focus:border-purple-500 focus:bg-white outline-none text-[13.5px] transition"
+              className="w-full h-10 pl-10 pr-3 rounded-xl bg-muted/60 border border-border focus:border-primary focus:bg-card outline-none text-sm transition"
             />
           </div>
 
@@ -382,10 +368,10 @@ function AcompanhamentosPage() {
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}
-                className={`h-9 px-3 rounded-xl text-[12.5px] font-semibold transition cursor-pointer ${
+                className={`h-9 px-3 rounded-xl text-sm font-semibold transition cursor-pointer ${
                   statusFilter === s
-                    ? "bg-[#8B47FF] text-white shadow-sm"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                    ? "bg-primary text-white shadow-sm"
+                    : "bg-muted text-foreground/80 hover:bg-surface-2"
                 }`}
               >
                 {s === "todos" ? "Todos" : STATUS_LABEL[s].label}
@@ -404,17 +390,21 @@ function AcompanhamentosPage() {
                 {[...Array(6)].map((_, i) => (
                   <div
                     key={i}
-                    className="h-48 rounded-2xl bg-white border border-slate-200 animate-pulse"
+                    className="h-48 rounded-2xl bg-card border border-border animate-pulse"
                   />
                 ))}
               </div>
             ) : filtered.length === 0 ? (
-              <div className="text-center py-20 bg-white rounded-2xl border border-slate-200/80 shadow-sm">
-                <Activity size={44} className="mx-auto text-slate-300" strokeWidth={1.5} />
-                <div className="mt-3 text-[16px] font-bold text-slate-800">
+              <div className="text-center py-20 bg-card rounded-2xl border border-border/80 shadow-sm">
+                <Activity
+                  size={44}
+                  className="mx-auto text-muted-foreground/60"
+                  strokeWidth={1.5}
+                />
+                <div className="mt-3 text-base font-semibold text-foreground">
                   Nenhum acompanhamento encontrado
                 </div>
-                <div className="text-[13px] text-slate-500 mt-1">
+                <div className="text-sm text-muted-foreground mt-1">
                   Ajuste seus filtros de busca ou crie um novo acompanhamento.
                 </div>
               </div>
@@ -432,15 +422,15 @@ function AcompanhamentosPage() {
                     >
                       <div
                         onClick={() => setSelectedTreatment(t)}
-                        className="block bg-white rounded-2xl border border-slate-200/80 p-5 hover:shadow-xl hover:border-purple-300 hover:-translate-y-0.5 transition-all group relative overflow-hidden cursor-pointer"
+                        className="block bg-card rounded-2xl border border-border/80 p-5 hover:shadow-md hover:border-primary/30 transition-all group relative overflow-hidden cursor-pointer"
                       >
                         {/* Indicador de progresso no topo do card */}
-                        <div className="absolute top-0 left-0 right-0 h-1 bg-slate-100">
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-muted">
                           <div
                             className="h-full transition-all duration-700"
                             style={{
                               width: `${prog}%`,
-                              background: t.color || "#8B47FF",
+                              background: t.color || "#6d3ff5",
                             }}
                           />
                         </div>
@@ -450,24 +440,24 @@ function AcompanhamentosPage() {
                             <div
                               className="h-11 w-11 shrink-0 rounded-2xl flex items-center justify-center shadow-xs"
                               style={{
-                                background: (t.color || "#8B47FF") + "18",
-                                color: t.color || "#8B47FF",
+                                background: (t.color || "#6d3ff5") + "18",
+                                color: t.color || "#6d3ff5",
                               }}
                             >
                               <Activity size={20} />
                             </div>
                             <div className="min-w-0">
-                              <div className="text-[15px] font-bold text-[#0F172A] truncate group-hover:text-purple-700 transition-colors">
+                              <div className="text-[15px] font-semibold text-foreground truncate group-hover:text-primary transition-colors">
                                 {t.title}
                               </div>
-                              <div className="text-[12.5px] text-slate-600 truncate flex items-center gap-1.5 mt-0.5">
-                                <UserIcon size={13} className="text-slate-400" />
+                              <div className="text-sm text-muted-foreground truncate flex items-center gap-1.5 mt-0.5">
+                                <UserIcon size={13} className="text-muted-foreground" />
                                 <span className="font-semibold">{t.patients?.name ?? "—"}</span>
                               </div>
                             </div>
                           </div>
                           <span
-                            className="text-[11px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap"
+                            className="text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap"
                             style={{ background: st.bg, color: st.fg }}
                           >
                             {st.label}
@@ -476,54 +466,54 @@ function AcompanhamentosPage() {
 
                         {/* Barra de Progresso com label */}
                         <div className="mt-4 pt-1">
-                          <div className="flex items-center justify-between text-[11.5px] font-semibold text-slate-600 mb-1.5">
+                          <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground mb-1.5">
                             <span>Prazo transcorrido</span>
-                            <span className="font-bold text-slate-900">{prog}%</span>
+                            <span className="font-semibold text-foreground">{prog}%</span>
                           </div>
-                          <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                          <div className="h-2 rounded-full bg-muted overflow-hidden">
                             <div
                               className="h-full rounded-full transition-all duration-700"
-                              style={{ width: `${prog}%`, background: t.color || "#8B47FF" }}
+                              style={{ width: `${prog}%`, background: t.color || "#6d3ff5" }}
                             />
                           </div>
                         </div>
 
                         {/* Dados adicionais */}
-                        <div className="mt-4 grid grid-cols-2 gap-3 text-[12.5px] bg-slate-50/80 p-3 rounded-xl">
+                        <div className="mt-4 grid grid-cols-2 gap-3 text-sm bg-muted/48 p-3 rounded-xl">
                           <div>
-                            <div className="text-slate-400 text-[11px] font-semibold uppercase">
+                            <div className="text-muted-foreground text-xs font-semibold uppercase">
                               Início
                             </div>
-                            <div className="text-slate-800 font-semibold mt-0.5 flex items-center gap-1">
-                              <CalIcon size={12} className="text-purple-600" />
+                            <div className="text-foreground font-semibold mt-0.5 flex items-center gap-1">
+                              <CalIcon size={12} className="text-primary" />
                               {new Date(t.start_date).toLocaleDateString("pt-BR")}
                             </div>
                           </div>
                           <div>
-                            <div className="text-slate-400 text-[11px] font-semibold uppercase">
+                            <div className="text-muted-foreground text-xs font-semibold uppercase">
                               Prazo
                             </div>
-                            <div className="text-slate-900 font-bold mt-0.5">
+                            <div className="text-foreground font-semibold mt-0.5">
                               {protocolDeadline(t.status, t.end_date)}
                             </div>
                           </div>
                         </div>
 
                         {/* Footer do Card com Ações Rápidas */}
-                        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                        <div className="mt-4 pt-3 border-t border-border-soft flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             {t.patients?.phone && (
                               <button
                                 type="button"
                                 onClick={(e) => openWhatsAppPatient(e, t)}
-                                className="h-7.5 px-2.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-[11.5px] font-bold inline-flex items-center gap-1 transition cursor-pointer"
+                                className="h-7.5 px-2.5 rounded-lg bg-success/10 text-success hover:bg-success/15 text-xs font-semibold inline-flex items-center gap-1 transition cursor-pointer"
                                 title="Enviar mensagem no WhatsApp"
                               >
                                 <MessageCircle size={13} />
                                 <span>WhatsApp</span>
                               </button>
                             )}
-                            <span className="text-[11.5px] text-slate-500 truncate max-w-[130px]">
+                            <span className="text-xs text-muted-foreground truncate max-w-[130px]">
                               {t.doctors?.name ? `Dr(a). ${t.doctors.name}` : ""}
                             </span>
                           </div>
@@ -533,7 +523,7 @@ function AcompanhamentosPage() {
                               e.stopPropagation();
                               setSelectedTreatment(t);
                             }}
-                            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl bg-purple-50 group-hover:bg-purple-600 text-purple-700 group-hover:text-white text-[12.5px] font-bold transition-all shadow-2xs"
+                            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl bg-primary-soft group-hover:bg-primary text-primary group-hover:text-white text-sm font-semibold transition-all shadow-2xs"
                           >
                             <span>Gerenciar</span>
                             <ChevronRight
@@ -559,21 +549,21 @@ function AcompanhamentosPage() {
             {kanbanColumns.map((col) => (
               <div
                 key={col.id}
-                className="bg-slate-50/90 rounded-2xl border border-slate-200/80 p-3.5 flex flex-col min-h-[480px]"
+                className="bg-muted/54 rounded-2xl border border-border/80 p-3.5 flex flex-col min-h-[480px]"
               >
                 {/* Header da Coluna */}
-                <div className="flex items-center justify-between pb-3 border-b border-slate-200/80 px-1">
+                <div className="flex items-center justify-between pb-3 border-b border-border/80 px-1">
                   <div>
-                    <div className="text-[13.5px] font-bold text-slate-900 flex items-center gap-2">
+                    <div className="text-sm font-semibold text-foreground flex items-center gap-2">
                       <span
                         className="h-2.5 w-2.5 rounded-full inline-block"
                         style={{ background: col.color }}
                       />
                       {col.title}
                     </div>
-                    <div className="text-[11px] text-slate-500 mt-0.5">{col.subtitle}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{col.subtitle}</div>
                   </div>
-                  <span className="px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-700 text-[11px] font-bold shadow-2xs">
+                  <span className="px-2 py-0.5 rounded-full bg-card border border-border text-foreground/80 text-xs font-semibold shadow-2xs">
                     {col.badge}
                   </span>
                 </div>
@@ -581,7 +571,7 @@ function AcompanhamentosPage() {
                 {/* Lista de cards da coluna */}
                 <div className="space-y-3 mt-3 flex-1 overflow-y-auto max-h-[620px] pr-0.5">
                   {col.items.length === 0 ? (
-                    <div className="text-center py-10 text-[12px] text-slate-400 font-medium">
+                    <div className="text-center py-10 text-xs text-muted-foreground font-medium">
                       Nenhum tratamento nesta fase.
                     </div>
                   ) : (
@@ -591,22 +581,22 @@ function AcompanhamentosPage() {
                         <div
                           key={t.id}
                           onClick={() => setSelectedTreatment(t)}
-                          className="block bg-white rounded-xl border border-slate-200/90 p-3.5 shadow-2xs hover:shadow-md hover:border-purple-400 transition group cursor-pointer"
+                          className="block bg-card rounded-xl border border-border/90 p-3.5 shadow-2xs hover:shadow-md hover:border-primary/50 transition group cursor-pointer"
                         >
-                          <div className="text-[13.5px] font-bold text-slate-900 truncate group-hover:text-purple-700">
+                          <div className="text-sm font-semibold text-foreground truncate group-hover:text-primary">
                             {t.title}
                           </div>
-                          <div className="text-[12px] text-slate-600 mt-1 flex items-center gap-1 truncate font-medium">
-                            <UserIcon size={12} className="text-slate-400" />
+                          <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1 truncate font-medium">
+                            <UserIcon size={12} className="text-muted-foreground" />
                             {t.patients?.name ?? "—"}
                           </div>
 
                           <div className="mt-3">
-                            <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 mb-1">
-                              <span>Progresso</span>
+                            <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground mb-1">
+                              <span>Prazo transcorrido</span>
                               <span>{prog}%</span>
                             </div>
-                            <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                               <div
                                 className="h-full rounded-full"
                                 style={{ width: `${prog}%`, background: col.color }}
@@ -614,16 +604,16 @@ function AcompanhamentosPage() {
                             </div>
                           </div>
 
-                          <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11.5px]">
+                          <div className="mt-3 pt-2.5 border-t border-border-soft flex items-center justify-between text-xs">
                             <div className="flex items-center gap-2">
-                              <span className="font-bold text-slate-800">
+                              <span className="font-semibold text-foreground">
                                 {protocolDeadline(t.status, t.end_date)}
                               </span>
                               {t.patients?.phone && (
                                 <button
                                   type="button"
                                   onClick={(e) => openWhatsAppPatient(e, t)}
-                                  className="text-emerald-600 hover:text-emerald-800 flex items-center gap-1 font-semibold cursor-pointer"
+                                  className="text-success hover:text-success flex items-center gap-1 font-semibold cursor-pointer"
                                   title="WhatsApp"
                                 >
                                   <MessageCircle size={12} />
@@ -631,7 +621,7 @@ function AcompanhamentosPage() {
                                 </button>
                               )}
                             </div>
-                            <span className="text-[11px] font-bold text-purple-600 group-hover:underline flex items-center">
+                            <span className="text-xs font-semibold text-primary group-hover:underline flex items-center">
                               Gerenciar <ChevronRight size={12} />
                             </span>
                           </div>
@@ -800,34 +790,31 @@ function TreatmentManageModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto border border-slate-200 flex flex-col"
-        onClick={(e) => e.stopPropagation()}
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        aria-describedby={undefined}
+        className="flex max-h-[92vh] max-w-2xl flex-col gap-0 p-0 [&>button.absolute]:hidden"
       >
         {/* Top Header */}
-        <div className="flex items-center justify-between px-6 py-4.5 border-b border-slate-100 sticky top-0 bg-white z-10">
+        <div className="flex items-center justify-between px-6 py-4.5 border-b border-border-soft sticky top-0 bg-card z-10">
           <div className="flex items-center gap-3 min-w-0">
             <div
               className="h-10 w-10 shrink-0 rounded-2xl flex items-center justify-center"
               style={{
-                background: (treatment.color || "#8B47FF") + "18",
-                color: treatment.color || "#8B47FF",
+                background: (treatment.color || "#6d3ff5") + "18",
+                color: treatment.color || "#6d3ff5",
               }}
             >
               <Activity size={20} />
             </div>
             <div className="min-w-0">
-              <div className="text-[16px] font-bold text-slate-900 truncate">{treatment.title}</div>
-              <div className="text-[12px] text-slate-500 flex items-center gap-1.5 mt-0.5">
-                <UserIcon size={12} className="text-slate-400" />
+              <DialogTitle className="truncate text-base">{treatment.title}</DialogTitle>
+              <div className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                <UserIcon size={12} className="text-muted-foreground" />
                 <span className="font-semibold">{treatment.patients?.name || "Paciente"}</span>
                 <span>•</span>
                 <span
-                  className="px-2 py-0.5 rounded-full text-[10px] font-bold"
+                  className="px-2 py-0.5 rounded-full text-xs font-semibold"
                   style={{ background: st.bg, color: st.fg }}
                 >
                   {st.label}
@@ -840,10 +827,10 @@ function TreatmentManageModal({
             <button
               type="button"
               onClick={() => setIsEditing(!isEditing)}
-              className={`h-8.5 px-3 rounded-xl text-[12.5px] font-bold flex items-center gap-1.5 transition cursor-pointer ${
+              className={`h-8.5 px-3 rounded-xl text-sm font-semibold flex items-center gap-1.5 transition cursor-pointer ${
                 isEditing
-                  ? "bg-purple-100 text-purple-700"
-                  : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                  ? "bg-primary-soft text-primary"
+                  : "bg-muted hover:bg-surface-2 text-foreground/80"
               }`}
               title={isEditing ? "Cancelar Edição" : "Editar Acompanhamento"}
             >
@@ -852,7 +839,7 @@ function TreatmentManageModal({
             </button>
             <button
               onClick={onClose}
-              className="h-8.5 w-8.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center transition cursor-pointer"
+              className="h-8.5 w-8.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground/80 flex items-center justify-center transition cursor-pointer"
             >
               <X size={18} />
             </button>
@@ -951,7 +938,7 @@ function TreatmentManageModal({
                 </select>
               </Field>
 
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-muted-foreground">
                 Entrada e parcelas são configuradas no Financeiro após salvar o plano.
               </p>
               <Field label="Cor de Identificação">
@@ -964,7 +951,7 @@ function TreatmentManageModal({
                       className="h-7 w-7 rounded-full border-2 transition cursor-pointer"
                       style={{
                         background: c,
-                        borderColor: form.color === c ? "#111827" : "transparent",
+                        borderColor: form.color === c ? "var(--foreground)" : "transparent",
                       }}
                     />
                   ))}
@@ -985,15 +972,15 @@ function TreatmentManageModal({
             /* ================= MODO VISUALIZAÇÃO ================= */
             <div className="space-y-5">
               {/* Paciente & Médico Banner */}
-              <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="bg-muted/60 border border-border/80 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Paciente
                   </div>
-                  <div className="text-[16px] font-bold text-slate-900 mt-0.5">
+                  <div className="text-base font-semibold text-foreground mt-0.5">
                     {treatment.patients?.name || "Paciente não identificado"}
                   </div>
-                  <div className="text-[12.5px] text-slate-500 mt-0.5">
+                  <div className="text-sm text-muted-foreground mt-0.5">
                     {treatment.doctors?.name
                       ? `Médico responsável: Dr(a). ${treatment.doctors.name}`
                       : "Sem médico atribuído"}
@@ -1012,7 +999,7 @@ function TreatmentManageModal({
                         );
                         window.open(`https://wa.me/55${phone}?text=${msg}`, "_blank");
                       }}
-                      className="h-9 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-[12px] font-bold inline-flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                      className="h-9 px-3 rounded-xl bg-success hover:bg-success/90 text-white text-xs font-semibold inline-flex items-center gap-1.5 transition cursor-pointer shadow-xs"
                     >
                       <MessageCircle size={15} />
                       <span>WhatsApp</span>
@@ -1022,74 +1009,76 @@ function TreatmentManageModal({
               </div>
 
               {/* Barra de Progresso e Prazos */}
-              <div className="bg-white border border-slate-200/80 rounded-2xl p-4.5 space-y-3">
-                <div className="flex items-center justify-between text-[13px] font-semibold text-slate-700">
+              <div className="bg-card border border-border/80 rounded-2xl p-4.5 space-y-3">
+                <div className="flex items-center justify-between text-sm font-semibold text-foreground/80">
                   <span className="flex items-center gap-1.5">
-                    <TrendingUp size={16} className="text-purple-600" />
-                    Progresso do Tratamento
+                    <TrendingUp size={16} className="text-primary" />
+                    Prazo transcorrido
                   </span>
-                  <span className="font-bold text-purple-700">{prog}%</span>
+                  <span className="font-semibold text-primary">{prog}%</span>
                 </div>
 
-                <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                <div className="h-2.5 rounded-full bg-muted overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all duration-700"
-                    style={{ width: `${prog}%`, background: treatment.color || "#8B47FF" }}
+                    style={{ width: `${prog}%`, background: treatment.color || "#6d3ff5" }}
                   />
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 text-center pt-2 border-t border-slate-100 text-[12px]">
+                <div className="grid grid-cols-3 gap-2 text-center pt-2 border-t border-border-soft text-xs">
                   <div>
-                    <div className="text-slate-400 text-[10.5px] font-bold uppercase">Início</div>
-                    <div className="font-bold text-slate-800 mt-0.5">
+                    <div className="text-muted-foreground text-xs font-semibold uppercase">
+                      Início
+                    </div>
+                    <div className="font-semibold text-foreground mt-0.5">
                       {new Date(treatment.start_date).toLocaleDateString("pt-BR")}
                     </div>
                   </div>
                   <div>
-                    <div className="text-slate-400 text-[10.5px] font-bold uppercase">
+                    <div className="text-muted-foreground text-xs font-semibold uppercase">
                       Dias Corridos
                     </div>
-                    <div className="font-bold text-purple-700 mt-0.5">{passedDays} dias</div>
+                    <div className="font-semibold text-primary mt-0.5">{passedDays} dias</div>
                   </div>
                   <div>
-                    <div className="text-slate-400 text-[10.5px] font-bold uppercase">
+                    <div className="text-muted-foreground text-xs font-semibold uppercase">
                       Restantes
                     </div>
-                    <div className="font-bold text-slate-800 mt-0.5">{remainingDays} dias</div>
+                    <div className="font-semibold text-foreground mt-0.5">{remainingDays} dias</div>
                   </div>
                 </div>
               </div>
 
-              <Link to="/financeiro" className="text-purple-700 underline">
+              <Link to="/financeiro" className="text-primary underline">
                 Gerenciar pagamentos no Financeiro
               </Link>
 
               {/* Objetivo e Notas */}
               {treatment.objective && (
-                <div className="bg-purple-50/50 border border-purple-100 rounded-2xl p-4">
-                  <div className="text-[11px] font-bold text-purple-700 uppercase tracking-wider">
+                <div className="bg-primary-soft/50 border border-primary/15 rounded-2xl p-4">
+                  <div className="text-xs font-semibold text-primary uppercase tracking-wider">
                     Objetivo Clínico
                   </div>
-                  <p className="text-[13px] text-slate-700 mt-1 leading-relaxed">
+                  <p className="text-sm text-foreground/80 mt-1 leading-relaxed">
                     {treatment.objective}
                   </p>
                 </div>
               )}
 
               {treatment.notes && (
-                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4">
-                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                <div className="bg-muted/60 border border-border/80 rounded-2xl p-4">
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Observações Internas
                   </div>
-                  <p className="text-[13px] text-slate-700 mt-1 leading-relaxed">
+                  <p className="text-sm text-foreground/80 mt-1 leading-relaxed">
                     {treatment.notes}
                   </p>
                 </div>
               )}
 
               {/* Alteração Rápida de Status */}
-              <div className="pt-2 border-t border-slate-100">
-                <div className="text-[11.5px] font-bold text-slate-500 uppercase tracking-wider mb-2.5">
+              <div className="pt-2 border-t border-border-soft">
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2.5">
                   Alterar Status do Acompanhamento
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -1099,9 +1088,9 @@ function TreatmentManageModal({
                         key={statusKey}
                         type="button"
                         onClick={() => handleQuickStatusChange(statusKey)}
-                        className={`h-8.5 px-3 rounded-xl text-[12px] font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                        className={`h-8.5 px-3 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
                           treatment.status === statusKey
-                            ? "ring-2 ring-purple-600 ring-offset-1 font-extrabold"
+                            ? "ring-2 ring-primary ring-offset-1 font-semibold"
                             : "hover:opacity-80 opacity-60"
                         }`}
                         style={{
@@ -1124,13 +1113,13 @@ function TreatmentManageModal({
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between gap-3 sticky bottom-0 bg-white">
+        <div className="px-6 py-4 border-t border-border-soft flex items-center justify-between gap-3 sticky bottom-0 bg-card">
           <div>
             {!isEditing ? (
               <button
                 type="button"
                 onClick={handleDelete}
-                className="h-10 px-3 rounded-xl text-rose-600 hover:bg-rose-50 text-[13px] font-bold inline-flex items-center gap-1.5 transition cursor-pointer"
+                className="h-10 px-3 rounded-full text-destructive hover:bg-destructive/10 text-sm font-semibold inline-flex items-center gap-1.5 transition cursor-pointer"
                 title="Excluir Acompanhamento"
               >
                 <Trash2 size={16} />
@@ -1140,7 +1129,7 @@ function TreatmentManageModal({
               <button
                 type="button"
                 onClick={() => setIsEditing(false)}
-                className="h-10 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[13px] font-semibold transition cursor-pointer"
+                className="h-10 px-4 rounded-xl bg-muted hover:bg-surface-2 text-foreground/80 text-sm font-semibold transition cursor-pointer"
               >
                 Cancelar
               </button>
@@ -1155,7 +1144,7 @@ function TreatmentManageModal({
                   onClose();
                   navigate({ to: "/acompanhamentos/$id", params: { id: treatment.id } });
                 }}
-                className="h-10 px-4 rounded-xl bg-[#8B47FF] hover:bg-[#7A3AE6] text-white text-[13px] font-bold shadow-md shadow-purple-500/20 inline-flex items-center gap-1.5 transition cursor-pointer"
+                className="h-10 px-4 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-semibold shadow-md shadow-primary/20 inline-flex items-center gap-1.5 transition cursor-pointer"
               >
                 <Pill size={15} />
                 <span>Abrir página completa</span>
@@ -1166,7 +1155,7 @@ function TreatmentManageModal({
                 type="button"
                 disabled={saving}
                 onClick={handleSaveEdit}
-                className="h-10 px-5 rounded-xl bg-[#8B47FF] hover:bg-[#7A3AE6] text-white text-[13px] font-bold shadow-sm inline-flex items-center gap-1.5 transition active:scale-98 disabled:opacity-50 cursor-pointer"
+                className="h-10 px-5 rounded-full bg-primary hover:bg-primary-hover text-white text-sm font-semibold shadow-sm inline-flex items-center gap-1.5 transition active:scale-98 disabled:opacity-50 cursor-pointer"
               >
                 <Save size={15} />
                 <span>{saving ? "Salvando…" : "Salvar Alterações"}</span>
@@ -1174,8 +1163,8 @@ function TreatmentManageModal({
             )}
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1330,29 +1319,25 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
 
   return (
     <>
-      <div
-        className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
-        onClick={() => {
+      <Dialog
+        open
+        onOpenChange={(open) => {
+          if (open) return;
           setIsPatientDropdownOpen(false);
           onClose();
         }}
       >
-        <div
-          className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto border border-slate-200"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="flex items-center justify-between px-6 py-4.5 border-b border-slate-100 sticky top-0 bg-white z-10">
+        <DialogContent className="max-h-[92vh] max-w-2xl gap-0 p-0 [&>button.absolute]:hidden">
+          <div className="flex items-center justify-between px-6 py-4.5 border-b border-border-soft sticky top-0 bg-card z-10">
             <div>
-              <div className="text-[16px] font-bold text-slate-900">
-                Novo Acompanhamento Clínico
-              </div>
-              <div className="text-[12px] text-slate-500 mt-0.5">
+              <DialogTitle className="text-base">Novo Acompanhamento Clínico</DialogTitle>
+              <DialogDescription className="mt-0.5 text-xs">
                 Defina o paciente, protocolo, cronograma e parâmetros iniciais.
-              </div>
+              </DialogDescription>
             </div>
             <button
               onClick={onClose}
-              className="h-8 w-8 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center transition cursor-pointer"
+              className="h-8 w-8 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground/80 flex items-center justify-center transition cursor-pointer"
             >
               <X size={18} />
             </button>
@@ -1362,25 +1347,25 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
             {/* Seletor Inteligente de Paciente */}
             <div className="relative md:col-span-1">
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[12px] font-bold text-slate-700">Paciente *</label>
+                <label className="text-xs font-semibold text-foreground/80">Paciente *</label>
                 <button
                   type="button"
                   onClick={() => setShowNewPatientModal(true)}
-                  className="text-[11.5px] font-semibold text-[#8B47FF] hover:underline flex items-center gap-1 cursor-pointer"
+                  className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
                 >
                   <UserPlus size={13} />+ Novo Paciente
                 </button>
               </div>
 
               {selectedPatient ? (
-                <div className="flex items-center justify-between h-10 px-3 rounded-xl bg-purple-50/70 border border-purple-200">
+                <div className="flex items-center justify-between h-10 px-3 rounded-xl bg-primary-soft/70 border border-primary/25">
                   <div className="flex items-center gap-2 truncate">
-                    <UserIcon size={15} className="text-[#8B47FF] shrink-0" />
-                    <span className="text-[13px] font-bold text-purple-900 truncate">
+                    <UserIcon size={15} className="text-primary shrink-0" />
+                    <span className="text-sm font-semibold text-primary-hover truncate">
                       {selectedPatient.name}
                     </span>
                     {selectedPatient.phone && (
-                      <span className="text-[11px] text-purple-600 truncate hidden sm:inline">
+                      <span className="text-xs text-primary truncate hidden sm:inline">
                         • {selectedPatient.phone}
                       </span>
                     )}
@@ -1391,7 +1376,7 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
                       setForm((f) => ({ ...f, patient_id: "" }));
                       setIsPatientDropdownOpen(true);
                     }}
-                    className="text-[11.5px] font-semibold text-purple-700 hover:text-purple-900 ml-2 shrink-0 cursor-pointer"
+                    className="text-xs font-semibold text-primary hover:text-primary-hover ml-2 shrink-0 cursor-pointer"
                   >
                     Trocar
                   </button>
@@ -1401,41 +1386,44 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
                   <button
                     type="button"
                     onClick={() => setIsPatientDropdownOpen((v) => !v)}
-                    className={`w-full h-10 px-3 rounded-xl border text-left flex items-center justify-between text-[13px] transition cursor-pointer ${
+                    className={`w-full h-10 px-3 rounded-xl border text-left flex items-center justify-between text-sm transition cursor-pointer ${
                       isPatientDropdownOpen
-                        ? "border-[#8B47FF] bg-white ring-2 ring-[#8B47FF]/15"
-                        : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100/70"
+                        ? "border-primary bg-card ring-2 ring-primary/15"
+                        : "border-border bg-muted/60 text-foreground/80 hover:bg-muted/70"
                     }`}
                   >
-                    <span className="text-slate-400">
+                    <span className="text-muted-foreground">
                       {loadingPatients
                         ? "Carregando pacientes..."
                         : "Selecione ou busque um paciente…"}
                     </span>
-                    <ChevronDown size={15} className="text-slate-400 shrink-0" />
+                    <ChevronDown size={15} className="text-muted-foreground shrink-0" />
                   </button>
 
                   {isPatientDropdownOpen && (
-                    <div className="absolute left-0 right-0 top-11 z-50 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 space-y-1.5 animate-in fade-in zoom-in-95">
+                    <div className="absolute left-0 right-0 top-11 z-50 space-y-1.5 rounded-2xl border border-hairline bg-glass-strong p-2 shadow-(--glass-shadow-lg) glass-blur-strong animate-in fade-in zoom-in-95">
                       <div className="relative">
-                        <Search size={14} className="absolute left-2.5 top-2.5 text-slate-400" />
+                        <Search
+                          size={14}
+                          className="absolute left-2.5 top-2.5 text-muted-foreground"
+                        />
                         <input
                           autoFocus
                           type="text"
                           value={patientSearch}
                           onChange={(e) => setPatientSearch(e.target.value)}
                           placeholder="Buscar paciente por nome, CPF ou telefone..."
-                          className="w-full h-8.5 pl-8 pr-3 rounded-lg bg-slate-50 border border-slate-200 text-[12px] focus:outline-none focus:border-[#8B47FF] text-slate-800"
+                          className="w-full h-8.5 pl-8 pr-3 rounded-lg bg-muted/60 border border-border text-xs focus:outline-none focus:border-primary text-foreground"
                         />
                       </div>
 
                       <div className="max-h-48 overflow-y-auto space-y-0.5 pt-1">
                         {loadingPatients ? (
-                          <div className="p-3 text-center text-[12px] text-slate-400">
+                          <div className="p-3 text-center text-xs text-muted-foreground">
                             Carregando lista de pacientes...
                           </div>
                         ) : filteredPatients.length === 0 ? (
-                          <div className="p-3 text-center text-[12px] text-slate-500 space-y-2">
+                          <div className="p-3 text-center text-xs text-muted-foreground space-y-2">
                             <div>Nenhum paciente encontrado</div>
                             <button
                               type="button"
@@ -1443,7 +1431,7 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
                                 setIsPatientDropdownOpen(false);
                                 setShowNewPatientModal(true);
                               }}
-                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#8B47FF] text-white text-[11.5px] font-bold hover:bg-[#7A3AE6] transition cursor-pointer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary-hover transition cursor-pointer"
                             >
                               <UserPlus size={12} />
                               Cadastrar "{patientSearch || "Novo Paciente"}"
@@ -1459,19 +1447,19 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
                                 setIsPatientDropdownOpen(false);
                                 setPatientSearch("");
                               }}
-                              className="w-full p-2 rounded-xl text-left hover:bg-purple-50/70 transition flex items-center justify-between group cursor-pointer"
+                              className="w-full p-2 rounded-xl text-left hover:bg-primary-soft/70 transition flex items-center justify-between group cursor-pointer"
                             >
                               <div className="min-w-0">
-                                <div className="text-[13px] font-semibold text-slate-800 group-hover:text-[#8B47FF] truncate">
+                                <div className="text-sm font-semibold text-foreground group-hover:text-primary truncate">
                                   {p.name}
                                 </div>
-                                <div className="text-[11px] text-slate-400 flex items-center gap-2">
+                                <div className="text-xs text-muted-foreground flex items-center gap-2">
                                   {p.cpf && <span>CPF: {p.cpf}</span>}
                                   {p.phone && <span>Tel: {p.phone}</span>}
                                 </div>
                               </div>
                               {form.patient_id === p.id && (
-                                <Check size={14} className="text-[#8B47FF] shrink-0" />
+                                <Check size={14} className="text-primary shrink-0" />
                               )}
                             </button>
                           ))
@@ -1550,7 +1538,7 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
                 ))}
               </select>
             </Field>
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-muted-foreground">
               Entrada e parcelas são configuradas no Financeiro após salvar o plano.
             </p>
             <Field label="Cor de identificação">
@@ -1563,7 +1551,7 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
                     className="h-7 w-7 rounded-full border-2 transition cursor-pointer"
                     style={{
                       background: c,
-                      borderColor: form.color === c ? "#111827" : "transparent",
+                      borderColor: form.color === c ? "var(--foreground)" : "transparent",
                     }}
                   />
                 ))}
@@ -1580,23 +1568,23 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
             </Field>
           </div>
 
-          <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-2.5 sticky bottom-0 bg-white">
+          <div className="px-6 py-4 border-t border-border-soft flex justify-end gap-2.5 sticky bottom-0 bg-card">
             <button
               onClick={onClose}
-              className="h-10 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[13px] font-semibold transition cursor-pointer"
+              className="h-10 px-4 rounded-full bg-muted hover:bg-surface-2 text-foreground/80 text-sm font-semibold transition cursor-pointer"
             >
               Cancelar
             </button>
             <button
               disabled={saving}
               onClick={submit}
-              className="h-10 px-5 rounded-xl bg-[#8B47FF] hover:bg-[#7A3AE6] text-white text-[13px] font-bold shadow-sm transition active:scale-98 disabled:opacity-50 cursor-pointer"
+              className="h-10 px-5 rounded-full bg-primary hover:bg-primary-hover text-white text-sm font-semibold shadow-sm transition active:scale-98 disabled:opacity-50 cursor-pointer"
             >
               {saving ? "Salvando…" : "Criar acompanhamento"}
             </button>
           </div>
-        </div>
-      </div>
+        </DialogContent>
+      </Dialog>
 
       {showNewPatientModal && (
         <PatientModal
@@ -1618,7 +1606,7 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
 }
 
 const inputCls =
-  "w-full h-10 px-3 rounded-xl bg-slate-50 border border-slate-200 focus:border-[#8B47FF] focus:bg-white outline-none text-[13px] text-slate-800 transition";
+  "w-full h-10 px-3 rounded-xl bg-muted/60 border border-border focus:border-primary focus:bg-card outline-none text-sm text-foreground transition";
 
 function Field({
   label,
@@ -1631,7 +1619,7 @@ function Field({
 }) {
   return (
     <div className={className}>
-      <label className="text-[12px] font-bold text-slate-700 block mb-1.5">{label}</label>
+      <label className="text-xs font-semibold text-foreground/80 block mb-1.5">{label}</label>
       {children}
     </div>
   );

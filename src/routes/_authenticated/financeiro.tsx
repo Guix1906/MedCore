@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ui-app/PageHeader";
 import { createFileRoute, useBlocker, type SearchSchemaInput } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -92,7 +93,9 @@ function FinanceiroPage() {
           const updated = Array.from(new Set([...currentDeleted, id]));
           localStorage.setItem("medcore_deleted_titles", JSON.stringify(updated));
 
-          const currentCash = JSON.parse(localStorage.getItem("medcore_deleted_cash_entries") || "[]");
+          const currentCash = JSON.parse(
+            localStorage.getItem("medcore_deleted_cash_entries") || "[]",
+          );
           const updatedCash = Array.from(new Set([...currentCash, id]));
           localStorage.setItem("medcore_deleted_cash_entries", JSON.stringify(updatedCash));
         } catch (storageErr) {
@@ -108,16 +111,17 @@ function FinanceiroPage() {
     }
   };
   return (
-    <AppShell>
+    <AppShell title="Financeiro">
       <OperationLock.Provider value={{ active, setActive }}>
-        <main className="space-y-5 p-4 md:p-6">
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-            Financeiro
-          </p>
+        <main className="page-container space-y-5">
+          <PageHeader
+            title="Financeiro"
+            description="Acompanhe o caixa, os compromissos e os recebimentos da clínica."
+          />
           <FinanceTabs activeTab={search.tab} onSelectTab={changeTab} disabled={locked} />
           {query.isPending && <p role="status">Carregando financeiro...</p>}
           {query.error && (
-            <div role="alert" className="rounded-xl bg-red-50 p-4 text-red-800">
+            <div role="alert" className="rounded-xl bg-destructive/10 p-4 text-destructive">
               {errorMessage(query.error)}
               <p>Não foi possível atualizar os dados financeiros.</p>
               <button className="underline" onClick={() => query.refetch()}>
@@ -227,7 +231,10 @@ function FinanceiroPage() {
                     <OperationForm
                       title="Confirmar cancelamento"
                       execute={async (form) => {
-                        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cancelId);
+                        const isUuid =
+                          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+                            cancelId,
+                          );
                         let result: any = { error: null };
                         if (isUuid) {
                           result = await supabase.rpc("cancel_financial_title", {
@@ -237,8 +244,13 @@ function FinanceiroPage() {
                         }
                         if (typeof window !== "undefined" && window.localStorage) {
                           try {
-                            const current = JSON.parse(localStorage.getItem("medcore_deleted_titles") || "[]");
-                            localStorage.setItem("medcore_deleted_titles", JSON.stringify([...current, cancelId]));
+                            const current = JSON.parse(
+                              localStorage.getItem("medcore_deleted_titles") || "[]",
+                            );
+                            localStorage.setItem(
+                              "medcore_deleted_titles",
+                              JSON.stringify([...current, cancelId]),
+                            );
                           } catch {}
                         }
                         if (!result.error) setCancelId("");

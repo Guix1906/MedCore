@@ -1,3 +1,4 @@
+import { addDays, addMonths } from "date-fns";
 // Normalização das fontes (tasks, events, deadlines) em uma "Activity" única
 // usada pelo calendário diário. Mantemos as tabelas existentes; aqui só
 // projetamos os campos para o componente visual.
@@ -23,7 +24,7 @@ export type Activity = {
   raw: unknown;
 };
 
-// Paleta por tipo (azul/roxo/vermelho/âmbar/esmeralda) — versão dark theme
+// Paleta por tipo (azul/roxo/vermelho/âmbar/esmeralda) — contraste para superfícies claras
 export const KIND_COLOR: Record<
   ActivityKind,
   { label: string; bar: string; chip: string; text: string; soft: string; ring: string }
@@ -31,40 +32,40 @@ export const KIND_COLOR: Record<
   tarefa: {
     label: "Tarefa",
     bar: "bg-sky-400",
-    chip: "bg-sky-500/15 text-sky-300 border-sky-400/30",
-    text: "text-sky-300",
+    chip: "bg-sky-500/15 text-sky-800 dark:text-sky-300 border-sky-400/30",
+    text: "text-sky-800 dark:text-sky-300",
     soft: "bg-sky-500/10 border-sky-400/20",
     ring: "ring-sky-400/30",
   },
   evento: {
     label: "Evento",
-    bar: "bg-violet-400",
-    chip: "bg-violet-500/15 text-violet-300 border-violet-400/30",
-    text: "text-violet-300",
-    soft: "bg-violet-500/10 border-violet-400/20",
-    ring: "ring-violet-400/30",
+    bar: "bg-primary/80",
+    chip: "bg-primary/15 text-primary border-primary/15",
+    text: "text-primary",
+    soft: "bg-primary/10 border-primary/10",
+    ring: "ring-primary/15",
   },
   prazo: {
     label: "Prazo",
-    bar: "bg-rose-500",
-    chip: "bg-rose-500/15 text-rose-300 border-rose-400/30",
-    text: "text-rose-300",
-    soft: "bg-rose-500/10 border-rose-400/20",
-    ring: "ring-rose-400/30",
+    bar: "bg-destructive",
+    chip: "bg-destructive/15 text-destructive border-destructive/15",
+    text: "text-destructive",
+    soft: "bg-destructive/10 border-destructive/10",
+    ring: "ring-destructive/15",
   },
   audiencia: {
     label: "Audiência",
-    bar: "bg-amber-400",
-    chip: "bg-amber-500/15 text-amber-200 border-amber-400/30",
-    text: "text-amber-300",
-    soft: "bg-amber-500/10 border-amber-400/20",
-    ring: "ring-amber-400/30",
+    bar: "bg-warning/80",
+    chip: "bg-warning/15 text-warning border-warning/15",
+    text: "text-warning",
+    soft: "bg-warning/10 border-warning/10",
+    ring: "ring-warning/15",
   },
   feriado: {
     label: "Feriado",
     bar: "bg-[#FF7597]",
     chip: "bg-[#FF7597] text-white border-none font-semibold shadow-xs",
-    text: "text-[#FF5277]",
+    text: "text-destructive",
     soft: "bg-[#FF7597]/15 border-[#FF7597]/30",
     ring: "ring-[#FF7597]/40",
   },
@@ -106,4 +107,14 @@ export function formatDateLong(d: Date) {
     month: "long",
     year: "numeric",
   });
+}
+
+export function shiftAgendaDate(
+  date: Date,
+  view: "dia" | "semana" | "mes" | "lista",
+  direction: number,
+): Date {
+  return view === "mes"
+    ? addMonths(date, direction)
+    : addDays(date, direction * (view === "semana" ? 7 : 1));
 }

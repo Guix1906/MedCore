@@ -70,7 +70,7 @@ export function RolesTab({
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="max-w-2xl text-[13px] text-slate-600">
+        <p className="max-w-2xl text-sm text-muted-foreground">
           Perfis do sistema são fixos. Para personalizar, duplique um perfil e ajuste as permissões.
           Alterações em um perfil valem para todos que o utilizam.
         </p>
@@ -97,28 +97,28 @@ export function RolesTab({
           return (
             <li
               key={role.id}
-              className="flex flex-col rounded-2xl border border-slate-200 bg-white p-4"
+              className="flex flex-col rounded-2xl border border-border bg-card p-4"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="flex items-center gap-2 font-semibold text-slate-900">
+                  <p className="flex items-center gap-2 font-semibold text-foreground">
                     {isOwnerRole(role) && (
-                      <ShieldCheck size={16} className="text-violet-600" aria-hidden="true" />
+                      <ShieldCheck size={16} className="text-primary" aria-hidden="true" />
                     )}
                     <span className="truncate">{roleDisplayName(role)}</span>
                   </p>
-                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     {role.isSystem ? "Perfil do sistema" : "Personalizado"}
                   </p>
                 </div>
-                <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground/80">
                   {role.memberCount} {role.memberCount === 1 ? "usuário" : "usuários"}
                 </span>
               </div>
               {role.description && (
-                <p className="mt-2 text-[13px] text-slate-600">{role.description}</p>
+                <p className="mt-2 text-sm text-muted-foreground">{role.description}</p>
               )}
-              <p className="mt-2 text-[12px] text-slate-500">
+              <p className="mt-2 text-xs text-muted-foreground">
                 {effective.length} de {PERMISSIONS.length} permissões ·{" "}
                 {modules.join(", ") || "nenhum módulo"}
               </p>
@@ -148,7 +148,7 @@ export function RolesTab({
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="text-rose-700 hover:text-rose-800"
+                    className="text-destructive hover:text-destructive"
                     onClick={() => setArchiving(role)}
                   >
                     <Archive aria-hidden="true" />
@@ -192,26 +192,30 @@ function RoleComparison({ overview }: { overview: AdminOverview }) {
     [roles],
   );
   return (
-    <section
-      aria-labelledby="roles-compare"
-      className="rounded-2xl border border-slate-200 bg-white"
-    >
+    <section aria-labelledby="roles-compare" className="rounded-2xl border border-border bg-card">
       <h3
         id="roles-compare"
-        className="border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900"
+        className="border-b border-border-soft px-4 py-3 text-sm font-semibold text-foreground"
       >
         Comparar perfis
       </h3>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] text-[12.5px]">
+      <div className="max-h-[70dvh] overflow-auto">
+        <table className="w-full min-w-[720px] text-sm">
           <caption className="sr-only">Permissões por perfil</caption>
           <thead>
-            <tr className="bg-slate-50 text-left text-slate-600">
-              <th scope="col" className="sticky left-0 bg-slate-50 px-4 py-2 font-semibold">
+            <tr className="text-left text-muted-foreground">
+              <th
+                scope="col"
+                className="sticky left-0 top-0 z-20 border-b border-border bg-card px-4 py-2 font-semibold"
+              >
                 Permissão
               </th>
               {roles.map((role) => (
-                <th key={role.id} scope="col" className="px-3 py-2 text-center font-semibold">
+                <th
+                  key={role.id}
+                  scope="col"
+                  className="sticky top-0 z-10 border-b border-border bg-card/90 px-3 py-2 text-center font-semibold glass-blur"
+                >
                   {roleDisplayName(role)}
                 </th>
               ))}
@@ -248,16 +252,16 @@ function ModuleRows({
         <th
           scope="colgroup"
           colSpan={roles.length + 1}
-          className="border-t border-slate-100 bg-white px-4 pb-1 pt-3 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400"
+          className="border-t border-border-soft bg-card px-4 pb-1 pt-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground"
         >
           {moduleLabel(module.id)}
         </th>
       </tr>
       {module.items.map((item) => (
-        <tr key={item.key} className="border-t border-slate-50">
+        <tr key={item.key} className="border-t border-border-soft">
           <th
             scope="row"
-            className="sticky left-0 bg-white px-4 py-1.5 text-left font-normal text-slate-700"
+            className="sticky left-0 bg-card px-4 py-1.5 text-left font-normal text-foreground/80"
           >
             {item.label}
           </th>
@@ -266,11 +270,11 @@ function ModuleRows({
             return (
               <td key={role.id} className="px-3 py-1.5 text-center">
                 {has ? (
-                  <span className="font-bold text-emerald-600" aria-label="Sim">
+                  <span className="font-semibold text-success" aria-label="Sim">
                     ✓
                   </span>
                 ) : (
-                  <span className="text-slate-300" aria-label="Não">
+                  <span className="text-muted-foreground/60" aria-label="Não">
                     —
                   </span>
                 )}
@@ -289,7 +293,7 @@ function RoleViewer({ role, onClose }: { role: AdminRole | null; onClose: () => 
       <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl">
         {role && (
           <>
-            <SheetHeader className="border-b border-slate-200 p-5 pr-12 text-left">
+            <SheetHeader className="border-b border-border p-5 pr-12 text-left">
               <SheetTitle>{roleDisplayName(role)}</SheetTitle>
               <SheetDescription>
                 {role.isSystem
@@ -413,7 +417,7 @@ function RoleForm({
 
   return (
     <form onSubmit={submit} className="flex h-full flex-col">
-      <SheetHeader className="border-b border-slate-200 p-5 pr-12 text-left">
+      <SheetHeader className="border-b border-border p-5 pr-12 text-left">
         <SheetTitle>{draft.role ? "Editar perfil" : "Novo perfil"}</SheetTitle>
         <SheetDescription>
           {draft.basedOn
@@ -433,7 +437,7 @@ function RoleForm({
               aria-invalid={nameTaken || (trimmed.length > 0 && trimmed.length < 2)}
             />
             {nameTaken && (
-              <p className="text-xs text-rose-700">Já existe um perfil com este nome.</p>
+              <p className="text-xs text-destructive">Já existe um perfil com este nome.</p>
             )}
           </div>
           <div className="space-y-1.5">
@@ -448,7 +452,7 @@ function RoleForm({
           </div>
         </div>
         {affected > 0 && (
-          <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[13px] text-amber-900">
+          <p className="rounded-xl border border-warning/25 bg-warning/10 p-3 text-sm text-warning">
             {affected} {affected === 1 ? "usuário usa" : "usuários usam"} este perfil. As alterações
             valem para todos imediatamente.
           </p>
@@ -460,7 +464,7 @@ function RoleForm({
           canGrant={(key) => canGrantPermission(actor, key)}
         />
       </div>
-      <footer className="flex justify-end gap-2 border-t border-slate-200 p-4">
+      <footer className="flex justify-end gap-2 border-t border-border p-4">
         <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
           Cancelar
         </Button>

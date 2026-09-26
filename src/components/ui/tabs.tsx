@@ -1,10 +1,9 @@
 import * as React from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
-
 import { cn } from "@/lib/utils";
 
+// Abas no formato de controle segmentado do macOS (trilho neutro, aba ativa elevada).
 const Tabs = TabsPrimitive.Root;
-
 const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
@@ -12,14 +11,13 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground",
+      "inline-flex max-w-full items-center justify-start gap-0.5 overflow-x-auto rounded-full bg-foreground/[0.06] p-0.5 text-muted-foreground",
       className,
     )}
     {...props}
   />
 ));
 TabsList.displayName = TabsPrimitive.List.displayName;
-
 const TabsTrigger = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>
@@ -27,27 +25,18 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow",
+      "inline-flex min-h-8 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-3 text-sm font-medium transition-[background-color,color,box-shadow] duration-200 ease-(--ease-apple) hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/25 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-[0_1px_2px_rgb(0_0_0/0.08),0_0_0_0.5px_rgb(0_0_0/0.06)]",
       className,
     )}
     {...props}
   />
 ));
 TabsTrigger.displayName = TabsPrimitive.Trigger.displayName;
-
 const TabsContent = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.Content>
 >(({ className, ...props }, ref) => (
-  <TabsPrimitive.Content
-    ref={ref}
-    className={cn(
-      "mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-      className,
-    )}
-    {...props}
-  />
+  <TabsPrimitive.Content ref={ref} className={cn("mt-5 min-w-0", className)} {...props} />
 ));
 TabsContent.displayName = TabsPrimitive.Content.displayName;
-
 export { Tabs, TabsList, TabsTrigger, TabsContent };

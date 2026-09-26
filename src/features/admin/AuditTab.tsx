@@ -70,7 +70,7 @@ export function AuditTab({ overview }: { overview: AdminOverview }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-3 md:grid-cols-[1fr_1fr_auto_auto_auto] md:items-end">
+      <div className="grid gap-3 rounded-2xl border border-border bg-card p-3 md:grid-cols-[1fr_1fr_auto_auto_auto] md:items-end">
         <div className="space-y-1">
           <Label htmlFor="audit-target">Usuário</Label>
           <Select value={target} onValueChange={setTarget}>
@@ -144,11 +144,11 @@ export function AuditTab({ overview }: { overview: AdminOverview }) {
       </div>
 
       {query.isPending ? (
-        <SkeletonRows count={6} className="rounded-2xl border border-slate-200 bg-white" />
+        <SkeletonRows count={6} className="rounded-2xl border border-border bg-card" />
       ) : query.error ? (
         <div
           role="alert"
-          className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800"
+          className="rounded-2xl border border-destructive/25 bg-destructive/10 p-4 text-sm text-destructive"
         >
           {toAdminError(query.error).message}
         </div>
@@ -156,38 +156,41 @@ export function AuditTab({ overview }: { overview: AdminOverview }) {
         <EmptyState
           title="Nenhum registro encontrado"
           description="Ajuste os filtros para ver outras alterações."
-          className="bg-white"
+          className="bg-card"
         />
       ) : (
         <ol className="space-y-2" aria-label="Registros de auditoria">
           {entries.map((entry) => {
             const lines = describeAuditChange(entry.dataBefore, entry.dataAfter);
             return (
-              <li key={entry.id} className="rounded-2xl border border-slate-200 bg-white p-3.5">
+              <li key={entry.id} className="rounded-2xl border border-border bg-card p-3.5">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="text-[13.5px] font-semibold text-slate-900">
+                  <p className="text-sm font-semibold text-foreground">
                     {AUDIT_ACTION_LABEL[entry.action] ?? entry.action}
                     {entry.targetName && (
-                      <span className="font-normal text-slate-600"> · {entry.targetName}</span>
+                      <span className="font-normal text-muted-foreground">
+                        {" "}
+                        · {entry.targetName}
+                      </span>
                     )}
                     {!entry.targetName && entry.roleName && (
-                      <span className="font-normal text-slate-600"> · {entry.roleName}</span>
+                      <span className="font-normal text-muted-foreground"> · {entry.roleName}</span>
                     )}
                   </p>
-                  <p className="text-[12px] text-slate-500">
+                  <p className="text-xs text-muted-foreground">
                     <time dateTime={entry.createdAt}>{formatDateTime(entry.createdAt)}</time> · por{" "}
                     {entry.actorName}
                   </p>
                 </div>
                 {lines.length > 0 && (
-                  <ul className="mt-1.5 space-y-0.5 text-[12.5px] text-slate-600">
+                  <ul className="mt-1.5 space-y-0.5 text-sm text-muted-foreground">
                     {lines.map((line) => (
                       <li key={line}>{line}</li>
                     ))}
                   </ul>
                 )}
                 {entry.reason && (
-                  <p className="mt-1.5 text-[12.5px] text-slate-500">Motivo: {entry.reason}</p>
+                  <p className="mt-1.5 text-sm text-muted-foreground">Motivo: {entry.reason}</p>
                 )}
               </li>
             );

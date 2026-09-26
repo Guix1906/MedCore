@@ -148,7 +148,7 @@ export default function ManagementReports({
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">{mode === "dre" ? "DRE" : "DFC"}</h1>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-muted-foreground">
             {mode === "dre"
               ? "Resultado por competência, independente do pagamento."
               : "Variação do dinheiro disponível por atividade."}
@@ -171,7 +171,7 @@ export default function ManagementReports({
           Exportar
         </Button>
       </header>
-      <div className="flex gap-3 rounded-xl border bg-white p-3">
+      <div className="flex gap-3 rounded-xl border bg-card p-3">
         <label className="text-sm">
           {mode === "dre" ? "Competência de" : "Período de"}
           <input
@@ -199,14 +199,14 @@ export default function ManagementReports({
         </label>
       </div>
       {failure && (
-        <p role="alert" className="rounded-lg bg-red-50 p-3 text-red-700">
+        <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-destructive">
           {failure}
         </p>
       )}
       {report && !failure && (
         <>
           {!complete && (
-            <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+            <p role="alert" className="rounded-lg bg-warning/10 p-3 text-sm text-warning">
               Demonstrativo parcial.{" "}
               {mode === "dre"
                 ? `${report.missingCompetence.length} conta(s) sem competência e ${report.missingClassification.length} sem classificação no período.`
@@ -214,14 +214,14 @@ export default function ManagementReports({
               Os valores não representam um demonstrativo definitivo.
             </p>
           )}
-          <div className="overflow-hidden rounded-xl border bg-white">
+          <div className="overflow-hidden rounded-xl border bg-card">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50">
+              <thead className="bg-muted/60">
                 <tr>
-                  <th className="p-3 text-left font-medium text-slate-500">
+                  <th className="p-3 text-left font-medium text-muted-foreground">
                     {mode === "dre" ? "Resultado gerencial" : "Fluxos de caixa"}
                   </th>
-                  <th className="p-3 text-right font-medium text-slate-500">
+                  <th className="p-3 text-right font-medium text-muted-foreground">
                     {complete ? "Valor" : "Valor parcial"}
                   </th>
                 </tr>
@@ -230,7 +230,7 @@ export default function ManagementReports({
                 {rows.map((row) => (
                   <tr
                     key={row.label}
-                    className={`border-t ${row.subtotal ? "bg-slate-50 font-semibold" : ""}`}
+                    className={`border-t ${row.subtotal ? "bg-muted/60 font-semibold" : ""}`}
                   >
                     <td className="px-4 py-3">{row.label}</td>
                     <td className="px-4 py-3 text-right tabular-nums">
@@ -253,7 +253,7 @@ export default function ManagementReports({
               </tbody>
             </table>
           </div>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted-foreground">
             Demonstrativo gerencial; não substitui a escrituração contábil. Clique nos valores para
             conferir a composição.{" "}
             {mode === "dre"
@@ -261,7 +261,7 @@ export default function ManagementReports({
               : "Cartões pendentes de depósito não são disponibilidade. Transferências entre caixa e bancos se anulam."}
           </p>
           {pending.size > 0 && (
-            <details className="rounded-lg border bg-white p-3">
+            <details className="rounded-lg border bg-card p-3">
               <summary className="cursor-pointer text-sm">
                 Revisar {pending.size} conta(s) sem competência ou classificação
               </summary>
@@ -288,7 +288,7 @@ export default function ManagementReports({
         </>
       )}
       {ops.can_manage && (
-        <details className="rounded-lg border bg-white p-3">
+        <details className="rounded-lg border bg-card p-3">
           <summary className="cursor-pointer text-sm">Revisar classificação e competência</summary>
           <div className="mt-3">
             <OperationForm
@@ -347,7 +347,7 @@ export default function ManagementReports({
               ? titleDetails.map((d) => (
                   <button
                     key={d.id}
-                    className="block w-full rounded-lg border p-3 text-left text-sm hover:bg-slate-50"
+                    className="block w-full rounded-lg border p-3 text-left text-sm hover:bg-muted/60"
                     onClick={() => {
                       setDetail(null);
                       onSelectTitle(d.id);
@@ -385,7 +385,7 @@ export default function ManagementReports({
                   </div>
                 ))}
             {(mode === "dre" ? titleDetails : cashDetails).length === 0 && (
-              <p className="text-sm text-slate-500">Nenhum registro neste grupo.</p>
+              <p className="text-sm text-muted-foreground">Nenhum registro neste grupo.</p>
             )}
           </div>
         </SheetContent>

@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "medcore",
+  "account_id": "dd5779c3caa4bfffb221ff20f1d407c6",
+  "main": ".output/server/index.mjs",
+  "compatibility_date": "2026-09-26",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "keep_vars": true,
+  "assets": {
+    "binding": "ASSETS",
+    "directory": ".output/public"
+  }
+}

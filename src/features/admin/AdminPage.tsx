@@ -49,16 +49,16 @@ export default function AdminPage({
     adminErrorHint(overview.error) === "admin.migration_pending";
 
   return (
-    <div className="space-y-5 p-4 md:p-6">
+    <div className="page-container space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Administração
           </p>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             Usuários e permissões
           </h1>
-          <p className="mt-0.5 text-sm text-slate-500">
+          <p className="mt-0.5 text-sm text-muted-foreground">
             {overview.data?.company.name ?? access.companyName ?? "Clínica"} · quem acessa o MedCore
             e o que cada pessoa pode fazer.
           </p>
@@ -102,11 +102,11 @@ export default function AdminPage({
         </Notice>
       ) : overview.data && actor ? (
         <>
-          <nav aria-label="Seções da administração" className="border-b border-slate-200">
+          <nav aria-label="Seções da administração" className="border-b border-border">
             <label className="block pb-3 text-sm md:hidden">
               Seção
               <select
-                className="mt-1 w-full rounded-lg border bg-white p-2"
+                className="mt-1 w-full rounded-lg border bg-card p-2"
                 value={current}
                 onChange={(event) => onTabChange(event.target.value as AdminTab)}
               >
@@ -127,7 +127,7 @@ export default function AdminPage({
                   className={`inline-flex shrink-0 items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
                     id === current
                       ? "border-primary text-primary"
-                      : "border-transparent text-slate-500 hover:text-slate-900"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   <Icon size={16} aria-hidden="true" />
@@ -154,7 +154,7 @@ function Notice({ title, children }: { title: string; children: React.ReactNode 
   return (
     <div
       role="alert"
-      className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+      className="rounded-2xl border border-warning/25 bg-warning/10 p-4 text-sm text-warning"
     >
       <p className="font-semibold">{title}</p>
       <p className="mt-1">{children}</p>
@@ -165,15 +165,15 @@ function Notice({ title, children }: { title: string; children: React.ReactNode 
 function MigrationPending() {
   return (
     <section
-      className="rounded-2xl border border-slate-200 bg-white p-5"
+      className="rounded-2xl border border-border bg-card p-5"
       aria-labelledby="migration-title"
     >
       <div className="flex items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary">
           <Database size={20} aria-hidden="true" />
         </span>
-        <div className="space-y-2 text-sm text-slate-700">
-          <h2 id="migration-title" className="text-base font-semibold text-slate-900">
+        <div className="space-y-2 text-sm text-foreground/80">
+          <h2 id="migration-title" className="text-base font-semibold text-foreground">
             Migração do banco pendente
           </h2>
           <p>
@@ -184,7 +184,7 @@ function MigrationPending() {
           <ol className="list-decimal space-y-1 pl-5">
             <li>
               Faça backup e aplique{" "}
-              <code className="rounded bg-slate-100 px-1">
+              <code className="rounded bg-muted px-1">
                 supabase/migrations/20260925120000_user_permissions.sql
               </code>{" "}
               em homologação e depois em produção.

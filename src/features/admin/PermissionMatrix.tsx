@@ -45,9 +45,9 @@ export function PermissionMatrix({
         const grantable = keys.filter((key) => !canGrant || canGrant(key));
         const moduleId = `${idPrefix}-module-${module.id}`;
         return (
-          <fieldset key={module.id} className="rounded-xl border border-slate-200 bg-white p-3">
+          <fieldset key={module.id} className="rounded-xl border border-border bg-card p-3">
             <legend className="sr-only">{module.label}</legend>
-            <div className="mb-2 flex items-center gap-2 border-b border-slate-100 pb-2">
+            <div className="mb-2 flex items-center gap-2 border-b border-border-soft pb-2">
               <Checkbox
                 id={moduleId}
                 checked={moduleState}
@@ -55,10 +55,10 @@ export function PermissionMatrix({
                 onCheckedChange={(checked) => setModule(keys, checked === true)}
                 aria-label={`Todas as permissões de ${module.label}`}
               />
-              <label htmlFor={moduleId} className="text-sm font-semibold text-slate-800">
+              <label htmlFor={moduleId} className="text-sm font-semibold text-foreground">
                 {module.label}
               </label>
-              <span className="ml-auto text-[11px] text-slate-500">
+              <span className="ml-auto text-xs text-muted-foreground">
                 {count}/{keys.length}
               </span>
             </div>
@@ -75,8 +75,8 @@ export function PermissionMatrix({
                     key={key}
                     className={cn(
                       "flex items-start gap-3 rounded-lg px-2 py-1.5",
-                      added && "bg-emerald-50/70",
-                      removed && "bg-rose-50/70",
+                      added && "bg-success/7",
+                      removed && "bg-destructive/7",
                     )}
                   >
                     <Checkbox
@@ -91,29 +91,29 @@ export function PermissionMatrix({
                     />
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <label htmlFor={id} className="text-[13px] font-medium text-slate-800">
+                        <label htmlFor={id} className="text-sm font-medium text-foreground">
                           {item.label}
                         </label>
                         {added && (
-                          <span className="rounded bg-emerald-100 px-1.5 text-[10.5px] font-semibold text-emerald-800">
+                          <span className="rounded bg-success/15 px-1.5 text-xs font-semibold text-success">
                             + ajuste individual
                           </span>
                         )}
                         {removed && (
-                          <span className="rounded bg-rose-100 px-1.5 text-[10.5px] font-semibold text-rose-800">
+                          <span className="rounded bg-destructive/15 px-1.5 text-xs font-semibold text-destructive">
                             − removida do perfil
                           </span>
                         )}
                         {item.enforcement === "interface" && (
                           <span
-                            className="rounded bg-slate-100 px-1.5 text-[10.5px] font-medium text-slate-600"
+                            className="rounded bg-muted px-1.5 text-xs font-medium text-muted-foreground"
                             title="Controla menus e telas. Os dados continuam protegidos pelas permissões de cada módulo no banco."
                           >
                             navegação
                           </span>
                         )}
                       </div>
-                      <p id={`${id}-desc`} className="text-[12px] leading-snug text-slate-500">
+                      <p id={`${id}-desc`} className="text-xs leading-snug text-muted-foreground">
                         {item.description}
                         {blocked ? " Você não possui esta permissão para concedê-la." : ""}
                       </p>
