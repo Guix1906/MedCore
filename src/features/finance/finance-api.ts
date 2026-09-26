@@ -56,6 +56,7 @@ export function saveLocalFinancialTitle(title: FinancialTitle): void {
       ...current.filter((t) => t.id !== title.id && (!title.origin_key || t.origin_key !== title.origin_key)),
     ];
     localStorage.setItem(STORAGE_KEY_LOCAL_TITLES, JSON.stringify(next));
+    window.dispatchEvent(new CustomEvent("medcore_local_title_saved"));
   } catch (e) {
     console.error("Erro ao salvar título local:", e);
   }
@@ -83,6 +84,7 @@ export function saveLocalPayment(payment: FinancialPayment): void {
     };
     const next = [itemToSave, ...current.filter((p) => p.id !== payment.id)];
     localStorage.setItem(STORAGE_KEY_LOCAL_PAYMENTS, JSON.stringify(next));
+    window.dispatchEvent(new CustomEvent("medcore_local_title_saved"));
   } catch (e) {
     console.error("Erro ao salvar pagamento local:", e);
   }
@@ -268,7 +270,7 @@ function normalizeFinancialSnapshot(
     if (!fMeta) return;
 
     const total = fMeta.procedurePrice > 0 ? fMeta.procedurePrice : fMeta.downPayment;
-    const down = fMeta.downPayment;
+    const down = fMeta.downPayment > 0 ? fMeta.downPayment : total;
     const eventStartsAt = event.starts_at || new Date().toISOString();
     const eventDateStr = eventStartsAt.slice(0, 10);
     const eventCompStr = eventStartsAt.slice(0, 7) + "-01";
@@ -338,7 +340,7 @@ function normalizeFinancialSnapshot(
             account_id: raw.accounts[0]?.id || "00000000-0000-0000-0000-000000000001",
             payer_name: existingTitle.patient_name || patientName,
             created_by: null,
-            created_at: eventStartsAt,
+            created_at: event.created_at || new Date().toISOString(),
             legacy: false,
             reversed_at: null,
             reversed_by: null,
@@ -390,7 +392,7 @@ function normalizeFinancialSnapshot(
               account_id: raw.accounts[0]?.id || "00000000-0000-0000-0000-000000000001",
               payer_name: patientName,
               created_by: null,
-              created_at: eventStartsAt,
+              created_at: event.created_at || new Date().toISOString(),
               legacy: false,
               reversed_at: null,
               reversed_by: null,
@@ -430,12 +432,12 @@ function normalizeFinancialSnapshot(
     if (isRecordWiped(t)) return;
     if ((t.status === "pago" || t.paid_amount > 0) && !existingTxPaymentIds.has(t.id)) {
       const synPayId = `syn-pay-${t.id}`;
-      if (isRecordWiped({ id: synPayId, date: t.date, paid_on: t.date })) return;
+      if (isRecordWiped({ id: synPayId, date: t.date, paid_on: t.date, created_at: (t as any).created_at })) return;
       const synPay: FinancialPayment = {
         id: synPayId,
         transaction_id: t.id,
         amount: t.paid_amount > 0 ? t.paid_amount : t.amount,
-        paid_on: t.date || t.due_date || "2026-09-15",
+        paid_on: t.date || t.due_date || new Date().toISOString().slice(0, 10),
         payment_method: "PIX",
         account_id: raw.accounts[0]?.id || "00000000-0000-0000-0000-000000000001",
         payer_name: t.patient_name || t.payer_name || "Cliente",

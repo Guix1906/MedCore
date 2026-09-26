@@ -63,17 +63,18 @@ function FinanceiroPage() {
     void navigate({ search: { tab, novo: false }, replace: true });
   };
 
-  // Auto-purga única inicial para garantir ambiente zerado e limpo
+  // Sincronização em tempo real instantânea (0ms) ao agendar ou salvar lançamentos
   useEffect(() => {
-    const WIPE_FLAG = "medcore_system_wipe_executed_v5_finance_done";
-    if (typeof window !== "undefined" && !localStorage.getItem(WIPE_FLAG)) {
-      localStorage.setItem(WIPE_FLAG, "true");
-      void wipeAllAppointments().then(() => {
-        void refreshFinance(queryClient);
-        void query.refetch();
-      });
-    }
-  }, [queryClient]);
+    const handleSync = () => {
+      void query.refetch();
+    };
+    window.addEventListener("medcore_local_title_saved", handleSync);
+    window.addEventListener("medcore_events_updated", handleSync);
+    return () => {
+      window.removeEventListener("medcore_local_title_saved", handleSync);
+      window.removeEventListener("medcore_events_updated", handleSync);
+    };
+  }, [query]);
 
   const handleWipeAll = async () => {
     const ok = await confirmDialog({

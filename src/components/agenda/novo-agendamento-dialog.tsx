@@ -949,18 +949,18 @@ export function NovoAgendamentoDialog({
             ? linkedTreatmentId || patientTreatments[0]?.id || undefined
             : undefined,
         procedurePrice:
-          type === "atendimento" && !isIncludedInPlan && (totalAmt > 0 || sinalAmt > 0)
+          !isIncludedInPlan && (totalAmt > 0 || sinalAmt > 0)
             ? totalAmt > 0
               ? totalAmt
               : sinalAmt
             : undefined,
-        downPayment: type === "atendimento" && !isIncludedInPlan && sinalAmt > 0 ? sinalAmt : 0,
+        downPayment: !isIncludedInPlan && sinalAmt > 0 ? sinalAmt : 0,
         remainingValue:
-          type === "atendimento" && !isIncludedInPlan
+          !isIncludedInPlan
             ? Math.max(0, (totalAmt > 0 ? totalAmt : sinalAmt) - sinalAmt)
             : 0,
         downPaymentMethod:
-          type === "atendimento" && !isIncludedInPlan ? downPaymentMethod : undefined,
+          !isIncludedInPlan ? downPaymentMethod : undefined,
         city: type === "atendimento" ? city : undefined,
         consultationType: type === "atendimento" ? consultationType : undefined,
       };
@@ -1006,21 +1006,25 @@ export function NovoAgendamentoDialog({
           case_id: caseId || null,
           patient_id: validPatientId || clientId || null,
           patient_name: clientDisplayName,
+          created_at: new Date().toISOString(),
         } as any,
         validCompanyId,
       );
 
-      // Salva título financeiro e sinal localmente para disponibilidade imediata (0ms)
-      if (type === "atendimento" && !isIncludedInPlan && (totalAmt > 0 || sinalAmt > 0)) {
+      // Salva título financeiro e entrada de caixa localmente para disponibilidade imediata (0ms)
+      if ((type === "atendimento" || totalAmt > 0 || sinalAmt > 0) && !isIncludedInPlan && (totalAmt > 0 || sinalAmt > 0)) {
+        const effectiveAmount = totalAmt > 0 ? totalAmt : sinalAmt;
+        const effectivePayment = sinalAmt > 0 ? sinalAmt : effectiveAmount;
+
         saveLocalFinancialTitle({
           id: `evt-${insertedId}`,
           type: "receita",
-          amount: totalAmt > 0 ? totalAmt : sinalAmt,
-          paid_amount: sinalAmt,
+          amount: effectiveAmount,
+          paid_amount: effectivePayment,
           due_date: day,
           date: todayStr,
           competence_date: day.slice(0, 7) + "-01",
-          status: sinalAmt >= totalAmt && totalAmt > 0 ? "pago" : "pendente",
+          status: effectivePayment >= effectiveAmount ? "pago" : "pendente",
           description: finalTitle,
           category: "Atendimentos",
           patient_id: validPatientId || clientId || null,
@@ -1033,26 +1037,29 @@ export function NovoAgendamentoDialog({
           can_settle: true,
           can_reverse: true,
           can_cancel: true,
-        });
+          created_at: new Date().toISOString(),
+        } as any);
 
-        if (sinalAmt > 0) {
-          saveLocalPayment({
-            id: `pay-evt-${insertedId}`,
-            transaction_id: `evt-${insertedId}`,
-            amount: sinalAmt,
-            paid_on: todayStr,
-            payment_method: (downPaymentMethod || "pix").toUpperCase(),
-            account_id: "00000000-0000-0000-0000-000000000001",
-            payer_name: clientDisplayName,
-            created_by: null,
-            created_at: new Date().toISOString(),
-            legacy: false,
-            reversed_at: null,
-            reversed_by: null,
-            reversal_reason: null,
-          });
-        }
+        saveLocalPayment({
+          id: `pay-evt-${insertedId}`,
+          transaction_id: `evt-${insertedId}`,
+          amount: effectivePayment,
+          paid_on: todayStr,
+          payment_method: (downPaymentMethod || "pix").toUpperCase(),
+          account_id: "00000000-0000-0000-0000-000000000001",
+          payer_name: clientDisplayName,
+          created_by: null,
+          created_at: new Date().toISOString(),
+          legacy: false,
+          reversed_at: null,
+          reversed_by: null,
+          reversal_reason: null,
+        });
       }
+
+      // Notifica em tempo real com 0ms de latência
+      window.dispatchEvent(new CustomEvent("medcore_local_title_saved"));
+      window.dispatchEvent(new CustomEvent("medcore_events_updated"));
 
       // Atualiza o financeiro imediatamente no cache local
       void refreshFinance(qc);

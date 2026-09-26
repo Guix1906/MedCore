@@ -282,6 +282,20 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
     }
   }, [availableAccounts]);
 
+  // Sincronização em tempo real instantânea (0ms) ao criar agendamentos ou lançamentos
+  useEffect(() => {
+    const handleSync = () => {
+      void qc.invalidateQueries({ queryKey: ["financial-snapshot"] });
+      void qc.invalidateQueries({ queryKey: ["cash-flow-snapshot"] });
+    };
+    window.addEventListener("medcore_local_title_saved", handleSync);
+    window.addEventListener("medcore_events_updated", handleSync);
+    return () => {
+      window.removeEventListener("medcore_local_title_saved", handleSync);
+      window.removeEventListener("medcore_events_updated", handleSync);
+    };
+  }, [qc]);
+
   // 1. Mapeamento de todas as movimentações realizadas (entradas e saídas reais)
   const allRealizedEntries = useMemo(() => {
     const payments = finance.payments || [];
@@ -329,7 +343,8 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       result.push({
         id: p.id,
         transaction_id: p.transaction_id,
-        date: p.paid_on || t?.due_date || t?.date || "2026-09-15",
+        created_at: p.created_at || (t as any)?.created_at || new Date().toISOString(),
+        date: p.paid_on || t?.due_date || t?.date || new Date().toISOString().slice(0, 10),
         description: t?.description || defaultDesc,
         category: t?.category || defaultCat,
         client_name: t?.patient_name || p.payer_name || t?.payer_name || "Avulso",
@@ -350,33 +365,48 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
     }
 
     // Inclui títulos com status 'pago' ou com valor pago registrado que ainda não estejam em payments
+    // E também inclui títulos de agendamentos para refletir instantaneamente todo valor inserido na agenda
     for (const t of titles) {
-      if ((t.status === "pago" || Number(t.paid_amount || 0) > 0) && !handledTitleIds.has(t.id)) {
+      const isAgendamentoTitle =
+        Boolean(t?.origin_key && String(t.origin_key).startsWith("event:")) ||
+        Boolean(t?.id && String(t.id).startsWith("evt-")) ||
+        (t?.category || "").toLowerCase().includes("atendimento");
+
+      const hasPaid = t.status === "pago" || Number(t.paid_amount || 0) > 0;
+      const shouldInclude = (hasPaid || isAgendamentoTitle) && !handledTitleIds.has(t.id);
+
+      if (shouldInclude) {
         const isExpense = t.type === "despesa";
         const isIncome = !isExpense;
         const accountObj = accounts.find((a) => a.company_id === t.company_id) || accounts[0];
+        const effectiveAmount = Number(t.paid_amount > 0 ? t.paid_amount : t.amount);
 
         result.push({
           id: `title-pay-${t.id}`,
           transaction_id: t.id,
-          date: t.date || t.due_date || "2026-09-15",
+          created_at: (t as any).created_at || new Date().toISOString(),
+          date: t.date || t.due_date || new Date().toISOString().slice(0, 10),
           description:
             t.description ||
-            (isIncome ? "Honorários - Ação de Cobrança – Entrada Paga" : "Pagamento realizado"),
-          category: t.category || (isIncome ? "Honorários Iniciais / sinal" : "Despesas Gerais"),
+            (isAgendamentoTitle
+              ? `Agendamento - ${t.patient_name || t.payer_name || "Paciente"}`
+              : isIncome
+                ? "Honorários - Ação de Cobrança – Entrada Paga"
+                : "Pagamento realizado"),
+          category: t.category || (isAgendamentoTitle ? "Atendimentos" : (isIncome ? "Honorários Iniciais / sinal" : "Despesas Gerais")),
           client_name: t.patient_name || t.payer_name || "Avulso",
           payment_method: "PIX",
-          payment_account: accountObj?.name || "BANCO DO BRASIL",
-          account_id: accountObj?.id || "acc-bb",
+          payment_account: accountObj?.name || accounts[0]?.name || "BANCO DO BRASIL",
+          account_id: accountObj?.id || accounts[0]?.id || "00000000-0000-0000-0000-000000000001",
           company_id: t.company_id || null,
           type: t.type as "receita" | "despesa",
           is_expense: isExpense,
-          amount: Number(t.paid_amount > 0 ? t.paid_amount : t.amount),
-          paid_amount: Number(t.paid_amount > 0 ? t.paid_amount : t.amount),
+          amount: effectiveAmount,
+          paid_amount: effectiveAmount,
           status: "pago" as const,
           reversed_at: null,
           reversal_reason: null,
-          badgeLabel: t.treatment_id ? "PLANO" : "MANUAL",
+          badgeLabel: isAgendamentoTitle ? "AGENDAMENTO" : (t.treatment_id ? "PLANO" : "MANUAL"),
           title: t,
         });
       }

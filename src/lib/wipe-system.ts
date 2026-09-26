@@ -90,6 +90,12 @@ export function addSuppressedIds(ids: string[]): void {
 /**
  * Universal filter to test if any item (appointment, title, payment, event)
  * is part of the wiped/legacy test data.
+ *
+ * Rules:
+ * 1. Legacy test records explicitly flagged (2026-09-21 and 2026-09-29) are wiped (unless created today).
+ * 2. Any old test record before today (< "2026-09-26") is wiped.
+ * 3. Records created or dated TODAY ("2026-09-26") are PRESERVED ("apenas o que lancei hoje"),
+ *    unless explicitly deleted by the user via the Cash Flow interface (medcore_deleted_cash_entries).
  */
 export function isRecordWiped(item: any): boolean {
   if (!item) return true;
@@ -97,45 +103,48 @@ export function isRecordWiped(item: any): boolean {
   const id = item.id ? String(item.id) : "";
   const txId = item.transaction_id ? String(item.transaction_id) : "";
 
-  // 1. Check direct ID suppression
-  if (id && isIdSuppressed(id)) return true;
-  if (txId && isIdSuppressed(txId)) return true;
-
-  // 2. Check origin_key suppression
-  if (item.origin_key) {
-    const rawKey = String(item.origin_key);
-    const eventIdPart = rawKey.replace("event:", "");
-    if (isIdSuppressed(eventIdPart) || isIdSuppressed(rawKey)) return true;
-  }
-
-  const cutoffTime = getSystemWipeCutoffTime();
-
-  // 3. If item has created_at timestamp:
-  if (item.created_at) {
-    const createdTime = new Date(item.created_at).getTime();
-    if (!isNaN(createdTime)) {
-      if (createdTime <= cutoffTime) {
-        return true;
-      }
-      // If created AFTER the cutoff, it is a valid new record created by the user during fresh testing!
-      return false;
-    }
-  }
-
-  // 4. Specific legacy test records filter:
-  // The user explicitly requested to remove the PIX received of R$ 200 on 21/09 and the PIX on 29/09,
-  // and all past test appointments.
   const dateStr = String(
     item.paid_on || item.date || item.due_date || item.starts_at || "",
   ).slice(0, 10);
 
+  const createdDateStr = item.created_at ? String(item.created_at).slice(0, 10) : "";
+
+  // 1. Specific legacy test records filter:
+  // User explicitly requested to eliminate the 21/09 PIX and 29/09 PIX:
   if (dateStr === "2026-09-21" || dateStr === "2026-09-29") {
-    // If not explicitly created after cutoff, it is the legacy test record
+    if (createdDateStr !== "2026-09-26") return true;
+  }
+
+  // 2. Any legacy test record strictly before today (2026-09-26) is wiped:
+  if (dateStr && dateStr < "2026-09-26" && createdDateStr !== "2026-09-26") {
     return true;
   }
-  if (dateStr && dateStr <= "2026-09-26") {
-    // Any legacy test entry on or before 2026-09-26 without created_at > cutoff is wiped
-    return true;
+
+  // 3. User explicit instruction: "apenas o que lancei hoje" (preserve everything launched today 2026-09-26)
+  if (dateStr === "2026-09-26" || createdDateStr === "2026-09-26") {
+    // Only wipe if the user explicitly clicked "Excluir" in the Cash Flow UI:
+    if (typeof window !== "undefined" && window.localStorage) {
+      try {
+        const rawCash = localStorage.getItem("medcore_deleted_cash_entries");
+        if (rawCash) {
+          const list = JSON.parse(rawCash);
+          if (Array.isArray(list) && (list.includes(id) || (txId && list.includes(txId)))) {
+            return true;
+          }
+        }
+      } catch {}
+    }
+    return false;
+  }
+
+  // 4. Check general suppression for any other items
+  if (id && isIdSuppressed(id)) return true;
+  if (txId && isIdSuppressed(txId)) return true;
+
+  if (item.origin_key) {
+    const rawKey = String(item.origin_key);
+    const eventIdPart = rawKey.replace("event:", "");
+    if (isIdSuppressed(eventIdPart) || isIdSuppressed(rawKey)) return true;
   }
 
   return false;
@@ -261,15 +270,4 @@ export async function performFullSystemWipe(): Promise<void> {
   window.dispatchEvent(new CustomEvent("medcore_events_updated", { detail: [] }));
   window.dispatchEvent(new CustomEvent("medcore_local_title_saved"));
   window.dispatchEvent(new CustomEvent("medcore_system_wiped"));
-}
-
-// Initial Auto-Wipe trigger on first startup of this version
-if (typeof window !== "undefined") {
-  try {
-    if (localStorage.getItem(STORAGE_KEY_AUTO_WIPED) !== "true") {
-      setTimeout(() => {
-        void performFullSystemWipe();
-      }, 0);
-    }
-  } catch {}
 }
