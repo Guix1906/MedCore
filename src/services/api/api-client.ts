@@ -74,26 +74,42 @@ export function setStoredUser(user: any, remember: boolean = true): void {
   }
 }
 
+const BACKEND_OFFLINE_KEY = "medcore_backend_offline";
 let backendOfflineUntil = 0;
 
 export function isBackendReachable(): boolean {
-  if (typeof window === "undefined") return true;
+  if (typeof window === "undefined") return false;
   // Bloqueio imediato de Mixed Content e localhost em ambientes HTTPS (Vercel/produção)
   const isHttps = window.location.protocol === "https:";
   const isLocalHost = API_BASE_URL.includes("localhost") || API_BASE_URL.includes("127.0.0.1");
   if (isHttps && isLocalHost) {
     return false;
   }
-  // Se falhou recentemente, não bloqueia a UI do usuário
+  // Se já foi marcado como indisponível na sessão, responde 0ms sem travar a navegação
+  try {
+    if (sessionStorage.getItem(BACKEND_OFFLINE_KEY) === "1") {
+      return false;
+    }
+  } catch {}
+
   if (backendOfflineUntil && Date.now() < backendOfflineUntil) {
     return false;
   }
   return true;
 }
 
+export function markBackendOffline(): void {
+  backendOfflineUntil = Date.now() + 24 * 3600_000; // 24h
+  try {
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem(BACKEND_OFFLINE_KEY, "1");
+    }
+  } catch {}
+}
+
 async function request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
   if (!isBackendReachable()) {
-    throw new ApiError("Backend local indisponível em produção HTTPS. Usando banco em nuvem.", 503);
+    throw new ApiError("Backend local indisponível. Usando banco em nuvem.", 503);
   }
 
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
@@ -117,9 +133,9 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}): Pr
     return inFlightRequests.get(cacheKey) as Promise<T>;
   }
 
-  const fetchWithRetry = async (attempt: number = 0): Promise<T> => {
+  const fetchWithRetry = async (): Promise<T> => {
     const controller = new AbortController();
-    const timeoutMs = 2500; // 2.5s max para nunca travar a navegação
+    const timeoutMs = 400; // 400ms max para resposta instantânea
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
@@ -141,16 +157,6 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}): Pr
           removeStoredToken();
         }
 
-        if (
-          [502, 503, 504].includes(response.status) &&
-          (method === "GET" || method === "HEAD") &&
-          attempt < 1
-        ) {
-          const delay = 200;
-          await new Promise((res) => setTimeout(res, delay));
-          return fetchWithRetry(attempt + 1);
-        }
-
         throw new ApiError(
           json.error || json.message || `Erro HTTP ${response.status}`,
           response.status,
@@ -163,20 +169,12 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}): Pr
       clearTimeout(timeoutId);
       if (err instanceof ApiError) throw err;
 
-      // Ativa circuit breaker por 60s em caso de falha de conexão ou timeout
-      backendOfflineUntil = Date.now() + 60_000;
+      // Ativa circuit breaker imediato para a sessão caso não responda em 400ms
+      markBackendOffline();
 
       const isAbort = err.name === "AbortError" || err.message?.includes("aborted");
-      const isNetworkFail = err.name === "TypeError" || err.message?.includes("Failed to fetch");
-
-      if (!isAbort && !isNetworkFail && (method === "GET" || method === "HEAD") && attempt < 1) {
-        const delay = 200;
-        await new Promise((res) => setTimeout(res, delay));
-        return fetchWithRetry(attempt + 1);
-      }
-
       throw new ApiError(
-        isAbort ? "Tempo limite de resposta esgotado (2.5s)." : err.message || "Erro de conexão.",
+        isAbort ? "Tempo limite esgotado." : err.message || "Erro de conexão.",
         0,
       );
     }

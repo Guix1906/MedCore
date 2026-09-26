@@ -26,20 +26,20 @@ export function usePermissions() {
     queryKey: qk.access.me(user?.id ?? null, requested),
     enabled: !!user?.id,
     queryFn: () => fetchMyAccess(requested),
-    staleTime: 30_000,
+    staleTime: 5 * 60_000,
     gcTime: 30 * 60_000,
-    refetchInterval: 60_000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
     // Mantém o último resultado durante a troca de clínica, nunca entre usuários diferentes.
     placeholderData: (previous) => (previous?.userId === user?.id ? previous : undefined),
-    retry: 1,
+    retry: 0,
   });
 
   const access: MyAccess = useMemo(() => {
     if (query.data) return query.data;
     if (query.isError) return emptyAccess("legacy", "unavailable");
-    return emptyAccess("loading");
-  }, [query.data, query.isError]);
+    return user?.id ? emptyAccess("legacy") : emptyAccess("loading");
+  }, [query.data, query.isError, user?.id]);
 
   const can = useCallback(
     (key: PermissionKey) => {

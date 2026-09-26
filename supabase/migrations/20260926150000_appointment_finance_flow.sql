@@ -3,31 +3,68 @@
 -- =============================================================================
 BEGIN;
 
--- 1. Garantir contas financeiras padrão com UUIDs reais no banco
-INSERT INTO public.financial_accounts (id, name, type, is_active, balance_kind, company_id)
+-- 1. Garantir compatibilidade de colunas nas tabelas existentes
+ALTER TABLE public.financial_accounts 
+  ADD COLUMN IF NOT EXISTS active boolean DEFAULT true,
+  ADD COLUMN IF NOT EXISTS is_active boolean DEFAULT true,
+  ADD COLUMN IF NOT EXISTS company_id uuid REFERENCES public.companies(id),
+  ADD COLUMN IF NOT EXISTS balance_kind text DEFAULT 'available';
+
+ALTER TABLE public.transactions
+  ADD COLUMN IF NOT EXISTS company_id uuid REFERENCES public.companies(id),
+  ADD COLUMN IF NOT EXISTS account_id uuid,
+  ADD COLUMN IF NOT EXISTS paid_amount numeric(14,2) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS competence_date date,
+  ADD COLUMN IF NOT EXISTS payer_name text,
+  ADD COLUMN IF NOT EXISTS origin_key text;
+
+CREATE UNIQUE INDEX IF NOT EXISTS transactions_origin_key_unique 
+  ON public.transactions(origin_key) 
+  WHERE origin_key IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS public.transaction_payments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  transaction_id uuid NOT NULL REFERENCES public.transactions(id) ON DELETE CASCADE,
+  amount numeric(14,2) NOT NULL CHECK (amount > 0),
+  paid_on date NOT NULL DEFAULT CURRENT_DATE,
+  payment_method text NOT NULL DEFAULT 'pix',
+  account_id uuid,
+  payer_name text,
+  created_by uuid,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  reversed_at timestamptz,
+  reversed_by uuid,
+  reversal_reason text
+);
+
+-- Garantir contas financeiras padrão com UUIDs reais no banco
+INSERT INTO public.financial_accounts (id, name, type, active, is_active, balance_kind, company_id)
 VALUES 
-  ('00000000-0000-0000-0000-000000000001'::uuid, 'Banco Principal / PIX', 'corrente', true, 'available', NULL),
-  ('00000000-0000-0000-0000-000000000002'::uuid, 'Caixa Geral / Dinheiro', 'caixa', true, 'available', NULL)
+  ('00000000-0000-0000-0000-000000000001'::uuid, 'Banco Principal / PIX', 'corrente', true, true, 'available', NULL),
+  ('00000000-0000-0000-0000-000000000002'::uuid, 'Caixa Geral / Dinheiro', 'caixa', true, true, 'available', NULL)
 ON CONFLICT (id) DO UPDATE SET
   name = EXCLUDED.name,
+  active = true,
   is_active = true,
   balance_kind = EXCLUDED.balance_kind;
 
 -- Criar contas para clínicas existentes que não possuam conta bancária ativa
-INSERT INTO public.financial_accounts (id, name, type, is_active, balance_kind, company_id)
+INSERT INTO public.financial_accounts (id, name, type, active, is_active, balance_kind, company_id)
 SELECT 
-  gen_random_uuid(), 'Banco Principal / PIX', 'corrente', true, 'available', c.id
+  gen_random_uuid(), 'Banco Principal / PIX', 'corrente', true, true, 'available', c.id
 FROM public.companies c
 WHERE NOT EXISTS (
-  SELECT 1 FROM public.financial_accounts a WHERE a.company_id = c.id AND a.is_active = true
+  SELECT 1 FROM public.financial_accounts a 
+  WHERE a.company_id = c.id AND (COALESCE(a.active, true) = true OR COALESCE(a.is_active, true) = true)
 );
 
-INSERT INTO public.financial_accounts (id, name, type, is_active, balance_kind, company_id)
+INSERT INTO public.financial_accounts (id, name, type, active, is_active, balance_kind, company_id)
 SELECT 
-  gen_random_uuid(), 'Caixa da Clínica', 'caixa', true, 'available', c.id
+  gen_random_uuid(), 'Caixa da Clínica', 'caixa', true, true, 'available', c.id
 FROM public.companies c
 WHERE NOT EXISTS (
-  SELECT 1 FROM public.financial_accounts a WHERE a.company_id = c.id AND a.type = 'caixa' AND a.is_active = true
+  SELECT 1 FROM public.financial_accounts a 
+  WHERE a.company_id = c.id AND a.type = 'caixa' AND (COALESCE(a.active, true) = true OR COALESCE(a.is_active, true) = true)
 );
 
 -- 2. Agendamento com Título e Sinal Atômico
@@ -111,7 +148,7 @@ BEGIN
       SELECT id INTO resolved_account_id
       FROM public.financial_accounts
       WHERE (company_id IS NOT DISTINCT FROM e.company_id OR company_id IS NULL)
-        AND is_active = true
+        AND (COALESCE(active, true) = true OR COALESCE(is_active, true) = true)
         AND (
           (sinal_method_clean = 'dinheiro' AND type = 'caixa')
           OR (sinal_method_clean <> 'dinheiro' AND type <> 'caixa')
@@ -123,7 +160,7 @@ BEGIN
         SELECT id INTO resolved_account_id
         FROM public.financial_accounts
         WHERE (company_id IS NOT DISTINCT FROM e.company_id OR company_id IS NULL)
-          AND is_active = true
+          AND (COALESCE(active, true) = true OR COALESCE(is_active, true) = true)
         ORDER BY CASE WHEN company_id = e.company_id THEN 0 ELSE 1 END, created_at
         LIMIT 1;
       END IF;
@@ -213,7 +250,7 @@ BEGIN
     SELECT id INTO resolved_account_id
     FROM public.financial_accounts
     WHERE (company_id IS NOT DISTINCT FROM t.company_id OR company_id IS NULL)
-      AND is_active = true
+      AND (COALESCE(active, true) = true OR COALESCE(is_active, true) = true)
       AND (
         (method_clean = 'dinheiro' AND type = 'caixa')
         OR (method_clean <> 'dinheiro' AND type <> 'caixa')
@@ -225,7 +262,7 @@ BEGIN
       SELECT id INTO resolved_account_id
       FROM public.financial_accounts
       WHERE (company_id IS NOT DISTINCT FROM t.company_id OR company_id IS NULL)
-        AND is_active = true
+        AND (COALESCE(active, true) = true OR COALESCE(is_active, true) = true)
       ORDER BY CASE WHEN company_id = t.company_id THEN 0 ELSE 1 END, created_at
       LIMIT 1;
     END IF;

@@ -527,9 +527,9 @@ export default function AppShell({ children, title }: { children: ReactNode; tit
       </aside>
       <main id="main-content" tabIndex={-1} className="app-main min-h-[calc(100dvh-64px)]">
         <ErrorBoundary>
-          {access.mode === "loading" || redirectToFallback ? (
+          {redirectToFallback ? (
             <div className="flex min-h-[50vh] items-center justify-center">
-              <BrandLoader label="Carregando permissões…" />
+              <BrandLoader label="Carregando…" />
             </div>
           ) : access.mode === "blocked" ? (
             <BlockedAccessScreen access={access} onSignOut={handleSignOut} />

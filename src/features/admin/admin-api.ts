@@ -426,16 +426,19 @@ function parseAudit(v: unknown): AuditEntry {
 // Leitura ------------------------------------------------------------------------------------------------
 
 export async function fetchMyAccess(companyId: string | null): Promise<MyAccess> {
-  const { data: sessionData } = await supabase.auth.getSession();
-  if (!sessionData.session) return emptyAccess("legacy", "no-session");
-  const { data, error } = await callRpc("get_my_access", {
-    p_company_id: isUuidValue(companyId) ? companyId : null,
-  });
-  if (error) {
-    if (isMissingFunction(error)) return emptyAccess("legacy", "migration");
-    throw toAdminError(error);
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData?.session) return emptyAccess("legacy", "no-session");
+    const { data, error } = await callRpc("get_my_access", {
+      p_company_id: isUuidValue(companyId) ? companyId : null,
+    });
+    if (error) {
+      return emptyAccess("legacy", isMissingFunction(error) ? "migration" : "unavailable");
+    }
+    return parseMyAccess(data);
+  } catch (err) {
+    return emptyAccess("legacy", "unavailable");
   }
-  return parseMyAccess(data);
 }
 
 export async function fetchAdminOverview(companyId: string): Promise<AdminOverview> {
