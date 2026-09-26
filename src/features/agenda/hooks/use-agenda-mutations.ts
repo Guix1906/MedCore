@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { pad2 } from "@/lib/date-utils";
 import { deleteStoredLocalEvent, updateStoredLocalEventTimes } from "@/lib/local-events";
+import { deleteLocalFinancialTitle, deleteLocalPayment } from "@/features/finance/finance-api";
 import type { Activity } from "@/components/agenda/agenda-types";
 
 /**
@@ -41,11 +42,20 @@ export function useAgendaMutations(onDone: (a: Activity | null) => void) {
       const id = a.id && a.id.includes(":") ? a.id.split(":")[1] : a.id;
       if (a.source === "event") {
         deleteStoredLocalEvent(id);
+        deleteLocalFinancialTitle(`evt-${id}`);
+        deleteLocalPayment(`pay-evt-${id}`);
+        try {
+          await supabase.from("transactions").delete().like("origin_key", `event:${id}`);
+          await supabase.from("financial_titles").delete().like("origin_key", `event:${id}`);
+          await supabase.from("financial_payments").delete().like("id", `pay-evt-${id}`);
+        } catch {}
       }
       const { error } = await supabase.from(tbl).delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: (_v, a) => {
+      qc.invalidateQueries({ queryKey: ["financial-snapshot"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
       toast.success("Atividade excluída com sucesso");
       onDone(a);
     },

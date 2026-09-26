@@ -4,18 +4,112 @@
  */
 
 import type { RawEvent } from "@/features/agenda/lib/normalize";
+import { supabase } from "@/integrations/supabase/client";
 
 const STORAGE_KEY = "medcore_local_events";
-const PURGE_KEY = "medcore_events_purged_v2";
+const AUTO_WIPE_KEY = "medcore_wipe_all_events_v2026_09_final";
 
-// Purga única de agendamentos e movimentações de teste residuais anteriores
+/**
+ * Exclui absolutamente todos os agendamentos existentes (banco Supabase e localStorage),
+ * além de limpar títulos e pagamentos financeiros derivados de agendamentos.
+ */
+export async function wipeAllAppointments(): Promise<void> {
+  if (typeof window === "undefined") return;
+  try {
+    // 1. Limpa localStorage
+    localStorage.removeItem(STORAGE_KEY);
+
+    try {
+      const rawTitles = localStorage.getItem("medcore_local_titles");
+      if (rawTitles) {
+        const titles = JSON.parse(rawTitles);
+        if (Array.isArray(titles)) {
+          const cleanTitles = titles.filter(
+            (t: any) =>
+              !t.id?.startsWith("evt-") &&
+              !t.origin_key?.startsWith("event:") &&
+              !t.category?.toLowerCase().includes("atendimento"),
+          );
+          localStorage.setItem("medcore_local_titles", JSON.stringify(cleanTitles));
+        }
+      }
+    } catch {}
+
+    try {
+      const rawPayments = localStorage.getItem("medcore_local_payments");
+      if (rawPayments) {
+        const payments = JSON.parse(rawPayments);
+        if (Array.isArray(payments)) {
+          const cleanPayments = payments.filter(
+            (p: any) =>
+              !p.id?.startsWith("pay-evt-") &&
+              !p.transaction_id?.startsWith("evt-"),
+          );
+          localStorage.setItem("medcore_local_payments", JSON.stringify(cleanPayments));
+        }
+      }
+    } catch {}
+
+    // 2. Limpa Supabase database
+    try {
+      await supabase.from("events").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    } catch (err) {
+      console.warn("Aviso ao limpar events no Supabase:", err);
+    }
+
+    try {
+      await supabase.from("transactions").delete().like("origin_key", "event:%");
+    } catch (err) {
+      console.warn("Aviso ao limpar transactions no Supabase:", err);
+    }
+
+    try {
+      await supabase.from("transactions").delete().like("id", "evt-%");
+    } catch (err) {
+      console.warn("Aviso ao limpar transactions evt no Supabase:", err);
+    }
+
+    try {
+      await supabase.from("financial_titles").delete().like("origin_key", "event:%");
+    } catch (err) {
+      console.warn("Aviso ao limpar financial_titles no Supabase:", err);
+    }
+
+    try {
+      await supabase.from("financial_titles").delete().like("id", "evt-%");
+    } catch (err) {
+      console.warn("Aviso ao limpar financial_titles evt no Supabase:", err);
+    }
+
+    try {
+      await supabase.from("financial_payments").delete().like("id", "pay-evt-%");
+    } catch (err) {
+      console.warn("Aviso ao limpar financial_payments no Supabase:", err);
+    }
+
+    try {
+      await supabase.from("appointments").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    } catch (err) {
+      console.warn("Aviso ao limpar appointments no Supabase:", err);
+    }
+
+    // 3. Emite eventos para notificar todas as telas do sistema
+    window.dispatchEvent(new CustomEvent("medcore_events_updated", { detail: [] }));
+    window.dispatchEvent(new CustomEvent("medcore_local_title_saved"));
+  } catch (e) {
+    console.error("Erro ao zerar agendamentos:", e);
+  }
+}
+
+// Purga automática inicial para zerar todos os agendamentos de teste anteriores
 if (typeof window !== "undefined") {
   try {
-    if (!localStorage.getItem(PURGE_KEY)) {
+    if (!localStorage.getItem(AUTO_WIPE_KEY)) {
+      localStorage.setItem(AUTO_WIPE_KEY, "true");
       localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem("medcore_local_titles");
-      localStorage.removeItem("medcore_local_payments");
-      localStorage.setItem(PURGE_KEY, "true");
+      setTimeout(() => {
+        void wipeAllAppointments();
+      }, 0);
     }
   } catch {}
 }

@@ -19,6 +19,7 @@ export interface DayChartPoint {
   date: string; // "dd/MM/yyyy"
   entradas: number; // Total recebido no dia
   saidas: number; // Total pago no dia
+  aReceber?: number; // Total previsto a receber
   saldo: number; // Saldo acumulado até o dia
 }
 
@@ -101,7 +102,8 @@ export function GraficoFluxoDeCaixa({ entries = [], customChartData }: GraficoFl
         ? Math.max(...days.map((d) => Math.max(d.entradas, d.saidas, Math.abs(d.saldo))), 1000)
         : 1000;
 
-    return { chartData: days, maxVolume: maxVol };
+    const hasAReceber = days.some((d) => (d.aReceber || 0) > 0);
+    return { chartData: days, maxVolume: maxVol, hasAReceber };
   }, [entries, customChartData]);
 
   return (
@@ -121,6 +123,12 @@ export function GraficoFluxoDeCaixa({ entries = [], customChartData }: GraficoFl
             <span className="h-2.5 w-2.5 rounded-full bg-success" />
             <span className="text-muted-foreground">Entradas</span>
           </div>
+          {hasAReceber && (
+            <div className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-primary" />
+              <span className="text-muted-foreground">A Receber</span>
+            </div>
+          )}
           <div className="flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-full bg-destructive" />
             <span className="text-muted-foreground">Saídas</span>
@@ -145,13 +153,36 @@ export function GraficoFluxoDeCaixa({ entries = [], customChartData }: GraficoFl
             summary="Entradas e saídas por dia, com o resultado acumulado no período."
             series={[
               { name: "Entradas", type: "column", data: chartData.map((d) => d.entradas) },
+              ...(hasAReceber
+                ? [
+                    {
+                      name: "A Receber (Previsto)",
+                      type: "column" as const,
+                      data: chartData.map((d) => d.aReceber || 0),
+                    },
+                  ]
+                : []),
               { name: "Saídas", type: "column", data: chartData.map((d) => d.saidas) },
               { name: "Resultado acumulado", type: "line", data: chartData.map((d) => d.saldo) },
             ]}
             options={{
-              colors: [CHART_COLORS.success, CHART_COLORS.danger, CHART_COLORS.secondary],
-              stroke: { width: [0, 0, 2.5], curve: "smooth" },
-              markers: { size: [0, 0, 3], strokeWidth: 0, hover: { size: 5 } },
+              colors: hasAReceber
+                ? [
+                    CHART_COLORS.success,
+                    CHART_COLORS.primarySoft,
+                    CHART_COLORS.danger,
+                    CHART_COLORS.secondary,
+                  ]
+                : [CHART_COLORS.success, CHART_COLORS.danger, CHART_COLORS.secondary],
+              stroke: {
+                width: hasAReceber ? [0, 0, 0, 2.5] : [0, 0, 2.5],
+                curve: "smooth",
+              },
+              markers: {
+                size: hasAReceber ? [0, 0, 0, 3] : [0, 0, 3],
+                strokeWidth: 0,
+                hover: { size: 5 },
+              },
               plotOptions: {
                 bar: { columnWidth: "40%", borderRadius: 3, borderRadiusApplication: "end" },
               },

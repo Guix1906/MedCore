@@ -1,7 +1,9 @@
-import { CalendarDays, Plus, RefreshCw, SlidersHorizontal } from "lucide-react";
+import { CalendarDays, Plus, RefreshCw, SlidersHorizontal, Trash2 } from "lucide-react";
 import type { CreateKind } from "@/components/agenda/agenda-modals";
 import { PageHeader } from "@/components/ui-app/PageHeader";
 import { Button } from "@/components/ui/button";
+import { wipeAllAppointments } from "@/lib/local-events";
+import { toast } from "sonner";
 
 export function AgendaHeader({
   isLoading,
@@ -18,6 +20,18 @@ export function AgendaHeader({
   activeFilterCount?: number;
   canCreate?: boolean;
 }) {
+  const handleWipeAll = async () => {
+    if (
+      window.confirm(
+        "Deseja realmente excluir todos os agendamentos salvos? Essa ação remove os agendamentos anteriores para iniciar seus testes limpos.",
+      )
+    ) {
+      await wipeAllAppointments();
+      onRefresh();
+      toast.success("Todos os agendamentos foram excluídos com sucesso.");
+    }
+  };
+
   return (
     <PageHeader
       title="Agenda"
@@ -35,6 +49,16 @@ export function AgendaHeader({
             disabled={isLoading}
           >
             <RefreshCw className={isLoading ? "animate-spin" : undefined} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleWipeAll}
+            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 text-xs h-9 px-2.5"
+            title="Excluir todos os agendamentos para iniciar do zero"
+          >
+            <Trash2 className="size-3.5 mr-1" />
+            <span>Zerar agendamentos</span>
           </Button>
           <Button variant="outline" onClick={onOpenFilters} className="xl:hidden">
             <SlidersHorizontal />

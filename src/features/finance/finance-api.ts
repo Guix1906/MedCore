@@ -318,6 +318,35 @@ export function reverseLocalPayment(paymentId: string, reason: string): void {
   }
 }
 
+export function deleteLocalFinancialTitle(idOrOriginKey: string): void {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    const current = getLocalTitles();
+    const next = current.filter(
+      (t) =>
+        t.id !== idOrOriginKey &&
+        t.origin_key !== idOrOriginKey &&
+        !idOrOriginKey.includes(t.id),
+    );
+    localStorage.setItem(STORAGE_KEY_LOCAL_TITLES, JSON.stringify(next));
+    window.dispatchEvent(new CustomEvent("medcore_local_title_saved"));
+  } catch (e) {
+    console.error("Erro ao excluir título local:", e);
+  }
+}
+
+export function deleteLocalPayment(paymentId: string): void {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    const current = getLocalPayments();
+    const next = current.filter((p) => p.id !== paymentId && p.transaction_id !== paymentId);
+    localStorage.setItem(STORAGE_KEY_LOCAL_PAYMENTS, JSON.stringify(next));
+    window.dispatchEvent(new CustomEvent("medcore_local_title_saved"));
+  } catch (e) {
+    console.error("Erro ao excluir pagamento local:", e);
+  }
+}
+
 function parseMetaNumber(val: any): number {
   if (typeof val === "number") return isNaN(val) ? 0 : val;
   if (!val) return 0;

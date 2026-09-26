@@ -12,7 +12,7 @@ import { getFinancialSnapshot, refreshFinance } from "@/features/finance/finance
 import { reportingRows } from "@/features/finance/finance-math";
 import { useResolvedTheme } from "@/hooks/use-theme";
 import { supabase } from "@/integrations/supabase/client";
-import { getStoredLocalEvents } from "@/lib/local-events";
+import { getStoredLocalEvents, wipeAllAppointments } from "@/lib/local-events";
 import { mergeWithLocalPatients } from "@/lib/local-patients";
 import { calcCashFlow } from "@/lib/finance";
 import { agendaService, companyService, patientsService } from "@/services/api";
@@ -30,6 +30,7 @@ import {
   Eye,
   EyeOff,
   Inbox,
+  Trash2,
   Users,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -179,6 +180,18 @@ function DashboardPage() {
       window.removeEventListener("medcore_patients_updated", handleCustomEvents);
       void supabase.removeChannel(ch);
     };
+  }, [qc]);
+
+  // Purga única inicial para zerar todos os agendamentos anteriores
+  useEffect(() => {
+    const WIPE_FLAG = "medcore_wipe_all_events_v2026_09_final_done";
+    if (typeof window !== "undefined" && !localStorage.getItem(WIPE_FLAG)) {
+      localStorage.setItem(WIPE_FLAG, "true");
+      void wipeAllAppointments().then(() => {
+        void qc.invalidateQueries({ queryKey: ["dashboard", "events-appointments"] });
+        void qc.invalidateQueries({ queryKey: ["financial-snapshot"] });
+      });
+    }
   }, [qc]);
 
   const apptsQ = useQuery({
@@ -750,6 +763,31 @@ function DashboardPage() {
                         next24h.length > 6 ? " · mostrando os 6 primeiros" : ""
                       }`
                 }
+                action={
+                  appts.length > 0 ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-7 px-2"
+                      title="Zerar todos os agendamentos"
+                      onClick={async () => {
+                        if (
+                          window.confirm(
+                            "Deseja excluir todos os agendamentos salvos para reiniciar do zero?",
+                          )
+                        ) {
+                          await wipeAllAppointments();
+                          void qc.invalidateQueries({ queryKey: ["dashboard"] });
+                          void qc.invalidateQueries({ queryKey: ["financial-snapshot"] });
+                          void qc.invalidateQueries({ queryKey: ["agenda"] });
+                        }
+                      }}
+                    >
+                      <Trash2 className="size-3.5 mr-1" />
+                      Zerar agendamentos
+                    </Button>
+                  ) : undefined
+                }
               />
               {next24h.length === 0 ? (
                 <EmptyBlock
@@ -886,9 +924,14 @@ function DashboardPage() {
                                 data: cashflow.map((d) => -Math.abs(d.saidas)),
                               },
                               {
-                                name: "Entradas",
+                                name: "Entradas (Realizado)",
                                 type: "column",
                                 data: cashflow.map((d) => d.entradas),
+                              },
+                              {
+                                name: "A Receber (Previsto)",
+                                type: "column",
+                                data: cashflow.map((d) => d.entradasPrev),
                               },
                               {
                                 name: "Resultado de caixa",
@@ -899,6 +942,7 @@ function DashboardPage() {
                           : [
                               { name: "Saídas", type: "column", data: [] },
                               { name: "Entradas", type: "column", data: [] },
+                              { name: "A Receber", type: "column", data: [] },
                               { name: "Saldo", type: "line", data: [] },
                             ]
                       }
@@ -909,14 +953,19 @@ function DashboardPage() {
                           stacked: true,
                           animations: { enabled: true, easing: "easeinout", speed: 700 },
                         },
-                        colors: [CHART_COLORS.danger, CHART_COLORS.success, CHART_COLORS.secondary],
+                        colors: [
+                          CHART_COLORS.danger,
+                          CHART_COLORS.success,
+                          CHART_COLORS.primarySoft,
+                          CHART_COLORS.secondary,
+                        ],
                         stroke: {
-                          width: [0, 0, 3],
+                          width: [0, 0, 0, 3],
                           curve: "straight",
-                          dashArray: [0, 0, 0],
+                          dashArray: [0, 0, 0, 0],
                         },
                         markers: {
-                          size: [0, 0, 6],
+                          size: [0, 0, 0, 6],
                           strokeWidth: 2,
                           strokeColors: [chartColor(CHART_COLORS.secondary, mode)],
                           colors: [mode === "dark" ? "#1c1c1e" : "#ffffff"],
@@ -1065,6 +1114,11 @@ function DashboardPage() {
                           {showBalance ? BRL(balance.entradasPrev) : "R$ ••••"}
                         </span>{" "}
                         previsto
+                        {balance.entradasPrev > balance.entradas && showBalance && (
+                          <span className="block text-[11px] font-semibold text-primary mt-0.5">
+                            A receber: {BRL(balance.entradasPrev - balance.entradas)}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="flex flex-col space-y-1">

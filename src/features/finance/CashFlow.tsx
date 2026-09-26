@@ -82,6 +82,7 @@ import {
   moneyCents,
 } from "@/features/acompanhamentos/followup-utils";
 import { refreshFinance } from "./finance-api";
+import { remaining } from "./finance-math";
 import { cashFlow } from "./cash-flow-math";
 import type { CashAccount, CashFlowSnapshot } from "./cash-flow-schema";
 import type { FinanceSnapshot, FinancialTitle } from "./finance-schema";
@@ -598,8 +599,8 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       }
     });
 
-    // Agrupamento diário para o ComposedChart
-    const dayMap = new Map<string, { entradas: number; saidas: number }>();
+    // Agrupamento diário para o ComposedChart (inclui Entradas reais e Previsão a Receber)
+    const dayMap = new Map<string, { entradas: number; saidas: number; aReceber: number }>();
     const sorted = [...base].sort((a, b) => a.date.localeCompare(b.date));
 
     sorted.forEach((e) => {
@@ -611,7 +612,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
         label = dStr;
       }
 
-      const cur = dayMap.get(label) || { entradas: 0, saidas: 0 };
+      const cur = dayMap.get(label) || { entradas: 0, saidas: 0, aReceber: 0 };
       if (!e.is_expense) {
         cur.entradas += e.paid_amount;
       } else {
@@ -620,14 +621,37 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       dayMap.set(label, cur);
     });
 
+    // Mapeia títulos a receber (ex: restante de procedimentos agendados) para a data de vencimento
+    const titles = finance.titles || [];
+    titles
+      .filter((t) => t.type === "receita" && t.status !== "cancelado" && remaining(t) > 0)
+      .forEach((t) => {
+        const dStr = (t.due_date || t.date || "").slice(0, 10);
+        if (!dStr) return;
+        if (start && dStr < start) return;
+        if (end && dStr > end) return;
+        if (deletedEntryIds.includes(t.id)) return;
+
+        let label = dStr;
+        try {
+          label = format(parseISO(dStr), "dd/MM/yyyy");
+        } catch {
+          label = dStr;
+        }
+
+        const cur = dayMap.get(label) || { entradas: 0, saidas: 0, aReceber: 0 };
+        cur.aReceber += remaining(t);
+        dayMap.set(label, cur);
+      });
+
     let running = 0;
-    const days: LancamentoFluxo[] = [];
     const chartPoints = Array.from(dayMap.entries()).map(([date, vals]) => {
       running += vals.entradas - vals.saidas;
       return {
         date,
         entradas: vals.entradas,
         saidas: vals.saidas,
+        aReceber: vals.aReceber,
         saldo: running,
       };
     });
