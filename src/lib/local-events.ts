@@ -7,84 +7,79 @@ import type { RawEvent } from "@/features/agenda/lib/normalize";
 import { supabase } from "@/integrations/supabase/client";
 
 const STORAGE_KEY = "medcore_local_events";
-const AUTO_WIPE_KEY = "medcore_wipe_all_events_v2026_09_final";
+const AUTO_WIPE_KEY = "medcore_system_clean_reset_v2026_09_26_final_1";
 
 /**
- * Exclui absolutamente todos os agendamentos existentes (banco Supabase e localStorage),
- * além de limpar títulos e pagamentos financeiros derivados de agendamentos.
+ * Exclui absolutamente todos os agendamentos e movimentações de teste existentes
+ * (banco Supabase e localStorage), zerando o sistema integralmente.
  */
 export async function wipeAllAppointments(): Promise<void> {
   if (typeof window === "undefined") return;
   try {
-    // 1. Limpa localStorage
-    localStorage.removeItem(STORAGE_KEY);
+    // 1. Limpa todas as chaves locais do MedCore
+    const storageKeys = [
+      STORAGE_KEY,
+      "medcore_local_titles",
+      "medcore_local_payments",
+      "medcore_deleted_titles",
+      "medcore_deleted_cash_entries",
+      "medcore_events_purged_v2",
+      "medcore_wipe_all_events_v2026_09_final",
+      "medcore_wipe_all_events_v2026_09_final_done",
+    ];
+    storageKeys.forEach((key) => {
+      try {
+        localStorage.removeItem(key);
+      } catch {}
+    });
 
+    // Remove qualquer chave residual dinâmica
     try {
-      const rawTitles = localStorage.getItem("medcore_local_titles");
-      if (rawTitles) {
-        const titles = JSON.parse(rawTitles);
-        if (Array.isArray(titles)) {
-          const cleanTitles = titles.filter(
-            (t: any) =>
-              !t.id?.startsWith("evt-") &&
-              !t.origin_key?.startsWith("event:") &&
-              !t.category?.toLowerCase().includes("atendimento"),
-          );
-          localStorage.setItem("medcore_local_titles", JSON.stringify(cleanTitles));
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (
+          k &&
+          (k.startsWith("medcore_event_") ||
+            k.startsWith("medcore_appt_") ||
+            k.startsWith("medcore_title_") ||
+            k.startsWith("medcore_pay_"))
+        ) {
+          localStorage.removeItem(k);
         }
       }
     } catch {}
 
+    // 2. Tenta zerar via RPC transacional com privilégios de segurança
     try {
-      const rawPayments = localStorage.getItem("medcore_local_payments");
-      if (rawPayments) {
-        const payments = JSON.parse(rawPayments);
-        if (Array.isArray(payments)) {
-          const cleanPayments = payments.filter(
-            (p: any) =>
-              !p.id?.startsWith("pay-evt-") &&
-              !p.transaction_id?.startsWith("evt-"),
-          );
-          localStorage.setItem("medcore_local_payments", JSON.stringify(cleanPayments));
-        }
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc("reset_all_system_test_data");
+      if (!rpcErr) {
+        console.info("RPC reset_all_system_test_data executada com sucesso:", rpcRes);
       }
     } catch {}
 
-    // 2. Limpa Supabase database
+    // 3. Limpeza direta e irrestrita nas tabelas do Supabase (fallback ativo)
     try {
-      await supabase.from("events").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await (supabase as any)
+        .from("transaction_payments")
+        .delete()
+        .neq("id", "00000000-0000-0000-0000-000000000000");
     } catch (err) {
-      console.warn("Aviso ao limpar events no Supabase:", err);
+      console.warn("Aviso ao limpar transaction_payments no Supabase:", err);
     }
 
     try {
-      await supabase.from("transactions").delete().like("origin_key", "event:%");
+      await (supabase as any)
+        .from("transactions")
+        .delete()
+        .neq("id", "00000000-0000-0000-0000-000000000000");
     } catch (err) {
       console.warn("Aviso ao limpar transactions no Supabase:", err);
     }
 
     try {
-      await supabase.from("transactions").delete().like("id", "evt-%");
+      await supabase.from("events").delete().neq("id", "00000000-0000-0000-0000-000000000000");
     } catch (err) {
-      console.warn("Aviso ao limpar transactions evt no Supabase:", err);
-    }
-
-    try {
-      await (supabase as any).from("financial_titles").delete().like("origin_key", "event:%");
-    } catch (err) {
-      console.warn("Aviso ao limpar financial_titles no Supabase:", err);
-    }
-
-    try {
-      await (supabase as any).from("financial_titles").delete().like("id", "evt-%");
-    } catch (err) {
-      console.warn("Aviso ao limpar financial_titles evt no Supabase:", err);
-    }
-
-    try {
-      await (supabase as any).from("financial_payments").delete().like("id", "pay-evt-%");
-    } catch (err) {
-      console.warn("Aviso ao limpar financial_payments no Supabase:", err);
+      console.warn("Aviso ao limpar events no Supabase:", err);
     }
 
     try {
@@ -93,20 +88,34 @@ export async function wipeAllAppointments(): Promise<void> {
       console.warn("Aviso ao limpar appointments no Supabase:", err);
     }
 
-    // 3. Emite eventos para notificar todas as telas do sistema
+    try {
+      await (supabase as any)
+        .from("financial_titles")
+        .delete()
+        .neq("id", "00000000-0000-0000-0000-000000000000");
+    } catch {}
+
+    try {
+      await (supabase as any)
+        .from("financial_payments")
+        .delete()
+        .neq("id", "00000000-0000-0000-0000-000000000000");
+    } catch {}
+
+    // 4. Emite eventos para notificar todas as telas do sistema e forçar refetch imediato
     window.dispatchEvent(new CustomEvent("medcore_events_updated", { detail: [] }));
     window.dispatchEvent(new CustomEvent("medcore_local_title_saved"));
+    window.dispatchEvent(new CustomEvent("medcore_system_wiped"));
   } catch (e) {
-    console.error("Erro ao zerar agendamentos:", e);
+    console.error("Erro ao zerar dados do sistema:", e);
   }
 }
 
-// Purga automática inicial para zerar todos os agendamentos de teste anteriores
+// Purga automática inicial para zerar todos os agendamentos e movimentações de teste residuais
 if (typeof window !== "undefined") {
   try {
     if (!localStorage.getItem(AUTO_WIPE_KEY)) {
       localStorage.setItem(AUTO_WIPE_KEY, "true");
-      localStorage.removeItem(STORAGE_KEY);
       setTimeout(() => {
         void wipeAllAppointments();
       }, 0);

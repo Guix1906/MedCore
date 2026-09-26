@@ -182,14 +182,15 @@ function DashboardPage() {
     };
   }, [qc]);
 
-  // Purga única inicial para zerar todos os agendamentos anteriores
+  // Purga única inicial para zerar todos os agendamentos e movimentações de teste anteriores
   useEffect(() => {
-    const WIPE_FLAG = "medcore_wipe_all_events_v2026_09_final_done";
+    const WIPE_FLAG = "medcore_system_clean_reset_v2026_09_26_final_1_done";
     if (typeof window !== "undefined" && !localStorage.getItem(WIPE_FLAG)) {
       localStorage.setItem(WIPE_FLAG, "true");
       void wipeAllAppointments().then(() => {
         void qc.invalidateQueries({ queryKey: ["dashboard", "events-appointments"] });
         void qc.invalidateQueries({ queryKey: ["financial-snapshot"] });
+        void qc.invalidateQueries({ queryKey: ["cash-flow-snapshot"] });
       });
     }
   }, [qc]);

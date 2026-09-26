@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/ui-app/PageHeader";
 import { createFileRoute, useBlocker, type SearchSchemaInput } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
@@ -11,6 +11,9 @@ import FinanceTabs, {
 import { errorMessage } from "@/features/acompanhamentos/followup-utils";
 import { getFinancialSnapshot, refreshFinance } from "@/features/finance/finance-api";
 import { confirmDialog } from "@/components/app/confirm-dialog";
+import { wipeAllAppointments } from "@/lib/local-events";
+import { Button } from "@/components/ui/button";
+import { Trash2 } from "lucide-react";
 import TitleList from "@/features/finance/TitleList";
 import CashFlow from "@/features/finance/CashFlow";
 import { ContasPagarTab } from "@/features/finance/ContasPagarTab";
@@ -58,6 +61,40 @@ function FinanceiroPage() {
   const currentTitle = data?.titles.find((t) => t.id === selected);
   const changeTab = (tab: FinanceTabId) => {
     void navigate({ search: { tab, novo: false }, replace: true });
+  };
+
+  // Auto-purga única inicial para garantir ambiente zerado e limpo
+  useEffect(() => {
+    const WIPE_FLAG = "medcore_system_clean_reset_v2026_09_26_final_1_finance_done";
+    if (typeof window !== "undefined" && !localStorage.getItem(WIPE_FLAG)) {
+      localStorage.setItem(WIPE_FLAG, "true");
+      void wipeAllAppointments().then(() => {
+        void refreshFinance(queryClient);
+        void query.refetch();
+      });
+    }
+  }, [queryClient]);
+
+  const handleWipeAll = async () => {
+    const ok = await confirmDialog({
+      title: "Zerar Dados de Teste",
+      description:
+        "Tem certeza que deseja apagar todos os lançamentos, pagamentos e agendamentos de teste? Essa ação zera o sistema para você iniciar testes do zero.",
+      confirmText: "Zerar Tudo",
+      destructive: true,
+    });
+    if (!ok) return;
+    const toastId = toast.loading("Zerando todo o sistema...");
+    try {
+      await wipeAllAppointments();
+      await refreshFinance(queryClient);
+      await query.refetch();
+      toast.success("Sistema zerado com sucesso! Todos os dados de teste foram removidos.", {
+        id: toastId,
+      });
+    } catch (err) {
+      toast.error(errorMessage(err), { id: toastId });
+    }
   };
 
   const handleDeleteReceber = async (id: string) => {
@@ -117,6 +154,18 @@ function FinanceiroPage() {
           <PageHeader
             title="Financeiro"
             description="Acompanhe o caixa, os compromissos e os recebimentos da clínica."
+            actions={
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs text-muted-foreground hover:text-destructive hover:border-destructive/40 gap-1.5 cursor-pointer"
+                onClick={handleWipeAll}
+                title="Zera todos os lançamentos e agendamentos de teste para iniciar do zero"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Zerar Dados de Teste
+              </Button>
+            }
           />
           <FinanceTabs activeTab={search.tab} onSelectTab={changeTab} disabled={locked} />
           {query.isPending && <p role="status">Carregando financeiro...</p>}
