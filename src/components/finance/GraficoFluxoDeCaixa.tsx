@@ -44,32 +44,39 @@ export function GraficoFluxoDeCaixa({ entries = [], customChartData }: GraficoFl
   // Processamento e agrupamento dos lançamentos por dia (quando não passado direto)
   const { chartData, maxVolume } = useMemo(() => {
     if (customChartData && customChartData.length > 0) {
-      const maxVol = Math.max(
-        ...customChartData.map((d) => Math.max(d.entradas, d.saidas, Math.abs(d.saldo))),
-        1000,
+      const volumes = customChartData.map((d) =>
+        Math.max(Number(d.entradas) || 0, Number(d.saidas) || 0, Math.abs(Number(d.saldo) || 0)),
       );
+      const computedMax = volumes.length > 0 ? Math.max(...volumes, 1000) : 1000;
+      const maxVol = Number.isFinite(computedMax) && computedMax > 0 ? computedMax : 1000;
       return { chartData: customChartData, maxVolume: maxVol };
     }
 
     // REGRA DO FLUXO DE CAIXA: Apenas lançamentos realizados (pagos)
-    const realizadados = entries.filter((e) => e.status === "pago" && (e.paid_at || e.due_date));
+    const safeEntries = Array.isArray(entries) ? entries : [];
+    const realizadados = safeEntries.filter(
+      (e) => e && e.status === "pago" && (e.paid_at || e.due_date),
+    );
 
     // Ordenação cronológica
     const ordenados = [...realizadados].sort((a, b) => {
-      const da = a.paid_at || a.due_date || "";
-      const db = b.paid_at || b.due_date || "";
+      const da = String(a.paid_at || a.due_date || "");
+      const db = String(b.paid_at || b.due_date || "");
       return da.localeCompare(db);
     });
 
     const dayMap = new Map<string, { entradas: number; saidas: number }>();
 
     ordenados.forEach((e) => {
-      const dStr = (e.paid_at || e.due_date || "").slice(0, 10);
+      const dStr = String(e.paid_at || e.due_date || "").slice(0, 10);
       if (!dStr) return;
 
       let label = dStr;
       try {
-        label = format(parseISO(dStr), "dd/MM/yyyy");
+        const parsed = parseISO(dStr);
+        if (!isNaN(parsed.getTime())) {
+          label = format(parsed, "dd/MM/yyyy");
+        }
       } catch {
         label = dStr;
       }
@@ -97,14 +104,16 @@ export function GraficoFluxoDeCaixa({ entries = [], customChartData }: GraficoFl
       };
     });
 
-    const maxVol =
-      days.length > 0
-        ? Math.max(...days.map((d) => Math.max(d.entradas, d.saidas, Math.abs(d.saldo))), 1000)
-        : 1000;
+    const volumes = days.map((d) =>
+      Math.max(Number(d.entradas) || 0, Number(d.saidas) || 0, Math.abs(Number(d.saldo) || 0)),
+    );
+    const computedMax = volumes.length > 0 ? Math.max(...volumes, 1000) : 1000;
+    const maxVol = Number.isFinite(computedMax) && computedMax > 0 ? computedMax : 1000;
 
-    const hasAReceber = days.some((d) => (d.aReceber || 0) > 0);
-    return { chartData: days, maxVolume: maxVol, hasAReceber };
+    return { chartData: days, maxVolume: maxVol };
   }, [entries, customChartData]);
+
+  const hasAReceber = Array.isArray(chartData) && chartData.some((d) => (d.aReceber || 0) > 0);
 
   return (
     <div className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">

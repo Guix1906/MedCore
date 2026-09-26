@@ -161,7 +161,8 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
   // Armazena IDs de movimentações excluídas/estornadas localmente para efeito imediato
   const [deletedEntryIds, setDeletedEntryIds] = useState<string[]>(() => {
     try {
-      return JSON.parse(localStorage.getItem("medcore_deleted_cash_entries") || "[]");
+      const val = JSON.parse(localStorage.getItem("medcore_deleted_cash_entries") || "[]");
+      return Array.isArray(val) ? val.map(String) : [];
     } catch {
       return [];
     }
@@ -297,9 +298,9 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       const isIncome = !isExpense;
       const accountObj = accounts.find((a) => a.id === p.account_id);
       const isAgendamento =
-        t?.origin_key?.startsWith("event:") ||
-        t?.id?.startsWith("evt-") ||
-        p.id.startsWith("pay-evt-") ||
+        Boolean(t?.origin_key && String(t.origin_key).startsWith("event:")) ||
+        Boolean(t?.id && String(t.id).startsWith("evt-")) ||
+        Boolean(p?.id && String(p.id).startsWith("pay-evt-")) ||
         (t?.category || "").toLowerCase().includes("atendimento");
       const isPlano = !!t?.treatment_id;
       const isManual = !isAgendamento && !isPlano;
@@ -590,33 +591,41 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
     });
 
     // Agrupamento diário para o ComposedChart (inclui Entradas reais e Previsão a Receber)
-    const dayMap = new Map<string, { entradas: number; saidas: number; aReceber: number }>();
-    const sorted = [...base].sort((a, b) => a.date.localeCompare(b.date));
+    const dayMap = new Map<
+      string,
+      { entradas: number; saidas: number; aReceber: number; iso: string }
+    >();
+    const sorted = [...base].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
 
     sorted.forEach((e) => {
-      const dStr = e.date.slice(0, 10);
+      const dStr = (e.date || "").slice(0, 10);
+      if (!dStr) return;
       let label = dStr;
       try {
-        label = format(parseISO(dStr), "dd/MM/yyyy");
+        const parsed = parseISO(dStr);
+        if (!isNaN(parsed.getTime())) {
+          label = format(parsed, "dd/MM/yyyy");
+        }
       } catch {
         label = dStr;
       }
 
-      const cur = dayMap.get(label) || { entradas: 0, saidas: 0, aReceber: 0 };
+      const cur = dayMap.get(label) || { entradas: 0, saidas: 0, aReceber: 0, iso: dStr };
+      const paid = Number(e.paid_amount) || 0;
       if (!e.is_expense) {
-        cur.entradas += e.paid_amount;
+        cur.entradas += paid;
       } else {
-        cur.saidas += e.paid_amount;
+        cur.saidas += paid;
       }
       dayMap.set(label, cur);
     });
 
     // Mapeia títulos a receber (ex: restante de procedimentos agendados) para a data de vencimento
-    const titles = finance.titles || [];
+    const titles = Array.isArray(finance?.titles) ? finance.titles : [];
     titles
-      .filter((t) => t.type === "receita" && t.status !== "cancelado" && remaining(t) > 0)
+      .filter((t) => t && t.type === "receita" && t.status !== "cancelado" && remaining(t) > 0)
       .forEach((t) => {
-        const dStr = (t.due_date || t.date || "").slice(0, 10);
+        const dStr = String(t.due_date || t.date || "").slice(0, 10);
         if (!dStr) return;
         if (start && dStr < start) return;
         if (end && dStr > end) return;
@@ -624,27 +633,33 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
 
         let label = dStr;
         try {
-          label = format(parseISO(dStr), "dd/MM/yyyy");
+          const parsed = parseISO(dStr);
+          if (!isNaN(parsed.getTime())) {
+            label = format(parsed, "dd/MM/yyyy");
+          }
         } catch {
           label = dStr;
         }
 
-        const cur = dayMap.get(label) || { entradas: 0, saidas: 0, aReceber: 0 };
+        const cur = dayMap.get(label) || { entradas: 0, saidas: 0, aReceber: 0, iso: dStr };
         cur.aReceber += remaining(t);
         dayMap.set(label, cur);
       });
 
+    // Dias só com valores a receber entram no mapa depois; ordena para o eixo e o acumulado.
     let running = 0;
-    const chartPoints = Array.from(dayMap.entries()).map(([date, vals]) => {
-      running += vals.entradas - vals.saidas;
-      return {
-        date,
-        entradas: vals.entradas,
-        saidas: vals.saidas,
-        aReceber: vals.aReceber,
-        saldo: running,
-      };
-    });
+    const chartPoints = Array.from(dayMap.entries())
+      .sort(([, a], [, b]) => (a.iso || "").localeCompare(b.iso || ""))
+      .map(([date, vals]) => {
+        running += vals.entradas - vals.saidas;
+        return {
+          date,
+          entradas: vals.entradas,
+          saidas: vals.saidas,
+          aReceber: vals.aReceber,
+          saldo: running,
+        };
+      });
 
     return {
       totalEntradas: entradas,
@@ -652,7 +667,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       saldoFinal: entradas - saidas,
       chartData: chartPoints,
     };
-  }, [allRealizedEntries, scope, selectedAccount, start, end]);
+  }, [allRealizedEntries, finance.titles, deletedEntryIds, scope, selectedAccount, start, end]);
 
   // Execução de transferência entre contas
   const handleExecuteTransfer = async () => {
@@ -1199,8 +1214,12 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                     if (dateStr) {
                       try {
                         const parsed = parseISO(dateStr);
-                        displayDate = format(parsed, "dd/MM/yy");
-                        isCurrentDay = isToday(parsed);
+                        if (!isNaN(parsed.getTime())) {
+                          displayDate = format(parsed, "dd/MM/yy");
+                          isCurrentDay = isToday(parsed);
+                        } else {
+                          displayDate = dateStr;
+                        }
                       } catch {
                         displayDate = dateStr;
                       }

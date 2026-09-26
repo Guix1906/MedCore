@@ -83,10 +83,10 @@ export function ContasReceberTab({
   useEffect(() => {
     async function loadAssociados() {
       try {
-        const { data } = await supabase.from("profiles").select("name").not("name", "is", null);
+        const { data } = await supabase.from("profiles").select("full_name").not("full_name", "is", null);
         if (data && data.length > 0) {
           const names = Array.from(
-            new Set(data.map((d: { name: string }) => d.name).filter(Boolean)),
+            new Set((data as any[]).map((d: any) => d.full_name || d.name).filter(Boolean)),
           );
           setAssociadosList(names);
         }

@@ -70,19 +70,19 @@ export async function wipeAllAppointments(): Promise<void> {
     }
 
     try {
-      await supabase.from("financial_titles").delete().like("origin_key", "event:%");
+      await (supabase as any).from("financial_titles").delete().like("origin_key", "event:%");
     } catch (err) {
       console.warn("Aviso ao limpar financial_titles no Supabase:", err);
     }
 
     try {
-      await supabase.from("financial_titles").delete().like("id", "evt-%");
+      await (supabase as any).from("financial_titles").delete().like("id", "evt-%");
     } catch (err) {
       console.warn("Aviso ao limpar financial_titles evt no Supabase:", err);
     }
 
     try {
-      await supabase.from("financial_payments").delete().like("id", "pay-evt-%");
+      await (supabase as any).from("financial_payments").delete().like("id", "pay-evt-%");
     } catch (err) {
       console.warn("Aviso ao limpar financial_payments no Supabase:", err);
     }

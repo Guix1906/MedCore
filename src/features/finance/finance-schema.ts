@@ -18,6 +18,7 @@ export type FinancialTitle = {
   treatment_id: string | null;
   installment_id: string | null;
   competence_date: string | null;
+  origin_key?: string | null;
   can_settle: boolean;
   can_reverse: boolean;
   can_cancel: boolean;

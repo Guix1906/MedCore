@@ -443,10 +443,71 @@ function normalizeFinancialSnapshot(
           },
         ];
 
+  // Sanitização rigorosa de títulos para prevenir quebras em runtime
+  const sanitizedTitles: FinancialTitle[] = mergedTitles
+    .filter((t): t is FinancialTitle => Boolean(t && t.id))
+    .map((t) => {
+      const amountNum = Number(t.amount);
+      const paidNum = Number(t.paid_amount);
+      const safeAmount = Number.isFinite(amountNum) ? amountNum : 0;
+      const safePaid = Number.isFinite(paidNum) ? paidNum : 0;
+      const dateStr = t.date ? String(t.date).slice(0, 10) : "";
+      const dueStr = t.due_date ? String(t.due_date).slice(0, 10) : dateStr || "2026-09-15";
+
+      return {
+        ...t,
+        id: String(t.id),
+        type: (t.type === "despesa" ? "despesa" : "receita") as "receita" | "despesa",
+        amount: safeAmount,
+        paid_amount: safePaid,
+        due_date: dueStr,
+        date: dateStr || dueStr,
+        status: String(t.status || (safePaid >= safeAmount && safeAmount > 0 ? "pago" : "pendente")),
+        description: t.description ? String(t.description) : null,
+        category: t.category ? String(t.category) : "Geral",
+        patient_id: t.patient_id ? String(t.patient_id) : null,
+        patient_name: t.patient_name ? String(t.patient_name) : null,
+        payer_name: t.payer_name ? String(t.payer_name) : null,
+        company_id: t.company_id ? String(t.company_id) : null,
+        treatment_id: t.treatment_id ? String(t.treatment_id) : null,
+        installment_id: t.installment_id ? String(t.installment_id) : null,
+        competence_date: t.competence_date ? String(t.competence_date) : null,
+        origin_key: t.origin_key ? String(t.origin_key) : null,
+        can_settle: t.can_settle ?? true,
+        can_reverse: t.can_reverse ?? true,
+        can_cancel: t.can_cancel ?? true,
+      };
+    });
+
+  const sanitizedPayments: FinancialPayment[] = mergedPayments
+    .filter((p): p is FinancialPayment => Boolean(p && p.id))
+    .map((p) => {
+      const amountNum = Number(p.amount);
+      const safeAmount = Number.isFinite(amountNum) ? amountNum : 0;
+      const paidOnStr = p.paid_on ? String(p.paid_on).slice(0, 10) : "2026-09-15";
+
+      return {
+        ...p,
+        id: String(p.id),
+        transaction_id: String(p.transaction_id || ""),
+        amount: safeAmount,
+        paid_on: paidOnStr,
+        payment_method: p.payment_method ? String(p.payment_method) : "PIX",
+        account_id: p.account_id ? String(p.account_id) : null,
+        payer_name: p.payer_name ? String(p.payer_name) : null,
+        created_by: p.created_by ? String(p.created_by) : null,
+        created_at: p.created_at ? String(p.created_at) : new Date().toISOString(),
+        legacy: Boolean(p.legacy),
+        reversed_at: p.reversed_at ? String(p.reversed_at) : null,
+        reversed_by: p.reversed_by ? String(p.reversed_by) : null,
+        reversal_reason: p.reversal_reason ? String(p.reversal_reason) : null,
+      };
+    });
+
   return {
     ...raw,
-    titles: mergedTitles,
-    payments: mergedPayments,
+    titles: sanitizedTitles,
+    payments: sanitizedPayments,
     accounts: mergedAccounts,
     scopes: mergedScopes,
   };
@@ -482,7 +543,7 @@ export async function getFinancialSnapshot(): Promise<FinanceSnapshot> {
     // Se o snapshot remoto estiver vazio (ex: RPC indisponível ou RLS restrito), busca diretamente em public.transactions
     if (!raw.titles.length) {
       try {
-        const { data: txList } = await supabase
+        const { data: txList } = await (supabase as any)
           .from("transactions")
           .select("id, type, amount, paid_amount, due_date, date, status, description, category, patient_id, payer_name, company_id, treatment_id, installment_id, competence_date, origin_key")
           .is("deleted_at", null)
@@ -501,7 +562,7 @@ export async function getFinancialSnapshot(): Promise<FinanceSnapshot> {
 
     if (!raw.payments.length) {
       try {
-        const { data: payList } = await supabase
+        const { data: payList } = await (supabase as any)
           .from("transaction_payments")
           .select("id, transaction_id, amount, paid_on, payment_method, account_id, payer_name, created_by, created_at, legacy, reversed_at, reversed_by, reversal_reason")
           .is("reversed_at", null)

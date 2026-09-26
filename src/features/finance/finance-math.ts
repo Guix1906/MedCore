@@ -1,15 +1,23 @@
 import type { FinanceSnapshot, FinancialTitle } from "./finance-schema";
 
-export const cents = (value: number) => {
-  const result = Math.round(value * 100);
-  if (!Number.isFinite(value) || !Number.isSafeInteger(result))
-    throw new Error("Valor financeiro inválido.");
+export const cents = (value: number | string | null | undefined): number => {
+  if (value === null || value === undefined) return 0;
+  const num = typeof value === "number" ? value : Number(String(value).replace(/[^\d.-]/g, "")) || 0;
+  if (!Number.isFinite(num)) return 0;
+  const result = Math.round(num * 100);
+  if (!Number.isSafeInteger(result)) return 0;
   return result;
 };
-export const remaining = (title: FinancialTitle) =>
-  title.status === "cancelado" ? 0 : (cents(title.amount) - cents(title.paid_amount)) / 100;
+
+export const remaining = (title: FinancialTitle): number => {
+  if (!title || title.status === "cancelado") return 0;
+  const total = cents(title.amount);
+  const paid = cents(title.paid_amount);
+  return Math.max(0, (total - paid) / 100);
+};
 
 export function isFreeBalance(title: FinancialTitle): boolean {
+  if (!title) return false;
   const desc = (title.description || "").toLowerCase();
   const cat = (title.category || "").toLowerCase();
   return (
@@ -21,13 +29,14 @@ export function isFreeBalance(title: FinancialTitle): boolean {
 }
 
 export function titleStatus(title: FinancialTitle, today: string) {
-  if (title.status === "cancelado") return "Cancelado";
+  if (!title || title.status === "cancelado") return "Cancelado";
   if (remaining(title) === 0) return "Quitado";
   if (isFreeBalance(title)) {
-    return title.paid_amount > 0 ? "Parcial (sem vencimento)" : "Em aberto sem vencimento";
+    return (Number(title.paid_amount) || 0) > 0 ? "Parcial (sem vencimento)" : "Em aberto sem vencimento";
   }
-  if (title.due_date < today) return title.paid_amount > 0 ? "Parcial / vencido" : "Vencido";
-  return title.paid_amount > 0 ? "Parcial" : "A vencer";
+  const dueDate = title.due_date || "";
+  if (dueDate && dueDate < today) return (Number(title.paid_amount) || 0) > 0 ? "Parcial / vencido" : "Vencido";
+  return (Number(title.paid_amount) || 0) > 0 ? "Parcial" : "A vencer";
 }
 
 export function financialSummary(
@@ -37,20 +46,24 @@ export function financialSummary(
   end: string,
   accountId = "",
 ) {
-  const within = (date: string) => (!start || date >= start) && (!end || date <= end);
-  const byId = new Map(titles.map((t) => [t.id, t]));
+  const within = (date?: string | null) => (!date ? false : (!start || date >= start) && (!end || date <= end));
+  const safeTitles = Array.isArray(titles) ? titles : [];
+  const safePayments = Array.isArray(data?.payments) ? data.payments : [];
+  const byId = new Map(safeTitles.map((t) => [t.id, t]));
   let income = 0,
     expense = 0,
     receivable = 0,
     payable = 0;
-  for (const p of data.payments) {
+  for (const p of safePayments) {
+    if (!p) continue;
     const title = byId.get(p.transaction_id);
     if (!title || p.reversed_at || !within(p.paid_on) || (accountId && p.account_id !== accountId))
       continue;
     if (title.type === "receita") income += cents(p.amount);
     else expense += cents(p.amount);
   }
-  for (const t of titles) {
+  for (const t of safeTitles) {
+    if (!t || t.status === "cancelado") continue;
     if (isFreeBalance(t)) {
       // Saldo livre compõe o total a receber da clínica, mas não é projetado em um mês específico quando há filtro de período (start/end)
       if (start || end) continue;
@@ -93,12 +106,15 @@ export function reportingRows(data: FinanceSnapshot) {
     } catch {}
   }
 
-  const byId = new Map(data.titles.map((t) => [t.id, t]));
+  const safeTitles = Array.isArray(data?.titles) ? data.titles : [];
+  const safePayments = Array.isArray(data?.payments) ? data.payments : [];
+
+  const byId = new Map(safeTitles.map((t) => [t.id, t]));
   const handledTitleIds = new Set<string>();
 
-  const paid = data.payments
+  const paid = safePayments
     .filter((p) => {
-      if (p.reversed_at) return false;
+      if (!p || p.reversed_at) return false;
       if (deletedIds.has(p.id) || deletedIds.has(p.transaction_id)) return false;
       return true;
     })
@@ -118,8 +134,8 @@ export function reportingRows(data: FinanceSnapshot) {
     });
 
   const syntheticPaid: any[] = [];
-  data.titles.forEach((t) => {
-    if (deletedIds.has(t.id) || deletedIds.has(`title-pay-${t.id}`)) return;
+  safeTitles.forEach((t) => {
+    if (!t || deletedIds.has(t.id) || deletedIds.has(`title-pay-${t.id}`)) return;
     if (t.status === "cancelado") return;
     if ((t.status === "pago" || Number(t.paid_amount || 0) > 0) && !handledTitleIds.has(t.id)) {
       handledTitleIds.add(t.id);
@@ -136,7 +152,7 @@ export function reportingRows(data: FinanceSnapshot) {
     }
   });
 
-  const pending = data.titles
+  const pending = safeTitles
     .filter((t) => {
       if (deletedIds.has(t.id) || deletedIds.has(`title-pay-${t.id}`)) return false;
       if (t.status === "cancelado") return false;

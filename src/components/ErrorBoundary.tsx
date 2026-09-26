@@ -39,17 +39,35 @@ export class ErrorBoundary extends Component<Props, State> {
             <h3 className="text-base font-semibold text-foreground mb-2">
               Ocorreu um imprevisto de execução
             </h3>
-            <p className="text-xs text-muted-foreground mb-6 leading-relaxed">
+            <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
               O sistema protegeu sua sessão com segurança. Nenhuma informação de paciente foi
-              afetada. Por favor, recarregue a página.
+              afetada. Por favor, recarregue a página ou tente novamente.
             </p>
-            <button
-              onClick={this.handleReload}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white text-xs font-semibold hover:bg-primary-hover transition-colors shadow-sm"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Recarregar Sistema
-            </button>
+            {this.state.error?.message && (
+              <details className="mb-5 text-left text-xs bg-muted/40 p-2.5 rounded-xl border border-border">
+                <summary className="cursor-pointer text-muted-foreground font-mono text-[11px] select-none hover:text-foreground">
+                  Detalhes do imprevisto
+                </summary>
+                <p className="mt-1.5 font-mono text-destructive text-[11px] break-all leading-normal">
+                  {this.state.error.message}
+                </p>
+              </details>
+            )}
+            <div className="flex items-center justify-center gap-2">
+              <button
+                onClick={() => this.setState({ hasError: false, error: undefined })}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-border bg-card text-foreground text-xs font-semibold hover:bg-muted transition-colors shadow-xs"
+              >
+                Tentar novamente
+              </button>
+              <button
+                onClick={this.handleReload}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-xs font-semibold hover:bg-primary-hover transition-colors shadow-sm"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Recarregar Sistema
+              </button>
+            </div>
           </div>
         </div>
       );
