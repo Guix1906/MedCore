@@ -10,6 +10,11 @@ ALTER TABLE public.financial_accounts
   ADD COLUMN IF NOT EXISTS company_id uuid REFERENCES public.companies(id),
   ADD COLUMN IF NOT EXISTS balance_kind text DEFAULT 'available';
 
+-- Ajustar restrição de tipo de conta para aceitar variações padrão (corrente, caixa, etc.)
+ALTER TABLE public.financial_accounts DROP CONSTRAINT IF EXISTS financial_accounts_type_check;
+ALTER TABLE public.financial_accounts ADD CONSTRAINT financial_accounts_type_check 
+  CHECK (type IN ('corrente','conta_corrente','caixa','carteira','banco','bank','cash','digital','cofre','pix','aplicacao'));
+
 ALTER TABLE public.transactions
   ADD COLUMN IF NOT EXISTS company_id uuid REFERENCES public.companies(id),
   ADD COLUMN IF NOT EXISTS account_id uuid,
