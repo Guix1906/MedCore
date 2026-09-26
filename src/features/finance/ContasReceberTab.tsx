@@ -779,7 +779,7 @@ export function ContasReceberTab({
                   <div className="space-y-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-sm text-foreground truncate">
-                        {t.description || "Honorários - Ação de Cobrança"}
+                        {t.description || "Atendimento Clínico"}
                       </span>
 
                       {/* Tag 1: Categoria / Sub-categoria */}

@@ -364,13 +364,13 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       const defaultDesc = isAgendamento
         ? `Sinal de Agendamento - ${t?.patient_name || p.payer_name || "Paciente"}`
         : isIncome
-          ? "Honorários - Ação de Cobrança – Entrada Paga"
+          ? "Recebimento de Consulta"
           : "Pagamento realizado";
 
       const defaultCat = isAgendamento
         ? "Atendimentos / Sinal"
         : isIncome
-          ? "Honorários Iniciais / sinal"
+          ? "Consultas / Procedimentos"
           : "Despesas Gerais";
 
       // A data de movimentação de caixa é quando foi pago (paid_on ou data do lançamento), NUNCA o vencimento futuro
@@ -442,14 +442,14 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
           (isAgendamentoTitle
             ? `Agendamento - ${t.patient_name || t.payer_name || "Paciente"}`
             : isIncome
-              ? "Honorários - Ação de Cobrança – Entrada Paga"
+              ? "Recebimento de Consulta"
               : "Pagamento realizado"),
         category:
           t.category ||
           (isAgendamentoTitle
             ? "Atendimentos"
             : isIncome
-              ? "Honorários Iniciais / sinal"
+              ? "Consultas / Procedimentos"
               : "Despesas Gerais"),
         client_name: t.patient_name || t.payer_name || "Avulso",
         payment_method: "PIX",
@@ -525,8 +525,8 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
             date: p.paid_on || t?.due_date || t?.date || new Date().toISOString().slice(0, 10),
             description:
               t?.description ||
-              (isIncome ? "Honorários - Ação de Cobrança – Entrada Paga" : "Pagamento realizado"),
-            category: t?.category || (isIncome ? "Honorários Iniciais / sinal" : "Despesas Gerais"),
+              (isIncome ? "Recebimento de Consulta" : "Pagamento realizado"),
+            category: t?.category || (isIncome ? "Consultas / Procedimentos" : "Despesas Gerais"),
             client_name: t?.patient_name || p.payer_name || t?.payer_name || "Avulso",
             payment_method: p.payment_method || "PIX",
             payment_account: accountObj?.name || accounts[0]?.name || "BANCO DO BRASIL",
@@ -559,8 +559,8 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
             date: t.date || t.due_date || new Date().toISOString().slice(0, 10),
             description:
               t.description ||
-              (isIncome ? "Honorários - Ação de Cobrança – Entrada Paga" : "Pagamento realizado"),
-            category: t.category || (isIncome ? "Honorários Iniciais / sinal" : "Despesas Gerais"),
+              (isIncome ? "Recebimento de Consulta" : "Pagamento realizado"),
+            category: t.category || (isIncome ? "Consultas / Procedimentos" : "Despesas Gerais"),
             client_name: t.patient_name || t.payer_name || "Avulso",
             payment_method: "PIX",
             payment_account: accountObj?.name || "BANCO DO BRASIL",

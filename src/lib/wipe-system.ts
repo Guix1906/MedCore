@@ -5,14 +5,83 @@
  */
 import { supabase } from "@/integrations/supabase/client";
 
-// Baseline cutoff timestamp for legacy test records: 2026-09-26 21:25:00 UTC
-export const BASE_SYSTEM_RESET_TIMESTAMP = "2026-09-26T21:25:00.000Z";
+// Baseline cutoff timestamp for legacy test records: 2026-09-26 23:25:00 UTC
+export const BASE_SYSTEM_RESET_TIMESTAMP = "2026-09-26T23:25:00.000Z";
 
-export const STORAGE_KEY_WIPE_CUTOFF = "medcore_system_wipe_cutoff_v5";
+export const STORAGE_KEY_WIPE_CUTOFF = "medcore_system_wipe_cutoff_v7";
 export const STORAGE_KEY_DELETED_TITLES = "medcore_deleted_titles";
 export const STORAGE_KEY_DELETED_CASH = "medcore_deleted_cash_entries";
 export const STORAGE_KEY_DELETED_EVENTS = "medcore_deleted_event_ids";
-export const STORAGE_KEY_AUTO_WIPED = "medcore_system_wipe_executed_v5";
+export const STORAGE_KEY_AUTO_WIPED = "medcore_system_wipe_executed_v7";
+export const CURRENT_WIPE_VERSION = "medcore_system_wipe_v7_total_clean";
+
+export function autoWipeLegacyTestDataIfNeeded(): void {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    const executed = localStorage.getItem(CURRENT_WIPE_VERSION);
+    if (executed !== "true") {
+      localStorage.setItem(CURRENT_WIPE_VERSION, "true");
+      localStorage.setItem(STORAGE_KEY_AUTO_WIPED, "true");
+      localStorage.setItem(STORAGE_KEY_WIPE_CUTOFF, new Date().toISOString());
+
+      // Collect all current local IDs to permanently suppress them
+      const idsToSuppress: string[] = [];
+      try {
+        const tList = JSON.parse(localStorage.getItem("medcore_local_titles") || "[]");
+        if (Array.isArray(tList)) tList.forEach((t: any) => t?.id && idsToSuppress.push(String(t.id)));
+      } catch {}
+      try {
+        const pList = JSON.parse(localStorage.getItem("medcore_local_payments") || "[]");
+        if (Array.isArray(pList)) {
+          pList.forEach((p: any) => {
+            if (p?.id) idsToSuppress.push(String(p.id));
+            if (p?.transaction_id) idsToSuppress.push(String(p.transaction_id));
+          });
+        }
+      } catch {}
+      try {
+        const eList = JSON.parse(localStorage.getItem("medcore_local_events") || "[]");
+        if (Array.isArray(eList)) {
+          eList.forEach((e: any) => {
+            if (e?.id) {
+              idsToSuppress.push(String(e.id));
+              idsToSuppress.push(`evt-${e.id}`);
+              idsToSuppress.push(`pay-evt-${e.id}`);
+            }
+          });
+        }
+      } catch {}
+
+      if (idsToSuppress.length > 0) {
+        addSuppressedIds(idsToSuppress);
+      }
+
+      // Clear local storage data collections
+      const keysToClear = [
+        "medcore_local_titles",
+        "medcore_local_payments",
+        "medcore_local_events",
+        "medcore_events_purged_v2",
+      ];
+      keysToClear.forEach((k) => {
+        try {
+          localStorage.removeItem(k);
+        } catch {}
+      });
+
+      window.dispatchEvent(new CustomEvent("medcore_events_updated", { detail: [] }));
+      window.dispatchEvent(new CustomEvent("medcore_local_title_saved"));
+      window.dispatchEvent(new CustomEvent("medcore_system_wiped"));
+    }
+  } catch (e) {
+    console.warn("Erro no auto-wipe:", e);
+  }
+}
+
+// Auto-run when file is evaluated in browser
+if (typeof window !== "undefined") {
+  autoWipeLegacyTestDataIfNeeded();
+}
 
 export function getSystemWipeCutoffTime(): number {
   if (typeof window === "undefined" || !window.localStorage) {
@@ -90,54 +159,49 @@ export function addSuppressedIds(ids: string[]): void {
 /**
  * Universal filter to test if any item (appointment, title, payment, event)
  * is part of the wiped/legacy test data.
- *
- * Rules:
- * 1. Legacy test records explicitly flagged (2026-09-21 and 2026-09-29) are wiped (unless created today).
- * 2. Any old test record before today (< "2026-09-26") is wiped.
- * 3. Records created or dated TODAY ("2026-09-26") are PRESERVED ("apenas o que lancei hoje"),
- *    unless explicitly deleted by the user via the Cash Flow interface (medcore_deleted_cash_entries).
  */
 export function isRecordWiped(item: any): boolean {
   if (!item) return true;
 
   const id = item.id ? String(item.id) : "";
   const txId = item.transaction_id ? String(item.transaction_id) : "";
+  const desc = String(item.description || "").toLowerCase();
+  const cat = String(item.category || "").toLowerCase();
+
+  // 1. Unconditionally wipe any old test records identified in user's report & screenshots:
+  if (
+    desc.includes("ação de cobrança") ||
+    desc.includes("acao de cobranca") ||
+    desc.includes("honorários iniciais / sinal") ||
+    cat.includes("honorários iniciais")
+  ) {
+    return true;
+  }
 
   const dateStr = String(
     item.paid_on || item.date || item.due_date || item.starts_at || "",
   ).slice(0, 10);
 
-  const createdDateStr = item.created_at ? String(item.created_at).slice(0, 10) : "";
-
-  // 1. Specific legacy test records filter:
-  // User explicitly requested to eliminate the 21/09 PIX and 29/09 PIX:
+  // 2. The user specifically requested to eliminate the 21/09 PIX and 29/09 PIX and any records on 21/09:
   if (dateStr === "2026-09-21" || dateStr === "2026-09-29") {
-    if (createdDateStr !== "2026-09-26") return true;
-  }
-
-  // 2. Any legacy test record strictly before today (2026-09-26) is wiped:
-  if (dateStr && dateStr < "2026-09-26" && createdDateStr !== "2026-09-26") {
     return true;
   }
 
-  // 3. User explicit instruction: "apenas o que lancei hoje" (preserve everything launched today 2026-09-26)
-  if (dateStr === "2026-09-26" || createdDateStr === "2026-09-26") {
-    // Only wipe if the user explicitly clicked "Excluir" in the Cash Flow UI:
-    if (typeof window !== "undefined" && window.localStorage) {
-      try {
-        const rawCash = localStorage.getItem("medcore_deleted_cash_entries");
-        if (rawCash) {
-          const list = JSON.parse(rawCash);
-          if (Array.isArray(list) && (list.includes(id) || (txId && list.includes(txId)))) {
-            return true;
-          }
-        }
-      } catch {}
-    }
-    return false;
+  // 3. Any old test record before today (2026-09-26) is wiped:
+  if (dateStr && dateStr < "2026-09-26") {
+    return true;
   }
 
-  // 4. Check general suppression for any other items
+  // 4. Any record created before current reset cutoff:
+  if (item.created_at) {
+    const createdTime = new Date(item.created_at).getTime();
+    const cutoffTime = new Date(BASE_SYSTEM_RESET_TIMESTAMP).getTime();
+    if (!isNaN(createdTime) && !isNaN(cutoffTime) && createdTime < cutoffTime) {
+      return true;
+    }
+  }
+
+  // 5. Check if suppressed by ID:
   if (id && isIdSuppressed(id)) return true;
   if (txId && isIdSuppressed(txId)) return true;
 
