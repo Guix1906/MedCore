@@ -70,7 +70,7 @@ export function ContasReceberTab({
 }: ContasReceberTabProps) {
   const [subTab, setSubTab] = useState<"geral" | "clientes" | "cartoes" | "parcelados">("geral");
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"todos" | "pendente" | "vencido">("todos");
+  const [statusFilter, setStatusFilter] = useState<"todos" | "pendente" | "vencido" | "pago">("todos");
   const [selectedAssociado, setSelectedAssociado] = useState<string>("todos");
   const [associadosList, setAssociadosList] = useState<string[]>([]);
 
@@ -252,14 +252,15 @@ export function ContasReceberTab({
         }
       }
 
-      // Filtro de status: Todos / Pendente / Vencido
-      if (statusFilter === "todos") {
-        if (isPaid) return false;
-      } else if (statusFilter === "pendente") {
+      // Filtro de status: Todos / Pendente / Vencido / Recebido (Pago)
+      if (statusFilter === "pendente") {
         if (isPaid || isVencido) return false;
       } else if (statusFilter === "vencido") {
         if (isPaid || !isVencido) return false;
+      } else if (statusFilter === "pago") {
+        if (!isPaid) return false;
       }
+      // 'todos' exibe todos os registros sem filtrar por status de quitação
 
       // Filtro de Associado
       if (selectedAssociado !== "todos") {
@@ -471,10 +472,16 @@ export function ContasReceberTab({
         </div>
 
         {/* CARD 3: RECEBIDO (MANUAL) */}
-        <div className="rounded-xl border border-border bg-card p-5 shadow-xs flex items-center justify-between">
+        <div
+          className={cn(
+            "rounded-xl border border-border bg-card p-5 shadow-xs flex items-center justify-between cursor-pointer hover:border-info/35 transition-colors",
+            statusFilter === "pago" && "ring-2 ring-info/50 border-info bg-info/5",
+          )}
+          onClick={() => setStatusFilter("pago")}
+        >
           <div className="space-y-1">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              RECEBIDO (MANUAL)
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+              RECEBIDO / PAGO <ExternalLink className="h-3 w-3" />
             </span>
             <p className="text-2xl font-semibold text-foreground tracking-tight">
               <CountUp value={metrics.recebidoTotal} format={(v) => currency(v)} />
@@ -636,6 +643,18 @@ export function ContasReceberTab({
             >
               Vencido
             </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter("pago")}
+              className={cn(
+                "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
+                statusFilter === "pago"
+                  ? "bg-card text-foreground shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Recebido
+            </button>
           </div>
         </div>
       </div>
@@ -653,19 +672,79 @@ export function ContasReceberTab({
             Nenhum recebimento encontrado para os filtros selecionados.
           </div>
         ) : subTab === "clientes" ? (
-          <div className="divide-y divide-border-soft">
+          <div className="space-y-4">
             {clientsGrouped.map((grp) => (
-              <div key={grp.name} className="py-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-semibold text-sm text-foreground">{grp.name}</h4>
-                    <span className="text-xs text-muted-foreground">
-                      {grp.titles.length} lançamento(s) associado(s)
-                    </span>
+              <div key={grp.name} className="rounded-xl border border-border/70 bg-card p-4 space-y-3 shadow-2xs">
+                <div className="flex items-center justify-between border-b border-border/50 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-full bg-info/10 text-info font-bold flex items-center justify-center text-xs">
+                      {grp.name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-sm text-foreground">{grp.name}</h4>
+                      <span className="text-xs text-muted-foreground">
+                        {grp.titles.length} lançamento(s) associado(s)
+                      </span>
+                    </div>
                   </div>
-                  <strong className="font-semibold text-sm text-success">
-                    {currency(grp.total)}
-                  </strong>
+                  <div className="text-right">
+                    <span className="text-[11px] text-muted-foreground block">Total a Receber</span>
+                    <strong className="font-semibold text-sm text-success">
+                      {currency(grp.total)}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="divide-y divide-border-soft">
+                  {grp.titles.map((t) => {
+                    const rem = remaining(t);
+                    const isPaid = t.status === "pago" || rem <= 0;
+                    const valorDisplay = rem > 0 ? rem : t.amount;
+                    return (
+                      <div key={t.id} className="pt-2.5 pb-1 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                        <div className="space-y-0.5 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-foreground">{t.description}</span>
+                            {t.paid_amount > 0 && rem > 0 && (
+                              <span className="inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/25">
+                                Sinal pago: {currency(t.paid_amount)}
+                              </span>
+                            )}
+                            <span className={cn(
+                              "text-[10px] font-semibold px-1.5 py-0.5 rounded-md",
+                              isPaid ? "bg-success/10 text-success" : "bg-warning/10 text-warning"
+                            )}>
+                              {isPaid ? "Recebido" : "Pendente"}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground">
+                            Venc: {t.due_date ? formatClinicalDate(t.due_date) : "Sem data"} · Total: {currency(t.amount)}
+                            {rem > 0 && ` · Saldo a receber: ${currency(rem)}`}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                          <strong className="font-semibold text-success tabular-nums">
+                            {currency(valorDisplay)}
+                          </strong>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-[11px] px-2.5 text-destructive border-destructive/25 hover:bg-destructive/10 cursor-pointer"
+                            onClick={() => handleOpenCobrar(t)}
+                          >
+                            Cobrar
+                          </Button>
+                          <Button
+                            size="sm"
+                            className="h-7 text-[11px] px-3 bg-success text-white hover:bg-success/90 cursor-pointer"
+                            onClick={() => onReceive(t)}
+                          >
+                            Receber
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ))}
@@ -707,6 +786,13 @@ export function ContasReceberTab({
                         {tagCategory}
                       </span>
 
+                      {/* Tag Sinal se houver */}
+                      {t.paid_amount > 0 && rem > 0 && (
+                        <span className="inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/25">
+                          Sinal pago: {currency(t.paid_amount)}
+                        </span>
+                      )}
+
                       {/* Tag 2: Status */}
                       <StatusBadge
                         tone={isPaid ? "success" : isVencido ? "danger" : "warning"}
@@ -718,6 +804,11 @@ export function ContasReceberTab({
 
                     <p className="text-xs text-muted-foreground truncate">
                       Vencimento: {formattedDue} · Cliente: {clientName} ·{" "}
+                      {t.paid_amount > 0 && rem > 0 && (
+                        <span className="text-amber-600 dark:text-amber-400 font-semibold mr-1.5">
+                          Saldo a cobrar: {currency(rem)} ·
+                        </span>
+                      )}
                       <span className="text-info font-medium">Associado: {associadoName}</span>
                     </p>
                   </div>

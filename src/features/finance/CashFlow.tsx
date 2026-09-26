@@ -305,7 +305,11 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       const isExpense = t?.type === "despesa";
       const isIncome = !isExpense;
       const accountObj = accounts.find((a) => a.id === p.account_id);
-      const isAgendamento = t?.origin_key?.startsWith("event:");
+      const isAgendamento =
+        t?.origin_key?.startsWith("event:") ||
+        t?.id?.startsWith("evt-") ||
+        p.id.startsWith("pay-evt-") ||
+        (t?.category || "").toLowerCase().includes("atendimento");
       const isPlano = !!t?.treatment_id;
       const isManual = !isAgendamento && !isPlano;
 
@@ -317,18 +321,28 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
             ? "MANUAL"
             : "LANÇAMENTO";
 
+      const defaultDesc = isAgendamento
+        ? `Sinal de Agendamento - ${t?.patient_name || p.payer_name || "Paciente"}`
+        : isIncome
+          ? "Honorários - Ação de Cobrança – Entrada Paga"
+          : "Pagamento realizado";
+
+      const defaultCat = isAgendamento
+        ? "Atendimentos / Sinal"
+        : isIncome
+          ? "Honorários Iniciais / sinal"
+          : "Despesas Gerais";
+
       result.push({
         id: p.id,
         transaction_id: p.transaction_id,
         date: p.paid_on || t?.due_date || t?.date || "2026-09-15",
-        description:
-          t?.description ||
-          (isIncome ? "Honorários - Ação de Cobrança – Entrada Paga" : "Pagamento realizado"),
-        category: t?.category || (isIncome ? "Honorários Iniciais / sinal" : "Despesas Gerais"),
+        description: t?.description || defaultDesc,
+        category: t?.category || defaultCat,
         client_name: t?.patient_name || p.payer_name || t?.payer_name || "Avulso",
         payment_method: p.payment_method || "PIX",
         payment_account: accountObj?.name || accounts[0]?.name || "BANCO DO BRASIL",
-        account_id: p.account_id || accounts[0]?.id || "acc-bb",
+        account_id: p.account_id || accounts[0]?.id || "00000000-0000-0000-0000-000000000001",
         company_id: t?.company_id || null,
         type: (t?.type || "receita") as "receita" | "despesa",
         is_expense: isExpense,

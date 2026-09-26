@@ -247,6 +247,33 @@ const DEFAULT_ACCOUNTS: FinancialAccount[] = [
 ];
 
 const STORAGE_KEY_LOCAL_PAYMENTS = "medcore_local_payments";
+const STORAGE_KEY_LOCAL_TITLES = "medcore_local_titles";
+
+export function getLocalTitles(): FinancialTitle[] {
+  if (typeof window === "undefined" || !window.localStorage) return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_LOCAL_TITLES);
+    if (!raw) return [];
+    const list = JSON.parse(raw);
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveLocalFinancialTitle(title: FinancialTitle): void {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    const current = getLocalTitles();
+    const next = [
+      title,
+      ...current.filter((t) => t.id !== title.id && (!title.origin_key || t.origin_key !== title.origin_key)),
+    ];
+    localStorage.setItem(STORAGE_KEY_LOCAL_TITLES, JSON.stringify(next));
+  } catch (e) {
+    console.error("Erro ao salvar título local:", e);
+  }
+}
 
 export function getLocalPayments(): FinancialPayment[] {
   if (typeof window === "undefined" || !window.localStorage) return [];
@@ -291,22 +318,33 @@ export function reverseLocalPayment(paymentId: string, reason: string): void {
   }
 }
 
+function parseMetaNumber(val: any): number {
+  if (typeof val === "number") return isNaN(val) ? 0 : val;
+  if (!val) return 0;
+  if (typeof val === "string") {
+    const cleaned = val.replace(/[^\d.,]/g, "").replace(",", ".");
+    const num = parseFloat(cleaned);
+    return isNaN(num) ? 0 : num;
+  }
+  return 0;
+}
+
 function parseEventFinancialMeta(description: string | null | undefined) {
   if (!description) return null;
   const m = description.match(/<!--AGENDAMENTO_META:(.*?)-->/s);
   if (!m) return null;
   try {
     const meta = JSON.parse(m[1]);
-    const procedurePrice = Number(meta.procedurePrice) || 0;
-    const downPayment = Number(meta.downPayment) || 0;
-    const remainingValue = Number(meta.remainingValue) || 0;
+    const procedurePrice = parseMetaNumber(meta.procedurePrice || meta.price || meta.total || meta.valor);
+    const downPayment = parseMetaNumber(meta.downPayment || meta.sinal || meta.entry);
+    const remainingValue = parseMetaNumber(meta.remainingValue || meta.restante);
     if (procedurePrice > 0 || downPayment > 0) {
       return {
         procedurePrice: procedurePrice > 0 ? procedurePrice : downPayment,
         downPayment,
         remainingValue:
           remainingValue > 0 ? remainingValue : Math.max(0, procedurePrice - downPayment),
-        downPaymentMethod: meta.downPaymentMethod || "pix",
+        downPaymentMethod: meta.downPaymentMethod || meta.forma || "pix",
         clientId: meta.clientId || null,
         patientName: meta.patientName || null,
       };
@@ -345,6 +383,15 @@ function normalizeFinancialSnapshot(
     if (!existingTitleIds.has(bt.id) && !deletedTitleIds.has(bt.id)) {
       mergedTitles.push(bt);
       existingTitleIds.add(bt.id);
+    }
+  });
+
+  // 1b. Merge títulos locais armazenados (localStorage)
+  const localTitles = getLocalTitles();
+  localTitles.forEach((lt) => {
+    if (!deletedTitleIds.has(lt.id) && !existingTitleIds.has(lt.id)) {
+      mergedTitles.push(lt);
+      existingTitleIds.add(lt.id);
     }
   });
 
@@ -387,20 +434,40 @@ function normalizeFinancialSnapshot(
     const eventStartsAt = event.starts_at || new Date().toISOString();
     const eventDateStr = eventStartsAt.slice(0, 10);
     const eventCompStr = eventStartsAt.slice(0, 7) + "-01";
+
+    // O sinal é pago no momento do agendamento (hoje/data de criação)
+    const bookingDateStr = event.created_at
+      ? event.created_at.slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
+    const signalPaidDate = eventDateStr <= bookingDateStr ? eventDateStr : bookingDateStr;
+
     const patientName =
       fMeta.patientName ||
-      (event.title ? event.title.split("-")[0]?.trim() : "") ||
+      event.patient_name ||
+      (event.title && event.title.includes("-") ? event.title.split("-")[0]?.trim() : "") ||
+      (event.title && !["agendamento", "atendimento", "consulta"].includes(event.title.trim().toLowerCase()) ? event.title.trim() : "") ||
       "Paciente";
+
+    const titleDescription = event.title
+      ? (event.title.includes(" - ") ? event.title : `${event.title} - ${patientName}`)
+      : `Atendimento - ${patientName}`;
 
     // Verifica se o título já existe em raw.titles ou mergedTitles
     const existingTitle = mergedTitles.find(
       (t) =>
         t.origin_key === `event:${event.id}` ||
         t.id === `evt-${event.id}` ||
-        t.id === event.id,
+        t.id === event.id ||
+        (t.origin_key && t.origin_key.includes(event.id)),
     );
 
     if (existingTitle) {
+      if (patientName && (!existingTitle.patient_name || existingTitle.patient_name === "Paciente" || existingTitle.patient_name === "Cliente")) {
+        existingTitle.patient_name = patientName;
+      }
+      if (patientName && (!existingTitle.payer_name || existingTitle.payer_name === "Paciente" || existingTitle.payer_name === "Cliente")) {
+        existingTitle.payer_name = patientName;
+      }
       // Se houver sinal pago e o título ainda constar com paid_amount menor que o sinal
       if (down > 0 && (Number(existingTitle.paid_amount) || 0) < down) {
         existingTitle.paid_amount = down;
@@ -408,7 +475,7 @@ function normalizeFinancialSnapshot(
           existingTitle.status = "pago";
         }
       }
-      // Garante que o pagamento do sinal esteja registrado no fluxo de caixa
+      // Garante que o pagamento do sinal esteja registrado no fluxo de caixa com a data correta
       if (down > 0 && !existingTxPaymentIds.has(existingTitle.id)) {
         const payId = `pay-evt-${event.id}`;
         if (!existingPaymentIds.has(payId) && !deletedTitleIds.has(payId)) {
@@ -416,9 +483,9 @@ function normalizeFinancialSnapshot(
             id: payId,
             transaction_id: existingTitle.id,
             amount: down,
-            paid_on: existingTitle.date || existingTitle.due_date || eventDateStr,
+            paid_on: signalPaidDate,
             payment_method: (fMeta.downPaymentMethod || "PIX").toUpperCase(),
-            account_id: raw.accounts[0]?.id || "acc-bb",
+            account_id: raw.accounts[0]?.id || "00000000-0000-0000-0000-000000000001",
             payer_name: existingTitle.patient_name || patientName,
             created_by: null,
             created_at: eventStartsAt,
@@ -442,10 +509,10 @@ function normalizeFinancialSnapshot(
           amount: total,
           paid_amount: down,
           due_date: eventDateStr,
-          date: eventDateStr,
+          date: signalPaidDate,
           competence_date: eventCompStr,
           status: down >= total && total > 0 ? "pago" : "pendente",
-          description: event.title || `Atendimento - ${patientName}`,
+          description: titleDescription,
           category: "Atendimentos",
           patient_id: event.patient_id || fMeta.clientId || null,
           patient_name: patientName,
@@ -468,9 +535,9 @@ function normalizeFinancialSnapshot(
               id: payId,
               transaction_id: evtTitleId,
               amount: down,
-              paid_on: eventDateStr,
+              paid_on: signalPaidDate,
               payment_method: (fMeta.downPaymentMethod || "PIX").toUpperCase(),
-              account_id: raw.accounts[0]?.id || "acc-bb",
+              account_id: raw.accounts[0]?.id || "00000000-0000-0000-0000-000000000001",
               payer_name: patientName,
               created_by: null,
               created_at: eventStartsAt,
@@ -517,7 +584,7 @@ function normalizeFinancialSnapshot(
         amount: t.paid_amount > 0 ? t.paid_amount : t.amount,
         paid_on: t.date || t.due_date || "2026-09-15",
         payment_method: "PIX",
-        account_id: raw.accounts[0]?.id || "acc-bb",
+        account_id: raw.accounts[0]?.id || "00000000-0000-0000-0000-000000000001",
         payer_name: t.patient_name || t.payer_name || "Cliente",
         created_by: null,
         created_at: new Date().toISOString(),
@@ -580,8 +647,8 @@ export async function getFinancialSnapshot(): Promise<FinanceSnapshot> {
   try {
     const { data: evts } = await supabase
       .from("events")
-      .select("id, title, starts_at, description, patient_id, company_id")
-      .ilike("description", "%AGENDAMENTO_META%")
+      .select("id, title, starts_at, description, patient_id, company_id, created_at")
+      .order("starts_at", { ascending: false })
       .limit(100);
     if (evts && Array.isArray(evts)) {
       remoteEvents = evts;
@@ -595,6 +662,40 @@ export async function getFinancialSnapshot(): Promise<FinanceSnapshot> {
     scopes: [],
     patients: [],
   };
+
+  // Se o snapshot remoto estiver vazio (ex: RPC indisponível ou RLS restrito), busca diretamente em public.transactions
+  if (!raw.titles.length) {
+    try {
+      const { data: txList } = await supabase
+        .from("transactions")
+        .select("id, type, amount, paid_amount, due_date, date, status, description, category, patient_id, payer_name, company_id, treatment_id, installment_id, competence_date, origin_key")
+        .is("deleted_at", null)
+        .order("date", { ascending: false })
+        .limit(100);
+      if (txList && Array.isArray(txList)) {
+        raw.titles = txList.map((t: any) => ({
+          ...t,
+          can_settle: true,
+          can_reverse: true,
+          can_cancel: true,
+        }));
+      }
+    } catch {}
+  }
+
+  if (!raw.payments.length) {
+    try {
+      const { data: payList } = await supabase
+        .from("transaction_payments")
+        .select("id, transaction_id, amount, paid_on, payment_method, account_id, payer_name, created_by, created_at, legacy, reversed_at, reversed_by, reversal_reason")
+        .is("reversed_at", null)
+        .order("paid_on", { ascending: false })
+        .limit(100);
+      if (payList && Array.isArray(payList)) {
+        raw.payments = payList;
+      }
+    } catch {}
+  }
 
   return normalizeFinancialSnapshot(raw, remoteEvents);
 }

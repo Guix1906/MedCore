@@ -35,7 +35,7 @@ type MemberOpt = {
 type IdOpt = { id: string };
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { refreshFinance } from "@/features/finance/finance-api";
+import { refreshFinance, saveLocalFinancialTitle, saveLocalPayment } from "@/features/finance/finance-api";
 import { errorMessage } from "@/features/acompanhamentos/followup-utils";
 import { patientsService, companyService, agendaService } from "@/services/api";
 import { PatientModal } from "@/components/pacientes/PatientModal";
@@ -992,6 +992,7 @@ export function NovoAgendamentoDialog({
       const insertedId = crypto.randomUUID();
 
       // 1. Salva imediatamente na camada local ultra-rápida (0ms de latência)
+      const clientDisplayName = selectedClient?.name || selectedClientObj?.name || "Paciente";
       saveStoredLocalEvent(
         {
           id: insertedId,
@@ -1003,9 +1004,55 @@ export function NovoAgendamentoDialog({
           location,
           assigned_to: finalAssignedTo || null,
           case_id: caseId || null,
-        },
+          patient_id: validPatientId || clientId || null,
+          patient_name: clientDisplayName,
+        } as any,
         validCompanyId,
       );
+
+      // Salva título financeiro e sinal localmente para disponibilidade imediata (0ms)
+      if (type === "atendimento" && !isIncludedInPlan && (totalAmt > 0 || sinalAmt > 0)) {
+        saveLocalFinancialTitle({
+          id: `evt-${insertedId}`,
+          type: "receita",
+          amount: totalAmt > 0 ? totalAmt : sinalAmt,
+          paid_amount: sinalAmt,
+          due_date: day,
+          date: todayStr,
+          competence_date: day.slice(0, 7) + "-01",
+          status: sinalAmt >= totalAmt && totalAmt > 0 ? "pago" : "pendente",
+          description: finalTitle,
+          category: "Atendimentos",
+          patient_id: validPatientId || clientId || null,
+          patient_name: clientDisplayName,
+          payer_name: clientDisplayName,
+          company_id: validCompanyId || null,
+          treatment_id: null,
+          installment_id: null,
+          origin_key: `event:${insertedId}`,
+          can_settle: true,
+          can_reverse: true,
+          can_cancel: true,
+        });
+
+        if (sinalAmt > 0) {
+          saveLocalPayment({
+            id: `pay-evt-${insertedId}`,
+            transaction_id: `evt-${insertedId}`,
+            amount: sinalAmt,
+            paid_on: todayStr,
+            payment_method: (downPaymentMethod || "pix").toUpperCase(),
+            account_id: "00000000-0000-0000-0000-000000000001",
+            payer_name: clientDisplayName,
+            created_by: null,
+            created_at: new Date().toISOString(),
+            legacy: false,
+            reversed_at: null,
+            reversed_by: null,
+            reversal_reason: null,
+          });
+        }
+      }
 
       // Atualiza o financeiro imediatamente no cache local
       void refreshFinance(qc);
@@ -1063,7 +1110,41 @@ export function NovoAgendamentoDialog({
                     p_due_date: day,
                   },
                 );
-                if (titleErr) throw titleErr;
+
+                if (titleErr) {
+                  // Fallback direto inserindo na tabela transactions do Supabase
+                  const directTitleId = crypto.randomUUID();
+                  const { error: directErr } = await supabase.from("transactions").insert({
+                    id: directTitleId,
+                    type: "receita",
+                    amount: totalAmt > 0 ? totalAmt : sinalAmt,
+                    paid_amount: sinalAmt,
+                    date: todayStr,
+                    due_date: day,
+                    competence_date: day.slice(0, 7) + "-01",
+                    status: sinalAmt >= totalAmt && totalAmt > 0 ? "pago" : "pendente",
+                    description: finalTitle,
+                    category: "Atendimentos",
+                    origin_key: `event:${insertedId}`,
+                    patient_id: validPatientId || null,
+                    payer_name: clientDisplayName,
+                    company_id: validCompanyId || null,
+                    created_by: remoteCreatedBy || null,
+                  });
+
+                  if (!directErr && sinalAmt > 0) {
+                    await supabase.from("transaction_payments").insert({
+                      id: crypto.randomUUID(),
+                      transaction_id: directTitleId,
+                      amount: sinalAmt,
+                      paid_on: todayStr,
+                      payment_method: (downPaymentMethod || "pix").toUpperCase(),
+                      account_id: "00000000-0000-0000-0000-000000000001",
+                      payer_name: clientDisplayName,
+                      created_by: remoteCreatedBy || null,
+                    });
+                  }
+                }
               }
             } catch (finErr) {
               console.warn("Aviso ao gerar cobrança do agendamento no Supabase:", finErr);
