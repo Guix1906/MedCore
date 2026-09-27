@@ -854,35 +854,52 @@ function DashboardPage() {
                         ? `${a.date.slice(8, 10)}/${a.date.slice(5, 7)}`
                         : "";
                     return (
-                      <li
-                        key={a.id}
-                        className="flex items-center gap-3 rounded-xl border border-border-soft bg-card px-3 py-2.5"
-                        style={{ borderLeftColor: accent, borderLeftWidth: 3 }}
-                      >
-                        <span
-                          className="size-2.5 shrink-0 rounded-full"
-                          style={{ backgroundColor: accent }}
-                          aria-hidden="true"
-                        />
-                        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
-                          {name}
-                        </span>
-                        <span className="shrink-0 flex items-center gap-1.5 text-xs font-medium tabular-nums text-muted-foreground">
-                          {dateBadge && (
-                            <span
-                              className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
-                                isToday
-                                  ? "bg-primary/10 text-primary"
-                                  : "bg-muted text-muted-foreground"
-                              }`}
-                            >
-                              {dateBadge}
-                            </span>
-                          )}
-                          <span>
-                            {a.start_time} - {a.end_time}
+                      <li key={a.id}>
+                        <Link
+                          to="/agenda"
+                          className="group flex items-center gap-3 rounded-xl px-3.5 py-2.5 transition-all duration-150 hover:shadow-xs hover:brightness-[0.98] dark:hover:brightness-110 cursor-pointer"
+                          style={{
+                            background: `linear-gradient(90deg, color-mix(in srgb, ${accent} 20%, var(--card)) 0%, color-mix(in srgb, ${accent} 10%, var(--card)) 100%)`,
+                            borderColor: `color-mix(in srgb, ${accent} 35%, transparent)`,
+                            borderWidth: 1,
+                            borderStyle: "solid",
+                            borderLeftColor: accent,
+                            borderLeftWidth: "4px",
+                          }}
+                        >
+                          <span
+                            className="size-2.5 shrink-0 rounded-full shadow-2xs ring-2 ring-white/80 dark:ring-black/40"
+                            style={{ backgroundColor: accent }}
+                            aria-hidden="true"
+                          />
+                          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
+                            {name}
                           </span>
-                        </span>
+                          <span className="shrink-0 flex items-center gap-2 text-xs font-medium tabular-nums">
+                            {dateBadge && (
+                              <span
+                                className="rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                                style={{
+                                  backgroundColor: isToday
+                                    ? `color-mix(in srgb, ${accent} 30%, var(--card))`
+                                    : `color-mix(in srgb, ${accent} 18%, var(--card))`,
+                                  borderColor: `color-mix(in srgb, ${accent} 40%, transparent)`,
+                                  borderWidth: 1,
+                                  borderStyle: "solid",
+                                  color: "var(--foreground)",
+                                }}
+                              >
+                                {dateBadge}
+                              </span>
+                            )}
+                            <span className="flex items-center gap-1 font-semibold text-foreground/80">
+                              <Clock className="size-3 text-foreground/60 shrink-0" />
+                              <span>
+                                {a.start_time} - {a.end_time}
+                              </span>
+                            </span>
+                          </span>
+                        </Link>
                       </li>
                     );
                   })}
