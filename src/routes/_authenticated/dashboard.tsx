@@ -129,31 +129,31 @@ function DashboardPage() {
   const [range, setRange] = useState<[Date, Date]>(initialRange());
   const [showBalance, setShowBalance] = useState(true);
   const [reportTab, setReportTab] = useState<"prof" | "type" | "insurance" | "cat">("prof");
+  const [financeVersion, setFinanceVersion] = useState(0);
 
   // Sincronização em tempo real do financeiro, agendamentos e pacientes
   useEffect(() => {
     // 1. Escuta alterações no localStorage (exclusão, estorno, novos agendamentos e lançamentos)
     const handleStorage = (e: StorageEvent) => {
-      if (
-        e.key === "medcore_deleted_cash_entries" ||
-        e.key === "medcore_deleted_titles" ||
-        e.key === "medcore_local_payments" ||
-        e.key === "medcore_local_titles" ||
-        e.key === "medcore_local_events" ||
-        e.key === "medcore_local_patients"
-      ) {
-        void qc.invalidateQueries({ queryKey: ["financial-snapshot"] });
-        void qc.invalidateQueries({ queryKey: ["dashboard", "events-appointments"] });
-        void qc.invalidateQueries({ queryKey: ["dashboard", "patients"] });
+      if (!e.key || e.key.startsWith("medcore_")) {
+        setFinanceVersion((v) => v + 1);
+        void qc.invalidateQueries({ queryKey: ["financial-snapshot"], refetchType: "all" });
+        void qc.invalidateQueries({ queryKey: ["cash-flow-snapshot"], refetchType: "all" });
+        void qc.invalidateQueries({ queryKey: ["dashboard"], refetchType: "all" });
+        void qc.invalidateQueries({ queryKey: ["dashboard", "events-appointments"], refetchType: "all" });
+        void qc.invalidateQueries({ queryKey: ["dashboard", "patients"], refetchType: "all" });
       }
     };
     window.addEventListener("storage", handleStorage);
 
     // 2. Escuta eventos customizados disparados nas telas do sistema
     const handleCustomEvents = () => {
-      void qc.invalidateQueries({ queryKey: ["financial-snapshot"] });
-      void qc.invalidateQueries({ queryKey: ["dashboard", "events-appointments"] });
-      void qc.invalidateQueries({ queryKey: ["dashboard", "patients"] });
+      setFinanceVersion((v) => v + 1);
+      void qc.invalidateQueries({ queryKey: ["financial-snapshot"], refetchType: "all" });
+      void qc.invalidateQueries({ queryKey: ["cash-flow-snapshot"], refetchType: "all" });
+      void qc.invalidateQueries({ queryKey: ["dashboard"], refetchType: "all" });
+      void qc.invalidateQueries({ queryKey: ["dashboard", "events-appointments"], refetchType: "all" });
+      void qc.invalidateQueries({ queryKey: ["dashboard", "patients"], refetchType: "all" });
     };
     window.addEventListener("medcore_events_updated", handleCustomEvents);
     window.addEventListener("medcore_local_title_saved", handleCustomEvents);
@@ -163,12 +163,15 @@ function DashboardPage() {
     const ch = supabase
       .channel("dashboard-financial-sync")
       .on("postgres_changes", { event: "*", schema: "public", table: "financial_titles" }, () => {
+        setFinanceVersion((v) => v + 1);
         void refreshFinance(qc);
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "financial_payments" }, () => {
+        setFinanceVersion((v) => v + 1);
         void refreshFinance(qc);
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "events" }, () => {
+        setFinanceVersion((v) => v + 1);
         void qc.invalidateQueries({ queryKey: ["dashboard", "events-appointments"] });
         void refreshFinance(qc);
       })
@@ -312,6 +315,8 @@ function DashboardPage() {
     queryKey: ["financial-snapshot"],
     queryFn: getFinancialSnapshot,
     staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
     refetchOnWindowFocus: true,
   });
 
@@ -337,7 +342,7 @@ function DashboardPage() {
   const tx: DashboardTx[] = useMemo(() => {
     if (!financeQ.data) return [];
     return reportingRows(financeQ.data);
-  }, [financeQ.data]);
+  }, [financeQ.data, financeVersion]);
   const doctors = doctorsQ.data ?? [];
   const loading =
     apptsQ.isLoading || patientsQ.isLoading || financeQ.isLoading || doctorsQ.isLoading;

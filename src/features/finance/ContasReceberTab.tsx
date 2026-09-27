@@ -42,7 +42,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { CountUp } from "@/components/finance/CountUp";
 import { currency, formatClinicalDate } from "@/features/acompanhamentos/followup-utils";
-import { remaining, isFreeBalance } from "./finance-math";
+import { remaining, isFreeBalance, isTitleDeleted, getDeletedFinanceIds } from "./finance-math";
 import { extractEventId } from "./finance-api";
 import type { FinanceSnapshot, FinancialTitle } from "./finance-schema";
 import { supabase } from "@/integrations/supabase/client";
@@ -101,30 +101,9 @@ export function ContasReceberTab({
 
   // Filtra todas as receitas ativas
   const receitas = useMemo(() => {
-    let deleted = new Set<string>();
-    if (typeof window !== "undefined" && window.localStorage) {
-      try {
-        const d1 = JSON.parse(localStorage.getItem("medcore_deleted_titles") || "[]");
-        const d2 = JSON.parse(localStorage.getItem("medcore_deleted_cash_entries") || "[]");
-        if (Array.isArray(d1)) d1.forEach((id) => deleted.add(id));
-        if (Array.isArray(d2)) d2.forEach((id) => deleted.add(id));
-      } catch {}
-    }
+    const deleted = getDeletedFinanceIds();
     return (finance?.titles || []).filter((t) => {
-      if (t.status === "cancelado" || deleted.has(t.id) || isRecordWiped(t)) return false;
-      if (t.origin_key && deleted.has(t.origin_key)) return false;
-      const evId = extractEventId(t.origin_key) || extractEventId(t.id);
-      if (evId) {
-        if (
-          deleted.has(evId) ||
-          deleted.has(`event:${evId}`) ||
-          deleted.has(`evt-${evId}`) ||
-          deleted.has(`evt-${evId}-remaining`) ||
-          deleted.has(`pay-evt-${evId}`)
-        ) {
-          return false;
-        }
-      }
+      if (t.status === "cancelado" || isTitleDeleted(t, deleted)) return false;
       return t.type === "receita";
     });
   }, [finance?.titles]);

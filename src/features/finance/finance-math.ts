@@ -1,4 +1,4 @@
-import type { FinanceSnapshot, FinancialTitle } from "./finance-schema";
+import type { FinanceSnapshot, FinancialTitle, FinancialPayment } from "./finance-schema";
 import { isRecordWiped } from "@/lib/wipe-system";
 
 export const cents = (value: number | string | null | undefined): number => {
@@ -40,6 +40,126 @@ export function titleStatus(title: FinancialTitle, today: string) {
   return (Number(title.paid_amount) || 0) > 0 ? "Parcial" : "A vencer";
 }
 
+export function extractEventId(str: string | null | undefined): string | null {
+  if (!str || typeof str !== "string") return null;
+  const s = str.trim();
+  if (s.startsWith("event:")) return s.slice(6).replace(/-downpayment$|-remaining$/, "").trim();
+  if (s.startsWith("pay-evt-")) return s.slice(8).replace(/-downpayment$|-remaining$/, "").trim();
+  if (s.startsWith("evt-")) return s.slice(4).replace(/-downpayment$|-remaining$/, "").trim();
+  if (s.startsWith("title-pay-evt-")) return s.slice(14).replace(/-downpayment$|-remaining$/, "").trim();
+  if (s.startsWith("title-pay-")) {
+    const rest = s.slice(10).trim();
+    if (rest.startsWith("evt-")) return rest.slice(4).replace(/-downpayment$|-remaining$/, "").trim();
+    return null;
+  }
+  if (s.startsWith("syn-pay-evt-")) return s.slice(12).replace(/-downpayment$|-remaining$/, "").trim();
+  if (s.startsWith("syn-pay-")) {
+    const rest = s.slice(8).trim();
+    if (rest.startsWith("evt-")) return rest.slice(4).replace(/-downpayment$|-remaining$/, "").trim();
+    return null;
+  }
+  return null;
+}
+
+export function getDeletedFinanceIds(): Set<string> {
+  const deleted = new Set<string>();
+  if (typeof window === "undefined" || !window.localStorage) return deleted;
+  try {
+    const rawCash = localStorage.getItem("medcore_deleted_cash_entries");
+    if (rawCash) {
+      const parsed = JSON.parse(rawCash);
+      if (Array.isArray(parsed)) parsed.forEach((id) => id && deleted.add(String(id)));
+    }
+    const rawTitles = localStorage.getItem("medcore_deleted_titles");
+    if (rawTitles) {
+      const parsed = JSON.parse(rawTitles);
+      if (Array.isArray(parsed)) parsed.forEach((id) => id && deleted.add(String(id)));
+    }
+  } catch {}
+
+  const expanded = new Set<string>(deleted);
+  deleted.forEach((id) => {
+    if (!id || typeof id !== "string") return;
+    const evId = extractEventId(id);
+    if (evId) {
+      expanded.add(evId);
+      expanded.add(`event:${evId}`);
+      expanded.add(`evt-${evId}`);
+      expanded.add(`evt-${evId}-downpayment`);
+      expanded.add(`evt-${evId}-remaining`);
+      expanded.add(`pay-evt-${evId}`);
+      expanded.add(`title-pay-evt-${evId}`);
+      expanded.add(`syn-pay-evt-${evId}`);
+    }
+    if (id.startsWith("title-pay-")) {
+      expanded.add(id.slice(10));
+    } else {
+      expanded.add(`title-pay-${id}`);
+    }
+    if (id.startsWith("pay-evt-")) {
+      expanded.add(id.slice(8));
+    }
+  });
+
+  return expanded;
+}
+
+export function isTitleDeleted(
+  title: FinancialTitle | undefined | null,
+  deletedIds?: Set<string>,
+): boolean {
+  if (!title) return true;
+  if (isRecordWiped(title)) return true;
+  const set = deletedIds || getDeletedFinanceIds();
+  if (set.has(title.id)) return true;
+  if (title.origin_key && set.has(title.origin_key)) return true;
+  if (set.has(`title-pay-${title.id}`)) return true;
+
+  const evId = extractEventId(title.origin_key) || extractEventId(title.id);
+  if (evId) {
+    if (
+      set.has(evId) ||
+      set.has(`event:${evId}`) ||
+      set.has(`evt-${evId}`) ||
+      set.has(`pay-evt-${evId}`) ||
+      set.has(`evt-${evId}-downpayment`) ||
+      set.has(`evt-${evId}-remaining`)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function isPaymentDeleted(
+  payment: FinancialPayment | undefined | null,
+  deletedIds?: Set<string>,
+): boolean {
+  if (!payment) return true;
+  if (isRecordWiped(payment)) return true;
+  const set = deletedIds || getDeletedFinanceIds();
+  if (set.has(payment.id)) return true;
+  if (payment.transaction_id) {
+    if (set.has(payment.transaction_id)) return true;
+    if (set.has(`title-pay-${payment.transaction_id}`)) return true;
+  }
+
+  const evId = extractEventId(payment.id) || extractEventId(payment.transaction_id);
+  if (evId) {
+    if (
+      set.has(evId) ||
+      set.has(`event:${evId}`) ||
+      set.has(`evt-${evId}`) ||
+      set.has(`pay-evt-${evId}`) ||
+      set.has(`evt-${evId}-downpayment`) ||
+      set.has(`evt-${evId}-remaining`)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function financialSummary(
   data: FinanceSnapshot,
   titles: FinancialTitle[],
@@ -47,24 +167,25 @@ export function financialSummary(
   end: string,
   accountId = "",
 ) {
+  const deletedIds = getDeletedFinanceIds();
   const within = (date?: string | null) => (!date ? false : (!start || date >= start) && (!end || date <= end));
-  const safeTitles = (Array.isArray(titles) ? titles : []).filter((t) => !isRecordWiped(t));
-  const safePayments = (Array.isArray(data?.payments) ? data.payments : []).filter((p) => !isRecordWiped(p));
+  const safeTitles = (Array.isArray(titles) ? titles : []).filter((t) => !isTitleDeleted(t, deletedIds));
+  const safePayments = (Array.isArray(data?.payments) ? data.payments : []).filter((p) => !isPaymentDeleted(p, deletedIds));
   const byId = new Map(safeTitles.map((t) => [t.id, t]));
   let income = 0,
     expense = 0,
     receivable = 0,
     payable = 0;
   for (const p of safePayments) {
-    if (!p || isRecordWiped(p)) continue;
+    if (!p || isPaymentDeleted(p, deletedIds)) continue;
     const title = byId.get(p.transaction_id);
-    if (!title || title.status === "cancelado" || isRecordWiped(title) || p.reversed_at || !within(p.paid_on) || (accountId && p.account_id !== accountId))
+    if (!title || title.status === "cancelado" || isTitleDeleted(title, deletedIds) || p.reversed_at || !within(p.paid_on) || (accountId && p.account_id !== accountId))
       continue;
     if (title.type === "receita") income += cents(p.amount);
     else expense += cents(p.amount);
   }
   for (const t of safeTitles) {
-    if (!t || t.status === "cancelado" || isRecordWiped(t)) continue;
+    if (!t || t.status === "cancelado" || isTitleDeleted(t, deletedIds)) continue;
     if (isFreeBalance(t)) {
       // Saldo livre compõe o total a receber da clínica, mas não é projetado em um mês específico quando há filtro de período (start/end)
       if (start || end) continue;
@@ -87,34 +208,13 @@ export function financialSummary(
 
 // Reporting rows represent either an actual payment or the unpaid balance, never the full title twice.
 export function reportingRows(data: FinanceSnapshot) {
-  let deletedIds = new Set<string>();
-  if (typeof window !== "undefined" && window.localStorage) {
-    try {
-      const rawCash = localStorage.getItem("medcore_deleted_cash_entries");
-      if (rawCash) {
-        const parsed = JSON.parse(rawCash);
-        if (Array.isArray(parsed)) {
-          parsed.forEach((id) => deletedIds.add(id));
-        }
-      }
-      const rawTitles = localStorage.getItem("medcore_deleted_titles");
-      if (rawTitles) {
-        const parsed = JSON.parse(rawTitles);
-        if (Array.isArray(parsed)) {
-          parsed.forEach((id) => deletedIds.add(id));
-        }
-      }
-    } catch {}
-  }
+  const deletedIds = getDeletedFinanceIds();
 
   const safeTitles = (Array.isArray(data?.titles) ? data.titles : []).filter(
-    (t) => !isRecordWiped(t) && !deletedIds.has(t.id),
+    (t) => !isTitleDeleted(t, deletedIds),
   );
   const safePayments = (Array.isArray(data?.payments) ? data.payments : []).filter(
-    (p) =>
-      !isRecordWiped(p) &&
-      !deletedIds.has(p.id) &&
-      !deletedIds.has(p.transaction_id),
+    (p) => !isPaymentDeleted(p, deletedIds),
   );
 
   const byId = new Map(safeTitles.map((t) => [t.id, t]));
@@ -122,8 +222,9 @@ export function reportingRows(data: FinanceSnapshot) {
 
   const paid = safePayments
     .filter((p) => {
-      if (!p || p.reversed_at || isRecordWiped(p)) return false;
-      if (deletedIds.has(p.id) || deletedIds.has(p.transaction_id)) return false;
+      if (!p || p.reversed_at || isPaymentDeleted(p, deletedIds)) return false;
+      const t = byId.get(p.transaction_id);
+      if (t && isTitleDeleted(t, deletedIds)) return false;
       return true;
     })
     .map((p) => {
@@ -143,7 +244,7 @@ export function reportingRows(data: FinanceSnapshot) {
 
   const syntheticPaid: any[] = [];
   safeTitles.forEach((t) => {
-    if (!t || isRecordWiped(t) || deletedIds.has(t.id) || deletedIds.has(`title-pay-${t.id}`)) return;
+    if (!t || isTitleDeleted(t, deletedIds)) return;
     if (t.status === "cancelado") return;
     const isAgendamento =
       Boolean(t.origin_key && t.origin_key.startsWith("event:")) ||
@@ -169,7 +270,7 @@ export function reportingRows(data: FinanceSnapshot) {
 
   const pending = safeTitles
     .filter((t) => {
-      if (isRecordWiped(t) || deletedIds.has(t.id) || deletedIds.has(`title-pay-${t.id}`)) return false;
+      if (isTitleDeleted(t, deletedIds)) return false;
       if (t.status === "cancelado") return false;
       return remaining(t) > 0;
     })

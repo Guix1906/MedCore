@@ -103,10 +103,13 @@ export function isIdSuppressed(id: string): boolean {
   if (typeof window === "undefined" || !window.localStorage || !id) return false;
   try {
     const cleanId = String(id)
+      .replace(/^event:/, "")
       .replace(/^evt-/, "")
       .replace(/^pay-evt-/, "")
       .replace(/^title-pay-/, "")
-      .replace(/^syn-pay-/, "");
+      .replace(/^syn-pay-/, "")
+      .replace(/-remaining$/, "")
+      .replace(/-downpayment$/, "");
 
     // Check deleted titles
     const rawTitles = localStorage.getItem(STORAGE_KEY_DELETED_TITLES);

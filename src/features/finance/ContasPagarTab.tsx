@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { CountUp } from "@/components/finance/CountUp";
 import { currency, formatClinicalDate } from "@/features/acompanhamentos/followup-utils";
-import { remaining } from "./finance-math";
+import { remaining, isTitleDeleted, getDeletedFinanceIds } from "./finance-math";
 import type { FinanceSnapshot, FinancialTitle } from "./finance-schema";
 import { isRecordWiped } from "@/lib/wipe-system";
 import { cn } from "@/lib/utils";
@@ -51,18 +51,9 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
 
   // Filtra todas as despesas ativas do sistema
   const despesas = useMemo(() => {
-    let deleted = new Set<string>();
-    if (typeof window !== "undefined" && window.localStorage) {
-      try {
-        const d1 = JSON.parse(localStorage.getItem("medcore_deleted_titles") || "[]");
-        const d2 = JSON.parse(localStorage.getItem("medcore_deleted_cash_entries") || "[]");
-        if (Array.isArray(d1)) d1.forEach((id) => deleted.add(String(id)));
-        if (Array.isArray(d2)) d2.forEach((id) => deleted.add(String(id)));
-      } catch {}
-    }
+    const deleted = getDeletedFinanceIds();
     return (finance?.titles || []).filter((t) => {
-      if (t.status === "cancelado" || deleted.has(t.id) || isRecordWiped(t)) return false;
-      if (t.origin_key && deleted.has(t.origin_key)) return false;
+      if (t.status === "cancelado" || isTitleDeleted(t, deleted)) return false;
       return t.type === "despesa";
     });
   }, [finance?.titles]);

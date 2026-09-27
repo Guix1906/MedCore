@@ -222,6 +222,14 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
             if (t.origin_key) idsToDelete.add(t.origin_key);
           }
         });
+
+        (finance?.payments || []).forEach((p) => {
+          const pEv = extractEventId(p.id) || extractEventId(p.transaction_id);
+          if (pEv === evId || idsToDelete.has(p.transaction_id)) {
+            idsToDelete.add(p.id);
+            if (p.transaction_id) idsToDelete.add(p.transaction_id);
+          }
+        });
       }
 
       // 2. Tenta estornar o pagamento se for um pagamento real no Supabase
@@ -382,6 +390,14 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
             if (tEv === evId) {
               idsToDelete.add(t.id);
               if (t.origin_key) idsToDelete.add(t.origin_key);
+            }
+          });
+
+          (finance?.payments || []).forEach((p) => {
+            const pEv = extractEventId(p.id) || extractEventId(p.transaction_id);
+            if (pEv === evId || idsToDelete.has(p.transaction_id)) {
+              idsToDelete.add(p.id);
+              if (p.transaction_id) idsToDelete.add(p.transaction_id);
             }
           });
         }
