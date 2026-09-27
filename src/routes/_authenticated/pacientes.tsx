@@ -218,7 +218,9 @@ function PacientesPage() {
         const { data, error } = await supabase.rpc("delete_patient", { p_id: patient.id });
         if (error) {
           const isMissingRpc =
+            error.code === "PGRST202" ||
             error.code === "42883" ||
+            error.message?.includes("schema cache") ||
             (error.message?.includes("function") && error.message?.includes("does not exist"));
           if (!isMissingRpc) {
             throw error;
@@ -230,21 +232,51 @@ function PacientesPage() {
         }
       } catch (err: any) {
         const isMissingRpc =
+          err?.code === "PGRST202" ||
           err?.code === "42883" ||
+          err?.message?.includes("schema cache") ||
           (err?.message?.includes("function") && err?.message?.includes("does not exist"));
         if (!isMissingRpc) {
           throw err;
         }
       }
 
-      // 2. Fallback backend PHP se RPC não estiver disponível
+      // 2. Fallback: se a RPC ainda não estiver instalada no Supabase, limpa dependências e exclui
       if (!rpcExecuted) {
-        let deletedOnService = false;
+        try {
+          await supabase.from("tasks").delete().eq("patient_id", patient.id);
+        } catch {}
+        try {
+          await supabase.from("patient_pipeline_history").delete().eq("patient_id", patient.id);
+        } catch {}
+        try {
+          await supabase.from("patient_tags").delete().eq("patient_id", patient.id);
+        } catch {}
+        try {
+          await supabase.from("waitlist").delete().eq("patient_id", patient.id);
+        } catch {}
+        try {
+          await supabase.from("vital_signs").delete().eq("patient_id", patient.id);
+        } catch {}
+        try {
+          await supabase.from("exam_orders").delete().eq("patient_id", patient.id);
+        } catch {}
+        try {
+          await supabase.from("prescriptions").delete().eq("patient_id", patient.id);
+        } catch {}
+        try {
+          await supabase.from("medical_records").delete().eq("patient_id", patient.id);
+        } catch {}
+        try {
+          await supabase.from("appointments").delete().eq("patient_id", patient.id);
+        } catch {}
+        try {
+          await supabase.from("events").delete().eq("patient_id", patient.id);
+        } catch {}
+
         try {
           await patientsService.deletePatient(patient.id);
-          deletedOnService = true;
         } catch {
-          // 3. Fallback exclusão direta Supabase
           const { error } = await supabase.from("patients").delete().eq("id", patient.id);
           if (error && !error.message?.includes("not found")) {
             throw error;
