@@ -1,6 +1,21 @@
-import { useMemo } from "react";
-import { format, parseISO } from "date-fns";
+import { useState, useMemo } from "react";
+import {
+  format,
+  parseISO,
+  startOfWeek,
+  endOfWeek,
+  startOfMonth,
+  endOfMonth,
+  startOfYear,
+  endOfYear,
+} from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { Calendar as CalendarIcon, Filter, Check } from "lucide-react";
 import { Chart, CHART_COLORS } from "@/components/ds/Chart";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import { SegmentedControl } from "@/components/ui-app/SegmentedControl";
 
 // ============================================================================
 // Tipagens
@@ -17,39 +32,87 @@ export interface LancamentoFluxo {
 
 export interface DayChartPoint {
   date: string; // "dd/MM/yyyy"
+  iso?: string; // "yyyy-MM-dd"
   entradas: number; // Total recebido no dia
   saidas: number; // Total pago no dia
   aReceber?: number; // Total previsto a receber
   saldo: number; // Saldo acumulado até o dia
 }
 
+export type ChartGranularity = "dia" | "semana" | "mes" | "anual";
+
 export interface GraficoFluxoDeCaixaProps {
   entries?: LancamentoFluxo[];
   // Caso já queira passar os dados agrupados diretamente:
   customChartData?: DayChartPoint[];
+  // Granularidade do gráfico (Dia, Semana, Anual):
+  granularity?: ChartGranularity;
+  onGranularityChange?: (g: ChartGranularity) => void;
+  // Período e filtros opcionais passados pelo container:
+  periodLabel?: string;
+  startDate?: string;
+  endDate?: string;
+  onDateRangeChange?: (start: string, end: string) => void;
+  onSelectPeriodPreset?: (preset: "dia" | "semana" | "mes" | "ano") => void;
 }
 
 // ============================================================================
-// Formatadores
+// Formatadores e Helpers de Data
 // ============================================================================
 const fmtBRL = (val: number): string =>
   val.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
 const compactValue = (val: number) =>
   Math.abs(val) >= 1000 ? `${Math.round(val / 1000)}k` : String(Math.round(val));
 
+function parsePointDate(point: DayChartPoint): Date {
+  if (point.iso) {
+    const p = parseISO(point.iso);
+    if (!isNaN(p.getTime())) return p;
+  }
+  if (point.date && point.date.includes("/")) {
+    const parts = point.date.split("/");
+    if (parts.length === 3) {
+      const [d, m, y] = parts;
+      const p = parseISO(`${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`);
+      if (!isNaN(p.getTime())) return p;
+    }
+  }
+  return new Date();
+}
+
 // ============================================================================
-// Componente Principal do Gráfico
+// Componente Principal do Gráfico (ApexCharts)
 // ============================================================================
-export function GraficoFluxoDeCaixa({ entries = [], customChartData }: GraficoFluxoDeCaixaProps) {
-  // Processamento e agrupamento dos lançamentos por dia (quando não passado direto)
-  const { chartData, maxVolume } = useMemo(() => {
+export function GraficoFluxoDeCaixa({
+  entries = [],
+  customChartData,
+  granularity: controlledGranularity,
+  onGranularityChange,
+  periodLabel,
+  startDate,
+  endDate,
+  onDateRangeChange,
+  onSelectPeriodPreset,
+}: GraficoFluxoDeCaixaProps) {
+  // Controle local ou controlado da granularidade (Dia, Semana, Anual)
+  const [internalGranularity, setInternalGranularity] = useState<ChartGranularity>("dia");
+  const activeGranularity = controlledGranularity ?? internalGranularity;
+
+  const handleSelectGranularity = (g: ChartGranularity) => {
+    setInternalGranularity(g);
+    onGranularityChange?.(g);
+  };
+
+  // Estado local para o popover de filtro de datas
+  const [tempStart, setTempStart] = useState(startDate || "");
+  const [tempEnd, setTempEnd] = useState(endDate || "");
+  const [popoverOpen, setPopoverOpen] = useState(false);
+
+  // 1. Processamento base dia a dia dos lançamentos
+  const baseDailyData = useMemo<DayChartPoint[]>(() => {
     if (customChartData && customChartData.length > 0) {
-      const volumes = customChartData.map((d) =>
-        Math.max(Number(d.entradas) || 0, Number(d.saidas) || 0, Math.abs(Number(d.saldo) || 0)),
-      );
-      const computedMax = volumes.length > 0 ? Math.max(...volumes, 1000) : 1000;
-      const maxVol = Number.isFinite(computedMax) && computedMax > 0 ? computedMax : 1000;
-      return { chartData: customChartData, maxVolume: maxVol };
+      return customChartData;
     }
 
     // REGRA DO FLUXO DE CAIXA: Apenas lançamentos realizados (pagos)
@@ -65,7 +128,10 @@ export function GraficoFluxoDeCaixa({ entries = [], customChartData }: GraficoFl
       return da.localeCompare(db);
     });
 
-    const dayMap = new Map<string, { entradas: number; saidas: number }>();
+    const dayMap = new Map<
+      string,
+      { label: string; entradas: number; saidas: number; aReceber: number; iso: string }
+    >();
 
     ordenados.forEach((e) => {
       const dStr = String(e.paid_at || e.due_date || "").slice(0, 10);
@@ -81,7 +147,13 @@ export function GraficoFluxoDeCaixa({ entries = [], customChartData }: GraficoFl
         label = dStr;
       }
 
-      const current = dayMap.get(label) || { entradas: 0, saidas: 0 };
+      const current = dayMap.get(label) || {
+        label,
+        entradas: 0,
+        saidas: 0,
+        aReceber: 0,
+        iso: dStr,
+      };
       const valor = Number(e.paid_amount ?? e.amount ?? 0);
 
       if (e.entry_type === "receita") {
@@ -94,57 +166,355 @@ export function GraficoFluxoDeCaixa({ entries = [], customChartData }: GraficoFl
     });
 
     let runningSaldo = 0;
-    const days: DayChartPoint[] = Array.from(dayMap.entries()).map(([date, vals]) => {
+    return Array.from(dayMap.values()).map((vals) => {
       runningSaldo += vals.entradas - vals.saidas;
       return {
-        date,
+        date: vals.label,
+        iso: vals.iso,
         entradas: vals.entradas,
         saidas: vals.saidas,
+        aReceber: vals.aReceber,
         saldo: runningSaldo,
       };
     });
+  }, [entries, customChartData]);
 
-    const volumes = days.map((d) =>
+  // 2. Agrupamento conforme a granularidade selecionada (Dia, Semana, Anual)
+  const { chartData, maxVolume } = useMemo(() => {
+    if (baseDailyData.length === 0) {
+      return { chartData: [], maxVolume: 1000 };
+    }
+
+    let aggregated: DayChartPoint[] = [];
+
+    if (activeGranularity === "semana") {
+      // Agrupamento por Semana
+      const weekMap = new Map<
+        string,
+        { label: string; entradas: number; saidas: number; aReceber: number; iso: string }
+      >();
+
+      baseDailyData.forEach((d) => {
+        const dt = parsePointDate(d);
+        const wStart = startOfWeek(dt, { weekStartsOn: 1 });
+        const wEnd = endOfWeek(dt, { weekStartsOn: 1 });
+        const key = format(wStart, "yyyy-MM-dd");
+        const label = `${format(wStart, "dd/MM")} - ${format(wEnd, "dd/MM")}`;
+
+        const cur = weekMap.get(key) || {
+          label,
+          entradas: 0,
+          saidas: 0,
+          aReceber: 0,
+          iso: key,
+        };
+        cur.entradas += d.entradas;
+        cur.saidas += d.saidas;
+        cur.aReceber += d.aReceber || 0;
+        weekMap.set(key, cur);
+      });
+
+      let running = 0;
+      aggregated = Array.from(weekMap.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([, item]) => {
+          running += item.entradas - item.saidas;
+          return {
+            date: item.label,
+            iso: item.iso,
+            entradas: item.entradas,
+            saidas: item.saidas,
+            aReceber: item.aReceber,
+            saldo: running,
+          };
+        });
+    } else if (activeGranularity === "mes") {
+      // Agrupamento por Mês
+      const monthMap = new Map<
+        string,
+        { label: string; entradas: number; saidas: number; aReceber: number; iso: string }
+      >();
+
+      baseDailyData.forEach((d) => {
+        const dt = parsePointDate(d);
+        const key = format(dt, "yyyy-MM");
+        const rawMonth = format(dt, "MMM/yy", { locale: ptBR });
+        const label = rawMonth.charAt(0).toUpperCase() + rawMonth.slice(1);
+
+        const cur = monthMap.get(key) || {
+          label,
+          entradas: 0,
+          saidas: 0,
+          aReceber: 0,
+          iso: key,
+        };
+        cur.entradas += d.entradas;
+        cur.saidas += d.saidas;
+        cur.aReceber += d.aReceber || 0;
+        monthMap.set(key, cur);
+      });
+
+      let running = 0;
+      aggregated = Array.from(monthMap.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([, item]) => {
+          running += item.entradas - item.saidas;
+          return {
+            date: item.label,
+            iso: item.iso,
+            entradas: item.entradas,
+            saidas: item.saidas,
+            aReceber: item.aReceber,
+            saldo: running,
+          };
+        });
+    } else if (activeGranularity === "anual") {
+      // Agrupamento por Ano
+      const yearMap = new Map<
+        string,
+        { label: string; entradas: number; saidas: number; aReceber: number; iso: string }
+      >();
+
+      baseDailyData.forEach((d) => {
+        const dt = parsePointDate(d);
+        const key = format(dt, "yyyy");
+        const label = key;
+
+        const cur = yearMap.get(key) || {
+          label,
+          entradas: 0,
+          saidas: 0,
+          aReceber: 0,
+          iso: key,
+        };
+        cur.entradas += d.entradas;
+        cur.saidas += d.saidas;
+        cur.aReceber += d.aReceber || 0;
+        yearMap.set(key, cur);
+      });
+
+      let running = 0;
+      aggregated = Array.from(yearMap.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([, item]) => {
+          running += item.entradas - item.saidas;
+          return {
+            date: item.label,
+            iso: item.iso,
+            entradas: item.entradas,
+            saidas: item.saidas,
+            aReceber: item.aReceber,
+            saldo: running,
+          };
+        });
+    } else {
+      // Visão por Dia (Diária)
+      aggregated = baseDailyData;
+    }
+
+    const volumes = aggregated.map((d) =>
       Math.max(Number(d.entradas) || 0, Number(d.saidas) || 0, Math.abs(Number(d.saldo) || 0)),
     );
     const computedMax = volumes.length > 0 ? Math.max(...volumes, 1000) : 1000;
     const maxVol = Number.isFinite(computedMax) && computedMax > 0 ? computedMax : 1000;
 
-    return { chartData: days, maxVolume: maxVol };
-  }, [entries, customChartData]);
+    return { chartData: aggregated, maxVolume: maxVol };
+  }, [baseDailyData, activeGranularity]);
 
   const hasAReceber = Array.isArray(chartData) && chartData.some((d) => (d.aReceber || 0) > 0);
 
+  // Título e subtítulo dinâmicos conforme a granularidade
+  const titleText =
+    activeGranularity === "anual"
+      ? "Movimento anual"
+      : activeGranularity === "mes"
+        ? "Movimento mensal"
+        : activeGranularity === "semana"
+          ? "Movimento semanal"
+          : "Movimento diário";
+
+  const subtitleText =
+    activeGranularity === "anual"
+      ? "Entradas, saídas e resultado consolidado ano a ano."
+      : activeGranularity === "mes"
+        ? "Entradas, saídas e resultado consolidado mês a mês."
+        : activeGranularity === "semana"
+          ? "Entradas, saídas e resultado consolidado por semana."
+          : "Entradas, saídas e resultado dia a dia no período.";
+
+  const handleApplyCustomDates = () => {
+    if (tempStart && tempEnd && onDateRangeChange) {
+      onDateRangeChange(tempStart, tempEnd);
+      setPopoverOpen(false);
+    }
+  };
+
   return (
     <div className="rounded-xl border border-border bg-card p-6 shadow-xs space-y-4">
-      {/* Cabeçalho do Card e Legendas */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+      {/* Cabeçalho do Card, Seletor de Granularidade e Legendas */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        {/* Título e Subtítulo */}
         <div>
-          <h2 className="text-base font-semibold text-foreground">Movimento por dia</h2>
-          <p className="text-xs text-muted-foreground">
-            Entradas, saídas e resultado acumulado dentro do período selecionado.
-          </p>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h2 className="text-base font-semibold text-foreground">{titleText}</h2>
+            {periodLabel && (
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-muted text-muted-foreground border border-border/60">
+                {periodLabel}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">{subtitleText}</p>
         </div>
 
-        {/* Legenda com Pills */}
-        <div className="flex items-center gap-3 text-xs font-medium">
-          <div className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-success" />
-            <span className="text-muted-foreground">Entradas</span>
-          </div>
-          {hasAReceber && (
-            <div className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-primary" />
-              <span className="text-muted-foreground">A Receber</span>
-            </div>
+        {/* Controles: Opções (Diária | Semanal | Mensal | Anual) + Filtro de Datas + Legenda */}
+        <div className="flex items-center gap-3 flex-wrap self-start lg:self-auto">
+          {/* SELETOR DE AGRUPAMENTO (DIÁRIA | SEMANAL | MENSAL | ANUAL) IDÊNTICO AO DO DASHBOARD */}
+          <SegmentedControl
+            size="sm"
+            aria-label="Agrupamento do fluxo de caixa"
+            value={activeGranularity}
+            onChange={(g) => handleSelectGranularity(g as ChartGranularity)}
+            options={[
+              { value: "dia", label: "Diária" },
+              { value: "semana", label: "Semanal" },
+              { value: "mes", label: "Mensal" },
+              { value: "anual", label: "Anual" },
+            ]}
+          />
+
+          {/* FILTRO DE DATAS (POPOVER) */}
+          {(onDateRangeChange || onSelectPeriodPreset) && (
+            <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs font-medium px-2.5 bg-card border-border shadow-2xs text-muted-foreground hover:text-foreground cursor-pointer flex items-center gap-1.5"
+                  title="Filtrar datas do período"
+                >
+                  <CalendarIcon className="h-3.5 w-3.5 text-primary" />
+                  <span>Filtrar Datas</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 p-4 space-y-3 bg-card border-border shadow-lg" align="end">
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                    Período do Gráfico e Fluxo
+                  </h4>
+                  <p className="text-[11px] text-muted-foreground">
+                    Escolha um atalho rápido ou defina o intervalo de datas.
+                  </p>
+                </div>
+
+                {/* Atalhos Rápidos */}
+                {onSelectPeriodPreset && (
+                  <div className="grid grid-cols-2 gap-1.5 pt-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs justify-start cursor-pointer hover:bg-muted"
+                      onClick={() => {
+                        onSelectPeriodPreset("dia");
+                        setPopoverOpen(false);
+                      }}
+                    >
+                      Hoje (Dia)
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs justify-start cursor-pointer hover:bg-muted"
+                      onClick={() => {
+                        onSelectPeriodPreset("semana");
+                        setPopoverOpen(false);
+                      }}
+                    >
+                      Esta Semana
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs justify-start cursor-pointer hover:bg-muted"
+                      onClick={() => {
+                        onSelectPeriodPreset("mes");
+                        setPopoverOpen(false);
+                      }}
+                    >
+                      Este Mês
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs justify-start cursor-pointer hover:bg-muted"
+                      onClick={() => {
+                        onSelectPeriodPreset("ano");
+                        setPopoverOpen(false);
+                      }}
+                    >
+                      Este Ano (Anual)
+                    </Button>
+                  </div>
+                )}
+
+                {/* Intervalo Personalizado */}
+                {onDateRangeChange && (
+                  <div className="space-y-2 pt-2 border-t border-border">
+                    <span className="text-[11px] font-semibold text-foreground block">
+                      Intervalo Personalizado
+                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-muted-foreground">Data Início</label>
+                        <input
+                          type="date"
+                          value={tempStart}
+                          onChange={(e) => setTempStart(e.target.value)}
+                          className="w-full text-xs p-1.5 rounded-md border border-border bg-background"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-muted-foreground">Data Fim</label>
+                        <input
+                          type="date"
+                          value={tempEnd}
+                          onChange={(e) => setTempEnd(e.target.value)}
+                          className="w-full text-xs p-1.5 rounded-md border border-border bg-background"
+                        />
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="w-full h-7 text-xs bg-primary text-white hover:bg-primary-hover font-semibold mt-1 cursor-pointer"
+                      onClick={handleApplyCustomDates}
+                    >
+                      Aplicar Filtro de Datas
+                    </Button>
+                  </div>
+                )}
+              </PopoverContent>
+            </Popover>
           )}
-          <div className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-destructive" />
-            <span className="text-muted-foreground">Saídas</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="h-1 w-4 rounded-full bg-info" />
-            <span className="text-muted-foreground">Saldo</span>
+
+          {/* Legenda com Pills */}
+          <div className="hidden sm:flex items-center gap-3 text-xs font-medium pl-1">
+            <div className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-success" />
+              <span className="text-muted-foreground">Entradas</span>
+            </div>
+            {hasAReceber && (
+              <div className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-primary" />
+                <span className="text-muted-foreground">A Receber</span>
+              </div>
+            )}
+            <div className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-destructive" />
+              <span className="text-muted-foreground">Saídas</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="h-1 w-4 rounded-full bg-info" />
+              <span className="text-muted-foreground">Saldo</span>
+            </div>
           </div>
         </div>
       </div>
@@ -159,7 +529,7 @@ export function GraficoFluxoDeCaixa({ entries = [], customChartData }: GraficoFl
           <Chart
             type="line"
             height={280}
-            summary="Entradas e saídas por dia, com o resultado acumulado no período."
+            summary="Entradas e saídas no período, com o resultado acumulado consolidado."
             series={[
               { name: "Entradas", type: "column", data: chartData.map((d) => d.entradas) },
               ...(hasAReceber

@@ -6,10 +6,7 @@ import { errorMessage } from "@/features/acompanhamentos/followup-utils";
 import type { FinanceSnapshot, FinancialTitle } from "./finance-schema";
 import { extractEventId } from "./finance-api";
 import { OperationLock, fieldClass } from "./OperationForm";
-import ManagementReports from "./ManagementReports";
 import BankReconciliation from "./BankReconciliation";
-import { DfcTab } from "./DfcTab";
-import { DreTab } from "./DreTab";
 import CashFlow from "./CashFlow";
 import FinancialAccounts from "./FinancialAccounts";
 
@@ -25,7 +22,7 @@ export default function FinanceOperations({
 } & (
   | { mode: "contas"; onSelectTitle?: never; onOpenTitles?: never }
   | {
-      mode: "fluxo" | "conciliacao" | "dre" | "dfc";
+      mode: "fluxo" | "conciliacao";
       onSelectTitle: (id: string) => void;
       onOpenTitles: (type: FinancialTitle["type"]) => void;
     }
@@ -153,8 +150,6 @@ export default function FinanceOperations({
             {mode === "conciliacao" && (
               <BankReconciliation finance={scoped} ops={ops} onOpenTitles={onOpenTitles} />
             )}
-            {mode === "dfc" && <DfcTab finance={scoped} onSelectTitle={onSelectTitle} />}
-            {mode === "dre" && <DreTab finance={scoped} onSelectTitle={onSelectTitle} />}
             {mode === "contas" && <FinancialAccounts finance={scoped} cash={cash} ops={ops} />}
           </div>
         )}

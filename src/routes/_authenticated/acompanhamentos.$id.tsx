@@ -58,6 +58,14 @@ import {
 
 export const Route = createFileRoute("/_authenticated/acompanhamentos/$id")({
   head: () => ({ meta: [{ title: "Acompanhamento Clínico • MedCore" }] }),
+  validateSearch: (search: Record<string, unknown>) => ({
+    tab: (typeof search.tab === "string" ? search.tab : undefined) as
+      | "resumo"
+      | "medicacoes"
+      | "evolucao"
+      | "financeiro"
+      | undefined,
+  }),
   component: TreatmentDetailPage,
 });
 
@@ -92,11 +100,20 @@ const daysBetween = (a: string | Date, b: string | Date) =>
 
 function TreatmentDetailPage() {
   const { id } = Route.useParams();
+  const search = Route.useSearch();
   const navigate = useNavigate();
   const [treatment, setTreatment] = useState<Treatment | null>(null);
   const [meds, setMeds] = useState<Medication[]>([]);
-  const [tab, setTab] = useState<"resumo" | "medicacoes" | "evolucao" | "financeiro">("resumo");
+  const [tab, setTab] = useState<"resumo" | "medicacoes" | "evolucao" | "financeiro">(
+    search.tab || "resumo",
+  );
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (search.tab && ["resumo", "medicacoes", "evolucao", "financeiro"].includes(search.tab)) {
+      setTab(search.tab);
+    }
+  }, [search.tab]);
 
   const queryClient = useQueryClient();
   const [loadError, setLoadError] = useState("");

@@ -1,5 +1,5 @@
 import PaymentHistory from "@/features/finance/PaymentHistory";
-import { getFinancialSnapshot, refreshFinance } from "@/features/finance/finance-api";
+import { getFinancialSnapshot, refreshFinance, saveLocalPayment, saveLocalFinancialTitle } from "@/features/finance/finance-api";
 import { isFreeBalance, remaining, titleStatus } from "@/features/finance/finance-math";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -77,6 +77,8 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
   const [repactCount, setRepactCount] = useState("3");
   const [repactFirstDue, setRepactFirstDue] = useState(localDate());
   const [repactMethod, setRepactMethod] = useState("pix");
+  const [downReceivedNow, setDownReceivedNow] = useState(true);
+  const [downAccountId, setDownAccountId] = useState("");
 
   let preview: ReturnType<typeof paymentPreview> | undefined;
   let previewError = "";
@@ -98,6 +100,8 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
       qc.invalidateQueries({ queryKey: ["treatment-alerts"] }),
       qc.invalidateQueries({ queryKey: ["transactions"] }),
       qc.invalidateQueries({ queryKey: ["treatment-ledger"] }),
+      qc.invalidateQueries({ queryKey: ["financial-snapshot"] }),
+      qc.invalidateQueries({ queryKey: ["cash-flow-snapshot"] }),
       refreshFinance(qc),
     ]);
 
@@ -111,7 +115,9 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
       !(await confirmDialog({
         title: "Salvar condições do plano",
         description:
-          "As parcelas ainda não pagas serão substituídas. A entrada será criada como pendente; confirme o recebimento separadamente.",
+          preview.down > 0 && downReceivedNow
+            ? "As parcelas serão salvas e a entrada à vista será lançada imediatamente no Fluxo de Caixa."
+            : "As parcelas não pagas serão recalculadas no Contas a Receber.",
         confirmText: "Salvar condições",
       }))
     )
@@ -155,8 +161,109 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
         }
       }
 
+      // Se entrada foi marcada para baixa à vista agora
+      if (preview.down > 0 && downReceivedNow) {
+        const { data: createdTxs } = await supabase
+          .from("transactions")
+          .select("id, description, installment_id, installments:installment_id(number)")
+          .eq("treatment_id", plan.id);
+
+        const downTx = createdTxs?.find(
+          (tx: any) => tx.installments?.number === 0 || tx.description?.toLowerCase().includes("entrada")
+        );
+        if (downTx) {
+          const payId = crypto.randomUUID();
+          const accountId = downAccountId || ledger.data?.accounts?.[0]?.id || "00000000-0000-0000-0000-000000000001";
+          const paidDate = form.downDue || localDate();
+          const patName = (plan as any).patient_name || (plan as any).patients?.name || plan.title || "Paciente";
+
+          try {
+            await supabase.rpc("record_financial_payment", {
+              p_id: payId,
+              p_transaction_id: downTx.id,
+              p_amount: preview.down,
+              p_paid_on: paidDate,
+              p_method: (form.downMethod || "pix").toLowerCase(),
+              p_account_id: accountId,
+              p_payer_name: patName,
+            });
+          } catch {
+            try {
+              await supabase.from("transaction_payments").insert({
+                id: payId,
+                transaction_id: downTx.id,
+                amount: preview.down,
+                paid_on: paidDate,
+                payment_method: (form.downMethod || "pix").toLowerCase(),
+                account_id: accountId,
+                payer_name: patName,
+              });
+              await supabase.from("transactions").update({
+                paid_amount: preview.down,
+                status: "pago",
+                paid_at: new Date().toISOString(),
+              }).eq("id", downTx.id);
+            } catch {}
+          }
+
+          if (downTx.installment_id) {
+            try {
+              await supabase.from("treatment_installments").update({
+                status: "pago",
+                paid_date: paidDate,
+              }).eq("id", downTx.installment_id);
+            } catch {}
+          }
+
+          saveLocalPayment({
+            id: payId,
+            transaction_id: downTx.id,
+            amount: preview.down,
+            paid_on: paidDate,
+            payment_method: (form.downMethod || "pix").toUpperCase(),
+            account_id: accountId,
+            payer_name: patName,
+            created_by: null,
+            created_at: new Date().toISOString(),
+            legacy: false,
+            reversed_at: null,
+            reversed_by: null,
+            reversal_reason: null,
+          });
+
+          saveLocalFinancialTitle({
+            id: downTx.id,
+            type: "receita",
+            amount: preview.down,
+            paid_amount: preview.down,
+            due_date: paidDate,
+            date: paidDate,
+            status: "pago",
+            description: `Acompanhamento: ${plan.title} - Entrada`,
+            category: "Honorários Iniciais / Entrada",
+            patient_id: plan.patient_id,
+            patient_name: patName,
+            payer_name: patName,
+            company_id: (plan as any).company_id || null,
+            treatment_id: plan.id,
+            installment_id: downTx.installment_id,
+            competence_date: paidDate.slice(0, 7) + "-01",
+            origin_key: null,
+            can_settle: true,
+            can_reverse: true,
+            can_cancel: false,
+          });
+
+          window.dispatchEvent(new CustomEvent("medcore_local_title_saved"));
+        }
+      }
+
       await refresh();
-      toast.success("Condições do plano salvas no Financeiro.");
+      toast.success(
+        preview.down > 0 && downReceivedNow
+          ? `Condições salvas e entrada de ${currency(preview.down)} lançada no Fluxo de Caixa!`
+          : "Condições do plano salvas no Financeiro.",
+      );
     } catch (error) {
       toast.error(errorMessage(error));
     } finally {
@@ -380,7 +487,7 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
                   />
                 </label>
                 <label className="text-sm">
-                  Vencimento da entrada
+                  Vencimento / Recebimento da entrada
                   <input
                     required
                     type="date"
@@ -389,6 +496,39 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
                     onChange={(e) => setForm({ ...form, downDue: e.target.value })}
                   />
                 </label>
+                <div className="sm:col-span-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={downReceivedNow}
+                      onChange={(e) => setDownReceivedNow(e.target.checked)}
+                      className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                    />
+                    <span>Entrada recebida à vista hoje (lançar no Fluxo de Caixa)</span>
+                  </label>
+                  {downReceivedNow && (
+                    <div className="grid sm:grid-cols-2 gap-2 pt-1">
+                      <label className="text-xs">
+                        Conta de Entrada
+                        <select
+                          className={input}
+                          value={downAccountId || ledger.data?.accounts?.[0]?.id || ""}
+                          onChange={(e) => setDownAccountId(e.target.value)}
+                        >
+                          {(ledger.data?.accounts || []).map((acc) => (
+                            <option key={acc.id} value={acc.id}>
+                              {acc.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1.5 self-end pb-2">
+                        <CheckCircle2 size={13} className="shrink-0" />
+                        A entrada entrará imediatamente no Fluxo de Caixa Realizado como receita.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </>
             )}
           </div>
@@ -476,8 +616,27 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
             </thead>
             <tbody>
               {plan.installments.map((i) => {
-                const title = planTitles.find((t) => t.installment_id === i.id);
+                const title = planTitles.find(
+                  (t) =>
+                    t.installment_id === i.id ||
+                    (i.number === 0 && t.description?.toLowerCase().includes("entrada")),
+                );
                 const isFree = title && isFreeBalance(title);
+                const relatedPayments = (ledger.data?.payments || []).filter(
+                  (p) =>
+                    !p.reversed_at &&
+                    ((title && p.transaction_id === title.id) ||
+                      p.transaction_id === i.id ||
+                      (title?.origin_key && p.transaction_id === title.origin_key)),
+                );
+                const sumPaid = relatedPayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
+                const titlePaid = Math.max(Number(title?.paid_amount) || 0, sumPaid);
+                const safeAmount = Number(i.amount) || Number(title?.amount) || 0;
+                const rem = Math.max(0, safeAmount - titlePaid);
+                const isPaid = i.status === "pago" || title?.status === "pago" || (safeAmount > 0 && rem <= 0.01);
+                const valorPago = isPaid ? safeAmount : titlePaid;
+                const valorRestante = isPaid ? 0 : rem;
+
                 return (
                   <tr key={i.id} className="border-t hover:bg-muted/30">
                     <td className="py-3">
@@ -495,9 +654,7 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
                       )}
                     </td>
                     <td>
-                      {currency(i.amount)} /{" "}
-                      {title ? currency(title.paid_amount) : "Não sincronizado"} /{" "}
-                      {title ? currency(remaining(title)) : "Não sincronizado"}
+                      {currency(safeAmount)} / {currency(valorPago)} / {currency(valorRestante)}
                     </td>
                     <td>
                       {isFree ? (
@@ -508,36 +665,54 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
                     </td>
                     <td>{methodLabel(i.payment_method)}</td>
                     <td>
-                      {title ? (
-                        <span
-                          className={cn(
-                            "px-2 py-0.5 rounded-md text-xs font-semibold",
-                            titleStatus(title, localDate()).includes("Quitado")
-                              ? "bg-success/10 text-success"
-                              : titleStatus(title, localDate()).includes("sem vencimento")
-                                ? "bg-primary-soft text-primary"
-                                : titleStatus(title, localDate()).includes("Vencido")
-                                  ? "bg-destructive/10 text-destructive"
-                                  : "bg-muted text-foreground/80",
-                          )}
-                        >
-                          {titleStatus(title, localDate())}
-                        </span>
-                      ) : (
-                        "Cobrança não sincronizada"
-                      )}
+                      <span
+                        className={cn(
+                          "px-2 py-0.5 rounded-md text-xs font-semibold",
+                          isPaid
+                            ? "bg-success/10 text-success"
+                            : isFree
+                              ? "bg-primary-soft text-primary"
+                              : i.due_date && i.due_date < localDate()
+                                ? "bg-destructive/10 text-destructive"
+                                : "bg-muted text-foreground/80",
+                        )}
+                      >
+                        {isPaid
+                          ? "Quitado"
+                          : isFree
+                            ? valorPago > 0
+                              ? "Parcial (sem vencimento)"
+                              : "Em aberto sem vencimento"
+                            : i.due_date && i.due_date < localDate()
+                              ? "Vencido"
+                              : "Pendente"}
+                      </span>
                     </td>
                     <td>
-                      {title && (
+                      {title ? (
                         <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            className="px-2.5 py-1 bg-primary-soft hover:bg-primary-soft text-primary rounded-lg text-xs font-semibold transition cursor-pointer"
-                            onClick={() => setSelectedTitle(title.id)}
-                          >
-                            {remaining(title) > 0 ? "Receber / Baixas" : "Ver Baixas"}
-                          </button>
+                          {isPaid ? (
+                            <button
+                              type="button"
+                              className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                              onClick={() => setSelectedTitle(title.id)}
+                              title="Visualizar histórico de baixas e comprovante"
+                            >
+                              <CheckCircle2 size={13} />
+                              Recebido
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="px-2.5 py-1 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-semibold transition cursor-pointer shadow-2xs"
+                              onClick={() => setSelectedTitle(title.id)}
+                            >
+                              Receber / Baixas
+                            </button>
+                          )}
                         </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">Não sincronizado</span>
                       )}
                     </td>
                   </tr>

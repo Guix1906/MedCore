@@ -82,6 +82,8 @@ export function saveLocalFinancialTitle(title: FinancialTitle): void {
   }
 }
 
+export const saveLocalTitle = saveLocalFinancialTitle;
+
 export function getLocalPayments(): FinancialPayment[] {
   if (typeof window === "undefined" || !window.localStorage) return [];
   try {
@@ -297,7 +299,19 @@ function normalizeFinancialSnapshot(
   // 1b. Merge títulos locais armazenados (localStorage) com deduplicação estrita por agendamento
   const localTitles = getLocalTitles();
   localTitles.forEach((lt) => {
-    if (isTitleDeleted(lt, deletedTitleIds) || isRecordWiped(lt) || existingTitleIds.has(lt.id)) return;
+    if (isTitleDeleted(lt, deletedTitleIds) || isRecordWiped(lt)) return;
+    if (existingTitleIds.has(lt.id)) {
+      const existing = mergedTitles.find((t) => t.id === lt.id);
+      if (existing) {
+        if ((Number(lt.paid_amount) || 0) > (Number(existing.paid_amount) || 0)) {
+          existing.paid_amount = lt.paid_amount;
+        }
+        if (lt.status === "pago" || String(lt.status).toLowerCase() === "quitado") {
+          existing.status = "pago";
+        }
+      }
+      return;
+    }
     const evKey = resolveTitleEventKey(lt);
     if (evKey) {
       if (deletedTitleIds.has(evKey)) return;
@@ -640,16 +654,56 @@ function normalizeFinancialSnapshot(
           },
         ];
 
+  // Mapa de pagamentos consolidados por transaction_id e origin_key
+  const paymentsByTxId = new Map<string, number>();
+  mergedPayments.forEach((p) => {
+    if (p.reversed_at) return;
+    const amt = Number(p.amount) || 0;
+    if (amt <= 0) return;
+    if (p.transaction_id) {
+      paymentsByTxId.set(
+        p.transaction_id,
+        (paymentsByTxId.get(p.transaction_id) || 0) + amt,
+      );
+    }
+    const evId = extractEventId(p.id) || extractEventId(p.transaction_id);
+    if (evId) {
+      paymentsByTxId.set(`event:${evId}`, (paymentsByTxId.get(`event:${evId}`) || 0) + amt);
+      paymentsByTxId.set(`evt-${evId}`, (paymentsByTxId.get(`evt-${evId}`) || 0) + amt);
+    }
+  });
+
   // Sanitização rigorosa de títulos para prevenir quebras em runtime
   const sanitizedTitles: FinancialTitle[] = mergedTitles
     .filter((t): t is FinancialTitle => Boolean(t && t.id && !isRecordWiped(t)))
     .map((t) => {
       const amountNum = Number(t.amount);
-      const paidNum = Number(t.paid_amount);
       const safeAmount = Number.isFinite(amountNum) ? amountNum : 0;
-      const safePaid = Number.isFinite(paidNum) ? paidNum : 0;
+
+      // Consolidação de pagamentos registrados (via banco ou cache local)
+      let paidFromPayments = paymentsByTxId.get(t.id) || 0;
+      if (t.installment_id && paymentsByTxId.has(t.installment_id)) {
+        paidFromPayments = Math.max(paidFromPayments, paymentsByTxId.get(t.installment_id) || 0);
+      }
+      if (t.origin_key && paymentsByTxId.has(t.origin_key)) {
+        paidFromPayments = Math.max(paidFromPayments, paymentsByTxId.get(t.origin_key) || 0);
+      }
+
+      const rawPaid = Number(t.paid_amount) || 0;
+      const effectivePaid = Math.max(rawPaid, paidFromPayments);
+      const isAlreadyMarkedPaid =
+        String(t.status).toLowerCase() === "pago" || String(t.status).toLowerCase() === "quitado";
+      const isComplete =
+        (safeAmount > 0 && effectivePaid >= safeAmount - 0.01) || isAlreadyMarkedPaid;
+
+      const safePaid =
+        isComplete && safeAmount > 0 ? Math.max(effectivePaid, safeAmount) : effectivePaid;
+      const safeStatus = isComplete ? "pago" : String(t.status || "pendente");
+
       const dateStr = t.date ? String(t.date).slice(0, 10) : "";
-      const dueStr = t.due_date ? String(t.due_date).slice(0, 10) : dateStr || new Date().toISOString().slice(0, 10);
+      const dueStr = t.due_date
+        ? String(t.due_date).slice(0, 10)
+        : dateStr || new Date().toISOString().slice(0, 10);
 
       return {
         ...t,
@@ -659,7 +713,7 @@ function normalizeFinancialSnapshot(
         paid_amount: safePaid,
         due_date: dueStr,
         date: dateStr || dueStr,
-        status: String(t.status || (safePaid >= safeAmount && safeAmount > 0 ? "pago" : "pendente")),
+        status: safeStatus,
         description: t.description ? String(t.description) : null,
         category: t.category ? String(t.category) : "Geral",
         patient_id: t.patient_id ? String(t.patient_id) : null,

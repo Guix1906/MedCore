@@ -70,10 +70,12 @@ export default function NewTitle({
   finance,
   type,
   onClose,
+  defaultPaidNow,
 }: {
   finance: FinanceSnapshot;
   type: FinancialTitle["type"];
   onClose: () => void;
+  defaultPaidNow?: boolean;
 }) {
   const qc = useQueryClient();
   const isExpense = type === "despesa";
@@ -90,8 +92,8 @@ export default function NewTitle({
   const [payer, setPayer] = useState("");
   const [patient, setPatient] = useState("");
 
-  // Opção de Baixa Imediata (já paga / recebida hoje)
-  const [isPaidNow, setIsPaidNow] = useState(false);
+  // Opção de Baixa Imediata (já paga / recebida hoje à vista)
+  const [isPaidNow, setIsPaidNow] = useState(defaultPaidNow ?? false);
   const [paymentMethod, setPaymentMethod] = useState("PIX");
   const [selectedAccount, setSelectedAccount] = useState(() => {
     return finance.accounts[0]?.id || "00000000-0000-0000-0000-000000000001";
@@ -442,8 +444,14 @@ export default function NewTitle({
             />
           </div>
 
-          {/* 5. BOX DE QUITAÇÃO IMEDIATA (BAIXA RÁPIDA NO CAIXA) */}
-          <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 space-y-3">
+          {/* 5. BOX DE QUITAÇÃO IMEDIATA (BAIXA RÁPIDA NO CAIXA / FLUXO DE CAIXA) */}
+          <div
+            className={`rounded-2xl border p-4 space-y-3 transition-colors ${
+              isPaidNow
+                ? "border-emerald-500/40 bg-emerald-500/5 shadow-2xs"
+                : "border-border/80 bg-muted/30"
+            }`}
+          >
             <div className="flex items-start gap-2.5 cursor-pointer" onClick={() => setIsPaidNow(!isPaidNow)}>
               <Checkbox
                 id="is-paid-now"
@@ -454,22 +462,29 @@ export default function NewTitle({
               <div className="space-y-0.5">
                 <label
                   htmlFor="is-paid-now"
-                  className="text-xs font-semibold text-foreground cursor-pointer select-none"
+                  className="text-xs font-semibold text-foreground cursor-pointer select-none flex items-center gap-1.5"
                 >
-                  {isExpense
-                    ? "Esta despesa já foi paga hoje?"
-                    : "Esta receita já foi recebida hoje?"}
+                  <span>
+                    {isExpense
+                      ? "Despesa à vista / já paga (Lançar no Fluxo de Caixa)"
+                      : "Receita à vista / já recebida (Lançar no Fluxo de Caixa)"}
+                  </span>
+                  {isPaidNow && (
+                    <span className="text-[10px] uppercase font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                      Fluxo de Caixa
+                    </span>
+                  )}
                 </label>
                 <p className="text-[11px] text-muted-foreground select-none">
                   {isExpense
-                    ? "Se marcado, lança a saída imediatamente no Fluxo de Caixa como realizada."
-                    : "Se marcado, lança a entrada imediatamente no Fluxo de Caixa como realizada."}
+                    ? "Lança imediatamente a saída no Fluxo de Caixa Realizado e debita da conta bancária da clínica."
+                    : "Lança imediatamente a entrada no Fluxo de Caixa Realizado e credita na conta bancária da clínica."}
                 </p>
               </div>
             </div>
 
             {isPaidNow && (
-              <div className="pt-2 border-t border-border/60 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="pt-2 border-t border-emerald-500/20 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
                     <CreditCard className="h-3 w-3" /> Forma de Pagamento
@@ -507,6 +522,13 @@ export default function NewTitle({
                         ))}
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div className="sm:col-span-2 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1.5 pt-0.5">
+                  <CheckCircle2 size={13} className="shrink-0" />
+                  <span>
+                    Confirmado: este valor aparecerá instantaneamente no relatório e no gráfico do Fluxo de Caixa.
+                  </span>
                 </div>
               </div>
             )}

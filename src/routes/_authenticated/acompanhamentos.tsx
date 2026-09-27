@@ -34,6 +34,7 @@ import {
   PlayCircle,
   DollarSign,
   Pill,
+  Wallet,
   UserPlus,
   ChevronDown,
   Check,
@@ -43,6 +44,7 @@ import AppShell from "@/components/AppShell";
 import { confirmDialog } from "@/components/app/confirm-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { refreshFinance, saveLocalPayment, saveLocalFinancialTitle } from "@/features/finance/finance-api";
 import { patientsService, companyService } from "@/services/api";
 import { getStoredLocalPatients, mergeWithLocalPatients } from "@/lib/local-patients";
 import { PatientModal } from "@/components/pacientes/PatientModal";
@@ -74,6 +76,10 @@ export type Treatment = {
   discount: number;
   installments_count: number;
   payment_method: string | null;
+  payment_type?: "a_vista" | "parcelado" | string | null;
+  down_payment_method?: string | null;
+  down_payment_due_date?: string | null;
+  first_due_date?: string | null;
   color: string;
   return_days: number | null;
   next_return_date: string | null;
@@ -97,6 +103,18 @@ const COLORS = ["#8B47FF", "#6C4CF7", "#10B981", "#F59E0B", "#EC4899", "#0EA5E9"
 
 const brl = (v: number) =>
   Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+function parseBrlNumber(val: string | number | null | undefined): number {
+  if (val === null || val === undefined) return 0;
+  if (typeof val === "number") return Number.isFinite(val) ? val : 0;
+  const s = String(val).trim();
+  if (!s) return 0;
+  if (s.includes(",")) {
+    const cleaned = s.replace(/\./g, "").replace(",", ".");
+    return Number(cleaned) || 0;
+  }
+  return Number(s) || 0;
+}
 
 const daysBetween = (a: string | Date, b: string | Date) =>
   Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000);
@@ -491,10 +509,19 @@ function AcompanhamentosPage() {
                           </div>
                           <div>
                             <div className="text-muted-foreground text-xs font-semibold uppercase">
-                              Prazo
+                              {Number(t.total_value) > 0 ? "Contratado" : "Prazo"}
                             </div>
-                            <div className="text-foreground font-semibold mt-0.5">
-                              {protocolDeadline(t.status, t.end_date)}
+                            <div className="text-foreground font-semibold mt-0.5 flex items-center gap-1">
+                              {Number(t.total_value) > 0 ? (
+                                <>
+                                  <Wallet size={12} className="text-emerald-500" />
+                                  <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                                    {brl(t.total_value)}
+                                  </span>
+                                </>
+                              ) : (
+                                protocolDeadline(t.status, t.end_date)
+                              )}
                             </div>
                           </div>
                         </div>
@@ -649,6 +676,182 @@ function AcompanhamentosPage() {
   );
 }
 
+// ============== AUXILIARES FINANCEIROS PARA FLUXO DE CAIXA IMEDIATO ==============
+const useFinancialAccounts = () => {
+  return useQuery({
+    queryKey: ["financial-accounts-active"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("financial_accounts")
+        .select("id, name, type, is_active, active, company_id")
+        .order("name");
+      const active = (data || []).filter((a: any) => a.is_active ?? a.active ?? true);
+      if (active.length > 0) return active;
+      return [
+        { id: "00000000-0000-0000-0000-000000000001", name: "Banco Principal / PIX", type: "corrente", company_id: null },
+        { id: "00000000-0000-0000-0000-000000000002", name: "Caixa Geral / Dinheiro", type: "caixa", company_id: null },
+      ];
+    },
+    staleTime: 60000,
+  });
+};
+
+async function recordImmediateTreatmentPayment({
+  treatmentId,
+  isDown,
+  amount,
+  paidDate,
+  method,
+  accountId,
+  payerName,
+}: {
+  treatmentId: string;
+  isDown: boolean;
+  amount: number;
+  paidDate: string;
+  method: string;
+  accountId: string;
+  payerName: string;
+}) {
+  if (amount <= 0) return;
+
+  // 1. Busca os títulos / transações geradas para o tratamento
+  const { data: createdTxs } = await supabase
+    .from("transactions")
+    .select("id, amount, paid_amount, status, installment_id, installments:installment_id(number), description, company_id")
+    .eq("treatment_id", treatmentId);
+
+  if (!createdTxs || createdTxs.length === 0) return;
+
+  // Identifica a transação correspondente (Entrada número 0 ou Parcela número 1 para à vista)
+  const targetTx = createdTxs.find((tx: any) => {
+    if (isDown) {
+      return (
+        tx.installments?.number === 0 ||
+        tx.description?.toLowerCase().includes("entrada")
+      );
+    } else {
+      return (
+        tx.installments?.number === 1 ||
+        !tx.description?.toLowerCase().includes("entrada")
+      );
+    }
+  });
+
+  if (!targetTx) return;
+
+  // Se já estiver quitada, não duplica
+  if (targetTx.status === "pago" || Number(targetTx.paid_amount) >= amount) {
+    return;
+  }
+
+  const payId = crypto.randomUUID();
+  const safeAccountId = accountId || "00000000-0000-0000-0000-000000000001";
+  const safeMethod = (method || "pix").toLowerCase();
+  const safeDate = paidDate || new Date().toISOString().slice(0, 10);
+
+  // 2. Registra o pagamento via RPC oficial
+  let rpcSuccess = false;
+  try {
+    const { error: rpcErr } = await supabase.rpc("record_financial_payment", {
+      p_id: payId,
+      p_transaction_id: targetTx.id,
+      p_amount: amount,
+      p_paid_on: safeDate,
+      p_method: safeMethod,
+      p_account_id: safeAccountId,
+      p_payer_name: payerName,
+    });
+    if (!rpcErr) {
+      rpcSuccess = true;
+    } else {
+      console.warn("Aviso ao liquidar pagamento via RPC:", rpcErr);
+    }
+  } catch (errRpc) {
+    console.warn("RPC record_financial_payment indisponível:", errRpc);
+  }
+
+  // 3. Fallback direto caso a RPC encontre conflito de permissão ou conta
+  if (!rpcSuccess) {
+    try {
+      await supabase.from("transaction_payments").insert({
+        id: payId,
+        transaction_id: targetTx.id,
+        amount: amount,
+        paid_on: safeDate,
+        payment_method: safeMethod,
+        account_id: safeAccountId,
+        payer_name: payerName,
+      });
+      await supabase.from("transactions").update({
+        paid_amount: amount,
+        status: "pago",
+        paid_at: new Date().toISOString(),
+      }).eq("id", targetTx.id);
+
+      if (targetTx.installment_id) {
+        await supabase.from("treatment_installments").update({
+          status: "pago",
+          paid_date: safeDate,
+        }).eq("id", targetTx.installment_id);
+      }
+    } catch (fallbackErr) {
+      console.warn("Fallback direto entrada info:", fallbackErr);
+    }
+  }
+
+  // 4. Salva no cache local para resposta imediata (0ms) no Fluxo de Caixa e Contas a Receber
+  saveLocalPayment({
+    id: payId,
+    transaction_id: targetTx.id,
+    amount: amount,
+    paid_on: safeDate,
+    payment_method: safeMethod.toUpperCase(),
+    account_id: safeAccountId,
+    payer_name: payerName,
+    created_by: null,
+    created_at: new Date().toISOString(),
+    legacy: false,
+    reversed_at: null,
+    reversed_by: null,
+    reversal_reason: null,
+  });
+
+  saveLocalFinancialTitle({
+    id: targetTx.id,
+    type: "receita",
+    amount: Number(targetTx.amount) || amount,
+    paid_amount: Number(targetTx.amount) || amount,
+    due_date: safeDate,
+    date: safeDate,
+    status: "pago",
+    description: targetTx.description || (isDown ? "Entrada de acompanhamento" : "Acompanhamento à vista"),
+    category: isDown ? "Honorários Iniciais / Entrada" : "Honorários Clínicos",
+    patient_id: null,
+    patient_name: payerName,
+    payer_name: payerName,
+    company_id: (targetTx as any).company_id || null,
+    treatment_id: treatmentId,
+    installment_id: targetTx.installment_id,
+    competence_date: safeDate.slice(0, 7) + "-01",
+    origin_key: null,
+    can_settle: true,
+    can_reverse: true,
+    can_cancel: false,
+  });
+
+  if (targetTx.installment_id) {
+    try {
+      await supabase.from("treatment_installments").update({
+        status: "pago",
+        paid_date: safeDate,
+      }).eq("id", targetTx.installment_id);
+    } catch {}
+  }
+
+  window.dispatchEvent(new CustomEvent("medcore_local_title_saved"));
+}
+
 // ============== MODAL DE GERENCIAMENTO & EDIÇÃO DE ACOMPANHAMENTO ==============
 function TreatmentManageModal({
   treatment,
@@ -660,6 +863,7 @@ function TreatmentManageModal({
   onUpdated: () => void;
 }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [doctors, setDoctors] = useState<{ id: string; name: string }[]>([]);
@@ -683,6 +887,105 @@ function TreatmentManageModal({
     color: treatment.color || COLORS[0],
     notes: treatment.notes || "",
   });
+
+  const { data: treatmentTitles = [] } = useQuery({
+    queryKey: ["treatment-manage-titles", treatment.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("transactions")
+        .select("*, installments:installment_id(*)")
+        .eq("treatment_id", treatment.id)
+        .order("due_date", { ascending: true });
+      return (data as any[]) || [];
+    },
+  });
+
+  const isInitiallyLivre = useMemo(() => {
+    return (
+      (treatment.notes && treatment.notes.includes("saldo_livre")) ||
+      treatmentTitles.some((t: any) => {
+        const desc = (t.description || "").toLowerCase();
+        const cat = (t.category || "").toLowerCase();
+        return desc.includes("saldo livre") || cat.includes("saldo livre");
+      }) ||
+      (treatment.payment_type === "parcelado" &&
+        treatment.installments_count === 1 &&
+        !treatment.first_due_date)
+    );
+  }, [treatment, treatmentTitles]);
+
+  const { data: financialAccounts = [] } = useFinancialAccounts();
+
+  const isDownAlreadyPaid = useMemo(() => {
+    return treatmentTitles.some((t: any) => {
+      const isDown = t.installment_id?.number === 0 || t.description?.toLowerCase().includes("entrada");
+      const isPaid = t.status === "pago" || (Number(t.paid_amount) >= Number(t.amount) && Number(t.amount) > 0);
+      return isDown && isPaid;
+    });
+  }, [treatmentTitles]);
+
+  const [hasFinance, setHasFinance] = useState(
+    Number(treatment.total_value || 0) > 0,
+  );
+
+  const [financeForm, setFinanceForm] = useState({
+    total: treatment.total_value ? String(treatment.total_value) : "",
+    discount: treatment.discount ? String(treatment.discount) : "0",
+    down: treatment.down_payment ? String(treatment.down_payment) : "0",
+    downMethod: treatment.down_payment_method || "pix",
+    downDue:
+      treatment.down_payment_due_date ||
+      treatment.start_date ||
+      new Date().toISOString().slice(0, 10),
+    downReceivedNow: true,
+    downAccountId: "",
+    modality: (isInitiallyLivre ? "livre" : "parcelado") as "parcelado" | "livre",
+    method: treatment.payment_method || "pix",
+    installments: String(treatment.installments_count || 1),
+    firstDue:
+      treatment.first_due_date ||
+      new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+    aVistaReceivedNow: false,
+    aVistaAccountId: "",
+  });
+
+  // Sincroniza modalidade se for identificada como livre após carregamento
+  useEffect(() => {
+    if (isInitiallyLivre && financeForm.modality !== "livre") {
+      setFinanceForm((prev) => ({ ...prev, modality: "livre" }));
+    }
+  }, [isInitiallyLivre]);
+
+  const financePreview = useMemo(() => {
+    const total = parseBrlNumber(financeForm.total);
+    const discount = parseBrlNumber(financeForm.discount);
+    const down = parseBrlNumber(financeForm.down);
+    const net = Math.max(0, total - discount);
+    const balance = Math.max(0, net - down);
+    return { total, discount, down, net, balance };
+  }, [financeForm.total, financeForm.discount, financeForm.down]);
+
+  const paymentStats = useMemo(() => {
+    let paidTotal = 0;
+    let pendingTotal = 0;
+    let countPaid = 0;
+    let countPending = 0;
+
+    treatmentTitles.forEach((t: any) => {
+      const amt = Number(t.amount || 0);
+      const paid = Number(t.paid_amount ?? (t.status === "pago" ? amt : 0));
+      if (t.status === "pago" || (paid >= amt && amt > 0)) {
+        paidTotal += amt;
+        countPaid++;
+      } else {
+        paidTotal += paid;
+        pendingTotal += Math.max(0, amt - paid);
+        countPending++;
+      }
+    });
+
+    return { paidTotal, pendingTotal, countPaid, countPending };
+  }, [treatmentTitles]);
 
   useEffect(() => {
     (async () => {
@@ -757,6 +1060,28 @@ function TreatmentManageModal({
       toast.error("Confira início, duração e intervalo de retorno (1 a 365 dias).");
       return;
     }
+
+    const totalNum = hasFinance ? parseBrlNumber(financeForm.total) : 0;
+    const discountNum = hasFinance ? parseBrlNumber(financeForm.discount) : 0;
+    const downNum = hasFinance ? parseBrlNumber(financeForm.down) : 0;
+    const isLivre = financeForm.modality === "livre";
+    const countNum = isLivre ? 1 : Math.max(1, parseInt(financeForm.installments) || 1);
+
+    if (hasFinance && totalNum > 0) {
+      if (downNum > financePreview.net) {
+        toast.error("O valor da entrada não pode ser superior ao total líquido com desconto.");
+        return;
+      }
+      if (downNum > 0 && !financeForm.downDue) {
+        toast.error("Informe a data de vencimento da entrada.");
+        return;
+      }
+      if (!isLivre && financePreview.balance > 0 && !financeForm.firstDue) {
+        toast.error("Informe o primeiro vencimento do saldo parcelado.");
+        return;
+      }
+    }
+
     setSaving(true);
     const startDateObj = new Date(form.start_date);
     const protocolDaysNum = Number(form.protocol_days) || 90;
@@ -774,16 +1099,107 @@ function TreatmentManageModal({
       return_days: form.return_days ? Number(form.return_days) : null,
       color: form.color,
       notes: form.notes.trim() || null,
+      total_value: totalNum,
+      discount: discountNum,
+      down_payment: downNum,
+      installments_count: isLivre ? 1 : countNum,
+      payment_type: isLivre ? "parcelado" : countNum === 1 && downNum === 0 ? "a_vista" : "parcelado",
+      down_payment_method: downNum > 0 ? financeForm.downMethod : null,
+      payment_method: financeForm.method,
+      down_payment_due_date: downNum > 0 ? financeForm.downDue : null,
+      first_due_date: isLivre ? null : financeForm.firstDue || null,
     };
 
     const { error } = await supabase.from("treatments").update(payload).eq("id", treatment.id);
 
-    setSaving(false);
     if (error) {
-      toast.error("Erro ao salvar alterações");
+      setSaving(false);
+      toast.error("Erro ao salvar alterações: " + (error?.message || ""));
       return;
     }
-    toast.success("Acompanhamento atualizado com sucesso!");
+
+    // Configurar parcelas e entrada automaticamente no financeiro
+    if (totalNum > 0) {
+      try {
+        const { error: confErr } = await supabase.rpc("configure_treatment_payment", {
+          p_treatment_id: treatment.id,
+          p_total: totalNum,
+          p_discount: discountNum,
+          p_down: downNum,
+          p_type: isLivre ? "parcelado" : countNum === 1 && downNum === 0 ? "a_vista" : "parcelado",
+          p_down_method: downNum > 0 ? financeForm.downMethod : null,
+          p_method: financeForm.method || "pix",
+          p_count: isLivre || (countNum === 1 && downNum === 0) ? 1 : countNum,
+          p_down_due: downNum > 0 ? financeForm.downDue : null,
+          p_first_due: financeForm.firstDue || null,
+        });
+
+        if (confErr) {
+          console.error("Erro ao configurar parcelas via RPC:", confErr);
+          toast.warning("Dados salvos! " + (confErr.message || "Aviso ao recalcular parcelas."));
+        } else if (isLivre && financePreview.balance > 0) {
+          // Atualiza título de saldo livre
+          const { data: createdTxs } = await supabase
+            .from("transactions")
+            .select("id, description, installment_id, installments:installment_id(number)")
+            .eq("treatment_id", treatment.id);
+
+          const balanceTx = createdTxs?.find(
+            (tx: any) => tx.installments?.number !== 0 && !tx.description?.includes("Entrada"),
+          );
+          if (balanceTx) {
+            await supabase
+              .from("transactions")
+              .update({
+                description: `Acompanhamento: ${form.title.trim()} - Saldo Livre (Sem vencimento definido)`,
+                category: "Saldo Livre",
+              })
+              .eq("id", balanceTx.id);
+          }
+        }
+
+        // Liquidação imediata no Fluxo de Caixa para Entrada ou À Vista
+        if (downNum > 0 && financeForm.downReceivedNow && !isDownAlreadyPaid) {
+          const patName = treatment.patients?.name || form.title || "Paciente";
+          await recordImmediateTreatmentPayment({
+            treatmentId: treatment.id,
+            isDown: true,
+            amount: downNum,
+            paidDate: financeForm.downDue,
+            method: financeForm.downMethod,
+            accountId: financeForm.downAccountId || financialAccounts[0]?.id || "",
+            payerName: patName,
+          });
+        } else if (downNum === 0 && countNum === 1 && financeForm.modality === "parcelado" && financeForm.aVistaReceivedNow) {
+          const patName = treatment.patients?.name || form.title || "Paciente";
+          await recordImmediateTreatmentPayment({
+            treatmentId: treatment.id,
+            isDown: false,
+            amount: totalNum - discountNum,
+            paidDate: financeForm.firstDue,
+            method: financeForm.method,
+            accountId: financeForm.aVistaAccountId || financialAccounts[0]?.id || "",
+            payerName: patName,
+          });
+        }
+      } catch (err) {
+        console.error("Erro ao integrar financeiro:", err);
+      }
+    }
+
+    try {
+      await refreshFinance(queryClient);
+      await queryClient.invalidateQueries({ queryKey: ["treatments-list"] });
+      await queryClient.invalidateQueries({ queryKey: ["treatment-finance-plans"] });
+      await queryClient.invalidateQueries({ queryKey: ["treatment-manage-titles", treatment.id] });
+      await queryClient.invalidateQueries({ queryKey: ["treatment-alerts"] });
+      await queryClient.invalidateQueries({ queryKey: ["financial-snapshot"] });
+      await queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      await queryClient.invalidateQueries({ queryKey: ["cash-flow-snapshot"] });
+    } catch {}
+
+    setSaving(false);
+    toast.success("Acompanhamento e condições financeiras atualizados com sucesso!");
     setIsEditing(false);
     onUpdated();
     onClose();
@@ -938,9 +1354,348 @@ function TreatmentManageModal({
                 </select>
               </Field>
 
-              <p className="text-sm text-muted-foreground">
-                Entrada e parcelas são configuradas no Financeiro após salvar o plano.
-              </p>
+              {/* ================= SEÇÃO FINANCEIRA INTEGRADA ================= */}
+              <div className="md:col-span-2 rounded-2xl border border-primary/25 bg-primary-soft/30 p-4 space-y-3.5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-8 w-8 rounded-xl bg-primary text-white flex items-center justify-center shadow-xs">
+                      <Wallet size={16} />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-semibold text-foreground">
+                        Condições Financeiras do Acompanhamento
+                      </h4>
+                      <p className="text-xs text-muted-foreground">
+                        Defina o valor total, entrada e se o saldo será parcelado ou livre
+                      </p>
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-foreground cursor-pointer select-none bg-card px-2.5 py-1 rounded-lg border border-border">
+                    <input
+                      type="checkbox"
+                      checked={hasFinance}
+                      onChange={(e) => setHasFinance(e.target.checked)}
+                      className="h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer"
+                    />
+                    <span>Ativar cobrança no plano</span>
+                  </label>
+                </div>
+
+                {hasFinance && (
+                  <div className="space-y-3.5 pt-2 border-t border-primary/15 animate-in fade-in duration-200">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <Field label="Valor Total (R$) *">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          className={inputCls}
+                          placeholder="Ex.: 8000,00"
+                          value={financeForm.total}
+                          onChange={(e) => setFinanceForm({ ...financeForm, total: e.target.value })}
+                        />
+                      </Field>
+                      <Field label="Desconto (R$)">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          className={inputCls}
+                          placeholder="0,00"
+                          value={financeForm.discount}
+                          onChange={(e) =>
+                            setFinanceForm({ ...financeForm, discount: e.target.value })
+                          }
+                        />
+                      </Field>
+                      <Field label="Modalidade do Saldo">
+                        <select
+                          className={inputCls}
+                          value={financeForm.modality}
+                          onChange={(e) =>
+                            setFinanceForm({
+                              ...financeForm,
+                              modality: e.target.value as "parcelado" | "livre",
+                            })
+                          }
+                        >
+                          <option value="parcelado">Parcelado com vencimentos fixos</option>
+                          <option value="livre">Pagamentos livres (Sem vencimento fixo)</option>
+                        </select>
+                      </Field>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <Field label="Valor de Entrada (R$)">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          className={inputCls}
+                          placeholder="Ex.: 1000,00"
+                          value={financeForm.down}
+                          onChange={(e) => setFinanceForm({ ...financeForm, down: e.target.value })}
+                        />
+                      </Field>
+                      {parseBrlNumber(financeForm.down) > 0 && (
+                        isDownAlreadyPaid ? (
+                          <div className="sm:col-span-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-700 dark:text-emerald-300 font-medium flex items-center gap-2">
+                            <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                            <span>Entrada de {brl(parseBrlNumber(financeForm.down))} já quitada e lançada no Fluxo de Caixa.</span>
+                          </div>
+                        ) : (
+                          <div className="sm:col-span-2 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-2.5">
+                            <div className="flex items-center justify-between">
+                              <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-foreground">
+                                <input
+                                  type="checkbox"
+                                  checked={financeForm.downReceivedNow}
+                                  onChange={(e) =>
+                                    setFinanceForm({ ...financeForm, downReceivedNow: e.target.checked })
+                                  }
+                                  className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                                />
+                                <span>Entrada recebida à vista hoje (lançar no Fluxo de Caixa)</span>
+                              </label>
+                              {financeForm.downReceivedNow && (
+                                <span className="text-[10px] uppercase font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                                  Fluxo de Caixa
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                              <Field label="Forma da Entrada">
+                                <select
+                                  className={inputCls}
+                                  value={financeForm.downMethod}
+                                  onChange={(e) =>
+                                    setFinanceForm({ ...financeForm, downMethod: e.target.value })
+                                  }
+                                >
+                                  <option value="pix">PIX</option>
+                                  <option value="dinheiro">Dinheiro</option>
+                                  <option value="cartao_debito">Cartão de Débito</option>
+                                  <option value="cartao_credito">Cartão de Crédito</option>
+                                  <option value="transferencia">Transferência</option>
+                                  <option value="boleto">Boleto Bancário</option>
+                                </select>
+                              </Field>
+
+                              <Field label="Data de Recebimento">
+                                <input
+                                  type="date"
+                                  className={inputCls}
+                                  value={financeForm.downDue}
+                                  onChange={(e) =>
+                                    setFinanceForm({ ...financeForm, downDue: e.target.value })
+                                  }
+                                />
+                              </Field>
+
+                              <Field label="Conta de Entrada">
+                                <select
+                                  className={inputCls}
+                                  value={financeForm.downAccountId || financialAccounts[0]?.id || ""}
+                                  onChange={(e) =>
+                                    setFinanceForm({ ...financeForm, downAccountId: e.target.value })
+                                  }
+                                >
+                                  {financialAccounts.map((acc) => (
+                                    <option key={acc.id} value={acc.id}>
+                                      {acc.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </Field>
+                            </div>
+                            {financeForm.downReceivedNow && (
+                              <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1.5">
+                                <CheckCircle2 size={13} className="shrink-0" />
+                                A entrada entrará imediatamente no Fluxo de Caixa Realizado como receita no caixa da clínica.
+                              </p>
+                            )}
+                          </div>
+                        )
+                      )}
+                    </div>
+
+                    {parseBrlNumber(financeForm.down) === 0 && parseInt(financeForm.installments) === 1 && financeForm.modality === "parcelado" && (
+                      <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-foreground">
+                            <input
+                              type="checkbox"
+                              checked={financeForm.aVistaReceivedNow}
+                              onChange={(e) =>
+                                setFinanceForm({ ...financeForm, aVistaReceivedNow: e.target.checked })
+                              }
+                              className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                            />
+                            <span>Pagamento à vista já recebido hoje (lançar no Fluxo de Caixa)</span>
+                          </label>
+                          {financeForm.aVistaReceivedNow && (
+                            <span className="text-[10px] uppercase font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                              Fluxo de Caixa
+                            </span>
+                          )}
+                        </div>
+
+                        {financeForm.aVistaReceivedNow && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <Field label="Forma de Pagamento">
+                              <select
+                                className={inputCls}
+                                value={financeForm.method}
+                                onChange={(e) =>
+                                  setFinanceForm({ ...financeForm, method: e.target.value })
+                                }
+                              >
+                                <option value="pix">PIX</option>
+                                <option value="dinheiro">Dinheiro</option>
+                                <option value="cartao_debito">Cartão de Débito</option>
+                                <option value="cartao_credito">Cartão de Crédito</option>
+                                <option value="transferencia">Transferência</option>
+                                <option value="boleto">Boleto Bancário</option>
+                              </select>
+                            </Field>
+
+                            <Field label="Conta de Entrada">
+                              <select
+                                className={inputCls}
+                                value={financeForm.aVistaAccountId || financialAccounts[0]?.id || ""}
+                                onChange={(e) =>
+                                  setFinanceForm({ ...financeForm, aVistaAccountId: e.target.value })
+                                }
+                              >
+                                {financialAccounts.map((acc) => (
+                                  <option key={acc.id} value={acc.id}>
+                                    {acc.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </Field>
+                          </div>
+                        )}
+                        {financeForm.aVistaReceivedNow && (
+                          <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1.5">
+                            <CheckCircle2 size={13} className="shrink-0" />
+                            O valor total de {brl(financePreview.balance)} entrará imediatamente no Fluxo de Caixa como receita realizada.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {financePreview.balance > 0 && (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <Field label="Forma do Saldo Restante">
+                          <select
+                            className={inputCls}
+                            value={financeForm.method}
+                            onChange={(e) =>
+                              setFinanceForm({ ...financeForm, method: e.target.value })
+                            }
+                          >
+                            <option value="pix">PIX</option>
+                            <option value="cartao_credito">Cartão de Crédito</option>
+                            <option value="cartao_debito">Cartão de Débito</option>
+                            <option value="boleto">Boleto Bancário</option>
+                            <option value="dinheiro">Dinheiro</option>
+                            <option value="transferencia">Transferência</option>
+                          </select>
+                        </Field>
+
+                        {financeForm.modality === "parcelado" && (
+                          <>
+                            <Field label="Nº de Parcelas do Saldo">
+                              <select
+                                className={inputCls}
+                                value={financeForm.installments}
+                                onChange={(e) =>
+                                  setFinanceForm({ ...financeForm, installments: e.target.value })
+                                }
+                              >
+                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 18, 24].map((n) => (
+                                  <option key={n} value={n}>
+                                    {n}x{" "}
+                                    {financePreview.balance > 0
+                                      ? `de ${brl(financePreview.balance / n)}`
+                                      : ""}
+                                  </option>
+                                ))}
+                              </select>
+                            </Field>
+                            <Field label="1º Vencimento do Saldo">
+                              <input
+                                type="date"
+                                className={inputCls}
+                                value={financeForm.firstDue}
+                                onChange={(e) =>
+                                  setFinanceForm({ ...financeForm, firstDue: e.target.value })
+                                }
+                              />
+                            </Field>
+                          </>
+                        )}
+
+                        {financeForm.modality === "livre" && (
+                          <div className="sm:col-span-2 flex items-center gap-2 p-3 bg-card rounded-xl border border-primary/20 text-xs text-primary font-medium">
+                            <CheckCircle2 size={16} className="text-primary shrink-0" />
+                            <span>
+                              Saldo livre de {brl(financePreview.balance)} em aberto para baixas parciais avulsas, sem vencimento fixo e sem alarmes indevidos de atraso.
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Resumo visual do contrato */}
+                    {financePreview.total > 0 && (
+                      <div className="bg-card p-3.5 rounded-xl border border-border space-y-2 text-xs">
+                        <div className="font-semibold text-foreground flex items-center justify-between">
+                          <span>Resumo Financeiro do Acompanhamento:</span>
+                          <span className="text-primary font-bold text-sm">
+                            {brl(financePreview.net)}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-muted-foreground pt-1.5 border-t border-border-soft">
+                          <div>
+                            Bruto: <strong className="text-foreground">{brl(financePreview.total)}</strong>
+                          </div>
+                          {financePreview.discount > 0 && (
+                            <div>
+                              Desconto: <strong className="text-destructive">-{brl(financePreview.discount)}</strong>
+                            </div>
+                          )}
+                          {financePreview.down > 0 && (
+                            <div>
+                              Entrada: <strong className="text-success">{brl(financePreview.down)}</strong> ({financeForm.downMethod.toUpperCase()})
+                            </div>
+                          )}
+                          <div>
+                            Saldo Restante:{" "}
+                            <strong className="text-primary">
+                              {brl(financePreview.balance)}
+                            </strong>{" "}
+                            {financeForm.modality === "livre"
+                              ? "(Pagamento livre / avulso)"
+                              : `(${financeForm.installments}x de ${brl(
+                                  financePreview.balance /
+                                    Math.max(1, parseInt(financeForm.installments) || 1),
+                                )} via ${financeForm.method.toUpperCase()})`}
+                          </div>
+                        </div>
+
+                        {paymentStats.paidTotal > 0 && (
+                          <div className="mt-2 p-2.5 rounded-lg bg-warning/10 border border-warning/20 text-warning-foreground text-xs flex items-center gap-2">
+                            <AlertCircle size={15} className="text-warning shrink-0" />
+                            <span>
+                              Existem {brl(paymentStats.paidTotal)} já quitados neste plano. As parcelas já recebidas serão preservadas e as pendentes serão atualizadas.
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
               <Field label="Cor de Identificação">
                 <div className="flex flex-wrap gap-2 pt-2">
                   {COLORS.map((c) => (
@@ -1049,9 +1804,214 @@ function TreatmentManageModal({
                 </div>
               </div>
 
-              <Link to="/financeiro" className="text-primary underline">
-                Gerenciar pagamentos no Financeiro
-              </Link>
+              {/* Card de Condições Financeiras do Acompanhamento */}
+              <div className="bg-card border border-border/80 rounded-2xl p-4.5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="h-8 w-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                      <Wallet size={16} />
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold text-foreground">
+                        Condições Financeiras do Acompanhamento
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {Number(treatment.total_value) > 0
+                          ? "Valores e parcelamento integrados com Contas a Receber"
+                          : "Nenhum valor financeiro configurado para este plano"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHasFinance(true);
+                        setIsEditing(true);
+                      }}
+                      className="h-8 px-2.5 rounded-lg border border-primary/20 bg-primary-soft hover:bg-primary/20 text-primary text-xs font-semibold inline-flex items-center gap-1.5 transition cursor-pointer"
+                    >
+                      <Edit3 size={13} />
+                      <span>{Number(treatment.total_value) > 0 ? "Alterar Valores" : "Inserir Valores"}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {Number(treatment.total_value) > 0 ? (
+                  <div className="space-y-3">
+                    {/* Grid de Métricas Financeiras */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                      <div className="p-3 rounded-xl bg-muted/50 border border-border-soft">
+                        <div className="text-xs font-semibold text-muted-foreground uppercase">
+                          Total Contratado
+                        </div>
+                        <div className="text-sm font-bold text-foreground mt-0.5">
+                          {brl(treatment.total_value)}
+                        </div>
+                        {Number(treatment.discount) > 0 && (
+                          <div className="text-2xs text-destructive font-medium mt-0.5">
+                            Desc: -{brl(treatment.discount)}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-muted/50 border border-border-soft">
+                        <div className="text-xs font-semibold text-muted-foreground uppercase flex items-center justify-between">
+                          <span>Entrada</span>
+                          {Number(treatment.down_payment) > 0 && (
+                            <span
+                              className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                                isDownAlreadyPaid
+                                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                                  : "bg-warning/15 text-warning"
+                              }`}
+                            >
+                              {isDownAlreadyPaid ? "No Caixa" : "Pendente"}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                          {Number(treatment.down_payment) > 0 ? brl(treatment.down_payment) : "Sem entrada"}
+                        </div>
+                        {Number(treatment.down_payment) > 0 && (
+                          <div className="text-2xs text-muted-foreground uppercase mt-0.5">
+                            {treatment.down_payment_method || "pix"}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-muted/50 border border-border-soft">
+                        <div className="text-xs font-semibold text-muted-foreground uppercase">
+                          Saldo Restante
+                        </div>
+                        <div className="text-sm font-bold text-primary mt-0.5">
+                          {brl(
+                            Math.max(
+                              0,
+                              (treatment.total_value || 0) -
+                                (treatment.discount || 0) -
+                                (treatment.down_payment || 0),
+                            ),
+                          )}
+                        </div>
+                        <div className="text-2xs text-muted-foreground mt-0.5">
+                          {isInitiallyLivre ? "Saldo Livre" : `${treatment.installments_count || 1}x parcelas`}
+                        </div>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-muted/50 border border-border-soft">
+                        <div className="text-xs font-semibold text-muted-foreground uppercase">
+                          Status Recebimento
+                        </div>
+                        <div className="text-sm font-bold text-foreground mt-0.5">
+                          {paymentStats.paidTotal > 0
+                            ? brl(paymentStats.paidTotal)
+                            : "Pendente"}
+                        </div>
+                        <div className="text-2xs text-muted-foreground mt-0.5">
+                          {paymentStats.countPaid > 0
+                            ? `${paymentStats.countPaid} recebido(s)`
+                            : "Aguardando baixa"}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Lista resumida de títulos / parcelas vinculadas */}
+                    {treatmentTitles.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-border-soft">
+                        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center justify-between">
+                          <span>Lançamentos no Contas a Receber ({treatmentTitles.length})</span>
+                          <Link
+                            to="/financeiro"
+                            className="text-primary hover:underline text-xs font-semibold inline-flex items-center gap-1"
+                          >
+                            <span>Ir para Contas a Receber</span>
+                            <ExternalLink size={11} />
+                          </Link>
+                        </div>
+                        <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1 text-xs">
+                          {treatmentTitles.map((t: any) => {
+                            const isPaid = t.status === "pago" || (Number(t.paid_amount) >= Number(t.amount) && Number(t.amount) > 0);
+                            const isFree = (t.category || "").toLowerCase().includes("saldo livre") || (t.description || "").toLowerCase().includes("saldo livre");
+                            return (
+                              <div
+                                key={t.id}
+                                className="flex items-center justify-between p-2 rounded-lg bg-muted/40 border border-border-soft hover:bg-muted/70 transition"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span
+                                    className={`h-2 w-2 rounded-full shrink-0 ${
+                                      isPaid
+                                        ? "bg-emerald-500"
+                                        : isFree
+                                          ? "bg-purple-500"
+                                          : t.due_date && t.due_date < new Date().toISOString().slice(0, 10)
+                                            ? "bg-red-500"
+                                            : "bg-blue-500"
+                                    }`}
+                                  />
+                                  <span className="truncate font-medium text-foreground">
+                                    {t.description || "Título"}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2.5 shrink-0">
+                                  <span className="text-muted-foreground">
+                                    {isFree
+                                      ? "Sem vencimento"
+                                      : t.due_date
+                                        ? new Date(t.due_date).toLocaleDateString("pt-BR")
+                                        : "—"}
+                                  </span>
+                                  <span className="font-semibold text-foreground">
+                                    {brl(t.amount)}
+                                  </span>
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-2xs font-semibold ${
+                                      isPaid
+                                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
+                                        : isFree
+                                          ? "bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300"
+                                          : t.due_date && t.due_date < new Date().toISOString().slice(0, 10)
+                                            ? "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300"
+                                            : "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300"
+                                    }`}
+                                  >
+                                    {isPaid
+                                      ? "Pago"
+                                      : isFree
+                                        ? "Livre"
+                                        : t.due_date && t.due_date < new Date().toISOString().slice(0, 10)
+                                          ? "Atrasado"
+                                          : "A vencer"}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl bg-muted/40 border border-dashed border-border text-center space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      Este acompanhamento ainda não possui valor contratado, entrada ou parcelas registradas.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHasFinance(true);
+                        setIsEditing(true);
+                      }}
+                      className="h-8 px-3.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-semibold inline-flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                    >
+                      <Plus size={13} />
+                      <span>Inserir Condições Financeiras</span>
+                    </button>
+                  </div>
+                )}
+              </div>
 
               {/* Objetivo e Notas */}
               {treatment.objective && (
@@ -1138,18 +2098,36 @@ function TreatmentManageModal({
 
           <div className="flex items-center gap-2">
             {!isEditing ? (
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  navigate({ to: "/acompanhamentos/$id", params: { id: treatment.id } });
-                }}
-                className="h-10 px-4 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-semibold shadow-md shadow-primary/20 inline-flex items-center gap-1.5 transition cursor-pointer"
-              >
-                <Pill size={15} />
-                <span>Abrir página completa</span>
-                <ExternalLink size={14} />
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    navigate({
+                      to: "/acompanhamentos/$id",
+                      params: { id: treatment.id },
+                      search: { tab: "financeiro" },
+                    });
+                  }}
+                  className="h-10 px-3.5 rounded-xl border border-primary/25 bg-primary-soft hover:bg-primary/20 text-primary text-sm font-semibold inline-flex items-center gap-1.5 transition cursor-pointer"
+                  title="Acessar o financeiro deste acompanhamento"
+                >
+                  <Wallet size={15} />
+                  <span>Financeiro</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    navigate({ to: "/acompanhamentos/$id", params: { id: treatment.id } });
+                  }}
+                  className="h-10 px-4 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-semibold shadow-md shadow-primary/20 inline-flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <Pill size={15} />
+                  <span>Página completa</span>
+                  <ExternalLink size={14} />
+                </button>
+              </>
             ) : (
               <button
                 type="button"
@@ -1190,6 +2168,34 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
     color: COLORS[0],
     notes: "",
   });
+
+  const { data: financialAccounts = [] } = useFinancialAccounts();
+  const [hasFinance, setHasFinance] = useState(true);
+  const [financeForm, setFinanceForm] = useState({
+    total: "",
+    discount: "0",
+    down: "0",
+    downMethod: "pix",
+    downDue: new Date().toISOString().slice(0, 10),
+    downReceivedNow: true,
+    downAccountId: "",
+    modality: "parcelado" as "parcelado" | "livre",
+    method: "pix",
+    installments: "1",
+    firstDue: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+    aVistaReceivedNow: true,
+    aVistaAccountId: "",
+  });
+
+  const financePreview = useMemo(() => {
+    const total = parseBrlNumber(financeForm.total);
+    const discount = parseBrlNumber(financeForm.discount);
+    const down = parseBrlNumber(financeForm.down);
+    const net = Math.max(0, total - discount);
+    const balance = Math.max(0, net - down);
+    return { total, discount, down, net, balance };
+  }, [financeForm.total, financeForm.discount, financeForm.down]);
+
   const [saving, setSaving] = useState(false);
 
   const loadPatientsAndDoctors = async () => {
@@ -1288,6 +2294,28 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
       toast.error("Confira início, duração e intervalo de retorno (1 a 365 dias).");
       return;
     }
+
+    const totalNum = hasFinance ? financePreview.total : 0;
+    const discountNum = hasFinance ? financePreview.discount : 0;
+    const downNum = hasFinance ? financePreview.down : 0;
+    const isLivre = financeForm.modality === "livre";
+    const countNum = isLivre ? 1 : Math.max(1, parseInt(financeForm.installments) || 1);
+
+    if (hasFinance && totalNum > 0) {
+      if (downNum > financePreview.net) {
+        toast.error("O valor da entrada não pode ser superior ao total líquido com desconto.");
+        return;
+      }
+      if (downNum > 0 && !financeForm.downDue) {
+        toast.error("Informe a data de vencimento da entrada.");
+        return;
+      }
+      if (!isLivre && financePreview.balance > 0 && !financeForm.firstDue) {
+        toast.error("Informe o primeiro vencimento do saldo parcelado.");
+        return;
+      }
+    }
+
     setSaving(true);
     const startDateObj = new Date(form.start_date);
     const protocolDaysNum = Number(form.protocol_days) || 90;
@@ -1304,15 +2332,113 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
       return_days: form.return_days ? Number(form.return_days) : null,
       color: form.color,
       notes: form.notes || null,
+      total_value: totalNum,
+      discount: discountNum,
+      down_payment: downNum,
+      installments_count: isLivre ? 1 : countNum,
+      payment_type: isLivre ? "parcelado" : (countNum === 1 && downNum === 0 ? "a_vista" : "parcelado"),
+      down_payment_method: downNum > 0 ? financeForm.downMethod : null,
+      payment_method: financeForm.method,
+      down_payment_due_date: downNum > 0 ? financeForm.downDue : null,
+      first_due_date: financeForm.firstDue || null,
     };
+
     const { data, error } = await supabase.from("treatments").insert(payload).select("id").single();
     if (error || !data) {
       setSaving(false);
-      toast.error("Erro ao criar acompanhamento");
+      toast.error("Erro ao criar acompanhamento: " + (error?.message || ""));
       return;
     }
+
+    // Configurar parcelas e entrada automaticamente no financeiro
+    if (totalNum > 0) {
+      try {
+        const { error: confErr } = await supabase.rpc("configure_treatment_payment", {
+          p_treatment_id: data.id,
+          p_total: totalNum,
+          p_discount: discountNum,
+          p_down: downNum,
+          p_type: isLivre ? "parcelado" : (countNum === 1 && downNum === 0 ? "a_vista" : "parcelado"),
+          p_down_method: downNum > 0 ? financeForm.downMethod : null,
+          p_method: financeForm.method || "pix",
+          p_count: isLivre || (countNum === 1 && downNum === 0) ? 1 : countNum,
+          p_down_due: downNum > 0 ? financeForm.downDue : null,
+          p_first_due: financeForm.firstDue || null,
+        });
+
+        if (confErr) {
+          console.error("Erro ao configurar parcelas via RPC:", confErr);
+          toast.warning("Acompanhamento criado! Confira as condições na aba Financeiro.");
+        } else if (isLivre && financePreview.balance > 0) {
+          // Atualiza título de saldo livre
+          const { data: createdTxs } = await supabase
+            .from("transactions")
+            .select("id, description, installment_id, installments:installment_id(number)")
+            .eq("treatment_id", data.id);
+
+          const balanceTx = createdTxs?.find(
+            (tx: any) => tx.installments?.number !== 0 && !tx.description?.includes("Entrada"),
+          );
+          if (balanceTx) {
+            await supabase
+              .from("transactions")
+              .update({
+                description: `Acompanhamento: ${form.title} - Saldo Livre (Sem vencimento definido)`,
+                category: "Saldo Livre",
+              })
+              .eq("id", balanceTx.id);
+          }
+        }
+
+        // Liquidação imediata no Fluxo de Caixa para Entrada ou À Vista
+        if (downNum > 0 && financeForm.downReceivedNow) {
+          const patName = patients.find((p) => p.id === form.patient_id)?.name || form.title || "Paciente";
+          await recordImmediateTreatmentPayment({
+            treatmentId: data.id,
+            isDown: true,
+            amount: downNum,
+            paidDate: financeForm.downDue,
+            method: financeForm.downMethod,
+            accountId: financeForm.downAccountId || financialAccounts[0]?.id || "",
+            payerName: patName,
+          });
+        } else if (downNum === 0 && countNum === 1 && financeForm.modality === "parcelado" && financeForm.aVistaReceivedNow) {
+          const patName = patients.find((p) => p.id === form.patient_id)?.name || form.title || "Paciente";
+          await recordImmediateTreatmentPayment({
+            treatmentId: data.id,
+            isDown: false,
+            amount: totalNum - discountNum,
+            paidDate: financeForm.firstDue,
+            method: financeForm.method,
+            accountId: financeForm.aVistaAccountId || financialAccounts[0]?.id || "",
+            payerName: patName,
+          });
+        }
+      } catch (err) {
+        console.error("Erro ao integrar financeiro:", err);
+      }
+    }
+
+    try {
+      await refreshFinance(queryClient);
+      await queryClient.invalidateQueries({ queryKey: ["treatments-list"] });
+      await queryClient.invalidateQueries({ queryKey: ["treatment-finance-plans"] });
+      await queryClient.invalidateQueries({ queryKey: ["treatment-alerts"] });
+      await queryClient.invalidateQueries({ queryKey: ["financial-snapshot"] });
+      await queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      await queryClient.invalidateQueries({ queryKey: ["cash-flow-snapshot"] });
+    } catch {}
+
     setSaving(false);
-    toast.success("Acompanhamento criado com sucesso!");
+    if (downNum > 0 && financeForm.downReceivedNow) {
+      toast.success(`Acompanhamento criado e entrada de ${brl(downNum)} lançada no Fluxo de Caixa com sucesso!`);
+    } else if (downNum === 0 && countNum === 1 && financeForm.modality === "parcelado" && financeForm.aVistaReceivedNow) {
+      toast.success(`Acompanhamento criado e valor de ${brl(totalNum - discountNum)} lançado no Fluxo de Caixa com sucesso!`);
+    } else if (totalNum > 0) {
+      toast.success("Acompanhamento criado e integrado ao Contas a Receber com sucesso!");
+    } else {
+      toast.success("Acompanhamento criado com sucesso!");
+    }
     onCreated();
     onClose();
   };
@@ -1538,9 +2664,312 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
                 ))}
               </select>
             </Field>
-            <p className="text-sm text-muted-foreground">
-              Entrada e parcelas são configuradas no Financeiro após salvar o plano.
-            </p>
+            {/* ================= SEÇÃO FINANCEIRA INTEGRADA ================= */}
+            <div className="md:col-span-2 rounded-2xl border border-primary/25 bg-primary-soft/30 p-4 space-y-3.5">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-8 w-8 rounded-xl bg-primary text-white flex items-center justify-center shadow-xs">
+                    <Wallet size={16} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-foreground">
+                      Condições Financeiras do Acompanhamento
+                    </h4>
+                    <p className="text-xs text-muted-foreground">
+                      Gera automaticamente os lançamentos e parcelas no Contas a Receber
+                    </p>
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-xs font-semibold text-foreground cursor-pointer select-none bg-card px-2.5 py-1 rounded-lg border border-border">
+                  <input
+                    type="checkbox"
+                    checked={hasFinance}
+                    onChange={(e) => setHasFinance(e.target.checked)}
+                    className="h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer"
+                  />
+                  <span>Definir valores agora</span>
+                </label>
+              </div>
+
+              {hasFinance && (
+                <div className="space-y-3.5 pt-2 border-t border-primary/15 animate-in fade-in duration-200">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <Field label="Valor Total (R$) *">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        className={inputCls}
+                        placeholder="Ex.: 8000,00"
+                        value={financeForm.total}
+                        onChange={(e) => setFinanceForm({ ...financeForm, total: e.target.value })}
+                      />
+                    </Field>
+                    <Field label="Desconto (R$)">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        className={inputCls}
+                        placeholder="0,00"
+                        value={financeForm.discount}
+                        onChange={(e) =>
+                          setFinanceForm({ ...financeForm, discount: e.target.value })
+                        }
+                      />
+                    </Field>
+                    <Field label="Modalidade do Saldo">
+                      <select
+                        className={inputCls}
+                        value={financeForm.modality}
+                        onChange={(e) =>
+                          setFinanceForm({
+                            ...financeForm,
+                            modality: e.target.value as "parcelado" | "livre",
+                          })
+                        }
+                      >
+                        <option value="parcelado">Parcelado com vencimentos fixos</option>
+                        <option value="livre">Pagamentos livres (Sem vencimento fixo)</option>
+                      </select>
+                    </Field>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <Field label="Valor de Entrada (R$)">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        className={inputCls}
+                        placeholder="Ex.: 1000,00"
+                        value={financeForm.down}
+                        onChange={(e) => setFinanceForm({ ...financeForm, down: e.target.value })}
+                      />
+                    </Field>
+                    {parseBrlNumber(financeForm.down) > 0 && (
+                      <div className="sm:col-span-2 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-foreground">
+                            <input
+                              type="checkbox"
+                              checked={financeForm.downReceivedNow}
+                              onChange={(e) =>
+                                setFinanceForm({ ...financeForm, downReceivedNow: e.target.checked })
+                              }
+                              className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                            />
+                            <span>Entrada recebida à vista hoje (lançar no Fluxo de Caixa)</span>
+                          </label>
+                          {financeForm.downReceivedNow && (
+                            <span className="text-[10px] uppercase font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                              Fluxo de Caixa
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                          <Field label="Forma da Entrada">
+                            <select
+                              className={inputCls}
+                              value={financeForm.downMethod}
+                              onChange={(e) =>
+                                setFinanceForm({ ...financeForm, downMethod: e.target.value })
+                              }
+                            >
+                              <option value="pix">PIX</option>
+                              <option value="dinheiro">Dinheiro</option>
+                              <option value="cartao_debito">Cartão de Débito</option>
+                              <option value="cartao_credito">Cartão de Crédito</option>
+                              <option value="transferencia">Transferência</option>
+                              <option value="boleto">Boleto Bancário</option>
+                            </select>
+                          </Field>
+
+                          <Field label="Data de Recebimento">
+                            <input
+                              type="date"
+                              className={inputCls}
+                              value={financeForm.downDue}
+                              onChange={(e) =>
+                                setFinanceForm({ ...financeForm, downDue: e.target.value })
+                              }
+                            />
+                          </Field>
+
+                          <Field label="Conta de Entrada">
+                            <select
+                              className={inputCls}
+                              value={financeForm.downAccountId || financialAccounts[0]?.id || ""}
+                              onChange={(e) =>
+                                setFinanceForm({ ...financeForm, downAccountId: e.target.value })
+                              }
+                            >
+                              {financialAccounts.map((acc) => (
+                                <option key={acc.id} value={acc.id}>
+                                  {acc.name}
+                                </option>
+                              ))}
+                            </select>
+                          </Field>
+                        </div>
+                        {financeForm.downReceivedNow && (
+                          <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1.5">
+                            <CheckCircle2 size={13} className="shrink-0" />
+                            A entrada entrará imediatamente no Fluxo de Caixa Realizado como receita no caixa da clínica.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {parseBrlNumber(financeForm.down) === 0 && parseInt(financeForm.installments) === 1 && financeForm.modality === "parcelado" && (
+                    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-foreground">
+                          <input
+                            type="checkbox"
+                            checked={financeForm.aVistaReceivedNow}
+                            onChange={(e) =>
+                              setFinanceForm({ ...financeForm, aVistaReceivedNow: e.target.checked })
+                            }
+                            className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                          />
+                          <span>Pagamento à vista já recebido hoje (lançar no Fluxo de Caixa)</span>
+                        </label>
+                        {financeForm.aVistaReceivedNow && (
+                          <span className="text-[10px] uppercase font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                            Fluxo de Caixa
+                          </span>
+                        )}
+                      </div>
+
+                      {financeForm.aVistaReceivedNow && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          <Field label="Forma de Pagamento">
+                            <select
+                              className={inputCls}
+                              value={financeForm.method}
+                              onChange={(e) =>
+                                setFinanceForm({ ...financeForm, method: e.target.value })
+                              }
+                            >
+                              <option value="pix">PIX</option>
+                              <option value="dinheiro">Dinheiro</option>
+                              <option value="cartao_debito">Cartão de Débito</option>
+                              <option value="cartao_credito">Cartão de Crédito</option>
+                              <option value="transferencia">Transferência</option>
+                              <option value="boleto">Boleto Bancário</option>
+                            </select>
+                          </Field>
+
+                          <Field label="Conta de Entrada">
+                            <select
+                              className={inputCls}
+                              value={financeForm.aVistaAccountId || financialAccounts[0]?.id || ""}
+                              onChange={(e) =>
+                                setFinanceForm({ ...financeForm, aVistaAccountId: e.target.value })
+                              }
+                            >
+                              {financialAccounts.map((acc) => (
+                                <option key={acc.id} value={acc.id}>
+                                  {acc.name}
+                                </option>
+                              ))}
+                            </select>
+                          </Field>
+                        </div>
+                      )}
+                      {financeForm.aVistaReceivedNow && (
+                        <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1.5">
+                          <CheckCircle2 size={13} className="shrink-0" />
+                          O valor total de {brl(financePreview.balance)} entrará imediatamente no Fluxo de Caixa como receita realizada.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {financePreview && financePreview.balance > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <Field label="Forma do Saldo Restante">
+                        <select
+                          className={inputCls}
+                          value={financeForm.method}
+                          onChange={(e) =>
+                            setFinanceForm({ ...financeForm, method: e.target.value })
+                          }
+                        >
+                          <option value="pix">PIX</option>
+                          <option value="cartao_credito">Cartão de Crédito</option>
+                          <option value="cartao_debito">Cartão de Débito</option>
+                          <option value="boleto">Boleto Bancário</option>
+                          <option value="dinheiro">Dinheiro</option>
+                          <option value="transferencia">Transferência</option>
+                        </select>
+                      </Field>
+
+                      {financeForm.modality === "parcelado" && (
+                        <>
+                          <Field label="Nº de Parcelas do Saldo">
+                            <select
+                              className={inputCls}
+                              value={financeForm.installments}
+                              onChange={(e) =>
+                                setFinanceForm({ ...financeForm, installments: e.target.value })
+                              }
+                            >
+                              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 18, 24].map((n) => (
+                                <option key={n} value={n}>
+                                  {n}x{" "}
+                                  {financePreview.balance > 0
+                                    ? `de ${brl(financePreview.balance / n)}`
+                                    : ""}
+                                </option>
+                              ))}
+                            </select>
+                          </Field>
+                          <Field label="1º Vencimento do Saldo">
+                            <input
+                              type="date"
+                              className={inputCls}
+                              value={financeForm.firstDue}
+                              onChange={(e) =>
+                                setFinanceForm({ ...financeForm, firstDue: e.target.value })
+                              }
+                            />
+                          </Field>
+                        </>
+                      )}
+
+                      {financeForm.modality === "livre" && (
+                        <div className="sm:col-span-2 flex items-center gap-2 p-3 bg-card rounded-xl border border-primary/20 text-xs text-primary font-medium">
+                          <CheckCircle2 size={16} className="text-primary shrink-0" />
+                          <span>
+                            Saldo livre de {brl(financePreview.balance)} em aberto para baixas parciais avulsas, sem vencimento fixo e sem alarmes indevidos de atraso.
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Resumo visual do contrato */}
+                  {financePreview.total > 0 && (
+                    <div className="p-3 bg-card rounded-xl border border-border text-xs flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-muted-foreground">
+                        Entrada: <strong className="text-foreground">{brl(financePreview.down)}</strong> · Saldo a receber:{" "}
+                        <strong className="text-primary">{brl(financePreview.balance)}</strong>
+                        {financeForm.modality === "parcelado" && financePreview.balance > 0 && (
+                          <span> ({financeForm.installments}x com 1º vencimento em {new Date(financeForm.firstDue + "T12:00:00").toLocaleDateString("pt-BR")})</span>
+                        )}
+                        {financeForm.modality === "livre" && financePreview.balance > 0 && (
+                          <span> (sem vencimento fixado)</span>
+                        )}
+                      </span>
+                      <span className="font-semibold text-foreground">
+                        Total Líquido: {brl(financePreview.net)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
             <Field label="Cor de identificação">
               <div className="flex flex-wrap gap-2 pt-2">
                 {COLORS.map((c) => (

@@ -18,7 +18,7 @@ import {
   moneyCents,
   PAYMENT_METHODS,
 } from "@/features/acompanhamentos/followup-utils";
-import { refreshFinance, saveLocalPayment, reverseLocalPayment } from "./finance-api";
+import { refreshFinance, saveLocalPayment, reverseLocalPayment, saveLocalTitle } from "./finance-api";
 import { remaining } from "./finance-math";
 import type { FinanceSnapshot, FinancialTitle, FinancialPayment } from "./finance-schema";
 
@@ -116,6 +116,44 @@ export default function PaymentHistory({
           reversal_reason: null,
         });
       }
+
+      // Atualiza o título imediatamente para que o status 'pago' e o saldo zero sejam refletidos
+      const currentPaid = Number(title.paid_amount) || 0;
+      const newPaidTotal = currentPaid + value;
+      const isPaidNow = newPaidTotal >= Number(title.amount) - 0.01;
+
+      saveLocalTitle({
+        ...title,
+        paid_amount: isPaidNow ? Number(title.amount) : newPaidTotal,
+        status: isPaidNow ? "pago" : title.status,
+      });
+
+      if (isUuid) {
+        try {
+          await supabase
+            .from("transactions")
+            .update({
+              paid_amount: isPaidNow ? Number(title.amount) : newPaidTotal,
+              status: isPaidNow ? "pago" : "pendente",
+              paid_at: isPaidNow ? new Date().toISOString() : null,
+            })
+            .eq("id", title.id);
+        } catch {}
+      }
+
+      if (title.installment_id) {
+        try {
+          await supabase
+            .from("treatment_installments")
+            .update({
+              status: isPaidNow ? "pago" : "pendente",
+              paid_date: isPaidNow ? date : null,
+            })
+            .eq("id", title.installment_id);
+        } catch {}
+      }
+
+      window.dispatchEvent(new CustomEvent("medcore_local_title_saved"));
 
       setRequestId(crypto.randomUUID());
       setSubmitted(false);

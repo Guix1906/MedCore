@@ -19,10 +19,7 @@ import CashFlow from "@/features/finance/CashFlow";
 import { ContasPagarTab } from "@/features/finance/ContasPagarTab";
 import { ContasReceberTab } from "@/features/finance/ContasReceberTab";
 import BankReconciliation from "@/features/finance/BankReconciliation";
-import { DfcTab } from "@/features/finance/DfcTab";
-import { DreTab } from "@/features/finance/DreTab";
 import CategoriesManager from "@/features/finance/CategoriesManager";
-import FinanceOperations from "@/features/finance/FinanceOperations";
 import NewTitle from "@/features/finance/NewTitle";
 import PaymentHistory from "@/features/finance/PaymentHistory";
 import OperationForm, { OperationLock, Reason, formText } from "@/features/finance/OperationForm";
@@ -58,6 +55,7 @@ function FinanceiroPage() {
   });
   const [selected, setSelected] = useState("");
   const [creatingType, setCreating] = useState<"receita" | "despesa" | null>(null);
+  const [creatingPaidNow, setCreatingPaidNow] = useState(false);
   const creating =
     creatingType ?? (search.novo ? (search.tab === "pagar" ? "despesa" : "receita") : null);
   const [cancelId, setCancelId] = useState("");
@@ -220,7 +218,10 @@ function FinanceiroPage() {
               {search.tab === "fluxo" ? (
                     <CashFlow
                       finance={data}
-                      onOpenNew={(type) => setCreating(type || "receita")}
+                      onOpenNew={(type) => {
+                        setCreating(type || "receita");
+                        setCreatingPaidNow(true);
+                      }}
                       onSelectTitle={(id) => setSelected(id)}
                     />
                   ) : search.tab === "pagar" ? (
@@ -228,7 +229,10 @@ function FinanceiroPage() {
                       finance={data}
                       onRefresh={() => void query.refetch()}
                       refreshing={query.isFetching}
-                      onOpenNew={(type) => setCreating(type || "despesa")}
+                      onOpenNew={(type) => {
+                        setCreating(type || "despesa");
+                        setCreatingPaidNow(false);
+                      }}
                       onEdit={(item) => setSelected(item.id)}
                       onPay={(item) => setSelected(item.id)}
                       onDelete={(id) => setCancelId(id)}
@@ -238,38 +242,19 @@ function FinanceiroPage() {
                       finance={data}
                       onRefresh={() => void query.refetch()}
                       refreshing={query.isFetching}
-                      onOpenNew={(type) => setCreating(type || "receita")}
+                      onOpenNew={(type) => {
+                        setCreating(type || "receita");
+                        setCreatingPaidNow(false);
+                      }}
                       onEdit={(item) => setSelected(item.id)}
                       onReceive={(item) => setSelected(item.id)}
                       onDelete={handleDeleteReceber}
                     />
-                  ) : search.tab === "conciliacao" ? (
+                  ) : (
                     <BankReconciliation
                       finance={data}
                       onRefresh={() => void query.refetch()}
                       refreshing={query.isFetching}
-                      onOpenTitles={(type) => changeTab(type === "receita" ? "receber" : "pagar")}
-                    />
-                  ) : search.tab === "dfc" ? (
-                    <DfcTab
-                      finance={data}
-                      onRefresh={() => void query.refetch()}
-                      refreshing={query.isFetching}
-                      onSelectTitle={(id) => setSelected(id)}
-                    />
-                  ) : search.tab === "dre" ? (
-                    <DreTab
-                      finance={data}
-                      onRefresh={() => void query.refetch()}
-                      refreshing={query.isFetching}
-                      onSelectTitle={(id) => setSelected(id)}
-                    />
-                  ) : (
-                    <FinanceOperations
-                      finance={data}
-                      mode={search.tab}
-                      onLockChange={setOperationsLocked}
-                      onSelectTitle={setSelected}
                       onOpenTitles={(type) => changeTab(type === "receita" ? "receber" : "pagar")}
                     />
                   )}
@@ -277,8 +262,10 @@ function FinanceiroPage() {
                 <NewTitle
                   finance={data}
                   type={creating}
+                  defaultPaidNow={creatingPaidNow || search.tab === "fluxo"}
                   onClose={() => {
                     setCreating(null);
+                    setCreatingPaidNow(false);
                     if (search.novo)
                       void navigate({ search: { ...search, novo: false }, replace: true });
                   }}

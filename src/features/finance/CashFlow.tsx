@@ -40,10 +40,20 @@ import {
   isToday,
   startOfDay,
   differenceInDays,
+  startOfWeek,
+  endOfWeek,
   startOfMonth,
   endOfMonth,
+  startOfYear,
+  endOfYear,
+  addDays,
+  subDays,
+  addWeeks,
+  subWeeks,
   addMonths,
   subMonths,
+  addYears,
+  subYears,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -91,6 +101,7 @@ import type { OperationsSnapshot } from "./operations-schema";
 import {
   GraficoFluxoDeCaixa,
   type LancamentoFluxo,
+  type ChartGranularity,
 } from "@/components/finance/GraficoFluxoDeCaixa";
 import { CountUp } from "@/components/finance/CountUp";
 import { cn } from "@/lib/utils";
@@ -117,21 +128,85 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
   const [selectedAccount, setSelectedAccount] = useState<string>("todas");
   const [showChart, setShowChart] = useState<boolean>(true);
 
-  // Período (Navegação mensal pelo Stepper do cabeçalho)
-  const [currentMonthDate, setCurrentMonthDate] = useState(() => new Date());
-
-  const start = useMemo(
-    () => format(startOfMonth(currentMonthDate), "yyyy-MM-dd"),
-    [currentMonthDate],
+  // Período e Filtros de Data (Dia, Semana, Mês, Ano, Personalizado)
+  const [periodMode, setPeriodMode] = useState<"dia" | "semana" | "mes" | "ano" | "custom">("mes");
+  const [currentPeriodDate, setCurrentPeriodDate] = useState(() => new Date());
+  const [customStartDate, setCustomStartDate] = useState(() =>
+    format(startOfMonth(new Date()), "yyyy-MM-dd"),
   );
-  const end = useMemo(() => format(endOfMonth(currentMonthDate), "yyyy-MM-dd"), [currentMonthDate]);
+  const [customEndDate, setCustomEndDate] = useState(() =>
+    format(endOfMonth(new Date()), "yyyy-MM-dd"),
+  );
+  const [chartGranularity, setChartGranularity] = useState<ChartGranularity>("dia");
 
-  const handlePrevMonth = () => {
-    setCurrentMonthDate((prev) => subMonths(prev, 1));
+  const { start, end, periodLabel } = useMemo(() => {
+    if (periodMode === "dia") {
+      const d = format(currentPeriodDate, "yyyy-MM-dd");
+      return {
+        start: d,
+        end: d,
+        periodLabel: format(currentPeriodDate, "dd/MM/yyyy"),
+      };
+    }
+    if (periodMode === "semana") {
+      const s = startOfWeek(currentPeriodDate, { weekStartsOn: 1 });
+      const e = endOfWeek(currentPeriodDate, { weekStartsOn: 1 });
+      return {
+        start: format(s, "yyyy-MM-dd"),
+        end: format(e, "yyyy-MM-dd"),
+        periodLabel: `${format(s, "dd/MM")} - ${format(e, "dd/MM/yyyy")}`,
+      };
+    }
+    if (periodMode === "ano") {
+      const s = startOfYear(currentPeriodDate);
+      const e = endOfYear(currentPeriodDate);
+      return {
+        start: format(s, "yyyy-MM-dd"),
+        end: format(e, "yyyy-MM-dd"),
+        periodLabel: `Ano ${format(currentPeriodDate, "yyyy")}`,
+      };
+    }
+    if (periodMode === "custom") {
+      const sLabel = customStartDate ? format(parseISO(customStartDate), "dd/MM/yyyy") : "Início";
+      const eLabel = customEndDate ? format(parseISO(customEndDate), "dd/MM/yyyy") : "Fim";
+      return {
+        start: customStartDate,
+        end: customEndDate,
+        periodLabel: `${sLabel} - ${eLabel}`,
+      };
+    }
+    // Default: "mes"
+    const s = startOfMonth(currentPeriodDate);
+    const e = endOfMonth(currentPeriodDate);
+    return {
+      start: format(s, "yyyy-MM-dd"),
+      end: format(e, "yyyy-MM-dd"),
+      periodLabel: `${format(s, "dd/MM/yyyy")} - ${format(e, "dd/MM/yyyy")}`,
+    };
+  }, [periodMode, currentPeriodDate, customStartDate, customEndDate]);
+
+  const handlePrevPeriod = () => {
+    if (periodMode === "dia") {
+      setCurrentPeriodDate((prev) => subDays(prev, 1));
+    } else if (periodMode === "semana") {
+      setCurrentPeriodDate((prev) => subWeeks(prev, 1));
+    } else if (periodMode === "ano") {
+      setCurrentPeriodDate((prev) => subYears(prev, 1));
+    } else if (periodMode === "mes") {
+      setCurrentPeriodDate((prev) => subMonths(prev, 1));
+    }
   };
 
-  const handleNextMonth = () => {
-    setCurrentMonthDate((prev) => addMonths(prev, 1));
+  const handleNextPeriod = () => {
+    if (periodMode === "dia") {
+      setCurrentPeriodDate((prev) => addDays(prev, 1));
+    } else if (periodMode === "semana") {
+      setCurrentPeriodDate((prev) => addWeeks(prev, 1));
+    } else if (periodMode === "ano") {
+      setCurrentPeriodDate((prev) => addYears(prev, 1));
+    } else if (periodMode === "mes") {
+      setCurrentPeriodDate((prev) => addMonths(prev, 1));
+    }
   };
 
   // Sub-abas (Lançamentos / Excluídos)
@@ -1116,6 +1191,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
         running += vals.entradas - vals.saidas;
         return {
           date,
+          iso: vals.iso,
           entradas: vals.entradas,
           saidas: vals.saidas,
           aReceber: vals.aReceber,
@@ -1318,29 +1394,124 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
             </SelectContent>
           </Select>
 
-          {/* Stepper de Mês: [ <   01/09/2026 - 30/09/2026   > ] */}
-          <div className="flex items-center bg-card border border-border rounded-lg h-9 px-1 shadow-2xs">
+          {/* Seletor de Período: Dia | Semana | Mês | Ano | Datas */}
+          <div className="inline-flex items-center bg-muted/60 p-0.5 rounded-lg border border-border shadow-2xs">
             <button
               type="button"
-              onClick={handlePrevMonth}
-              className="h-7 w-7 inline-flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground/80 hover:bg-muted transition-colors cursor-pointer"
-              title="Mês anterior"
+              onClick={() => {
+                setPeriodMode("dia");
+                setChartGranularity("dia");
+              }}
+              className={cn(
+                "px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
+                periodMode === "dia"
+                  ? "bg-card text-foreground shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
             >
-              <ChevronLeft className="h-4 w-4" />
+              Dia
             </button>
-            <span className="px-3 text-xs font-semibold text-foreground/80 tracking-wide select-none">
-              {format(startOfMonth(currentMonthDate), "dd/MM/yyyy")} -{" "}
-              {format(endOfMonth(currentMonthDate), "dd/MM/yyyy")}
-            </span>
             <button
               type="button"
-              onClick={handleNextMonth}
-              className="h-7 w-7 inline-flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground/80 hover:bg-muted transition-colors cursor-pointer"
-              title="Próximo mês"
+              onClick={() => {
+                setPeriodMode("semana");
+                setChartGranularity("dia");
+              }}
+              className={cn(
+                "px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
+                periodMode === "semana"
+                  ? "bg-card text-foreground shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
             >
-              <ChevronRight className="h-4 w-4" />
+              Semana
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPeriodMode("mes");
+                setChartGranularity("dia");
+              }}
+              className={cn(
+                "px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
+                periodMode === "mes"
+                  ? "bg-card text-foreground shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Mês
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPeriodMode("ano");
+                setChartGranularity("anual");
+              }}
+              className={cn(
+                "px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
+                periodMode === "ano"
+                  ? "bg-card text-foreground shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Ano
+            </button>
+            <button
+              type="button"
+              onClick={() => setPeriodMode("custom")}
+              className={cn(
+                "px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer flex items-center gap-1",
+                periodMode === "custom"
+                  ? "bg-card text-foreground shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <CalendarIcon className="h-3 w-3" />
+              Datas
             </button>
           </div>
+
+          {/* Stepper ou Inputs de Data Personalizada */}
+          {periodMode !== "custom" ? (
+            <div className="flex items-center bg-card border border-border rounded-lg h-9 px-1 shadow-2xs">
+              <button
+                type="button"
+                onClick={handlePrevPeriod}
+                className="h-7 w-7 inline-flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground/80 hover:bg-muted transition-colors cursor-pointer"
+                title="Período anterior"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="px-3 text-xs font-semibold text-foreground/80 tracking-wide select-none">
+                {periodLabel}
+              </span>
+              <button
+                type="button"
+                onClick={handleNextPeriod}
+                className="h-7 w-7 inline-flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground/80 hover:bg-muted transition-colors cursor-pointer"
+                title="Próximo período"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 bg-card border border-border rounded-lg h-9 px-2 shadow-2xs text-xs">
+              <span className="text-muted-foreground text-[11px] font-medium">De:</span>
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="bg-transparent text-xs text-foreground font-medium outline-hidden cursor-pointer"
+              />
+              <span className="text-muted-foreground text-[11px] font-medium ml-1">Até:</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="bg-transparent text-xs text-foreground font-medium outline-hidden cursor-pointer"
+              />
+            </div>
+          )}
 
           {/* Botão Alternar Exibição do Gráfico */}
           <Button
@@ -1415,9 +1586,30 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       </div>
 
       {/* ========================================================================= */}
-      {/* GRÁFICO PRINCIPAL ("MOVIMENTO POR DIA" - COMPOSEDCHART)                   */}
+      {/* GRÁFICO PRINCIPAL ("MOVIMENTO POR DIA / SEMANA / ANO" - APEXCHARTS)        */}
       {/* ========================================================================= */}
-      {showChart && <GraficoFluxoDeCaixa customChartData={chartData} />}
+      {showChart && (
+        <GraficoFluxoDeCaixa
+          customChartData={chartData}
+          granularity={chartGranularity}
+          onGranularityChange={setChartGranularity}
+          periodLabel={periodLabel}
+          startDate={start}
+          endDate={end}
+          onDateRangeChange={(s, e) => {
+            setCustomStartDate(s);
+            setCustomEndDate(e);
+            setPeriodMode("custom");
+          }}
+          onSelectPeriodPreset={(preset) => {
+            setPeriodMode(preset);
+            if (preset === "ano") setChartGranularity("anual");
+            else if (preset === "mes") setChartGranularity("mes");
+            else if (preset === "semana") setChartGranularity("semana");
+            else setChartGranularity("dia");
+          }}
+        />
+      )}
 
       {/* ========================================================================= */}
       {/* SEÇÃO COMPLETA DE LANÇAMENTOS E MOVIMENTAÇÕES                             */}
@@ -1628,9 +1820,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Período aplicado: {format(startOfMonth(currentMonthDate), "dd/MM/yyyy")} -{" "}
-            {format(endOfMonth(currentMonthDate), "dd/MM/yyyy")}. Exportação desta lista respeita os
-            filtros.
+            Período aplicado: {periodLabel}. Exportação desta lista respeita os filtros.
           </p>
         </div>
 

@@ -18,9 +18,14 @@ import {
   ExternalLink,
   ChevronDown,
   TrendingUp,
+  Wallet,
+  Bell,
+  CalendarCheck2,
 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { parseISO, startOfDay, format } from "date-fns";
 import { isRecordWiped } from "@/lib/wipe-system";
+import { getStoredLocalPatients } from "@/lib/local-patients";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -70,7 +75,9 @@ export function ContasReceberTab({
   onReceive,
   onDelete,
 }: ContasReceberTabProps) {
-  const [subTab, setSubTab] = useState<"geral" | "clientes" | "cartoes" | "parcelados">("geral");
+  const [subTab, setSubTab] = useState<
+    "geral" | "hoje" | "parcelados" | "livre" | "clientes" | "cartoes"
+  >("geral");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"todos" | "pendente" | "vencido" | "pago">("todos");
   const [selectedAssociado, setSelectedAssociado] = useState<string>("todos");
@@ -108,7 +115,27 @@ export function ContasReceberTab({
     });
   }, [finance?.titles]);
 
-  // Cálculos de KPIs e Envelhecimento (Aging por Vencimento)
+  // Helper para verificar status de liquidação estrito cruzando título e pagamentos
+  const getTitleStatus = (t: FinancialTitle) => {
+    const directPayments = (finance?.payments || []).filter(
+      (p) =>
+        (p.transaction_id === t.id || (t.installment_id && p.transaction_id === t.installment_id)) &&
+        !p.reversed_at,
+    );
+    const paymentsTotal = directPayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
+    const paidAmt = Math.max(Number(t.paid_amount) || 0, paymentsTotal);
+    const titleAmt = Number(t.amount) || 0;
+    const rem = Math.max(0, titleAmt - paidAmt);
+    const isPaid =
+      String(t.status).toLowerCase() === "pago" ||
+      String(t.status).toLowerCase() === "quitado" ||
+      rem <= 0.01 ||
+      (titleAmt > 0 && paidAmt >= titleAmt - 0.01);
+
+    return { rem, isPaid, paidAmt, valorDisplay: rem > 0 ? rem : titleAmt };
+  };
+
+  // Cálculos de KPIs, Vencem Hoje, Saldos Livres e Envelhecimento (Aging)
   const metrics = useMemo(() => {
     const today = startOfDay(new Date());
     const todayTime = today.getTime();
@@ -119,6 +146,12 @@ export function ContasReceberTab({
     let emAtrasoCount = 0;
     let recebidoTotal = 0;
     let recebidoCount = 0;
+
+    let vencemHojeTotal = 0;
+    const vencemHojeList: FinancialTitle[] = [];
+
+    let saldoLivreTotal = 0;
+    const saldoLivreList: FinancialTitle[] = [];
 
     let rec_0_15_count = 0,
       rec_0_15_val = 0;
@@ -137,9 +170,8 @@ export function ContasReceberTab({
     const overdueClients = new Set<string>();
 
     receitas.forEach((e) => {
-      const paid = Number(e.paid_amount ?? (e.status === "pago" ? e.amount : 0));
-      const rem = remaining(e);
-      const isPaid = e.status === "pago" || rem <= 0;
+      const { rem, isPaid, paidAmt } = getTitleStatus(e);
+      const paid = paidAmt;
 
       if (paid > 0) {
         recebidoTotal += paid;
@@ -150,6 +182,14 @@ export function ContasReceberTab({
 
       const amt = rem;
       const clientIdentifier = e.patient_id || e.patient_name || e.payer_name || e.id;
+      const free = isFreeBalance(e);
+
+      // Tratamento segregado para saldos livres (não distorce o aging de atrasos)
+      if (free) {
+        saldoLivreTotal += amt;
+        saldoLivreList.push(e);
+        return;
+      }
 
       if (!e.due_date) {
         aReceberTotal += amt;
@@ -161,6 +201,12 @@ export function ContasReceberTab({
 
       const dueTime = parseISO(e.due_date).getTime();
       const diff = Math.floor((dueTime - todayTime) / 86400000);
+
+      // Cobranças agendadas exatamente para hoje
+      if (diff === 0) {
+        vencemHojeTotal += amt;
+        vencemHojeList.push(e);
+      }
 
       if (diff < 0) {
         // Em atraso
@@ -180,7 +226,7 @@ export function ContasReceberTab({
           atr_30_plus_val += amt;
         }
       } else {
-        // A receber (a vencer)
+        // A receber (a vencer ou hoje)
         aReceberTotal += amt;
         aReceberCount++;
 
@@ -204,6 +250,12 @@ export function ContasReceberTab({
       emAtrasoClientesCount: overdueClients.size,
       recebidoTotal,
       recebidoCount,
+      vencemHojeTotal,
+      vencemHojeCount: vencemHojeList.length,
+      vencemHojeList,
+      saldoLivreTotal,
+      saldoLivreCount: saldoLivreList.length,
+      saldoLivreList,
       faixas: {
         aReceber: [
           { label: "0-15 dias", count: rec_0_15_count, val: rec_0_15_val },
@@ -224,12 +276,23 @@ export function ContasReceberTab({
     const today = startOfDay(new Date());
 
     return receitas.filter((e) => {
-      const rem = remaining(e);
-      const isPaid = e.status === "pago" || rem <= 0;
-      const isVencido = !isPaid && !!e.due_date && startOfDay(parseISO(e.due_date)) < today;
+      const { rem, isPaid } = getTitleStatus(e);
+      const isVencido = !isPaid && !isFreeBalance(e) && !!e.due_date && startOfDay(parseISO(e.due_date)) < today;
 
       // Filtro de sub-abas
-      if (subTab === "cartoes") {
+      if (subTab === "hoje") {
+        if (isPaid || isFreeBalance(e) || !e.due_date) return false;
+        const dueTime = parseISO(e.due_date).getTime();
+        const diff = Math.floor((dueTime - today.getTime()) / 86400000);
+        if (diff !== 0) return false;
+      } else if (subTab === "parcelados") {
+        if (isFreeBalance(e)) return false;
+        if (!e.treatment_id && !e.installment_id && !(e.description || "").includes("Parcela") && !(e.description || "").includes("Entrada")) {
+          return false;
+        }
+      } else if (subTab === "livre") {
+        if (!isFreeBalance(e)) return false;
+      } else if (subTab === "cartoes") {
         const desc = (e.description || "").toLowerCase();
         const cat = (e.category || "").toLowerCase();
         if (
@@ -238,10 +301,6 @@ export function ContasReceberTab({
           !cat.includes("cartão") &&
           !cat.includes("boleto")
         ) {
-          return false;
-        }
-      } else if (subTab === "parcelados") {
-        if (!e.treatment_id && !e.installment_id && !(e.description || "").includes("Parcela")) {
           return false;
         }
       }
@@ -254,7 +313,6 @@ export function ContasReceberTab({
       } else if (statusFilter === "pago") {
         if (!isPaid) return false;
       }
-      // 'todos' exibe todos os registros sem filtrar por status de quitação
 
       // Filtro de Associado
       if (selectedAssociado !== "todos") {
@@ -278,7 +336,7 @@ export function ContasReceberTab({
 
       return true;
     });
-  }, [receitas, subTab, statusFilter, selectedAssociado, search]);
+  }, [receitas, subTab, statusFilter, selectedAssociado, search, finance?.payments]);
 
   // Agrupamento por cliente para a sub-aba "Central de Recebíveis por Cliente"
   const clientsGrouped = useMemo(() => {
@@ -286,12 +344,13 @@ export function ContasReceberTab({
     filteredTitles.forEach((t) => {
       const clientName = t.patient_name || t.payer_name || "Cliente Avulso";
       const cur = map.get(clientName) || { name: clientName, titles: [], total: 0 };
+      const { rem } = getTitleStatus(t);
       cur.titles.push(t);
-      cur.total += remaining(t) > 0 ? remaining(t) : t.amount;
+      cur.total += rem > 0 ? rem : 0;
       map.set(clientName, cur);
     });
     return Array.from(map.values()).sort((a, b) => b.total - a.total);
-  }, [filteredTitles]);
+  }, [filteredTitles, finance?.payments]);
 
   // Abrir modal de cobrança com mensagem pronta
   const handleOpenCobrar = (title: FinancialTitle) => {
@@ -299,8 +358,8 @@ export function ContasReceberTab({
     const client = title.patient_name || title.payer_name || "Prezado(a) Cliente";
     const desc = title.description || "honorários acordados";
     const val = currency(remaining(title) > 0 ? remaining(title) : title.amount);
-    let dueStr = "sem vencimento definido";
-    if (title.due_date) {
+    let dueStr = "sem vencimento fixado";
+    if (title.due_date && !isFreeBalance(title)) {
       try {
         dueStr = format(parseISO(title.due_date), "dd/MM/yyyy");
       } catch {
@@ -309,7 +368,17 @@ export function ContasReceberTab({
     }
     const msg = `Olá, ${client}! Lembramos do vencimento referente a ${desc} no valor de ${val} com vencimento em ${dueStr}. Para sua comodidade, você pode solicitar a chave PIX ou boleto atualizado respondendo a esta mensagem. Caso já tenha efetuado o pagamento, por favor desconsidere este aviso.`;
     setCobrarMessage(msg);
-    setCobrarPhone("");
+
+    // Auto-preenchimento inteligente de telefone do paciente
+    let phoneFound = "";
+    if (title.patient_id) {
+      try {
+        const localPats = getStoredLocalPatients();
+        const matched = localPats.find((p) => p.id === title.patient_id);
+        if (matched?.phone) phoneFound = matched.phone;
+      } catch {}
+    }
+    setCobrarPhone(phoneFound);
   };
 
   const handleSendWhatsApp = () => {
@@ -362,7 +431,7 @@ export function ContasReceberTab({
       </div>
 
       {/* ========================================================================= */}
-      {/* 2. SUB-ABAS / PILLS (Geral, Central de Recebíveis, Cartões, Honorários)      */}
+      {/* 2. SUB-ABAS / PILLS (Geral, Vencem Hoje, Parcelados, Saldos Livres...)    */}
       {/* ========================================================================= */}
       <div className="flex items-center gap-2 flex-wrap">
         <button
@@ -381,6 +450,58 @@ export function ContasReceberTab({
 
         <button
           type="button"
+          onClick={() => setSubTab("hoje")}
+          className={cn(
+            "rounded-full px-4 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer",
+            subTab === "hoje"
+              ? "bg-amber-600 text-white shadow-xs"
+              : "border border-amber-500/30 bg-card text-amber-600 dark:text-amber-400 hover:bg-amber-500/10",
+          )}
+        >
+          <Bell className="h-3.5 w-3.5" />
+          Vencem Hoje
+          {metrics.vencemHojeCount > 0 && (
+            <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold">
+              {metrics.vencemHojeCount}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSubTab("parcelados")}
+          className={cn(
+            "rounded-full px-4 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer",
+            subTab === "parcelados"
+              ? "bg-info text-white shadow-xs"
+              : "border border-border bg-card text-muted-foreground hover:bg-muted/60",
+          )}
+        >
+          <Layers className="h-3.5 w-3.5" />
+          Parcelados (Com Vencimento)
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSubTab("livre")}
+          className={cn(
+            "rounded-full px-4 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer",
+            subTab === "livre"
+              ? "bg-primary text-white shadow-xs"
+              : "border border-primary/30 bg-card text-primary hover:bg-primary/10",
+          )}
+        >
+          <Wallet className="h-3.5 w-3.5" />
+          Saldos Livres
+          {metrics.saldoLivreCount > 0 && (
+            <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-primary/15 font-bold">
+              {metrics.saldoLivreCount}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
           onClick={() => setSubTab("clientes")}
           className={cn(
             "rounded-full px-4 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer",
@@ -390,7 +511,7 @@ export function ContasReceberTab({
           )}
         >
           <FileText className="h-3.5 w-3.5" />
-          Central de Recebíveis por Cliente
+          Por Cliente
         </button>
 
         <button
@@ -406,37 +527,136 @@ export function ContasReceberTab({
           <CreditCard className="h-3.5 w-3.5" />
           Cartões / Boletos
         </button>
-
-        <button
-          type="button"
-          onClick={() => setSubTab("parcelados")}
-          className={cn(
-            "rounded-full px-4 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer",
-            subTab === "parcelados"
-              ? "bg-info text-white shadow-xs font-semibold"
-              : "border border-border bg-card text-muted-foreground hover:bg-muted/60",
-          )}
-        >
-          <Layers className="h-3.5 w-3.5" />
-          Honorários Parcelados
-        </button>
       </div>
 
       {/* ========================================================================= */}
-      {/* 3. OS 3 CARDS DE MÉTRICAS (A RECEBER, EM ATRASO, RECEBIDO MANUAL)          */}
+      {/* ALERTA DE COBRANÇAS DE HOJE (RÉGUA DIÁRIA PROATIVA)                       */}
       {/* ========================================================================= */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {metrics.vencemHojeCount > 0 && (
+        <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 dark:bg-amber-950/20 p-4.5 space-y-3 shadow-xs animate-in fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-2xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                <Bell className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30">
+                    Cobranças de Hoje
+                  </span>
+                  <h3 className="font-semibold text-sm text-foreground">
+                    {metrics.vencemHojeCount} paciente(s) com parcela vencendo hoje ({currency(metrics.vencemHojeTotal)})
+                  </h3>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Lembre os pacientes para não perder o prazo de recebimento via WhatsApp ou confirme a baixa.
+                </p>
+              </div>
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSubTab("hoje")}
+              className="text-xs border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/15 cursor-pointer self-start sm:self-auto font-semibold"
+            >
+              Ver na Tabela ({metrics.vencemHojeCount})
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
+            {metrics.vencemHojeList.slice(0, 6).map((item) => {
+              const client = item.patient_name || item.payer_name || "Paciente";
+              const val = remaining(item) > 0 ? remaining(item) : item.amount;
+              return (
+                <div
+                  key={item.id}
+                  className="bg-card border border-border/80 rounded-xl p-3 flex items-center justify-between gap-2 shadow-2xs"
+                >
+                  <div className="min-w-0">
+                    <div className="font-semibold text-xs text-foreground truncate">{client}</div>
+                    <div className="text-[11px] text-muted-foreground truncate">{item.description}</div>
+                    <div className="text-xs font-bold text-success mt-0.5">{currency(val)}</div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {item.status === "pago" || remaining(item) <= 0 ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-[11px] px-2 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20 cursor-pointer"
+                        onClick={() => onReceive(item)}
+                        title="Visualizar histórico e recibo"
+                      >
+                        <CheckCircle2 className="h-3 w-3 mr-1" />
+                        Recebido
+                      </Button>
+                    ) : (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-[11px] px-2 text-destructive border-destructive/25 hover:bg-destructive/10 cursor-pointer"
+                          onClick={() => handleOpenCobrar(item)}
+                          title="Enviar lembrete via WhatsApp"
+                        >
+                          <MessageCircle className="h-3.5 w-3.5 mr-1" />
+                          Cobrar
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="h-7 text-[11px] px-2.5 bg-success text-white hover:bg-success/90 cursor-pointer"
+                          onClick={() => onReceive(item)}
+                          title="Registrar recebimento"
+                        >
+                          Receber
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* BANNER INFORMATIVO NA ABA DE SALDOS LIVRES */}
+      {subTab === "livre" && (
+        <div className="rounded-2xl border border-primary/25 bg-primary-soft/50 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-primary shadow-xs">
+          <div className="space-y-0.5">
+            <span className="font-bold uppercase tracking-wider block text-primary-hover">
+              Modalidade Ativa: Saldos Livres ({metrics.saldoLivreCount} acompanhamentos em aberto)
+            </span>
+            <p className="text-foreground/80 leading-relaxed">
+              Estes valores correspondem a acompanhamentos com pagamento sem vencimento fixado (Total: {currency(metrics.saldoLivreTotal)}).
+              Eles não geram alarmes indevidos de inadimplência e recebem baixas parciais conforme os pagamentos do paciente.
+              Caso o paciente decida fixar vencimentos, você pode repactuar em parcelas com data diretamente na ficha dele.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 3. OS 4 CARDS DE MÉTRICAS (A RECEBER, EM ATRASO, SALDOS LIVRES, RECEBIDO) */}
+      {/* ========================================================================= */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* CARD 1: A RECEBER */}
-        <div className="rounded-xl border border-border bg-card p-5 shadow-xs flex items-center justify-between">
+        <div
+          className={cn(
+            "rounded-xl border border-border bg-card p-5 shadow-xs flex items-center justify-between cursor-pointer hover:border-info/40 transition-colors",
+            subTab === "parcelados" && "ring-2 ring-info/50 border-info bg-info/5",
+          )}
+          onClick={() => setSubTab("parcelados")}
+        >
           <div className="space-y-1">
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              A RECEBER
+              A RECEBER (PREVISTO)
             </span>
             <p className="text-2xl font-semibold text-foreground tracking-tight">
               <CountUp value={metrics.aReceberTotal} format={(v) => currency(v)} />
             </p>
             <p className="text-xs text-muted-foreground">
-              {metrics.aReceberCount} pagamentos previstos
+              {metrics.aReceberCount} pagamentos com data
             </p>
           </div>
           <div className="h-9 w-9 rounded-full bg-warning/10 text-warning flex items-center justify-center shrink-0">
@@ -446,8 +666,14 @@ export function ContasReceberTab({
 
         {/* CARD 2: EM ATRASO */}
         <div
-          className="rounded-xl border border-border bg-card p-5 shadow-xs flex items-center justify-between cursor-pointer hover:border-destructive/35 transition-colors"
-          onClick={() => setStatusFilter("vencido")}
+          className={cn(
+            "rounded-xl border border-border bg-card p-5 shadow-xs flex items-center justify-between cursor-pointer hover:border-destructive/35 transition-colors",
+            statusFilter === "vencido" && "ring-2 ring-destructive/50 border-destructive bg-destructive/5",
+          )}
+          onClick={() => {
+            setStatusFilter("vencido");
+            setSubTab("geral");
+          }}
         >
           <div className="space-y-1">
             <span className="text-xs font-semibold text-destructive uppercase tracking-wider flex items-center gap-1">
@@ -465,13 +691,40 @@ export function ContasReceberTab({
           </div>
         </div>
 
-        {/* CARD 3: RECEBIDO (MANUAL) */}
+        {/* CARD 3: SALDOS LIVRES */}
+        <div
+          className={cn(
+            "rounded-xl border border-border bg-card p-5 shadow-xs flex items-center justify-between cursor-pointer hover:border-primary/40 transition-colors",
+            subTab === "livre" && "ring-2 ring-primary/50 border-primary bg-primary-soft/50",
+          )}
+          onClick={() => setSubTab("livre")}
+        >
+          <div className="space-y-1">
+            <span className="text-xs font-semibold text-primary uppercase tracking-wider flex items-center gap-1">
+              SALDOS LIVRES <ExternalLink className="h-3 w-3" />
+            </span>
+            <p className="text-2xl font-semibold text-foreground tracking-tight">
+              <CountUp value={metrics.saldoLivreTotal} format={(v) => currency(v)} />
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {metrics.saldoLivreCount} planos a combinar
+            </p>
+          </div>
+          <div className="h-9 w-9 rounded-full bg-primary-soft text-primary flex items-center justify-center shrink-0">
+            <Wallet className="h-4 w-4" />
+          </div>
+        </div>
+
+        {/* CARD 4: RECEBIDO / PAGO */}
         <div
           className={cn(
             "rounded-xl border border-border bg-card p-5 shadow-xs flex items-center justify-between cursor-pointer hover:border-info/35 transition-colors",
             statusFilter === "pago" && "ring-2 ring-info/50 border-info bg-info/5",
           )}
-          onClick={() => setStatusFilter("pago")}
+          onClick={() => {
+            setStatusFilter("pago");
+            setSubTab("geral");
+          }}
         >
           <div className="space-y-1">
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
@@ -691,17 +944,15 @@ export function ContasReceberTab({
 
                 <div className="divide-y divide-border-soft">
                   {grp.titles.map((t) => {
-                    const rem = remaining(t);
-                    const isPaid = t.status === "pago" || rem <= 0;
-                    const valorDisplay = rem > 0 ? rem : t.amount;
+                    const { rem, isPaid, valorDisplay, paidAmt } = getTitleStatus(t);
                     return (
                       <div key={t.id} className="pt-2.5 pb-1 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                         <div className="space-y-0.5 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-medium text-foreground">{t.description}</span>
-                            {t.paid_amount > 0 && rem > 0 && (
+                            {paidAmt > 0 && rem > 0 && (
                               <span className="inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/25">
-                                Sinal pago: {currency(t.paid_amount)}
+                                Sinal pago: {currency(paidAmt)}
                               </span>
                             )}
                             <span className={cn(
@@ -712,7 +963,13 @@ export function ContasReceberTab({
                             </span>
                           </div>
                           <p className="text-[11px] text-muted-foreground">
-                            Venc: {t.due_date ? formatClinicalDate(t.due_date) : "Sem data"} · Total: {currency(t.amount)}
+                            Venc:{" "}
+                            {isFreeBalance(t)
+                              ? "Sem vencimento fixo"
+                              : t.due_date
+                                ? formatClinicalDate(t.due_date)
+                                : "Sem data"}{" "}
+                            · Total: {currency(t.amount)}
                             {rem > 0 && ` · Saldo a receber: ${currency(rem)}`}
                           </p>
                         </div>
@@ -720,21 +977,36 @@ export function ContasReceberTab({
                           <strong className="font-semibold text-success tabular-nums">
                             {currency(valorDisplay)}
                           </strong>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-[11px] px-2.5 text-destructive border-destructive/25 hover:bg-destructive/10 cursor-pointer"
-                            onClick={() => handleOpenCobrar(t)}
-                          >
-                            Cobrar
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="h-7 text-[11px] px-3 bg-success text-white hover:bg-success/90 cursor-pointer"
-                            onClick={() => onReceive(t)}
-                          >
-                            Receber
-                          </Button>
+                          {isPaid ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-[11px] px-2.5 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20 cursor-pointer"
+                              onClick={() => onReceive(t)}
+                              title="Visualizar histórico e recibo"
+                            >
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Recebido
+                            </Button>
+                          ) : (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-[11px] px-2.5 text-destructive border-destructive/25 hover:bg-destructive/10 cursor-pointer"
+                                onClick={() => handleOpenCobrar(t)}
+                              >
+                                Cobrar
+                              </Button>
+                              <Button
+                                size="sm"
+                                className="h-7 text-[11px] px-3 bg-success text-white hover:bg-success/90 cursor-pointer"
+                                onClick={() => onReceive(t)}
+                              >
+                                Receber
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </div>
                     );
@@ -746,10 +1018,10 @@ export function ContasReceberTab({
         ) : (
           <div className="divide-y divide-border-soft">
             {filteredTitles.map((t) => {
-              const rem = remaining(t);
-              const isPaid = t.status === "pago" || rem <= 0;
+              const { rem, isPaid, valorDisplay, paidAmt } = getTitleStatus(t);
               const isVencido =
                 !isPaid &&
+                !isFreeBalance(t) &&
                 !!t.due_date &&
                 startOfDay(parseISO(t.due_date)) < startOfDay(new Date());
 
@@ -761,7 +1033,6 @@ export function ContasReceberTab({
               ).toUpperCase();
               const formattedDue = t.due_date ? formatClinicalDate(t.due_date) : "Sem data";
               const tagCategory = t.category || "Honorários Iniciais / sinal";
-              const valorDisplay = rem > 0 ? rem : t.amount;
 
               return (
                 <div
@@ -776,14 +1047,21 @@ export function ContasReceberTab({
                       </span>
 
                       {/* Tag 1: Categoria / Sub-categoria */}
-                      <span className="inline-flex items-center text-xs font-semibold px-2.5 py-0.5 rounded-full bg-info/10 text-info border border-info/25">
-                        {tagCategory}
+                      <span
+                        className={cn(
+                          "inline-flex items-center text-xs font-semibold px-2.5 py-0.5 rounded-full border",
+                          isFreeBalance(t)
+                            ? "bg-primary/10 text-primary border-primary/25 font-bold"
+                            : "bg-info/10 text-info border-info/25",
+                        )}
+                      >
+                        {isFreeBalance(t) ? "Saldo Livre" : tagCategory}
                       </span>
 
                       {/* Tag Sinal se houver */}
-                      {t.paid_amount > 0 && rem > 0 && (
+                      {paidAmt > 0 && rem > 0 && (
                         <span className="inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/25">
-                          Sinal pago: {currency(t.paid_amount)}
+                          Sinal pago: {currency(paidAmt)}
                         </span>
                       )}
 
@@ -792,18 +1070,43 @@ export function ContasReceberTab({
                         tone={isPaid ? "success" : isVencido ? "danger" : "warning"}
                         icon={isPaid ? CheckCircle2 : isVencido ? AlertCircle : Clock3}
                       >
-                        {isPaid ? "Recebido" : isVencido ? "Vencido" : "Pendente"}
+                        {isPaid
+                          ? "Recebido"
+                          : isFreeBalance(t)
+                            ? paidAmt > 0
+                              ? "Parcial (Saldo Livre)"
+                              : "Aberto (Saldo Livre)"
+                            : isVencido
+                              ? "Vencido"
+                              : "Pendente"}
                       </StatusBadge>
                     </div>
 
                     <p className="text-xs text-muted-foreground truncate">
-                      Vencimento: {formattedDue} · Cliente: {clientName} ·{" "}
-                      {t.paid_amount > 0 && rem > 0 && (
+                      Vencimento:{" "}
+                      {isFreeBalance(t) ? (
+                        <span className="text-primary font-medium">Sem vencimento fixo</span>
+                      ) : (
+                        formattedDue
+                      )}{" "}
+                      · Cliente: {clientName} ·{" "}
+                      {paidAmt > 0 && rem > 0 && (
                         <span className="text-amber-600 dark:text-amber-400 font-semibold mr-1.5">
                           Saldo a cobrar: {currency(rem)} ·
                         </span>
                       )}
                       <span className="text-info font-medium">Associado: {associadoName}</span>
+                      {t.treatment_id && (
+                        <Link
+                          to="/acompanhamentos/$id"
+                          params={{ id: t.treatment_id }}
+                          search={{ tab: "financeiro" }}
+                          className="inline-flex items-center gap-1 ml-2 text-primary hover:underline font-semibold"
+                        >
+                          <Wallet className="h-3 w-3" />
+                          Plano Clínico
+                        </Link>
+                      )}
                     </p>
                   </div>
 
@@ -813,25 +1116,40 @@ export function ContasReceberTab({
                       {currency(valorDisplay)}
                     </strong>
 
-                    {/* Botão Cobrar */}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 border-destructive/25 bg-card text-destructive hover:bg-destructive/10 text-xs font-semibold px-3 flex items-center gap-1.5 shadow-2xs cursor-pointer"
-                      onClick={() => handleOpenCobrar(t)}
-                    >
-                      <MessageCircle className="h-3.5 w-3.5" />
-                      Cobrar
-                    </Button>
+                    {isPaid ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 text-xs font-semibold px-3 flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                        onClick={() => onReceive(t)}
+                        title="Visualizar histórico e comprovante"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                        Recebido
+                      </Button>
+                    ) : (
+                      <>
+                        {/* Botão Cobrar */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 border-destructive/25 bg-card text-destructive hover:bg-destructive/10 text-xs font-semibold px-3 flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                          onClick={() => handleOpenCobrar(t)}
+                        >
+                          <MessageCircle className="h-3.5 w-3.5" />
+                          Cobrar
+                        </Button>
 
-                    {/* Botão Receber */}
-                    <Button
-                      size="sm"
-                      className="h-8 bg-success hover:bg-success/90 text-white text-xs font-semibold px-4 shadow-2xs cursor-pointer"
-                      onClick={() => onReceive(t)}
-                    >
-                      Receber
-                    </Button>
+                        {/* Botão Receber */}
+                        <Button
+                          size="sm"
+                          className="h-8 bg-success hover:bg-success/90 text-white text-xs font-semibold px-4 shadow-2xs cursor-pointer"
+                          onClick={() => onReceive(t)}
+                        >
+                          Receber
+                        </Button>
+                      </>
+                    )}
 
                     {/* Botão Editar */}
                     <Button
