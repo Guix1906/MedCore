@@ -24,10 +24,26 @@ export interface LancamentoFluxo {
   id: string;
   amount: number;
   paid_amount?: number | null;
-  entry_type: "receita" | "despesa";
-  status: "pago" | "pendente" | "cancelado";
+  entry_type?: "receita" | "despesa";
+  type?: "receita" | "despesa";
+  status?: "pago" | "pendente" | "cancelado";
   paid_at?: string | null;
   due_date?: string | null;
+  date?: string;
+  transaction_id?: string;
+  created_at?: string;
+  description?: string;
+  category?: string;
+  client_name?: string;
+  payment_method?: string;
+  payment_account?: string;
+  account_id?: string;
+  company_id?: string | null;
+  is_expense?: boolean;
+  reversed_at?: string | null;
+  reversal_reason?: string | null;
+  badgeLabel?: string;
+  title?: any;
 }
 
 export interface DayChartPoint {
@@ -118,13 +134,13 @@ export function GraficoFluxoDeCaixa({
     // REGRA DO FLUXO DE CAIXA: Apenas lançamentos realizados (pagos)
     const safeEntries = Array.isArray(entries) ? entries : [];
     const realizadados = safeEntries.filter(
-      (e) => e && e.status === "pago" && (e.paid_at || e.due_date),
+      (e) => e && (e.status === "pago" || !e.status) && (e.paid_at || e.date || e.due_date),
     );
 
     // Ordenação cronológica
     const ordenados = [...realizadados].sort((a, b) => {
-      const da = String(a.paid_at || a.due_date || "");
-      const db = String(b.paid_at || b.due_date || "");
+      const da = String(a.paid_at || a.date || a.due_date || "");
+      const db = String(b.paid_at || b.date || b.due_date || "");
       return da.localeCompare(db);
     });
 
@@ -134,7 +150,7 @@ export function GraficoFluxoDeCaixa({
     >();
 
     ordenados.forEach((e) => {
-      const dStr = String(e.paid_at || e.due_date || "").slice(0, 10);
+      const dStr = String(e.paid_at || e.date || e.due_date || "").slice(0, 10);
       if (!dStr) return;
 
       let label = dStr;
@@ -155,10 +171,15 @@ export function GraficoFluxoDeCaixa({
         iso: dStr,
       };
       const valor = Number(e.paid_amount ?? e.amount ?? 0);
+      const isEntrada =
+        e.entry_type === "receita" ||
+        e.type === "receita" ||
+        (e.is_expense === false) ||
+        (!e.entry_type && !e.type && !e.is_expense);
 
-      if (e.entry_type === "receita") {
+      if (isEntrada) {
         current.entradas += valor;
-      } else if (e.entry_type === "despesa") {
+      } else {
         current.saidas += valor;
       }
 

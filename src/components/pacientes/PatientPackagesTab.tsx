@@ -553,7 +553,9 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
                     </div>
 
                     <Link
-                      to={`/acompanhamentos/${item.id}`}
+                      to="/acompanhamentos/$id"
+                      params={{ id: item.id }}
+                      search={{ tab: undefined }}
                       className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary-soft hover:bg-primary-soft text-primary text-sm font-semibold transition-all cursor-pointer shrink-0"
                     >
                       <span>Abrir Acompanhamento</span>
@@ -810,7 +812,7 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
                               .filter((a) => a.active)
                               .map((acc) => (
                                 <option key={acc.id} value={acc.id}>
-                                  {acc.name} ({acc.bank_name || "Caixa"})
+                                  {acc.name} ({(acc as any).bank_name || acc.type || "Caixa"})
                                 </option>
                               ))}
                           </select>

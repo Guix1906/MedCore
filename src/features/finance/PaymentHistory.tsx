@@ -130,7 +130,7 @@ export default function PaymentHistory({
 
       if (isUuid) {
         try {
-          await supabase
+          await (supabase as any)
             .from("transactions")
             .update({
               paid_amount: isPaidNow ? Number(title.amount) : newPaidTotal,

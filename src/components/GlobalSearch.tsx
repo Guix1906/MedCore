@@ -198,7 +198,7 @@ export default function GlobalSearch({
       if (row.kind === "patient")
         void navigate({ to: "/pacientes", search: { patientId: row.id } });
       else if (row.kind === "treatment")
-        void navigate({ to: "/acompanhamentos/$id", params: { id: row.id } });
+        void navigate({ to: "/acompanhamentos/$id", params: { id: row.id }, search: { tab: undefined } });
       else if (row.kind === "task") void navigate({ to: "/agenda", search: { taskId: row.id } });
       else void navigate({ to: META[row.kind].route });
     }

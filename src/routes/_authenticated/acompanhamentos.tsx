@@ -683,13 +683,13 @@ const useFinancialAccounts = () => {
     queryFn: async () => {
       const { data } = await supabase
         .from("financial_accounts")
-        .select("id, name, type, is_active, active, company_id")
+        .select("id, name, type, active")
         .order("name");
-      const active = (data || []).filter((a: any) => a.is_active ?? a.active ?? true);
+      const active = (data || []).filter((a) => a.active ?? true);
       if (active.length > 0) return active;
       return [
-        { id: "00000000-0000-0000-0000-000000000001", name: "Banco Principal / PIX", type: "corrente", company_id: null },
-        { id: "00000000-0000-0000-0000-000000000002", name: "Caixa Geral / Dinheiro", type: "caixa", company_id: null },
+        { id: "00000000-0000-0000-0000-000000000001", name: "Banco Principal / PIX", type: "corrente" },
+        { id: "00000000-0000-0000-0000-000000000002", name: "Caixa Geral / Dinheiro", type: "caixa" },
       ];
     },
     staleTime: 60000,
@@ -716,7 +716,7 @@ async function recordImmediateTreatmentPayment({
   if (amount <= 0) return;
 
   // 1. Busca os títulos / transações geradas para o tratamento
-  const { data: createdTxs } = await supabase
+  const { data: createdTxs } = await (supabase as any)
     .from("transactions")
     .select("id, amount, paid_amount, status, installment_id, installments:installment_id(number), description, company_id")
     .eq("treatment_id", treatmentId);
@@ -774,7 +774,7 @@ async function recordImmediateTreatmentPayment({
   // 3. Fallback direto caso a RPC encontre conflito de permissão ou conta
   if (!rpcSuccess) {
     try {
-      await supabase.from("transaction_payments").insert({
+      await (supabase as any).from("transaction_payments").insert({
         id: payId,
         transaction_id: targetTx.id,
         amount: amount,
@@ -783,14 +783,14 @@ async function recordImmediateTreatmentPayment({
         account_id: safeAccountId,
         payer_name: payerName,
       });
-      await supabase.from("transactions").update({
+      await (supabase as any).from("transactions").update({
         paid_amount: amount,
         status: "pago",
         paid_at: new Date().toISOString(),
       }).eq("id", targetTx.id);
 
       if (targetTx.installment_id) {
-        await supabase.from("treatment_installments").update({
+        await (supabase as any).from("treatment_installments").update({
           status: "pago",
           paid_date: safeDate,
         }).eq("id", targetTx.installment_id);
@@ -842,7 +842,7 @@ async function recordImmediateTreatmentPayment({
 
   if (targetTx.installment_id) {
     try {
-      await supabase.from("treatment_installments").update({
+      await (supabase as any).from("treatment_installments").update({
         status: "pago",
         paid_date: safeDate,
       }).eq("id", targetTx.installment_id);
@@ -2119,7 +2119,7 @@ function TreatmentManageModal({
                   type="button"
                   onClick={() => {
                     onClose();
-                    navigate({ to: "/acompanhamentos/$id", params: { id: treatment.id } });
+                    navigate({ to: "/acompanhamentos/$id", params: { id: treatment.id }, search: { tab: undefined } });
                   }}
                   className="h-10 px-4 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-semibold shadow-md shadow-primary/20 inline-flex items-center gap-1.5 transition cursor-pointer"
                 >
@@ -2148,6 +2148,7 @@ function TreatmentManageModal({
 
 // ============== MODAL NOVO ACOMPANHAMENTO ==============
 function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const queryClient = useQueryClient();
   const [patients, setPatients] = useState<
     { id: string; name: string; phone?: string | null; cpf?: string | null }[]
   >([]);

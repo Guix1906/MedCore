@@ -886,7 +886,7 @@ export function ActivityDrawer({
     try {
       let success = false;
       try {
-        const { error: rpcErr } = await supabase.rpc("settle_appointment_remaining", {
+        const { error: rpcErr } = await (supabase as any).rpc("settle_appointment_remaining", {
           p_event_id: eventRawId,
           p_amount: value,
           p_method: settleMethod,
@@ -933,7 +933,7 @@ export function ActivityDrawer({
           eventRawId,
         );
         if (isUuid) {
-          const { data, error } = await supabase
+          const { data, error } = await (supabase as any)
             .from("transactions")
             .select("id, amount, paid_amount, status, due_date, description")
             .eq("origin_key", `event:${eventRawId}`)
@@ -974,7 +974,7 @@ export function ActivityDrawer({
         (Number(meta?.procedurePrice) || 0) > 0
           ? Number(meta?.procedurePrice)
           : Number(meta?.downPayment) || 0;
-      const dateStr = activity.start
+      const dateStr = activity?.start
         ? activity.start.toISOString().slice(0, 10)
         : new Date().toISOString().slice(0, 10);
       const { error } = await supabase.rpc("create_event_financial_title", {

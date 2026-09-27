@@ -225,9 +225,8 @@ function MemberEditor({
     }
     const ok = await confirmDialog({
       title: "Alterar senha do usuário",
-      message: `Deseja definir esta nova senha para ${member.fullName}? A pessoa poderá fazer login imediatamente com a nova senha.`,
+      description: `Deseja definir esta nova senha para ${member.fullName}? A pessoa poderá fazer login imediatamente com a nova senha.`,
       confirmText: "Alterar senha",
-      variant: "default",
     });
     if (!ok) return;
 

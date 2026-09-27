@@ -1098,7 +1098,7 @@ export function NovoAgendamentoDialog({
           ) {
             try {
               // 1. Tenta gravar atomicamente título + sinal com conta financeira real (UUID)
-              const { data: scheduleData, error: scheduleErr } = await supabase.rpc(
+              const { data: scheduleData, error: scheduleErr } = await (supabase as any).rpc(
                 "schedule_appointment_finance",
                 {
                   p_event_id: insertedId,
@@ -1109,7 +1109,7 @@ export function NovoAgendamentoDialog({
                 },
               );
 
-              if (!scheduleErr && scheduleData?.title_id) {
+              if (!scheduleErr && (scheduleData as any)?.title_id) {
                 // Backend persistiu com sucesso: limpa o placeholder local para evitar duplicidade
                 deleteLocalPayment(`pay-evt-${insertedId}`);
                 deleteLocalFinancialTitle(`evt-${insertedId}`);
@@ -1130,7 +1130,7 @@ export function NovoAgendamentoDialog({
                 } else if (titleErr) {
                   // Fallback direto inserindo na tabela transactions do Supabase
                   const directTitleId = crypto.randomUUID();
-                  const { error: directErr } = await supabase.from("transactions").insert({
+                  const { error: directErr } = await (supabase as any).from("transactions").insert({
                     id: directTitleId,
                     type: "receita",
                     amount: totalAmt > 0 ? totalAmt : sinalAmt,
@@ -1149,7 +1149,7 @@ export function NovoAgendamentoDialog({
                   });
 
                   if (!directErr && sinalAmt > 0) {
-                    await supabase.from("transaction_payments").insert({
+                    await (supabase as any).from("transaction_payments").insert({
                       id: crypto.randomUUID(),
                       transaction_id: directTitleId,
                       amount: sinalAmt,

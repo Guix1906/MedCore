@@ -65,6 +65,7 @@ export default function TreatmentAlerts({
               <Link
                 to="/acompanhamentos/$id"
                 params={{ id: a.treatment_id }}
+                search={{ tab: undefined }}
                 className="text-primary underline"
               >
                 Abrir acompanhamento

@@ -804,7 +804,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
     const seenPayIds = new Set<string>();
     const seenEventKeys = new Set<string>();
     const seenClientDownPayments = new Map<string, any>();
-    const finalResult = [];
+    const finalResult: LancamentoFluxo[] = [];
 
     for (const e of result) {
       if (!e || seenPayIds.has(e.id)) continue;
@@ -860,7 +860,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
 
     return finalResult.filter((e) => {
       if (isRecordWiped(e)) return false;
-      if (deletedEntryIds.includes(e.id) || deletedEntryIds.includes(e.transaction_id)) return false;
+      if (deletedEntryIds.includes(e.id) || (e.transaction_id && deletedEntryIds.includes(e.transaction_id))) return false;
       if (e.title?.id && deletedEntryIds.includes(e.title.id)) return false;
       if (e.title?.origin_key && deletedEntryIds.includes(e.title.origin_key)) return false;
       const evId =
@@ -1072,8 +1072,8 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
           return false;
         }
       }
-      if (start && e.date < start) return false;
-      if (end && e.date > end) return false;
+      if (start && (!e.date || e.date < start)) return false;
+      if (end && (!e.date || e.date > end)) return false;
       if (e.status === "cancelado" || e.reversed_at) return false;
       return true;
     });
@@ -1090,10 +1090,11 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
     }
 
     base.forEach((e) => {
+      const amt = Number(e.paid_amount || 0);
       if (!e.is_expense) {
-        entradas += e.paid_amount;
+        entradas += amt;
       } else {
-        saidas += e.paid_amount;
+        saidas += amt;
       }
     });
 
@@ -1305,10 +1306,11 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
   }
 
   const handleOpenEditOrHistory = (entry: (typeof allRealizedEntries)[0]) => {
+    const tid = entry.transaction_id || entry.id;
     if (onSelectTitle) {
-      onSelectTitle(entry.transaction_id);
+      onSelectTitle(tid);
     } else {
-      setInternalSelectedTitleId(entry.transaction_id);
+      setInternalSelectedTitleId(tid);
     }
   };
 

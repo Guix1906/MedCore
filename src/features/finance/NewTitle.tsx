@@ -172,7 +172,7 @@ export default function NewTitle({
       // 2. Fallback direto se a RPC falhar
       if (!rpcSuccess) {
         try {
-          const { error: directErr } = await supabase.from("transactions").insert({
+          const { error: directErr } = await (supabase as any).from("transactions").insert({
             id: titleId,
             type: type,
             amount: numAmount,
@@ -235,7 +235,7 @@ export default function NewTitle({
           });
         } catch (payErr) {
           try {
-            await supabase.from("transaction_payments").insert({
+            await (supabase as any).from("transaction_payments").insert({
               id: payId,
               transaction_id: titleId,
               amount: numAmount,

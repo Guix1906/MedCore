@@ -189,7 +189,7 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
             });
           } catch {
             try {
-              await supabase.from("transaction_payments").insert({
+              await (supabase as any).from("transaction_payments").insert({
                 id: payId,
                 transaction_id: downTx.id,
                 amount: preview.down,
@@ -198,7 +198,7 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
                 account_id: accountId,
                 payer_name: patName,
               });
-              await supabase.from("transactions").update({
+              await (supabase as any).from("transactions").update({
                 paid_amount: preview.down,
                 status: "pago",
                 paid_at: new Date().toISOString(),
@@ -208,7 +208,7 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
 
           if (downTx.installment_id) {
             try {
-              await supabase.from("treatment_installments").update({
+              await (supabase as any).from("treatment_installments").update({
                 status: "pago",
                 paid_date: paidDate,
               }).eq("id", downTx.installment_id);
@@ -241,7 +241,7 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
             status: "pago",
             description: `Acompanhamento: ${plan.title} - Entrada`,
             category: "Honorários Iniciais / Entrada",
-            patient_id: plan.patient_id,
+            patient_id: (plan as any).patient_id || null,
             patient_name: patName,
             payer_name: patName,
             company_id: (plan as any).company_id || null,

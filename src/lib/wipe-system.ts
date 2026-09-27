@@ -314,7 +314,7 @@ export async function performFullSystemWipe(): Promise<void> {
 
   // Attempt backend cancellations/deletions via security definer RPCs
   try {
-    await supabase.rpc("reset_all_system_test_data");
+    await (supabase as any).rpc("reset_all_system_test_data");
   } catch {}
 
   // Cancel any individual titles if possible

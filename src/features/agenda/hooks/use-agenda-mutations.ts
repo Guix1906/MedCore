@@ -45,9 +45,9 @@ export function useAgendaMutations(onDone: (a: Activity | null) => void) {
         deleteLocalFinancialTitle(`evt-${id}`);
         deleteLocalPayment(`pay-evt-${id}`);
         try {
-          await supabase.from("transactions").delete().like("origin_key", `event:${id}`);
-          await supabase.from("financial_titles").delete().like("origin_key", `event:${id}`);
-          await supabase.from("financial_payments").delete().like("id", `pay-evt-${id}`);
+          await (supabase as any).from("transactions").delete().like("origin_key", `event:${id}`);
+          await (supabase as any).from("financial_titles").delete().like("origin_key", `event:${id}`);
+          await (supabase as any).from("financial_payments").delete().like("id", `pay-evt-${id}`);
         } catch {}
       }
       const { error } = await supabase.from(tbl).delete().eq("id", id);
