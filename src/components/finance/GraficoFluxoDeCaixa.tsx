@@ -494,28 +494,6 @@ export function GraficoFluxoDeCaixa({
               </PopoverContent>
             </Popover>
           )}
-
-          {/* Legenda com Pills */}
-          <div className="hidden sm:flex items-center gap-3 text-xs font-medium pl-1">
-            <div className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-success" />
-              <span className="text-muted-foreground">Entradas</span>
-            </div>
-            {hasAReceber && (
-              <div className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-primary" />
-                <span className="text-muted-foreground">A Receber</span>
-              </div>
-            )}
-            <div className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-destructive" />
-              <span className="text-muted-foreground">Saídas</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="h-1 w-4 rounded-full bg-info" />
-              <span className="text-muted-foreground">Saldo</span>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -588,6 +566,28 @@ export function GraficoFluxoDeCaixa({
             }}
           />
         )}
+      </div>
+
+      {/* Legenda Centralizada no Rodapé do Gráfico */}
+      <div className="flex items-center justify-center gap-6 pt-3 border-t border-border/40 text-xs font-medium flex-wrap">
+        <div className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-success shrink-0" />
+          <span className="text-muted-foreground">Entradas</span>
+        </div>
+        {hasAReceber && (
+          <div className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-primary shrink-0" />
+            <span className="text-muted-foreground">A Receber</span>
+          </div>
+        )}
+        <div className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-destructive shrink-0" />
+          <span className="text-muted-foreground">Saídas</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="h-1 w-4 rounded-full bg-info shrink-0" />
+          <span className="text-muted-foreground">Saldo</span>
+        </div>
       </div>
     </div>
   );
