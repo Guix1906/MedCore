@@ -39,6 +39,8 @@ Cores fixas (hex) ficam restritas a dados: cor de profissional, evento, tratamen
 - No máximo 3–4 camadas de vidro visíveis ao mesmo tempo.
 - Sem suporte a `backdrop-filter`, o vidro fica quase opaco; com `prefers-reduced-transparency` ou `prefers-contrast: more`, fica opaco.
 - Texto sobre vidro precisa de contraste AA. Não aplique cor de marca no fundo do vidro, só na ação principal e em status.
+- No login (`auth-canvas`), o papel de parede usa as cores das marcas (teal da clínica, azul do símbolo MedCore e roxo de ação) para o vidro aparecer. São dois vidros reais, o palco do logo e o cartão de acesso; os ícones em volta do logo são translúcidos, sem blur. As cores ficam em `--auth-*`, com valores para o modo escuro, transparência reduzida e alto contraste, e o preenchimento automático do navegador segue o tema.
+- O login é a única tela com movimento ambiente (aurora e ícones flutuando), lento e desligado com `prefers-reduced-motion`.
 
 ## Componentes
 

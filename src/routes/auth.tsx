@@ -1,22 +1,59 @@
-import { BrandLogo } from "@/components/ui-app/BrandLogo";
+import { BrandSymbol } from "@/components/ui-app/BrandLogo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { safeRedirectPath } from "@/features/admin/permissions";
 import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 import { authService, getStoredToken } from "@/services/api";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import {
+  Activity,
   ArrowRight,
+  CalendarCheck,
   Eye,
   EyeOff,
+  HeartPulse,
   Loader2,
-  ShieldCheck,
+  LockKeyhole,
+  Mail,
+  Salad,
+  UserRound,
+  type LucideIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 type AuthSearch = { redirect?: string; modo?: "convite" | "nova-senha" };
 type AuthMode = "signin" | "signup" | "forgot" | "password";
+
+// Ícones decorativos que flutuam em volta do logo da clínica (só atmosfera, sem texto).
+const HERO_TILES: { icon: LucideIcon; slot: string; tile: string }[] = [
+  {
+    icon: CalendarCheck,
+    slot: "-top-7 left-[7%] size-16 [animation-delay:380ms]",
+    tile: "text-blue-600 [--tile-time:7.5s] dark:text-blue-300",
+  },
+  {
+    icon: HeartPulse,
+    slot: "top-[26%] -right-7 size-14 [animation-delay:480ms]",
+    tile: "text-rose-600 [--tile-time:6.5s] [animation-delay:-2s] dark:text-rose-300",
+  },
+  {
+    icon: Salad,
+    slot: "-bottom-8 right-[12%] size-17 [animation-delay:580ms]",
+    tile: "text-emerald-600 [--tile-time:8.5s] [animation-delay:-4s] dark:text-emerald-300",
+  },
+  {
+    icon: Activity,
+    slot: "bottom-[22%] -left-7 size-13 [animation-delay:680ms]",
+    tile: "text-violet-600 [--tile-time:7s] [animation-delay:-1s] dark:text-violet-300",
+  },
+];
+
+const FIELD_CLASS =
+  "peer h-12 border-(--auth-field-line) bg-(--auth-field) pl-11 shadow-none hover:border-(--auth-field-line-hover) focus:bg-(--auth-field-focus)";
+const FIELD_ICON_CLASS =
+  "pointer-events-none absolute left-4 top-1/2 size-[18px] -translate-y-1/2 text-muted-foreground transition-colors peer-focus:text-primary";
 
 function readLinkError(): string | null {
   if (typeof window === "undefined" || !window.location.hash.includes("error")) return null;
@@ -274,43 +311,57 @@ function AuthPage() {
 
   return (
     <div className="auth-canvas grid min-h-dvh lg:grid-cols-2">
-      <aside className="hidden flex-col justify-between p-12 lg:flex xl:p-16">
-        <div />
-        <div className="mx-auto my-auto flex w-full max-w-xl flex-col items-center justify-center text-center">
-          <img
-            src="/assets/dr-jonatas-bandeira-logo.png"
-            alt="Dr. Jonatas Bandeira - Nutrologia"
-            className="w-full max-w-[460px] xl:max-w-[540px] object-contain select-none drop-shadow-md transition-transform duration-300 hover:scale-105"
-          />
+      <div className="auth-aurora" aria-hidden="true">
+        <span className="auth-blob auth-blob--aqua" />
+        <span className="auth-blob auth-blob--sky" />
+        <span className="auth-blob auth-blob--rose" />
+        <span className="auth-blob auth-blob--violet" />
+        <span className="auth-blob auth-blob--indigo" />
+      </div>
+      <aside className="hidden min-w-0 items-center justify-center p-10 lg:flex xl:p-16">
+        <div className="auth-stage w-full max-w-[34rem] 2xl:max-w-[38rem]">
+          <div className="auth-plate auth-edge auth-rise">
+            <img
+              src="/assets/dr-jonatas-bandeira-logo.png"
+              alt="Dr. Jonatas Bandeira - Nutrologia"
+              draggable={false}
+              className="relative w-[78%] select-none object-contain"
+            />
+          </div>
+          {HERO_TILES.map(({ icon: Icon, slot, tile }) => (
+            <span key={slot} aria-hidden="true" className={cn("auth-tile-slot auth-pop", slot)}>
+              <span className={cn("auth-tile auth-edge", tile)}>
+                <Icon strokeWidth={1.75} />
+              </span>
+            </span>
+          ))}
         </div>
-        <p className="text-center text-sm text-muted-foreground">
-          MedCore · Consultório Dr. Jonatas Bandeira
-        </p>
       </aside>
-      <main className="flex min-w-0 flex-col items-center justify-center px-4 py-8 sm:px-8 lg:py-12">
-        <div className="w-full max-w-[440px] rounded-2xl border border-hairline bg-glass-strong p-6 shadow-(--glass-shadow-lg) glass-blur-strong sm:p-10">
-          <div className="mb-7">
-            <div className="mb-6 flex items-center justify-between">
-              <img
-                src="/assets/dr-jonatas-bandeira-logo.png"
-                alt="Dr. Jonatas Bandeira - Nutrologia"
-                className="h-14 w-auto max-w-[200px] object-contain select-none drop-shadow-xs transition-transform duration-300 hover:scale-105"
-              />
-              <div className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <ShieldCheck size={20} aria-hidden="true" />
-              </div>
+      <main className="flex min-w-0 flex-col items-center justify-center px-4 py-6 sm:px-8">
+        <div className="auth-card auth-edge auth-rise w-full max-w-[440px] rounded-[28px] p-6 [animation-delay:120ms] sm:px-10 sm:py-9">
+          <div className="mb-6 flex flex-col items-center text-center">
+            <img
+              src="/assets/dr-jonatas-bandeira-logo.png"
+              alt="Dr. Jonatas Bandeira - Nutrologia"
+              draggable={false}
+              className="mb-5 h-20 w-auto max-w-full select-none object-contain lg:hidden"
+            />
+            <div className="auth-avatar mb-5 hidden place-items-center lg:grid">
+              <BrandSymbol size="large" interactive={false} />
             </div>
-            <h1 className="text-[28px] font-semibold leading-tight tracking-tight sm:text-display">
-              {titles[mode]}
-            </h1>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              {descriptions[mode]}
-            </p>
+            <div key={mode} className="auth-swap">
+              <h1 className="text-[28px] font-semibold leading-tight tracking-tight sm:text-display">
+                {titles[mode]}
+              </h1>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                {descriptions[mode]}
+              </p>
+            </div>
           </div>
           {mode === "password" && linkError && (
             <div
               role="alert"
-              className="mb-5 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive"
+              className="mb-5 rounded-xl border border-destructive/20 bg-(--auth-alert-danger) p-3 text-sm text-destructive"
             >
               {linkError}
             </div>
@@ -319,7 +370,7 @@ function AuthPage() {
             <div
               id="auth-error"
               role="alert"
-              className="mb-5 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive"
+              className="mb-5 rounded-xl border border-destructive/20 bg-(--auth-alert-danger) p-3 text-sm text-destructive"
             >
               {formError}
             </div>
@@ -327,7 +378,7 @@ function AuthPage() {
           {successMessage && (
             <div
               role="status"
-              className="mb-5 rounded-xl border border-success/20 bg-success/5 p-4 text-sm leading-relaxed text-success"
+              className="mb-5 rounded-xl border border-success/20 bg-(--auth-alert-success) p-4 text-sm leading-relaxed text-success"
             >
               {successMessage}
             </div>
@@ -344,16 +395,19 @@ function AuthPage() {
                   <label htmlFor="full-name" className="text-sm font-medium">
                     Nome completo
                   </label>
-                  <Input
-                    id="full-name"
-                    name="name"
-                    autoComplete="name"
-                    value={fullName}
-                    onChange={(event) => setFullName(event.target.value)}
-                    required
-                    placeholder="Seu nome completo"
-                    className="h-11"
-                  />
+                  <div className="relative">
+                    <Input
+                      id="full-name"
+                      name="name"
+                      autoComplete="name"
+                      value={fullName}
+                      onChange={(event) => setFullName(event.target.value)}
+                      required
+                      placeholder="Seu nome completo"
+                      className={FIELD_CLASS}
+                    />
+                    <UserRound aria-hidden="true" className={FIELD_ICON_CLASS} />
+                  </div>
                 </div>
               )}
               {mode !== "password" && (
@@ -361,17 +415,20 @@ function AuthPage() {
                   <label htmlFor="auth-email" className="text-sm font-medium">
                     E-mail
                   </label>
-                  <Input
-                    id="auth-email"
-                    name="email"
-                    type="email"
-                    autoComplete="username"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    required
-                    placeholder="seu@email.com"
-                    className="h-11"
-                  />
+                  <div className="relative">
+                    <Input
+                      id="auth-email"
+                      name="email"
+                      type="email"
+                      autoComplete="username"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      required
+                      placeholder="seu@email.com"
+                      className={FIELD_CLASS}
+                    />
+                    <Mail aria-hidden="true" className={FIELD_ICON_CLASS} />
+                  </div>
                 </div>
               )}
               {mode !== "forgot" && (
@@ -390,15 +447,16 @@ function AuthPage() {
                       required
                       minLength={mode === "signin" ? undefined : 8}
                       placeholder="Digite sua senha"
-                      className="h-11 pr-12"
+                      className={cn(FIELD_CLASS, "pr-12")}
                       aria-describedby={mode !== "signin" ? "password-hint" : undefined}
                     />
+                    <LockKeyhole aria-hidden="true" className={FIELD_ICON_CLASS} />
                     <button
                       type="button"
                       onClick={() => setShowPassword((value) => !value)}
                       aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
                       aria-pressed={showPassword}
-                      className="absolute right-1 top-1 flex size-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+                      className="absolute right-1.5 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
                     >
                       {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
@@ -415,17 +473,20 @@ function AuthPage() {
                   <label htmlFor="confirm-password" className="text-sm font-medium">
                     Confirmar senha
                   </label>
-                  <Input
-                    id="confirm-password"
-                    type={showPassword ? "text" : "password"}
-                    autoComplete="new-password"
-                    value={confirmPassword}
-                    onChange={(event) => setConfirmPassword(event.target.value)}
-                    required
-                    minLength={8}
-                    placeholder="Repita a nova senha"
-                    className="h-11"
-                  />
+                  <div className="relative">
+                    <Input
+                      id="confirm-password"
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="new-password"
+                      value={confirmPassword}
+                      onChange={(event) => setConfirmPassword(event.target.value)}
+                      required
+                      minLength={8}
+                      placeholder="Repita a nova senha"
+                      className={FIELD_CLASS}
+                    />
+                    <LockKeyhole aria-hidden="true" className={FIELD_ICON_CLASS} />
+                  </div>
                 </div>
               )}
               {mode === "signin" && (
@@ -450,7 +511,7 @@ function AuthPage() {
               )}
               <Button
                 type="submit"
-                className="h-11 w-full rounded-full"
+                className="group h-12 w-full rounded-full bg-(image:--auth-cta) text-[15px] font-semibold shadow-(--auth-cta-shadow) hover:shadow-(--auth-cta-shadow-hover)"
                 disabled={
                   busy || googleBusy || (mode === "password" && (!sessionEmail || !!linkError))
                 }
@@ -465,20 +526,22 @@ function AuthPage() {
                       : mode === "password"
                         ? "Salvar senha"
                         : "Enviar instruções"}
-                {!busy && <ArrowRight />}
+                {!busy && (
+                  <ArrowRight className="transition-transform duration-200 group-hover:translate-x-0.5" />
+                )}
               </Button>
             </fieldset>
           </form>
           {mode === "signin" && (
             <>
-              <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground">
+              <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
                 <span className="h-px flex-1 bg-hairline" />
                 ou continue com
                 <span className="h-px flex-1 bg-hairline" />
               </div>
               <Button
                 variant="outline"
-                className="h-11 w-full rounded-full"
+                className="h-12 w-full rounded-full border-(--auth-field-line) bg-(--auth-soft) shadow-none hover:bg-(--auth-soft-hover)"
                 disabled={busy || googleBusy}
                 onClick={() => void handleGoogleSignIn()}
               >
@@ -487,7 +550,7 @@ function AuthPage() {
               </Button>
             </>
           )}
-          <div className="mt-7 text-center text-sm text-muted-foreground">
+          <div className="mt-6 text-center text-sm text-muted-foreground">
             {mode === "password" ? (
               sessionEmail ? (
                 search.modo === "convite" && (
@@ -537,9 +600,10 @@ function AuthPage() {
             )}
           </div>
         </div>
-        <p className="mt-8 text-center text-xs text-muted-foreground">
-          MedCore © {new Date().getFullYear()} · Gestão clínica
-        </p>
+        <div className="mt-6 flex items-center justify-center gap-2 text-center text-xs text-foreground/70">
+          <BrandSymbol size="small" interactive={false} className="[&_img]:size-4" />
+          <span>MedCore © {new Date().getFullYear()} · Consultório Dr. Jonatas Bandeira</span>
+        </div>
       </main>
     </div>
   );
