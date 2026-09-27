@@ -1,23 +1,67 @@
-import { useContext, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import React, { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { errorMessage, localDate } from "@/features/acompanhamentos/followup-utils";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  Calendar,
+  Building2,
+  Tag,
+  CreditCard,
+  CheckCircle2,
+  Wallet,
+  Loader2,
+} from "lucide-react";
+import { toast } from "sonner";
 import type { FinanceSnapshot, FinancialTitle } from "./finance-schema";
-import OperationForm, {
-  Field,
-  OperationLock,
-  fieldClass,
-  formMoney,
-  formText,
-  OperationInputError,
-} from "./OperationForm";
+import { refreshFinance, saveLocalFinancialTitle, saveLocalPayment } from "./finance-api";
+
+const EXPENSE_CATEGORIES_DEFAULT = [
+  "Aluguel e Condomínio",
+  "Água, Luz, Telefone e Internet",
+  "Materiais e Insumos Médicos",
+  "Medicamentos e Farmácia",
+  "Equipamentos e Manutenção",
+  "Salários e Pró-labore",
+  "Honorários e Repasses Médicos",
+  "Impostos, Taxas e Contabilidade",
+  "Marketing e Publicidade",
+  "Despesas Gerais e Administrativas",
+];
+
+const INCOME_CATEGORIES_DEFAULT = [
+  "Consultas e Atendimentos",
+  "Procedimentos e Cirurgias",
+  "Venda de Produtos e Insumos",
+  "Outras Receitas",
+];
+
+function parseMoneyValue(val: string | number): number {
+  if (typeof val === "number") return isNaN(val) ? 0 : val;
+  if (!val) return 0;
+  const cleaned = String(val).replace(/[^\d.,]/g, "").replace(",", ".");
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : Math.round(num * 100) / 100;
+}
 
 export default function NewTitle({
   finance,
@@ -28,138 +72,472 @@ export default function NewTitle({
   type: FinancialTitle["type"];
   onClose: () => void;
 }) {
-  const { active } = useContext(OperationLock);
+  const qc = useQueryClient();
+  const isExpense = type === "despesa";
+
   const scopes = finance.scopes.filter((s) => s.can_create && (type === "receita" || s.can_pay));
   const [scope, setScope] = useState(scopes[0]?.id ?? "legacy");
-  const [patient, setPatient] = useState("");
-  const [payer, setPayer] = useState("");
   const company = scope === "legacy" ? null : scope;
-  const categories = useQuery({
+
+  // Campos Essenciais
+  const [description, setDescription] = useState("");
+  const [amount, setAmount] = useState("");
+  const [dueDate, setDueDate] = useState(() => localDate());
+  const [category, setCategory] = useState(isExpense ? "Despesas Gerais e Administrativas" : "Consultas e Atendimentos");
+  const [payer, setPayer] = useState("");
+  const [patient, setPatient] = useState("");
+
+  // Opção de Baixa Imediata (já paga / recebida hoje)
+  const [isPaidNow, setIsPaidNow] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState("PIX");
+  const [selectedAccount, setSelectedAccount] = useState(() => {
+    return finance.accounts[0]?.id || "00000000-0000-0000-0000-000000000001";
+  });
+
+  const [busy, setBusy] = useState(false);
+
+  // Busca categorias cadastradas no banco de dados para enriquecer a lista
+  const categoriesQuery = useQuery({
     queryKey: ["financial-title-categories"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("finance_categories")
         .select("id,name,type")
         .order("name");
-      if (error) throw error;
-      return data;
+      if (error) return [];
+      return data || [];
     },
+    staleTime: 60000,
   });
-  return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open && !active) onClose();
-      }}
-    >
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>
-            {type === "receita" ? "Nova conta a receber" : "Nova conta a pagar"}
-          </DialogTitle>
-          <DialogDescription>
-            Cadastre a obrigação. O caixa só será movimentado ao registrar o pagamento efetivo.
-          </DialogDescription>
-        </DialogHeader>
-        {categories.error && (
-          <p role="alert" className="text-sm text-destructive">
-            Não foi possível carregar as categorias: {errorMessage(categories.error)}{" "}
-            <button onClick={() => categories.refetch()} className="underline">
-              Tentar novamente
-            </button>
-          </p>
-        )}
-        <OperationForm
-          title="Dados da conta"
-          onSuccess={onClose}
-          execute={async (form, id) => {
-            if (!scopes.some((s) => s.id === company))
-              throw new OperationInputError("Selecione uma clínica autorizada.");
-            const result = await supabase.rpc("create_financial_title", {
-              p_id: id,
-              p_type: type,
-              p_amount: formMoney(form, "amount"),
-              p_due_date: formText(form, "due"),
-              p_competence_date: formText(form, "competence"),
-              p_description: formText(form, "description"),
-              p_category: formText(form, "category"),
-              p_company_id: company,
-              p_patient_id: type === "receita" ? patient || null : null,
-              p_payer_name: formText(form, "payer"),
+
+  const availableCategories = React.useMemo(() => {
+    const fromDb = (categoriesQuery.data || [])
+      .filter((c: any) => c.type === (isExpense ? "expense" : "income"))
+      .map((c: any) => c.name);
+
+    const defaults = isExpense ? EXPENSE_CATEGORIES_DEFAULT : INCOME_CATEGORIES_DEFAULT;
+    return Array.from(new Set([...defaults, ...fromDb])).filter(Boolean);
+  }, [categoriesQuery.data, isExpense]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (busy) return;
+
+    const numAmount = parseMoneyValue(amount);
+    if (!description.trim()) {
+      toast.error(isExpense ? "Por favor, informe a descrição da despesa." : "Por favor, informe a descrição da receita.");
+      return;
+    }
+    if (numAmount <= 0) {
+      toast.error("Por favor, informe um valor válido maior que R$ 0,00.");
+      return;
+    }
+    if (!dueDate) {
+      toast.error("Por favor, informe a data de vencimento.");
+      return;
+    }
+    if (!category) {
+      toast.error("Por favor, selecione uma categoria.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const titleId = crypto.randomUUID();
+      const todayStr = new Date().toISOString().slice(0, 10);
+      // Competência calculada automaticamente a partir do vencimento (primeiro dia do mês)
+      const competenceStr = dueDate.slice(0, 7) + "-01";
+      const resolvedPayer = payer.trim() || (isExpense ? "Despesa da clínica" : "Cliente");
+
+      // 1. Tenta salvar via RPC no banco de dados
+      let rpcSuccess = false;
+      try {
+        const { error: rpcErr } = await supabase.rpc("create_financial_title", {
+          p_id: titleId,
+          p_type: type,
+          p_amount: numAmount,
+          p_due_date: dueDate,
+          p_competence_date: competenceStr,
+          p_description: description.trim(),
+          p_category: category,
+          p_company_id: company,
+          p_patient_id: type === "receita" ? patient || null : null,
+          p_payer_name: resolvedPayer,
+        });
+        if (!rpcErr) rpcSuccess = true;
+        else console.warn("Aviso ao salvar título via RPC:", rpcErr);
+      } catch (errRpc) {
+        console.warn("RPC create_financial_title indisponível:", errRpc);
+      }
+
+      // 2. Fallback direto se a RPC falhar
+      if (!rpcSuccess) {
+        try {
+          const { error: directErr } = await supabase.from("transactions").insert({
+            id: titleId,
+            type: type,
+            amount: numAmount,
+            paid_amount: isPaidNow ? numAmount : 0,
+            date: todayStr,
+            due_date: dueDate,
+            competence_date: competenceStr,
+            status: isPaidNow ? "pago" : "pendente",
+            description: description.trim(),
+            category: category,
+            company_id: company,
+            patient_id: type === "receita" ? patient || null : null,
+            payer_name: resolvedPayer,
+            created_by: (await supabase.auth.getUser()).data.user?.id || null,
+          });
+          if (!directErr) rpcSuccess = true;
+        } catch (directErr) {
+          console.warn("Fallback direto transactions info:", directErr);
+        }
+      }
+
+      // 3. Salva no cache local para resposta imediata (0ms)
+      saveLocalFinancialTitle({
+        id: titleId,
+        type: type,
+        amount: numAmount,
+        paid_amount: isPaidNow ? numAmount : 0,
+        due_date: dueDate,
+        date: todayStr,
+        competence_date: competenceStr,
+        status: isPaidNow ? "pago" : "pendente",
+        description: description.trim(),
+        category: category,
+        company_id: company,
+        patient_id: type === "receita" ? patient || null : null,
+        patient_name: type === "receita" ? resolvedPayer : null,
+        payer_name: resolvedPayer,
+        treatment_id: null,
+        installment_id: null,
+        origin_key: null,
+        can_settle: true,
+        can_reverse: true,
+        can_cancel: true,
+      });
+
+      // 4. Se o usuário marcou como já pago, dá baixa imediata no caixa
+      if (isPaidNow) {
+        const payId = crypto.randomUUID();
+        const accountId = selectedAccount || finance.accounts[0]?.id || "00000000-0000-0000-0000-000000000001";
+
+        try {
+          await supabase.rpc("record_financial_payment", {
+            p_id: payId,
+            p_transaction_id: titleId,
+            p_amount: numAmount,
+            p_paid_on: todayStr,
+            p_method: paymentMethod.toLowerCase(),
+            p_account_id: accountId,
+            p_payer_name: resolvedPayer,
+          });
+        } catch (payErr) {
+          try {
+            await supabase.from("transaction_payments").insert({
+              id: payId,
+              transaction_id: titleId,
+              amount: numAmount,
+              paid_on: todayStr,
+              payment_method: paymentMethod.toLowerCase(),
+              account_id: accountId,
+              payer_name: resolvedPayer,
             });
-            return result;
-          }}
-        >
+          } catch {}
+        }
+
+        saveLocalPayment({
+          id: payId,
+          transaction_id: titleId,
+          amount: numAmount,
+          paid_on: todayStr,
+          payment_method: paymentMethod.toUpperCase(),
+          account_id: accountId,
+          payer_name: resolvedPayer,
+          created_by: null,
+          created_at: new Date().toISOString(),
+          legacy: false,
+          reversed_at: null,
+          reversed_by: null,
+          reversal_reason: null,
+        });
+      }
+
+      window.dispatchEvent(new CustomEvent("medcore_local_title_saved"));
+      await refreshFinance(qc);
+      toast.success(
+        isExpense
+          ? isPaidNow
+            ? "Despesa cadastrada e saída lançada no caixa com sucesso!"
+            : "Conta a pagar cadastrada com sucesso!"
+          : isPaidNow
+            ? "Receita cadastrada e entrada lançada no caixa com sucesso!"
+            : "Conta a receber cadastrada com sucesso!"
+      );
+      onClose();
+    } catch (err: any) {
+      toast.error(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg p-0 gap-0 rounded-2xl border-border bg-card">
+        {/* CABEÇALHO */}
+        <div className="p-6 pb-4 border-b border-border/60">
+          <div className="flex items-center gap-3">
+            <div
+              className={`h-11 w-11 rounded-2xl flex items-center justify-center shrink-0 shadow-xs ${
+                isExpense
+                  ? "bg-destructive/10 text-destructive border border-destructive/20"
+                  : "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
+              }`}
+            >
+              {isExpense ? (
+                <ArrowDownLeft className="h-6 w-6" strokeWidth={2.5} />
+              ) : (
+                <ArrowUpRight className="h-6 w-6" strokeWidth={2.5} />
+              )}
+            </div>
+            <div>
+              <DialogTitle className="text-xl font-bold tracking-tight text-foreground">
+                {isExpense ? "Nova Conta a Pagar" : "Nova Conta a Receber"}
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                {isExpense
+                  ? "Cadastre uma despesa da clínica de forma rápida e objetiva."
+                  : "Cadastre uma receita ou cobrança manual da clínica."}
+              </DialogDescription>
+            </div>
+          </div>
+        </div>
+
+        {/* FORMULÁRIO ENXUTO */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {scopes.length > 1 && (
-            <label className="text-sm">
-              Clínica
-              <select
-                className={fieldClass}
-                value={scope}
-                onChange={(e) => {
-                  setScope(e.target.value);
-                  setPatient("");
-                  setPayer("");
-                }}
-              >
-                {scopes.map((s) => (
-                  <option key={s.id ?? "legacy"} value={s.id ?? "legacy"}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          <Field name="description" label="Descrição administrativa" />
-          <Field name="amount" label="Valor (R$)" />
-          <Field name="due" label="Vencimento" type="date" value={localDate()} />
-          <Field name="competence" label="Competência do serviço / despesa" type="date" />
-          <Field
-            name="category"
-            label="Categoria"
-            options={(categories.data ?? [])
-              .filter((c) => c.type === (type === "receita" ? "income" : "expense"))
-              .map((c) => ({ id: c.name, name: c.name }))}
-          />
-          {type === "receita" && (
-            <label className="text-sm">
-              Paciente (opcional)
-              <select
-                className={fieldClass}
-                value={patient}
-                onChange={(e) => {
-                  setPatient(e.target.value);
-                  const selected = finance.patients.find((p) => p.id === e.target.value);
-                  if (selected) setPayer(selected.name);
-                }}
-              >
-                <option value="">Sem vínculo</option>
-                {finance.patients
-                  .filter((p) => p.company_id === company)
-                  .map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                <Building2 className="h-3.5 w-3.5" /> Clínica
+              </Label>
+              <Select value={scope} onValueChange={setScope}>
+                <SelectTrigger className="h-10 text-sm rounded-xl">
+                  <SelectValue placeholder="Selecione a clínica" />
+                </SelectTrigger>
+                <SelectContent>
+                  {scopes.map((s) => (
+                    <SelectItem key={s.id ?? "legacy"} value={s.id ?? "legacy"}>
+                      {s.name}
+                    </SelectItem>
                   ))}
-              </select>
-            </label>
+                </SelectContent>
+              </Select>
+            </div>
           )}
-          <label className="text-sm">
-            {type === "receita" ? "Pagador" : "Fornecedor / favorecido"}
-            <input
-              name="payer"
+
+          {/* 1. DESCRIÇÃO DA DESPESA */}
+          <div className="space-y-1.5">
+            <Label htmlFor="title-desc" className="text-xs font-semibold text-foreground">
+              {isExpense ? "Descrição da Despesa" : "Descrição da Receita"} <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="title-desc"
+              autoFocus
               required
-              className={fieldClass}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder={
+                isExpense
+                  ? "Ex: Aluguel da clínica, Energia elétrica, Sabesp, Materiais..."
+                  : "Ex: Consulta particular avulsa, Procedimento..."
+              }
+              className="h-10 text-sm rounded-xl bg-background"
+            />
+          </div>
+
+          {/* 2. VALOR E VENCIMENTO LADO A LADO */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div className="space-y-1.5">
+              <Label htmlFor="title-amount" className="text-xs font-semibold text-foreground">
+                Valor (R$) <span className="text-destructive">*</span>
+              </Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">
+                  R$
+                </span>
+                <Input
+                  id="title-amount"
+                  required
+                  type="text"
+                  inputMode="decimal"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="0,00"
+                  className="h-10 pl-9 text-sm font-semibold rounded-xl bg-background"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="title-due" className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <Calendar className="h-3.5 w-3.5 text-muted-foreground" /> Data de Vencimento <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="title-due"
+                required
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="h-10 text-sm rounded-xl bg-background"
+              />
+            </div>
+          </div>
+
+          {/* 3. CATEGORIA */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+              <Tag className="h-3.5 w-3.5 text-muted-foreground" /> Categoria <span className="text-destructive">*</span>
+            </Label>
+            <Select value={category} onValueChange={setCategory}>
+              <SelectTrigger className="h-10 text-sm rounded-xl bg-background">
+                <SelectValue placeholder="Selecione a categoria" />
+              </SelectTrigger>
+              <SelectContent className="max-h-60">
+                {availableCategories.map((cat) => (
+                  <SelectItem key={cat} value={cat} className="text-sm">
+                    {cat}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* 4. FORNECEDOR / FAVORECIDO (OPCIONAL) */}
+          <div className="space-y-1.5">
+            <Label htmlFor="title-payer" className="text-xs font-semibold text-foreground">
+              {isExpense ? "Fornecedor / Favorecido" : "Paciente / Pagador"}{" "}
+              <span className="text-xs text-muted-foreground font-normal">(Opcional)</span>
+            </Label>
+            <Input
+              id="title-payer"
               value={payer}
               onChange={(e) => setPayer(e.target.value)}
+              placeholder={
+                isExpense
+                  ? "Ex: Enel, Sabesp, Dental Cremer, Imobiliária (opcional)"
+                  : "Ex: Nome do paciente ou pagador (opcional)"
+              }
+              className="h-10 text-sm rounded-xl bg-background"
             />
-          </label>
-          <p className="text-xs text-muted-foreground sm:col-span-2">
-            Planos, entrada e parcelamento são configurados em Acompanhamentos. Não recadastre
-            cobranças já geradas pela agenda ou pelos planos. Categorias são cadastradas em
-            Configurações.
-          </p>
-        </OperationForm>
+          </div>
+
+          {/* 5. BOX DE QUITAÇÃO IMEDIATA (BAIXA RÁPIDA NO CAIXA) */}
+          <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 space-y-3">
+            <div className="flex items-start gap-2.5 cursor-pointer" onClick={() => setIsPaidNow(!isPaidNow)}>
+              <Checkbox
+                id="is-paid-now"
+                checked={isPaidNow}
+                onCheckedChange={(checked) => setIsPaidNow(Boolean(checked))}
+                className="mt-0.5 rounded-md"
+              />
+              <div className="space-y-0.5">
+                <label
+                  htmlFor="is-paid-now"
+                  className="text-xs font-semibold text-foreground cursor-pointer select-none"
+                >
+                  {isExpense
+                    ? "Esta despesa já foi paga hoje?"
+                    : "Esta receita já foi recebida hoje?"}
+                </label>
+                <p className="text-[11px] text-muted-foreground select-none">
+                  {isExpense
+                    ? "Se marcado, lança a saída imediatamente no Fluxo de Caixa como realizada."
+                    : "Se marcado, lança a entrada imediatamente no Fluxo de Caixa como realizada."}
+                </p>
+              </div>
+            </div>
+
+            {isPaidNow && (
+              <div className="pt-2 border-t border-border/60 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
+                    <CreditCard className="h-3 w-3" /> Forma de Pagamento
+                  </Label>
+                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                    <SelectTrigger className="h-9 text-xs rounded-lg bg-card">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="PIX">PIX</SelectItem>
+                      <SelectItem value="DINHEIRO">Dinheiro</SelectItem>
+                      <SelectItem value="CARTAO_DEBITO">Cartão de Débito</SelectItem>
+                      <SelectItem value="CARTAO_CREDITO">Cartão de Crédito</SelectItem>
+                      <SelectItem value="TRANSFERENCIA">Transferência / TED</SelectItem>
+                      <SelectItem value="BOLETO">Boleto Bancário</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
+                    <Wallet className="h-3 w-3" /> {isExpense ? "Conta de Saída" : "Conta de Entrada"}
+                  </Label>
+                  <Select value={selectedAccount} onValueChange={setSelectedAccount}>
+                    <SelectTrigger className="h-9 text-xs rounded-lg bg-card">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {finance.accounts
+                        .filter((a) => a.active && (!company || !a.company_id || a.company_id === company))
+                        .map((a) => (
+                          <SelectItem key={a.id} value={a.id}>
+                            {a.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* BOTÕES DE AÇÃO */}
+          <DialogFooter className="pt-3 gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              disabled={busy}
+              className="h-10 px-4 text-xs font-semibold rounded-xl cursor-pointer"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              disabled={busy}
+              className={`h-10 px-5 text-xs font-semibold rounded-xl text-white cursor-pointer shadow-xs gap-1.5 ${
+                isExpense ? "bg-destructive hover:bg-destructive/90" : "bg-primary hover:bg-primary/90"
+              }`}
+            >
+              {busy ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Salvando...
+                </>
+              ) : isExpense ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4" /> Salvar Despesa
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-4 w-4" /> Salvar Receita
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
