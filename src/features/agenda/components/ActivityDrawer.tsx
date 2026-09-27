@@ -33,6 +33,7 @@ import {
   PatientDetailsModal,
   type PatientDetailsData,
 } from "@/components/pacientes/PatientDetailsModal";
+import { NovoAgendamentoDialog } from "@/components/agenda/novo-agendamento-dialog";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -384,444 +385,29 @@ function ColorPickerDropdown({
 }
 
 /**
- * Modal Quadrado Centralizado no Meio da Tela: "Editar agendamento"
- * Idêntico à imagem fornecida pelo usuário
+ * Modal Completo de Edição: Mostra todas as opções da tela de novo agendamento
  */
 export function EditAppointmentModal({
   activity,
   open,
   onClose,
-  ownerName,
   onSaved,
 }: {
   activity: Activity | null;
   open: boolean;
   onClose: () => void;
-  ownerName: string | null;
+  ownerName?: string | null;
   onSaved: () => void;
 }) {
-  const [patientName, setPatientName] = useState<string>("");
-  const [professionalName, setProfessionalName] = useState<string>("Amanda Thais");
-  const [status, setStatus] = useState<string>("Agendado");
-  const [color, setColor] = useState<string>("#7C5CFC");
-  const [notes, setNotes] = useState<string>("");
-
-  const [procedures, setProcedures] = useState<Array<{ id: string; name: string }>>([]);
-  const [dateSectionOpen, setDateSectionOpen] = useState<boolean>(true);
-
-  const [dayDate, setDayDate] = useState<string>("2026-08-06");
-  const [startTime, setStartTime] = useState<string>("09:15");
-  const [endTime, setEndTime] = useState<string>("11:00");
-  const [recurrence, setRecurrence] = useState<string>("Não se repete");
-
-  const [saving, setSaving] = useState<boolean>(false);
-
-  useEffect(() => {
-    if (!activity) return;
-
-    setNotes(
-      activity.description
-        ? activity.description.replace(/<!--AGENDAMENTO_META:.*?-->/s, "").trim()
-        : "",
-    );
-    if (ownerName) setProfessionalName(ownerName);
-    if (activity.title) setPatientName(activity.title);
-
-    const d = activity.start instanceof Date ? activity.start : new Date(activity.start);
-    if (!isNaN(d.getTime())) {
-      const dateFormatted = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-      setDayDate(dateFormatted);
-      const startFormatted = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-      setStartTime(startFormatted);
-    }
-
-    if (activity.end) {
-      const e = activity.end instanceof Date ? activity.end : new Date(activity.end);
-      if (!isNaN(e.getTime())) {
-        const endFormatted = `${pad2(e.getHours())}:${pad2(e.getMinutes())}`;
-        setEndTime(endFormatted);
-      }
-    } else {
-      setEndTime("11:00");
-    }
-
-    if (activity.status) setStatus(activity.status);
-  }, [activity, ownerName]);
-
-  if (!activity) return null;
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const id =
-        activity.id && activity.id.includes(":") ? activity.id.split(":")[1] : activity.id || "";
-
-      const [year, month, day] = dayDate.split("-").map(Number);
-      const [startH, startM] = startTime.split(":").map(Number);
-      const [endH, endM] = endTime.split(":").map(Number);
-
-      const newStart = new Date(
-        year || 2026,
-        (month || 8) - 1,
-        day || 6,
-        startH || 9,
-        startM || 15,
-      );
-      const newEnd = new Date(year || 2026, (month || 8) - 1, day || 6, endH || 11, endM || 0);
-
-      const match = activity.description?.match(/<!--AGENDAMENTO_META:(.*?)-->/s);
-      let existingMeta: Record<string, any> = {};
-      if (match && match[1]) {
-        try {
-          existingMeta = JSON.parse(match[1]);
-        } catch {}
-      }
-
-      const metaObj = {
-        ...existingMeta,
-        color,
-        status,
-        recurrence,
-        patientName,
-        professionalName,
-      };
-      const metaJson = `<!--AGENDAMENTO_META:${JSON.stringify(metaObj)}-->`;
-      const fullDescription = `${notes}\n\n${metaJson}`.trim();
-
-      if (activity.source === "event") {
-        const { error } = await supabase
-          .from("events")
-          .update({
-            title: patientName || activity.title,
-            starts_at: newStart.toISOString(),
-            ends_at: newEnd.toISOString(),
-            description: fullDescription,
-          })
-          .eq("id", id);
-        if (error) throw error;
-      } else if (activity.source === "task") {
-        const { error } = await supabase
-          .from("tasks")
-          .update({
-            title: patientName || activity.title,
-            due_date: newStart.toISOString(),
-            description: fullDescription,
-          })
-          .eq("id", id);
-        if (error) throw error;
-      }
-
-      activity.title = patientName || activity.title;
-      activity.start = newStart;
-      activity.end = newEnd;
-      activity.description = fullDescription;
-      activity.status = status;
-
-      toast.success("Agendamento salvo com sucesso!");
-      onSaved();
-    } catch (err: any) {
-      console.error(err);
-      toast.error("Erro ao salvar agendamento", {
-        description: err?.message || "Ocorreu um erro ao salvar alterações.",
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleAddProcedure = () => {
-    const name = prompt("Nome do procedimento ou produto:");
-    if (name) {
-      setProcedures((prev) => [...prev, { id: String(Date.now()), name }]);
-      toast.success("Procedimento adicionado");
-    }
-  };
-
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-[460px] p-0 rounded-2xl bg-card shadow-2xl overflow-hidden border border-border text-foreground">
-        <DialogDescription className="sr-only">Formulário Editar agendamento</DialogDescription>
-
-        {/* 1. Header: Editar agendamento */}
-        <div className="px-6 py-4 flex items-center justify-between border-b border-border-soft bg-card">
-          <div className="flex items-center gap-2.5">
-            <DialogTitle className="text-lg font-semibold text-foreground leading-none">
-              Editar agendamento
-            </DialogTitle>
-
-            {/* 3 Icon Badges next to title */}
-            <div className="flex items-center gap-1.5 ml-1">
-              <span
-                title="Cupom / Desconto"
-                className="h-7 w-7 rounded-full bg-muted grid place-items-center text-muted-foreground hover:bg-surface-2 transition cursor-pointer"
-              >
-                <Ticket className="h-3.5 w-3.5" />
-              </span>
-              <span
-                title="Financeiro"
-                className="h-7 w-7 rounded-full bg-success/15 grid place-items-center text-success hover:bg-success/25 transition cursor-pointer"
-              >
-                <DollarSign className="h-3.5 w-3.5" />
-              </span>
-              <span
-                title="Atenção"
-                className="h-7 w-7 rounded-full bg-warning/15 grid place-items-center text-warning hover:bg-warning/25 transition cursor-pointer"
-              >
-                <AlertTriangle className="h-3.5 w-3.5" />
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* 2. Form Body Scrollable */}
-        <div className="p-6 space-y-6 overflow-y-auto max-h-[75vh] bg-card">
-          {/* Seção 1: Dados básicos */}
-          <div>
-            <h3 className="text-[15px] font-semibold text-foreground mb-4">Dados básicos</h3>
-
-            {/* Field: Paciente */}
-            <div className="space-y-1.5 mb-4">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-muted-foreground">Paciente</label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const np = prompt("Nome do novo paciente:");
-                    if (np) {
-                      setPatientName(np);
-                      toast.success(`Paciente ${np} adicionado`);
-                    }
-                  }}
-                  className="text-sm font-medium text-primary hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  + Adicionar
-                </button>
-              </div>
-
-              <div className="relative">
-                <div className="w-full h-11 px-3 bg-card border border-border rounded-xl flex items-center justify-between hover:border-input transition shadow-2xs">
-                  <div className="flex items-center gap-2.5 min-w-0 w-full">
-                    <span className="h-7 w-7 rounded-full bg-primary/15 text-primary font-semibold text-xs grid place-items-center shrink-0">
-                      {initialsOf(patientName)}
-                    </span>
-                    <input
-                      type="text"
-                      value={patientName}
-                      onChange={(e) => setPatientName(e.target.value)}
-                      className="w-full bg-transparent text-sm font-medium text-foreground focus:outline-none"
-                    />
-                  </div>
-                  <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 ml-1" />
-                </div>
-              </div>
-            </div>
-
-            {/* Grid 3 colunas: Profissional, Status, Cor */}
-            <div className="grid grid-cols-12 gap-3 mb-4">
-              {/* Profissional */}
-              <div className="col-span-5 space-y-1.5">
-                <label className="text-sm font-medium text-muted-foreground">Profissional</label>
-                <div className="relative">
-                  <div className="w-full h-11 px-3 bg-card border border-border rounded-xl flex items-center justify-between hover:border-input transition shadow-2xs">
-                    <div className="flex items-center gap-2 min-w-0 w-full">
-                      <span className="h-6 w-6 rounded-full bg-primary-soft text-primary font-semibold text-xs grid place-items-center shrink-0">
-                        {initialsOf(professionalName)}
-                      </span>
-                      <input
-                        type="text"
-                        value={professionalName}
-                        onChange={(e) => setProfessionalName(e.target.value)}
-                        className="w-full bg-transparent text-sm font-medium text-foreground focus:outline-none truncate"
-                      />
-                    </div>
-                    <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Status */}
-              <div className="col-span-4 space-y-1.5">
-                <label className="text-sm font-medium text-muted-foreground">Status</label>
-                <StatusSelectDropdown
-                  value={status}
-                  onChange={(newStatus, newColor) => {
-                    setStatus(newStatus);
-                    setColor(newColor);
-                  }}
-                />
-              </div>
-
-              {/* Cor */}
-              <div className="col-span-3 space-y-1.5">
-                <label className="text-sm font-medium text-muted-foreground">Cor</label>
-                <ColorPickerDropdown color={color} onChange={setColor} />
-              </div>
-            </div>
-
-            {/* Observações */}
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-muted-foreground">Observações</label>
-              <input
-                type="text"
-                placeholder="Digite"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="w-full h-11 px-3 bg-card border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition shadow-2xs"
-              />
-            </div>
-          </div>
-
-          {/* Seção 2: Procedimentos/Produtos */}
-          <div className="pt-4 border-t border-border-soft">
-            <h3 className="text-[15px] font-semibold text-foreground mb-3">
-              Procedimentos/Produtos
-            </h3>
-
-            {procedures.length > 0 && (
-              <div className="space-y-2 mb-3">
-                {procedures.map((p, idx) => (
-                  <div
-                    key={p.id}
-                    className="flex items-center justify-between p-2.5 bg-muted/60 border border-border rounded-xl text-xs"
-                  >
-                    <span className="font-medium text-foreground/80">{p.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => setProcedures((prev) => prev.filter((_, i) => i !== idx))}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={handleAddProcedure}
-              className="text-sm font-medium text-primary hover:underline flex items-center gap-1.5 cursor-pointer"
-            >
-              + Adicionar Procedimentos/Produtos
-            </button>
-          </div>
-
-          {/* Seção 3: Data */}
-          <div className="pt-4 border-t border-border-soft">
-            <div
-              className="flex items-center justify-between mb-4 cursor-pointer select-none"
-              onClick={() => setDateSectionOpen(!dateSectionOpen)}
-            >
-              <h3 className="text-[15px] font-semibold text-foreground">Data</h3>
-              <ChevronUp
-                className={cn(
-                  "h-4 w-4 text-muted-foreground transition-transform duration-200",
-                  !dateSectionOpen && "rotate-180",
-                )}
-              />
-            </div>
-
-            {dateSectionOpen && (
-              <div className="space-y-4">
-                {/* Grid 3 colunas: Dia*, Início*, Fim* */}
-                <div className="grid grid-cols-12 gap-3">
-                  {/* Dia* */}
-                  <div className="col-span-6 space-y-1.5">
-                    <label className="text-sm font-medium text-muted-foreground">Dia*</label>
-                    <div className="relative flex items-center">
-                      <input
-                        type="text"
-                        value={
-                          dayDate && dayDate.includes("-")
-                            ? `${dayDate.split("-")[2]}/${dayDate.split("-")[1]}/${dayDate.split("-")[0]}`
-                            : "06/08/2026"
-                        }
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          const parts = val.split("/");
-                          if (parts.length === 3 && parts[2]?.length === 4) {
-                            setDayDate(`${parts[2]}-${parts[1]}-${parts[0]}`);
-                          }
-                        }}
-                        className="w-full h-11 px-3 pr-9 bg-card border border-border rounded-xl text-sm font-medium text-foreground focus:outline-none focus:border-primary transition shadow-2xs"
-                      />
-                      <input
-                        type="date"
-                        value={dayDate}
-                        onChange={(e) => setDayDate(e.target.value)}
-                        className="absolute right-2 opacity-0 w-7 h-7 cursor-pointer z-10"
-                      />
-                      <Calendar className="h-4 w-4 text-muted-foreground absolute right-3 pointer-events-none" />
-                    </div>
-                  </div>
-
-                  {/* Início* */}
-                  <div className="col-span-3 space-y-1.5">
-                    <label className="text-sm font-medium text-muted-foreground">Início*</label>
-                    <div className="relative flex items-center">
-                      <input
-                        type="text"
-                        value={startTime}
-                        onChange={(e) => setStartTime(e.target.value)}
-                        placeholder="09:15"
-                        className="w-full h-11 px-2.5 pr-8 bg-card border border-border rounded-xl text-sm font-medium text-foreground focus:outline-none focus:border-primary transition shadow-2xs"
-                      />
-                      <Clock className="h-4 w-4 text-muted-foreground absolute right-2 pointer-events-none" />
-                    </div>
-                  </div>
-
-                  {/* Fim* */}
-                  <div className="col-span-3 space-y-1.5">
-                    <label className="text-sm font-medium text-muted-foreground">Fim*</label>
-                    <div className="relative flex items-center">
-                      <input
-                        type="text"
-                        value={endTime}
-                        onChange={(e) => setEndTime(e.target.value)}
-                        placeholder="11:00"
-                        className="w-full h-11 px-2.5 pr-8 bg-card border border-border rounded-xl text-sm font-medium text-foreground focus:outline-none focus:border-primary transition shadow-2xs"
-                      />
-                      <Clock className="h-4 w-4 text-muted-foreground absolute right-2 pointer-events-none" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Recorrência* */}
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-muted-foreground">Recorrência*</label>
-                  <div className="relative">
-                    <select
-                      value={recurrence}
-                      onChange={(e) => setRecurrence(e.target.value)}
-                      className="w-full h-11 px-3 pr-8 bg-card border border-border rounded-xl text-sm font-medium text-foreground focus:outline-none focus:border-primary cursor-pointer appearance-none shadow-2xs"
-                    >
-                      <option value="Não se repete">Não se repete</option>
-                      <option value="Diariamente">Diariamente</option>
-                      <option value="Semanalmente">Semanalmente</option>
-                      <option value="Mensalmente">Mensalmente</option>
-                      <option value="Anualmente">Anualmente</option>
-                    </select>
-                    <ChevronDown className="h-4 w-4 text-muted-foreground absolute right-3 top-3.5 pointer-events-none" />
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* 3. Bottom Action Footer: Centered Purple Salvar Button */}
-        <div className="p-4 border-t border-border-soft bg-card flex items-center justify-center">
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="w-40 h-11 rounded-xl bg-primary hover:bg-primary-hover active:scale-[0.98] text-white font-semibold text-[15px] shadow-md shadow-primary/20 transition-all flex items-center justify-center cursor-pointer"
-          >
-            {saving ? "Salvando..." : "Salvar"}
-          </button>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <NovoAgendamentoDialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) onClose();
+      }}
+      activityToEdit={activity}
+      onSaved={onSaved}
+    />
   );
 }
 
@@ -968,18 +554,25 @@ export function ActivityDrawer({
 
   const handleGenerateFinance = async () => {
     if (!eventRawId) return;
+    const amt =
+      (Number(meta?.procedurePrice) || 0) > 0
+        ? Number(meta?.procedurePrice)
+        : Number(meta?.downPayment) || 0;
+
+    if (amt <= 0) {
+      toast.info("Informe o valor e o procedimento do agendamento para gerar a cobrança.");
+      setEditModalOpen(true);
+      return;
+    }
+
     setGeneratingFinance(true);
     try {
-      const amt =
-        (Number(meta?.procedurePrice) || 0) > 0
-          ? Number(meta?.procedurePrice)
-          : Number(meta?.downPayment) || 0;
       const dateStr = activity?.start
         ? activity.start.toISOString().slice(0, 10)
         : new Date().toISOString().slice(0, 10);
       const { error } = await supabase.rpc("create_event_financial_title", {
         p_event_id: eventRawId,
-        p_amount: amt > 0 ? amt : 100,
+        p_amount: amt,
         p_due_date: dateStr,
       });
       if (error) throw error;

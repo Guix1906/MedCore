@@ -173,6 +173,22 @@ const TAG_PRESETS = [
   },
 ];
 
+function parseMeta(desc: string | null | undefined): Record<string, any> | null {
+  if (!desc) return null;
+  const m = desc.match(/<!--AGENDAMENTO_META:(.*?)-->/s);
+  if (!m) return null;
+  try {
+    return JSON.parse(m[1]);
+  } catch {
+    return null;
+  }
+}
+
+function stripMeta(desc: string | null | undefined): string {
+  if (!desc) return "";
+  return desc.replace(/<!--AGENDAMENTO_META:.*?-->/s, "").trim();
+}
+
 // ============================================================
 // Types
 // ============================================================
@@ -346,11 +362,13 @@ export function NovoAgendamentoDialog({
   onOpenChange,
   defaultDate,
   onSaved,
+  activityToEdit,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   defaultDate?: Date;
   onSaved?: (created?: Activity) => void;
+  activityToEdit?: Activity | null;
 }) {
   const { user } = useAuth();
   const { companyId } = useActiveCompany();
@@ -416,6 +434,91 @@ export function NovoAgendamentoDialog({
 
   useEffect(() => {
     if (!open) return;
+
+    if (activityToEdit) {
+      const meta = parseMeta(activityToEdit.description);
+      const cleanNotes = stripMeta(activityToEdit.description);
+      const startDate =
+        activityToEdit.start instanceof Date ? activityToEdit.start : new Date(activityToEdit.start);
+      const endDate = activityToEdit.end
+        ? activityToEdit.end instanceof Date
+          ? activityToEdit.end
+          : new Date(activityToEdit.end)
+        : new Date(startDate.getTime() + 60 * 60_000);
+
+      const resolvedType =
+        (meta?.type as any) ||
+        (activityToEdit.kind === "tarefa"
+          ? "atendimento"
+          : activityToEdit.kind || "atendimento");
+      setType(resolvedType);
+      setTitle(activityToEdit.title || "");
+
+      const patId = meta?.clientId || activityToEdit.caseId || "";
+      setClientId(patId);
+      if (patId || meta?.patientName || activityToEdit.title) {
+        setSelectedClientObj({
+          id: patId,
+          name: meta?.patientName || activityToEdit.title || "Paciente",
+        });
+      } else {
+        setSelectedClientObj(null);
+      }
+
+      setAssignedTo(activityToEdit.assignedTo || user?.id || "");
+      setStatus((meta?.status as any) || activityToEdit.status || "agendado");
+      setColor(meta?.color || COLORS[0]);
+      setNotes(cleanNotes);
+
+      setDay(toDateStr(startDate));
+      setStart(toTimeStr(startDate));
+      setEnd(toTimeStr(endDate));
+      setDayEnd(toDateStr(endDate));
+      setRecurrence(meta?.recurrence || "none");
+
+      setLocName(meta?.locName || activityToEdit.location || "");
+      setLocRoom(meta?.locRoom || "");
+      setLocCity(meta?.locCity || "");
+      setLocState(meta?.locState || "");
+      setLocAddress(meta?.locAddress || "");
+
+      setParticipants(meta?.participants || []);
+      setCaseId(activityToEdit.caseId || "");
+      setFiles(meta?.files || []);
+      setReminders(meta?.reminders || []);
+      setChecklist(meta?.checklist || []);
+      setTags(meta?.tags || []);
+
+      setSelectedProfs(
+        meta?.selectedProfs ||
+          (activityToEdit.assignedTo ? [activityToEdit.assignedTo] : []),
+      );
+      setAllClinic(!!meta?.allClinic);
+      setAllDay(!!activityToEdit.allDay || !!meta?.allDay);
+      setDataExpanded(true);
+
+      setSelectedProcedure(meta?.selectedProcedure || "");
+      setAllowOtherProcedures(!!meta?.allowOtherProcedures);
+      setIsNewPatient(!!meta?.isNewPatient);
+
+      setProcedurePrice(
+        meta?.procedurePrice !== undefined && meta?.procedurePrice !== null
+          ? meta.procedurePrice
+          : "",
+      );
+      setDownPayment(
+        meta?.downPayment !== undefined && meta?.downPayment !== null
+          ? meta.downPayment
+          : "",
+      );
+      setDownPaymentMethod(meta?.downPaymentMethod || "pix");
+      setCity(meta?.city || availableCities[0] || "");
+      setConsultationType(meta?.consultationType || "nova_consulta");
+      setPlanCoverage(meta?.planCoverage || "avulso");
+      setLinkedTreatmentId(meta?.linkedTreatmentId || "");
+      return;
+    }
+
     // reset when reopening
     const d = defaultDate ?? new Date();
     setType("atendimento");
@@ -456,7 +559,7 @@ export function NovoAgendamentoDialog({
     setConsultationType("nova_consulta");
     setPlanCoverage("avulso");
     setLinkedTreatmentId("");
-  }, [open]);
+  }, [open, activityToEdit, defaultDate]);
   // ------ Queries com Cache Imediato e Prioridade PHP ------
   const { data: clients = [] } = useQuery({
     queryKey: ["patients-picker"],
@@ -852,13 +955,14 @@ export function NovoAgendamentoDialog({
 
   // Deriva o título automaticamente a partir do cliente + tipo
   useEffect(() => {
+    if (activityToEdit) return;
     if (!clientId) {
       setTitle(labelOfType(type));
       return;
     }
     const clientName = selectedClient?.name ?? labelOfType(type);
     setTitle(`${clientName} - ${labelOfType(type)}`);
-  }, [clientId, type, selectedClient?.name]);
+  }, [clientId, type, selectedClient?.name, activityToEdit]);
 
   // ------ File drop ------
   const inputFilesRef = useRef<HTMLInputElement | null>(null);
@@ -990,7 +1094,9 @@ export function NovoAgendamentoDialog({
       const validCaseId = caseId && isUuid(caseId) ? caseId : toValidUuid(caseId);
       const validPatientId = clientId && isUuid(clientId) ? clientId : toValidUuid(clientId);
 
-      const insertedId = crypto.randomUUID();
+      const rawId = activityToEdit?.id;
+      const cleanRawId = rawId && rawId.includes(":") ? rawId.split(":")[1] : rawId;
+      const insertedId = cleanRawId || crypto.randomUUID();
 
       // 1. Salva imediatamente na camada local ultra-rápida (0ms de latência)
       const clientDisplayName = selectedClient?.name || selectedClientObj?.name || "Paciente";
@@ -1007,7 +1113,7 @@ export function NovoAgendamentoDialog({
           case_id: caseId || null,
           patient_id: validPatientId || clientId || null,
           patient_name: clientDisplayName,
-          created_at: new Date().toISOString(),
+          created_at: (activityToEdit as any)?.created_at || new Date().toISOString(),
         } as any,
         validCompanyId,
       );
@@ -1075,11 +1181,82 @@ export function NovoAgendamentoDialog({
           const supabaseAuthId = authData?.user?.id;
           if (supabaseAuthId && isUuid(supabaseAuthId)) remoteCreatedBy = supabaseAuthId;
 
-          // 1. Tenta salvar via RPC save_agenda_event garantida
-          let remoteSaved = false;
-          try {
-            const { data: rpcRes, error: rpcErr } = await (supabase as any).rpc("save_agenda_event", {
-              p_event: {
+          if (activityToEdit) {
+            try {
+              if (activityToEdit.source === "event" || !activityToEdit.source) {
+                await (supabase as any)
+                  .from("events")
+                  .update({
+                    title: finalTitle,
+                    description,
+                    starts_at: startsAt.toISOString(),
+                    ends_at: endsAt.toISOString(),
+                    location,
+                    assigned_to: validAssignedTo,
+                    patient_id: validPatientId,
+                  })
+                  .eq("id", insertedId);
+              } else if (activityToEdit.source === "task") {
+                await (supabase as any)
+                  .from("tasks")
+                  .update({
+                    title: finalTitle,
+                    description,
+                    due_date: startsAt.toISOString(),
+                    assigned_to: validAssignedTo,
+                    patient_id: validPatientId,
+                  })
+                  .eq("id", insertedId);
+              }
+            } catch (updErr) {
+              console.warn("Erro ao atualizar evento no Supabase:", updErr);
+            }
+
+            if (type === "atendimento" && validPatientId && validAssignedTo) {
+              try {
+                await (supabase as any)
+                  .from("appointments")
+                  .upsert({
+                    id: insertedId,
+                    patient_id: validPatientId,
+                    doctor_id: validAssignedTo,
+                    date: day,
+                    start_time: start,
+                    end_time: end,
+                    status: status || "agendado",
+                    notes: notes.trim() || undefined,
+                  });
+              } catch (apptErr) {
+                console.warn("Aviso ao atualizar appointments no Supabase:", apptErr);
+              }
+            }
+          } else {
+            // 1. Tenta salvar via RPC save_agenda_event garantida
+            let remoteSaved = false;
+            try {
+              const { data: rpcRes, error: rpcErr } = await (supabase as any).rpc("save_agenda_event", {
+                p_event: {
+                  id: insertedId,
+                  company_id: validCompanyId,
+                  created_by: remoteCreatedBy,
+                  title: finalTitle,
+                  description,
+                  event_type: "meeting",
+                  starts_at: startsAt.toISOString(),
+                  ends_at: endsAt.toISOString(),
+                  location,
+                  case_id: validCaseId,
+                  assigned_to: validAssignedTo,
+                  patient_id: validPatientId,
+                },
+              });
+              if (!rpcErr && rpcRes) {
+                remoteSaved = true;
+              }
+            } catch {}
+
+            if (!remoteSaved) {
+              const { error: eventError } = await supabase.from("events").insert({
                 id: insertedId,
                 company_id: validCompanyId,
                 created_by: remoteCreatedBy,
@@ -1092,51 +1269,33 @@ export function NovoAgendamentoDialog({
                 case_id: validCaseId,
                 assigned_to: validAssignedTo,
                 patient_id: validPatientId,
-              },
-            });
-            if (!rpcErr && rpcRes) {
-              remoteSaved = true;
+              });
+              if (eventError) {
+                console.warn("Aviso ao salvar evento no Supabase:", eventError);
+              }
             }
-          } catch {}
 
-          if (!remoteSaved) {
-            const { error: eventError } = await supabase.from("events").insert({
-              id: insertedId,
-              company_id: validCompanyId,
-              created_by: remoteCreatedBy,
-              title: finalTitle,
-              description,
-              event_type: "meeting",
-              starts_at: startsAt.toISOString(),
-              ends_at: endsAt.toISOString(),
-              location,
-              case_id: validCaseId,
-              assigned_to: validAssignedTo,
-              patient_id: validPatientId,
-            });
-            if (eventError) {
-              console.warn("Aviso ao salvar evento no Supabase:", eventError);
+            // Se for atendimento com paciente e médico selecionados, persiste também na tabela appointments
+            if (type === "atendimento" && validPatientId && validAssignedTo) {
+              try {
+                await supabase.from("appointments").insert({
+                  id: insertedId,
+                  patient_id: validPatientId,
+                  doctor_id: validAssignedTo,
+                  date: day,
+                  start_time: start,
+                  end_time: end,
+                  type: "consulta",
+                  status: status || "agendado",
+                  notes: notes.trim() || undefined,
+                });
+              } catch (apptErr) {
+                console.warn("Aviso ao salvar appointments no Supabase:", apptErr);
+              }
             }
           }
 
-          // Se for atendimento com paciente e médico selecionados, persiste também na tabela appointments
-          if (type === "atendimento" && validPatientId && validAssignedTo) {
-            try {
-              await supabase.from("appointments").insert({
-                id: insertedId,
-                patient_id: validPatientId,
-                doctor_id: validAssignedTo,
-                date: day,
-                start_time: start,
-                end_time: end,
-                type: "consulta",
-                status: status || "agendado",
-                notes: notes.trim() || undefined,
-              });
-            } catch (apptErr) {
-              console.warn("Aviso ao salvar appointments no Supabase:", apptErr);
-            }
-          } else if (
+          if (
             type === "atendimento" &&
             !isIncludedInPlan &&
             (totalAmt > 0 || sinalAmt > 0)
@@ -1282,9 +1441,15 @@ export function NovoAgendamentoDialog({
     },
     onSuccess: (data) => {
       const asDraft = data?.asDraft;
-      toast.success(asDraft ? "Rascunho salvo" : "Agendamento criado");
+      toast.success(
+        asDraft
+          ? "Rascunho salvo"
+          : activityToEdit
+            ? "Agendamento atualizado com sucesso!"
+            : "Agendamento criado com sucesso!",
+      );
       logClient({
-        action: "create",
+        action: activityToEdit ? "update" : "create",
         entity_type: "agendamento",
         entity_label: title.trim() || labelOfType(type),
       });
@@ -1361,16 +1526,26 @@ export function NovoAgendamentoDialog({
           <div className="flex items-center justify-between border-b border-hairline bg-card px-4 py-4 md:px-6">
             <div>
               <DialogTitle className="text-2xl font-semibold tracking-tight">
-                {type === "bloqueio"
-                  ? "Novo bloqueio de horário"
-                  : type === "lembrete"
-                    ? "Novo lembrete"
-                    : type === "evento"
-                      ? "Novo evento"
-                      : "Novo Agendamento"}
+                {activityToEdit
+                  ? type === "bloqueio"
+                    ? "Editar bloqueio de horário"
+                    : type === "lembrete"
+                      ? "Editar lembrete"
+                      : type === "evento"
+                        ? "Editar evento"
+                        : "Editar Agendamento"
+                  : type === "bloqueio"
+                    ? "Novo bloqueio de horário"
+                    : type === "lembrete"
+                      ? "Novo lembrete"
+                      : type === "evento"
+                        ? "Novo evento"
+                        : "Novo Agendamento"}
               </DialogTitle>
               <DialogDescription className="sr-only">
-                Crie um novo agendamento com todos os detalhes.
+                {activityToEdit
+                  ? "Edite todos os detalhes do agendamento."
+                  : "Crie um novo agendamento com todos os detalhes."}
               </DialogDescription>
             </div>
             <button
@@ -3147,7 +3322,11 @@ export function NovoAgendamentoDialog({
                 size="lg"
                 className={cn("px-6 font-semibold", GREEN.grad, "hover:bg-primary-hover")}
               >
-                {save.isPending ? "Salvando..." : "Salvar Agendamento"}
+                {save.isPending
+                  ? "Salvando..."
+                  : activityToEdit
+                    ? "Salvar Alterações"
+                    : "Salvar Agendamento"}
               </Button>
             </div>
           )}
