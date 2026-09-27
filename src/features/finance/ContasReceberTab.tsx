@@ -43,6 +43,7 @@ import { Label } from "@/components/ui/label";
 import { CountUp } from "@/components/finance/CountUp";
 import { currency, formatClinicalDate } from "@/features/acompanhamentos/followup-utils";
 import { remaining, isFreeBalance } from "./finance-math";
+import { extractEventId } from "./finance-api";
 import type { FinanceSnapshot, FinancialTitle } from "./finance-schema";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -111,6 +112,19 @@ export function ContasReceberTab({
     }
     return (finance?.titles || []).filter((t) => {
       if (t.status === "cancelado" || deleted.has(t.id) || isRecordWiped(t)) return false;
+      if (t.origin_key && deleted.has(t.origin_key)) return false;
+      const evId = extractEventId(t.origin_key) || extractEventId(t.id);
+      if (evId) {
+        if (
+          deleted.has(evId) ||
+          deleted.has(`event:${evId}`) ||
+          deleted.has(`evt-${evId}`) ||
+          deleted.has(`evt-${evId}-remaining`) ||
+          deleted.has(`pay-evt-${evId}`)
+        ) {
+          return false;
+        }
+      }
       return t.type === "receita";
     });
   }, [finance?.titles]);

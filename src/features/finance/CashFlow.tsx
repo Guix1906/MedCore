@@ -81,7 +81,8 @@ import {
   localDate,
   moneyCents,
 } from "@/features/acompanhamentos/followup-utils";
-import { refreshFinance, extractEventId, getTitleEventKey } from "./finance-api";
+import { refreshFinance, extractEventId, getTitleEventKey, deleteLocalPayment, deleteLocalFinancialTitle } from "./finance-api";
+import { confirmDialog } from "@/components/app/confirm-dialog";
 import { remaining } from "./finance-math";
 import { cashFlow } from "./cash-flow-math";
 import type { CashAccount, CashFlowSnapshot } from "./cash-flow-schema";
@@ -94,7 +95,7 @@ import {
 import { CountUp } from "@/components/finance/CountUp";
 import { cn } from "@/lib/utils";
 import PaymentHistory from "./PaymentHistory";
-import { isRecordWiped } from "@/lib/wipe-system";
+import { isRecordWiped, addSuppressedIds } from "@/lib/wipe-system";
 
 const balance = (value: number | null) =>
   value === null ? "Pendente de conferência" : currency(value);
@@ -163,7 +164,13 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
   const [deletedEntryIds, setDeletedEntryIds] = useState<string[]>(() => {
     try {
       const val = JSON.parse(localStorage.getItem("medcore_deleted_cash_entries") || "[]");
-      return Array.isArray(val) ? val.map(String) : [];
+      const val2 = JSON.parse(localStorage.getItem("medcore_deleted_titles") || "[]");
+      return Array.from(
+        new Set([
+          ...(Array.isArray(val) ? val.map(String) : []),
+          ...(Array.isArray(val2) ? val2.map(String) : []),
+        ]),
+      );
     } catch {
       return [];
     }
@@ -187,7 +194,37 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
     try {
       const reason = deleteReason.trim() || "Exclusão manual realizada no Fluxo de Caixa";
 
-      // 1. Tenta estornar o pagamento se for um pagamento real
+      // 1. Coleta todos os identificadores vinculados (pagamento, título e evento originário)
+      const idsToDelete = new Set<string>();
+      if (entryToDelete.id) idsToDelete.add(String(entryToDelete.id));
+      if (entryToDelete.transaction_id) idsToDelete.add(String(entryToDelete.transaction_id));
+      if (entryToDelete.title?.id) idsToDelete.add(String(entryToDelete.title.id));
+      if (entryToDelete.title?.origin_key) idsToDelete.add(String(entryToDelete.title.origin_key));
+
+      const evId =
+        extractEventId(entryToDelete.id) ||
+        extractEventId(entryToDelete.transaction_id) ||
+        extractEventId(entryToDelete.title?.origin_key) ||
+        extractEventId(entryToDelete.title?.id);
+
+      if (evId) {
+        idsToDelete.add(evId);
+        idsToDelete.add(`event:${evId}`);
+        idsToDelete.add(`evt-${evId}`);
+        idsToDelete.add(`evt-${evId}-downpayment`);
+        idsToDelete.add(`evt-${evId}-remaining`);
+        idsToDelete.add(`pay-evt-${evId}`);
+
+        (finance?.titles || []).forEach((t) => {
+          const tEv = extractEventId(t.origin_key) || extractEventId(t.id);
+          if (tEv === evId) {
+            idsToDelete.add(t.id);
+            if (t.origin_key) idsToDelete.add(t.origin_key);
+          }
+        });
+      }
+
+      // 2. Tenta estornar o pagamento se for um pagamento real no Supabase
       if (
         entryToDelete.id &&
         !entryToDelete.id.startsWith("title-pay-") &&
@@ -203,27 +240,64 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
         }
       }
 
-      // 2. Tenta cancelar o título financeiro no Supabase
-      if (entryToDelete.transaction_id) {
-        try {
-          await supabase.rpc("cancel_financial_title", {
-            p_id: entryToDelete.transaction_id,
-            p_reason: reason,
-          });
-        } catch (err) {
-          console.warn("RPC cancel_financial_title info:", err);
+      // 3. Tenta cancelar todos os títulos financeiros no Supabase
+      const isUuid = (str: string) =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+      for (const id of idsToDelete) {
+        if (isUuid(id)) {
+          try {
+            await supabase.rpc("cancel_financial_title", {
+              p_id: id,
+              p_reason: reason,
+            });
+          } catch (err) {
+            console.warn("RPC cancel_financial_title info:", err);
+          }
         }
       }
 
-      // 3. Persistência de exclusão imediata local
+      // 4. Suprime e exclui localmente
+      const idList = Array.from(idsToDelete);
+      addSuppressedIds(idList);
+      idList.forEach((id) => {
+        deleteLocalPayment(id);
+        deleteLocalFinancialTitle(id);
+      });
+
+      // 5. Persistência de exclusão imediata local (sincroniza ambos os storages)
+      const currentCash = (() => {
+        try {
+          return JSON.parse(localStorage.getItem("medcore_deleted_cash_entries") || "[]");
+        } catch {
+          return [];
+        }
+      })();
+      const currentTitles = (() => {
+        try {
+          return JSON.parse(localStorage.getItem("medcore_deleted_titles") || "[]");
+        } catch {
+          return [];
+        }
+      })();
+
       const newDeleted = Array.from(
-        new Set([...deletedEntryIds, entryToDelete.id, entryToDelete.transaction_id]),
-      );
+        new Set([
+          ...deletedEntryIds,
+          ...(Array.isArray(currentCash) ? currentCash : []),
+          ...(Array.isArray(currentTitles) ? currentTitles : []),
+          ...idList,
+        ]),
+      ).map(String);
+
       setDeletedEntryIds(newDeleted);
       localStorage.setItem("medcore_deleted_cash_entries", JSON.stringify(newDeleted));
+      localStorage.setItem("medcore_deleted_titles", JSON.stringify(newDeleted));
+
+      window.dispatchEvent(new CustomEvent("medcore_local_title_saved"));
+      window.dispatchEvent(new CustomEvent("medcore_events_updated"));
 
       await refreshFinance(qc);
-      toast.success("Movimentação excluída do fluxo de caixa com sucesso!", {
+      toast.success("Movimentação e pendências associadas excluídas com sucesso!", {
         description: "O registro foi movido para a sub-aba Excluídos.",
       });
       setDeleteModalOpen(false);
@@ -238,15 +312,152 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
 
   const handleRestoreEntry = async (entry: any) => {
     try {
-      const newDeleted = deletedEntryIds.filter(
-        (id) => id !== entry.id && id !== entry.transaction_id,
-      );
+      const idsToRestore = new Set<string>([entry.id, entry.transaction_id]);
+      if (entry.title?.id) idsToRestore.add(entry.title.id);
+      if (entry.title?.origin_key) idsToRestore.add(entry.title.origin_key);
+      const evId =
+        extractEventId(entry.id) ||
+        extractEventId(entry.transaction_id) ||
+        extractEventId(entry.title?.origin_key) ||
+        extractEventId(entry.title?.id);
+      if (evId) {
+        idsToRestore.add(evId);
+        idsToRestore.add(`event:${evId}`);
+        idsToRestore.add(`evt-${evId}`);
+        idsToRestore.add(`evt-${evId}-remaining`);
+        idsToRestore.add(`evt-${evId}-downpayment`);
+        idsToRestore.add(`pay-evt-${evId}`);
+      }
+
+      const newDeleted = deletedEntryIds.filter((id) => !idsToRestore.has(id));
       setDeletedEntryIds(newDeleted);
       localStorage.setItem("medcore_deleted_cash_entries", JSON.stringify(newDeleted));
+      localStorage.setItem("medcore_deleted_titles", JSON.stringify(newDeleted));
+      window.dispatchEvent(new CustomEvent("medcore_local_title_saved"));
+      window.dispatchEvent(new CustomEvent("medcore_events_updated"));
       await refreshFinance(qc);
       toast.success("Movimentação restaurada com sucesso no fluxo de caixa!");
     } catch (err: any) {
       toast.error(errorMessage(err));
+    }
+  };
+
+  const handleDeleteAllVisible = async () => {
+    if (filteredEntries.length === 0) return;
+    const ok = await confirmDialog({
+      title: "Excluir Todas as Movimentações",
+      description: `Tem certeza que deseja excluir todas as ${filteredEntries.length} movimentações deste período do Fluxo de Caixa? As movimentações e qualquer previsão vinculada serão removidas do fluxo.`,
+      confirmText: "Excluir Todas",
+      destructive: true,
+    });
+    if (!ok) return;
+
+    const toastId = toast.loading("Excluindo todas as movimentações e previsões...");
+    try {
+      const idsToDelete = new Set<string>();
+      const reason = "Exclusão em lote realizada no Fluxo de Caixa";
+
+      for (const e of filteredEntries) {
+        if (e.id) idsToDelete.add(String(e.id));
+        if (e.transaction_id) idsToDelete.add(String(e.transaction_id));
+        if (e.title?.id) idsToDelete.add(String(e.title.id));
+        if (e.title?.origin_key) idsToDelete.add(String(e.title.origin_key));
+
+        const evId =
+          extractEventId(e.id) ||
+          extractEventId(e.transaction_id) ||
+          extractEventId(e.title?.origin_key) ||
+          extractEventId(e.title?.id);
+
+        if (evId) {
+          idsToDelete.add(evId);
+          idsToDelete.add(`event:${evId}`);
+          idsToDelete.add(`evt-${evId}`);
+          idsToDelete.add(`evt-${evId}-downpayment`);
+          idsToDelete.add(`evt-${evId}-remaining`);
+          idsToDelete.add(`pay-evt-${evId}`);
+
+          (finance?.titles || []).forEach((t) => {
+            const tEv = extractEventId(t.origin_key) || extractEventId(t.id);
+            if (tEv === evId) {
+              idsToDelete.add(t.id);
+              if (t.origin_key) idsToDelete.add(t.origin_key);
+            }
+          });
+        }
+      }
+
+      // Estorna pagamentos
+      for (const e of filteredEntries) {
+        if (e.id && !e.id.startsWith("title-pay-") && !e.id.startsWith("syn-")) {
+          try {
+            await supabase.rpc("reverse_financial_payment", {
+              p_id: e.id,
+              p_reason: reason,
+            });
+          } catch {}
+        }
+      }
+
+      // Cancela títulos no Supabase
+      const isUuid = (str: string) =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+      for (const id of idsToDelete) {
+        if (isUuid(id)) {
+          try {
+            await supabase.rpc("cancel_financial_title", {
+              p_id: id,
+              p_reason: reason,
+            });
+          } catch {}
+        }
+      }
+
+      // Suprime e exclui localmente
+      const idArray = Array.from(idsToDelete);
+      addSuppressedIds(idArray);
+      idArray.forEach((id) => {
+        deleteLocalPayment(id);
+        deleteLocalFinancialTitle(id);
+      });
+
+      const currentCash = (() => {
+        try {
+          return JSON.parse(localStorage.getItem("medcore_deleted_cash_entries") || "[]");
+        } catch {
+          return [];
+        }
+      })();
+      const currentTitles = (() => {
+        try {
+          return JSON.parse(localStorage.getItem("medcore_deleted_titles") || "[]");
+        } catch {
+          return [];
+        }
+      })();
+
+      const updated = Array.from(
+        new Set([
+          ...deletedEntryIds,
+          ...(Array.isArray(currentCash) ? currentCash : []),
+          ...(Array.isArray(currentTitles) ? currentTitles : []),
+          ...idArray,
+        ]),
+      ).map(String);
+
+      setDeletedEntryIds(updated);
+      localStorage.setItem("medcore_deleted_cash_entries", JSON.stringify(updated));
+      localStorage.setItem("medcore_deleted_titles", JSON.stringify(updated));
+
+      window.dispatchEvent(new CustomEvent("medcore_local_title_saved"));
+      window.dispatchEvent(new CustomEvent("medcore_events_updated"));
+      await refreshFinance(qc);
+
+      toast.success("Todas as movimentações e previsões foram excluídas com sucesso!", {
+        id: toastId,
+      });
+    } catch (err: any) {
+      toast.error(errorMessage(err), { id: toastId });
     }
   };
 
@@ -291,12 +502,29 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
     void qc.invalidateQueries({ queryKey: ["financial-snapshot"], refetchType: "all" });
     void qc.invalidateQueries({ queryKey: ["cash-flow-snapshot"], refetchType: "all" });
 
+    const reloadDeleted = () => {
+      try {
+        const val = JSON.parse(localStorage.getItem("medcore_deleted_cash_entries") || "[]");
+        const val2 = JSON.parse(localStorage.getItem("medcore_deleted_titles") || "[]");
+        setDeletedEntryIds(
+          Array.from(
+            new Set([
+              ...(Array.isArray(val) ? val.map(String) : []),
+              ...(Array.isArray(val2) ? val2.map(String) : []),
+            ]),
+          ),
+        );
+      } catch {}
+    };
+
     const handleSync = () => {
+      reloadDeleted();
       void qc.invalidateQueries({ queryKey: ["financial-snapshot"], refetchType: "all" });
       void qc.invalidateQueries({ queryKey: ["cash-flow-snapshot"], refetchType: "all" });
     };
     const handleStorage = (e: StorageEvent) => {
       if (!e.key || e.key.startsWith("medcore_")) {
+        reloadDeleted();
         void qc.invalidateQueries({ queryKey: ["financial-snapshot"], refetchType: "all" });
         void qc.invalidateQueries({ queryKey: ["cash-flow-snapshot"], refetchType: "all" });
       }
@@ -538,12 +766,28 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       finalResult.push(e);
     }
 
-    return finalResult.filter(
-      (e) =>
-        !deletedEntryIds.includes(e.id) &&
-        !deletedEntryIds.includes(e.transaction_id) &&
-        !isRecordWiped(e),
-    );
+    return finalResult.filter((e) => {
+      if (isRecordWiped(e)) return false;
+      if (deletedEntryIds.includes(e.id) || deletedEntryIds.includes(e.transaction_id)) return false;
+      if (e.title?.id && deletedEntryIds.includes(e.title.id)) return false;
+      if (e.title?.origin_key && deletedEntryIds.includes(e.title.origin_key)) return false;
+      const evId =
+        extractEventId(e.id) ||
+        extractEventId(e.transaction_id) ||
+        extractEventId(e.title?.origin_key) ||
+        extractEventId(e.title?.id);
+      if (evId) {
+        if (
+          deletedEntryIds.includes(evId) ||
+          deletedEntryIds.includes(`event:${evId}`) ||
+          deletedEntryIds.includes(`evt-${evId}`) ||
+          deletedEntryIds.includes(`pay-evt-${evId}`)
+        ) {
+          return false;
+        }
+      }
+      return true;
+    });
   }, [finance.payments, finance.titles, finance.accounts, deletedEntryIds]);
 
   // 2. Títulos e baixas excluídos/cancelados para a sub-aba "Excluídos"
@@ -742,6 +986,17 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       return true;
     });
 
+    // SE NÃO HÁ MOVIMENTAÇÕES REALIZADAS NO PERÍODO OU TODAS FORAM EXCLUÍDAS DO FLUXO DE CAIXA:
+    // O fluxo de caixa está zerado/excluído, portanto NÃO DEVE MOSTRAR PREVISTO no gráfico!
+    if (base.length === 0) {
+      return {
+        totalEntradas: 0,
+        totalDespesas: 0,
+        saldoFinal: 0,
+        chartData: [],
+      };
+    }
+
     base.forEach((e) => {
       if (!e.is_expense) {
         entradas += e.paid_amount;
@@ -780,16 +1035,47 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       dayMap.set(label, cur);
     });
 
+    // Conjunto completo de IDs excluídos (incluindo títulos, pagamentos e eventos)
+    const allDeletedSet = new Set<string>(deletedEntryIds);
+    try {
+      const t = JSON.parse(localStorage.getItem("medcore_deleted_titles") || "[]");
+      const c = JSON.parse(localStorage.getItem("medcore_deleted_cash_entries") || "[]");
+      if (Array.isArray(t)) t.forEach((id: string) => allDeletedSet.add(String(id)));
+      if (Array.isArray(c)) c.forEach((id: string) => allDeletedSet.add(String(id)));
+    } catch {}
+
     // Mapeia títulos a receber (ex: restante de procedimentos agendados) para a data de vencimento
+    // SOMENTE para títulos que NÃO foram excluídos e cujas movimentações originárias NÃO foram excluídas
     const titles = Array.isArray(finance?.titles) ? finance.titles : [];
     titles
-      .filter((t) => t && t.type === "receita" && t.status !== "cancelado" && remaining(t) > 0)
+      .filter((t) => {
+        if (!t || t.type !== "receita" || t.status === "cancelado" || remaining(t) <= 0) return false;
+        if (isRecordWiped(t)) return false;
+
+        // Se o título ou origin_key estiver nos excluídos
+        if (allDeletedSet.has(t.id)) return false;
+        if (t.origin_key && allDeletedSet.has(t.origin_key)) return false;
+
+        const evId = extractEventId(t.origin_key) || extractEventId(t.id);
+        if (evId) {
+          if (
+            allDeletedSet.has(evId) ||
+            allDeletedSet.has(`event:${evId}`) ||
+            allDeletedSet.has(`evt-${evId}`) ||
+            allDeletedSet.has(`evt-${evId}-remaining`) ||
+            allDeletedSet.has(`evt-${evId}-downpayment`) ||
+            allDeletedSet.has(`pay-evt-${evId}`)
+          ) {
+            return false;
+          }
+        }
+        return true;
+      })
       .forEach((t) => {
         const dStr = String(t.due_date || t.date || "").slice(0, 10);
         if (!dStr) return;
         if (start && dStr < start) return;
         if (end && dStr > end) return;
-        if (deletedEntryIds.includes(t.id)) return;
 
         let label = dStr;
         try {
@@ -1135,8 +1421,21 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
             </div>
           </div>
 
-          {/* Botões de Ação Topo Direito (Planilha e Transferência) */}
+          {/* Botões de Ação Topo Direito (Excluir Todas, Planilha e Transferência) */}
           <div className="flex items-center gap-2 flex-wrap">
+            {activeSubTab === "lancamentos" && filteredEntries.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 bg-card border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 text-xs font-medium gap-1.5 shadow-2xs cursor-pointer"
+                onClick={handleDeleteAllVisible}
+                title="Exclui todas as movimentações exibidas e remove suas pendências do fluxo"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Excluir Todas
+              </Button>
+            )}
+
             <Button
               variant="outline"
               size="sm"
