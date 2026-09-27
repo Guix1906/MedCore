@@ -30,10 +30,13 @@ import {
   CheckCircle2,
   Wallet,
   Loader2,
+  Plus,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { FinanceSnapshot, FinancialTitle } from "./finance-schema";
 import { refreshFinance, saveLocalFinancialTitle, saveLocalPayment } from "./finance-api";
+import { CategoryModal } from "./CategoriesManager";
+import { getFinanceCategories } from "./finance-categories";
 
 const EXPENSE_CATEGORIES_DEFAULT = [
   "Aluguel e Condomínio",
@@ -95,19 +98,13 @@ export default function NewTitle({
   });
 
   const [busy, setBusy] = useState(false);
+  const [createCatOpen, setCreateCatOpen] = useState(false);
 
-  // Busca categorias cadastradas no banco de dados para enriquecer a lista
+  // Busca categorias cadastradas (banco de dados + cache local)
   const categoriesQuery = useQuery({
     queryKey: ["financial-title-categories"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("finance_categories")
-        .select("id,name,type")
-        .order("name");
-      if (error) return [];
-      return data || [];
-    },
-    staleTime: 60000,
+    queryFn: getFinanceCategories,
+    staleTime: 30000,
   });
 
   const availableCategories = React.useMemo(() => {
@@ -398,9 +395,20 @@ export default function NewTitle({
 
           {/* 3. CATEGORIA */}
           <div className="space-y-1.5">
-            <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-              <Tag className="h-3.5 w-3.5 text-muted-foreground" /> Categoria <span className="text-destructive">*</span>
-            </Label>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <Tag className="h-3.5 w-3.5 text-muted-foreground" /> Categoria <span className="text-destructive">*</span>
+              </Label>
+              <button
+                type="button"
+                onClick={() => setCreateCatOpen(true)}
+                className="text-xs text-primary hover:underline flex items-center gap-1 font-medium cursor-pointer"
+                title="Cadastrar nova categoria sem perder os dados preenchidos"
+              >
+                <Plus className="h-3 w-3" />
+                Nova categoria
+              </button>
+            </div>
             <Select value={category} onValueChange={setCategory}>
               <SelectTrigger className="h-10 text-sm rounded-xl bg-background">
                 <SelectValue placeholder="Selecione a categoria" />
@@ -539,6 +547,15 @@ export default function NewTitle({
           </DialogFooter>
         </form>
       </DialogContent>
+      <CategoryModal
+        open={createCatOpen}
+        onOpenChange={setCreateCatOpen}
+        defaultType={isExpense ? "expense" : "income"}
+        onSuccess={(newCat) => {
+          setCategory(newCat.name);
+          void categoriesQuery.refetch();
+        }}
+      />
     </Dialog>
   );
 }

@@ -6,11 +6,12 @@ import {
   FileBarChart,
   LineChart,
   Wallet,
+  Tags,
 } from "lucide-react";
 import { SegmentedControl } from "@/components/ui-app/SegmentedControl";
 import { StickyToolbar } from "@/components/ui-app/StickyToolbar";
 
-export type FinanceTabId = "fluxo" | "pagar" | "receber" | "conciliacao" | "dre" | "dfc";
+export type FinanceTabId = "fluxo" | "pagar" | "receber" | "conciliacao" | "dre" | "dfc" | "categorias";
 export const financeTabs: { id: FinanceTabId; label: string; icon: ElementType }[] = [
   { id: "fluxo", label: "Fluxo de Caixa", icon: LineChart },
   { id: "pagar", label: "Contas a Pagar", icon: ArrowUpRight },
@@ -18,6 +19,7 @@ export const financeTabs: { id: FinanceTabId; label: string; icon: ElementType }
   { id: "conciliacao", label: "Conciliação OFX", icon: CheckCheck },
   { id: "dre", label: "DRE", icon: FileBarChart },
   { id: "dfc", label: "DFC", icon: Wallet },
+  { id: "categorias", label: "Categorias", icon: Tags },
 ];
 
 export function resolveFinanceTab(value: unknown): FinanceTabId {
@@ -26,6 +28,7 @@ export function resolveFinanceTab(value: unknown): FinanceTabId {
   if (value === "planos") return "receber";
   if (value === "repasses") return "pagar";
   if (value === "relatorios") return "dre";
+  if (value === "categorias" || value === "categoria") return "categorias";
   return "fluxo";
 }
 

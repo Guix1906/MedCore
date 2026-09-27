@@ -13,7 +13,7 @@ import { getFinancialSnapshot, refreshFinance } from "@/features/finance/finance
 import { confirmDialog } from "@/components/app/confirm-dialog";
 import { wipeAllAppointments } from "@/lib/local-events";
 import { Button } from "@/components/ui/button";
-import { Trash2 } from "lucide-react";
+import { Trash2, Tags } from "lucide-react";
 import TitleList from "@/features/finance/TitleList";
 import CashFlow from "@/features/finance/CashFlow";
 import { ContasPagarTab } from "@/features/finance/ContasPagarTab";
@@ -21,6 +21,7 @@ import { ContasReceberTab } from "@/features/finance/ContasReceberTab";
 import BankReconciliation from "@/features/finance/BankReconciliation";
 import { DfcTab } from "@/features/finance/DfcTab";
 import { DreTab } from "@/features/finance/DreTab";
+import CategoriesManager from "@/features/finance/CategoriesManager";
 import FinanceOperations from "@/features/finance/FinanceOperations";
 import NewTitle from "@/features/finance/NewTitle";
 import PaymentHistory from "@/features/finance/PaymentHistory";
@@ -177,21 +178,33 @@ function FinanceiroPage() {
             title="Financeiro"
             description="Acompanhe o caixa, os compromissos e os recebimentos da clínica."
             actions={
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs text-muted-foreground hover:text-destructive hover:border-destructive/40 gap-1.5 cursor-pointer"
-                onClick={handleWipeAll}
-                title="Zera todos os lançamentos e agendamentos de teste para iniciar do zero"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Zerar Dados de Teste
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={search.tab === "categorias" ? "default" : "outline"}
+                  size="sm"
+                  className="text-xs gap-1.5 cursor-pointer"
+                  onClick={() => changeTab("categorias")}
+                  title="Cadastrar e gerenciar categorias financeiras de receitas e despesas"
+                >
+                  <Tags className="h-3.5 w-3.5" />
+                  Categorias
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs text-muted-foreground hover:text-destructive hover:border-destructive/40 gap-1.5 cursor-pointer"
+                  onClick={handleWipeAll}
+                  title="Zera todos os lançamentos e agendamentos de teste para iniciar do zero"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Zerar Dados de Teste
+                </Button>
+              </div>
             }
           />
           <FinanceTabs activeTab={search.tab} onSelectTab={changeTab} disabled={locked} />
-          {query.isPending && <p role="status">Carregando financeiro...</p>}
-          {query.error && (
+          {query.isPending && search.tab !== "categorias" && <p role="status">Carregando financeiro...</p>}
+          {query.error && search.tab !== "categorias" && (
             <div role="alert" className="rounded-xl bg-destructive/10 p-4 text-destructive">
               {errorMessage(query.error)}
               <p>Não foi possível atualizar os dados financeiros.</p>
@@ -200,7 +213,9 @@ function FinanceiroPage() {
               </button>
             </div>
           )}
-          {data && !query.error && (
+          {search.tab === "categorias" ? (
+            <CategoriesManager />
+          ) : data && !query.error ? (
             <>
               {search.tab === "fluxo" ? (
                     <CashFlow
@@ -326,7 +341,7 @@ function FinanceiroPage() {
                 </DialogContent>
               </Dialog>
             </>
-          )}
+          ) : null}
         </main>
       </OperationLock.Provider>
     </AppShell>

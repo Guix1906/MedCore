@@ -35,6 +35,7 @@ import AppShell from "@/components/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { companyService, financeService } from "@/services/api";
 import FinanceOperations from "@/features/finance/FinanceOperations";
+import CategoriesManager from "@/features/finance/CategoriesManager";
 import { getFinancialSnapshot } from "@/features/finance/finance-api";
 import { errorMessage } from "@/features/acompanhamentos/followup-utils";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -248,7 +249,7 @@ function ConfiguracoesPage() {
             )}
             {tab === "clinica" && <ClinicSettings />}
             {tab === "servicos" && <ServiceTypes />}
-            {tab === "categorias" && <FinanceCategories />}
+            {tab === "categorias" && <CategoriesManager />}
             {tab === "contas" && <FinancialAccountSettings onLockChange={setFinanceLocked} />}
             {tab === "cidades" && <CitySettings />}
           </section>
@@ -709,114 +710,6 @@ function ServiceModal({
   );
 }
 
-type Cat = { id: string; name: string; type: "income" | "expense"; color?: string | null };
-
-function FinanceCategories() {
-  const queryClient = useQueryClient();
-  const [newName, setNewName] = useState("");
-  const [newType, setNewType] = useState<"income" | "expense">("income");
-
-  const { data: rows = [] } = useQuery({
-    queryKey: ["finance-categories-list"],
-    staleTime: 10 * 60_000,
-    gcTime: 30 * 60_000,
-    placeholderData: (prev) => prev,
-    queryFn: async () => {
-      try {
-        const phpData = await financeService.getCategories();
-        if (phpData && Array.isArray(phpData) && phpData.length > 0) {
-          return phpData as Cat[];
-        }
-      } catch {}
-      const { data } = await (supabase as DbRow)
-        .from("finance_categories")
-        .select("*")
-        .order("type")
-        .order("name");
-      return (data ?? []) as Cat[];
-    },
-  });
-
-  const load = () => {
-    queryClient.invalidateQueries({ queryKey: ["finance-categories-list"] });
-  };
-
-  const add = async () => {
-    if (!newName.trim()) return;
-    const { error } = await (supabase as DbRow)
-      .from("finance_categories")
-      .insert({ name: newName.trim(), type: newType });
-    if (error) toast.error("Erro: " + error.message);
-    else toast.success("Categoria adicionada");
-    setNewName("");
-    load();
-  };
-
-  const del = async (id: string) => {
-    const { error } = await (supabase as DbRow).from("finance_categories").delete().eq("id", id);
-    if (error) toast.error("Erro: " + error.message);
-    else toast.success("Categoria excluída");
-    load();
-  };
-
-  return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-      {(["income", "expense"] as const).map((t) => {
-        const items = rows.filter((r) => r.type === t);
-        const title = t === "income" ? "Receitas" : "Despesas";
-        return (
-          <SettingsGroup key={t} title={title}>
-            {items.map((r) => (
-              <div key={r.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                <span className="min-w-0 truncate text-sm text-foreground">{r.name}</span>
-                <button
-                  type="button"
-                  onClick={() => del(r.id)}
-                  aria-label={`Excluir categoria ${r.name}`}
-                  title="Excluir"
-                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-destructive transition-colors hover:bg-destructive/10"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
-            {items.length === 0 && (
-              <div className="px-4 py-3 text-center text-xs text-muted-foreground">
-                Sem categorias.
-              </div>
-            )}
-            <div className="flex gap-2 bg-muted/40 px-3 py-2.5">
-              <input
-                value={newType === t ? newName : ""}
-                onChange={(e) => {
-                  setNewType(t);
-                  setNewName(e.target.value);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && newType === t) add();
-                }}
-                placeholder="Nova categoria…"
-                aria-label={`Nova categoria de ${title.toLowerCase()}`}
-                className={cn(settingsInput, "flex-1")}
-              />
-              <Button
-                size="icon"
-                className="size-9"
-                aria-label={`Adicionar categoria de ${title.toLowerCase()}`}
-                onClick={() => {
-                  setNewType(t);
-                  if (newType === t) add();
-                }}
-              >
-                <Plus />
-              </Button>
-            </div>
-          </SettingsGroup>
-        );
-      })}
-    </div>
-  );
-}
 
 function CitySettings() {
   const { cities, addCity, removeCity } = useClinicCities();
