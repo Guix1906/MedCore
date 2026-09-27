@@ -5,6 +5,9 @@ import { useEffect, useMemo, useRef } from "react";
 import { useRouteContext } from "@tanstack/react-router";
 import { qk, staleTimes } from "@/lib/query-keys";
 import { getStoredUser } from "@/services/api";
+import { isUuid } from "@/lib/uuid";
+
+export const DEFAULT_COMPANY_ID = "00000000-0000-0000-0000-0000000c1111";
 
 export function useActiveCompany() {
   const { user } = useAuth();
@@ -17,7 +20,10 @@ export function useActiveCompany() {
   });
 
   const storedUser = getStoredUser();
-  const defaultCompanyId = storedUser?.active_company_id || "comp_medcore_default";
+  const defaultCompanyId =
+    storedUser?.active_company_id && isUuid(storedUser.active_company_id)
+      ? storedUser.active_company_id
+      : DEFAULT_COMPANY_ID;
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: qk.activeCompany(user?.id),
@@ -34,7 +40,7 @@ export function useActiveCompany() {
     queryFn: async () => {
       if (!user?.id) return { companyId: defaultCompanyId, fullName: null, needsPersist: false };
 
-      if (storedUser?.active_company_id) {
+      if (storedUser?.active_company_id && isUuid(storedUser.active_company_id)) {
         return {
           companyId: storedUser.active_company_id,
           fullName: storedUser.full_name ?? null,
@@ -54,18 +60,34 @@ export function useActiveCompany() {
           .select("company_id")
           .eq("user_id", user.id);
 
-        const validCompanyIds = (memberships ?? []).map((m) => m.company_id);
+        const validCompanyIds = (memberships ?? [])
+          .map((m) => m.company_id)
+          .filter((id): id is string => !!id && isUuid(id));
 
         let companyId: string | null = null;
         let needsPersist = false;
 
-        if (profile?.active_company_id && validCompanyIds.includes(profile.active_company_id)) {
+        if (profile?.active_company_id && isUuid(profile.active_company_id)) {
           companyId = profile.active_company_id;
         } else if (validCompanyIds.length > 0) {
           companyId = validCompanyIds[0];
           needsPersist = true;
         } else {
-          companyId = defaultCompanyId;
+          // Busca primeira empresa existente no banco
+          try {
+            const { data: firstComp } = await supabase
+              .from("companies")
+              .select("id")
+              .order("created_at", { ascending: true })
+              .limit(1)
+              .maybeSingle();
+            if (firstComp?.id && isUuid(firstComp.id)) {
+              companyId = firstComp.id;
+            }
+          } catch {}
+          if (!companyId) {
+            companyId = defaultCompanyId;
+          }
         }
 
         return {
@@ -85,14 +107,15 @@ export function useActiveCompany() {
 
   const persistedRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!user?.id || !data?.needsPersist || !data.companyId) return;
+    if (!user?.id || !data?.needsPersist || !data.companyId || !isUuid(data.companyId)) return;
     if (persistedRef.current === data.companyId) return;
     persistedRef.current = data.companyId;
     void supabase.from("profiles").update({ active_company_id: data.companyId }).eq("id", user.id);
   }, [user?.id, data?.needsPersist, data?.companyId]);
 
   return useMemo(() => {
-    const companyId = context?.companyId ?? data?.companyId ?? defaultCompanyId;
+    const rawCompanyId = context?.companyId ?? data?.companyId ?? defaultCompanyId;
+    const companyId = isUuid(rawCompanyId) ? rawCompanyId : DEFAULT_COMPANY_ID;
     const fullName = context?.fullName ?? data?.fullName ?? storedUser?.full_name ?? null;
 
     return {

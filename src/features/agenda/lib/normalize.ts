@@ -83,7 +83,7 @@ export function toActivities(opts: {
       caseTitle: e.case?.title ?? null,
       location: e.location,
       priority: null,
-      status: null,
+      status: (e as any).status ?? null,
       raw: e,
     });
   }

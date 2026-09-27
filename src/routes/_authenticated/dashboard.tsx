@@ -186,19 +186,6 @@ function DashboardPage() {
     };
   }, [qc]);
 
-  // Purga única inicial para zerar todos os agendamentos e movimentações de teste anteriores
-  useEffect(() => {
-    const WIPE_FLAG = "medcore_system_wipe_executed_v5";
-    if (typeof window !== "undefined" && !localStorage.getItem(WIPE_FLAG)) {
-      localStorage.setItem(WIPE_FLAG, "true");
-      void wipeAllAppointments().then(() => {
-        void qc.invalidateQueries({ queryKey: ["dashboard", "events-appointments"] });
-        void qc.invalidateQueries({ queryKey: ["financial-snapshot"] });
-        void qc.invalidateQueries({ queryKey: ["cash-flow-snapshot"] });
-      });
-    }
-  }, [qc]);
-
   const apptsQ = useQuery({
     queryKey: ["dashboard", "events-appointments"],
     placeholderData: (prev) => prev,
@@ -211,17 +198,62 @@ function DashboardPage() {
         }
       } catch {}
 
+      // 1. Tenta carregar via RPC garantida get_agenda_events
+      try {
+        const { data: rpcData, error: rpcErr } = await (supabase as any).rpc("get_agenda_events");
+        if (!rpcErr && rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
+          const map = new Map<string, any>();
+          rawList.forEach((e) => map.set(e.id, e));
+          rpcData.forEach((e: any) => map.set(e.id, e));
+          rawList = Array.from(map.values());
+        }
+      } catch {}
+
+      // 2. Complementa via tabela events do Supabase
       if (rawList.length === 0) {
-        const { data } = await supabase
-          .from("events")
-          .select("id, title, description, starts_at, ends_at, assigned_to, case_id, created_at")
-          .order("starts_at", { ascending: true });
-        if (data && Array.isArray(data)) {
-          rawList = data;
+        try {
+          const { data } = await supabase
+            .from("events")
+            .select("id, title, description, starts_at, ends_at, assigned_to, case_id, patient_id, created_at")
+            .order("starts_at", { ascending: true });
+          if (data && Array.isArray(data)) {
+            rawList = data;
+          }
+        } catch (e) {
+          console.warn("Aviso ao carregar eventos no dashboard:", e);
         }
       }
 
-      // Merge com agendamentos salvos localmente
+      // 3. Complementa com agendamentos clínicos da tabela appointments se existirem
+      try {
+        const { data: apptRows } = await supabase
+          .from("appointments")
+          .select("id, date, start_time, end_time, patient_id, doctor_id, type, status, notes, created_at")
+          .order("date", { ascending: true })
+          .limit(200);
+        if (apptRows && Array.isArray(apptRows)) {
+          const existingIds = new Set(rawList.map((e) => e.id));
+          apptRows.forEach((a: any) => {
+            if (!existingIds.has(a.id)) {
+              const startIso = `${a.date}T${a.start_time || "08:00"}:00`;
+              rawList.push({
+                id: a.id,
+                title: a.type || "Consulta",
+                description: a.notes,
+                starts_at: startIso,
+                ends_at: `${a.date}T${a.end_time || a.start_time || "08:30"}:00`,
+                assigned_to: a.doctor_id,
+                patient_id: a.patient_id,
+                status: a.status || "agendado",
+                event_type: a.type || "atendimento",
+                created_at: a.created_at,
+              });
+            }
+          });
+        }
+      } catch {}
+
+      // 4. Merge com agendamentos salvos localmente
       const localEvents = getStoredLocalEvents();
       const eventMap = new Map<string, any>();
       rawList.forEach((e) => {

@@ -503,6 +503,9 @@ function AgendaPage() {
               members,
               onSaved: (createdActivity) => {
                 setCreateKind(null);
+                if (createdActivity?.start) {
+                  setDate(new Date(createdActivity.start));
+                }
                 refresh();
                 if (createdActivity) {
                   setDrawer(createdActivity);

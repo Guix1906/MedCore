@@ -5,6 +5,7 @@ import { agendaService } from "@/services/api";
 import { qk } from "@/lib/query-keys";
 import { mergeWithLocalEvents } from "@/lib/local-events";
 import { isRecordWiped } from "@/lib/wipe-system";
+import { isUuid } from "@/lib/uuid";
 import { toActivities, type RawDeadline, type RawEvent, type RawTask } from "../lib/normalize";
 
 const AGENDA_STALE_TIME = 0;
@@ -47,14 +48,16 @@ export function useAgendaData(
         }
       } catch {}
 
-      if (companyId) {
+      if (companyId && isUuid(companyId)) {
         try {
           const { data } = await supabase
             .from("tasks")
             .select("id, title, description, due_date, priority, status, assigned_to, case_id")
             .eq("company_id", companyId);
           return (data ?? []) as RawTask[];
-        } catch {}
+        } catch (e) {
+          console.warn("Aviso ao carregar tarefas:", e);
+        }
       }
       return [] as RawTask[];
     },
@@ -70,11 +73,9 @@ export function useAgendaData(
     refetchOnWindowFocus: false,
     queryFn: async () => {
       let rawList: RawEvent[] = [];
-      let loadedFromPhp = false;
       try {
         const phpEvents = await agendaService.getEvents();
         if (phpEvents && Array.isArray(phpEvents)) {
-          loadedFromPhp = true;
           rawList = phpEvents.map((e) => ({
             id: e.id,
             title: e.title,
@@ -89,26 +90,42 @@ export function useAgendaData(
         }
       } catch {}
 
+      const validCompId = companyId && isUuid(companyId) ? companyId : null;
+
+      // 1. Tenta carregar via RPC garantida get_agenda_events
       try {
-        let q = supabase
-          .from("events")
-          .select(
-            "id, title, description, event_type, starts_at, ends_at, location, assigned_to, case_id, created_at",
-          );
-        if (companyId) {
-          q = q.eq("company_id", companyId);
-        }
-        const { data, error } = await q.order("starts_at", { ascending: true }).limit(1000);
-        if (error) throw error;
-        if (data && data.length > 0) {
+        const { data: rpcData, error: rpcErr } = await (supabase as any).rpc("get_agenda_events", {
+          p_company_id: validCompId,
+        });
+        if (!rpcErr && rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
           const map = new Map<string, RawEvent>();
           rawList.forEach((e) => map.set(e.id, e));
-          data.forEach((e: any) => map.set(e.id, e as RawEvent));
+          rpcData.forEach((e: any) => map.set(e.id, e as RawEvent));
           rawList = Array.from(map.values());
         }
-      } catch (error) {
-        if (!loadedFromPhp) throw error;
-        console.warn("A fonte complementar da agenda não está disponível.", error);
+      } catch {}
+
+      // 2. Select direto caso a RPC não tenha retornado registros
+      if (rawList.length === 0) {
+        try {
+          let q = supabase
+            .from("events")
+            .select(
+              "id, title, description, event_type, starts_at, ends_at, location, assigned_to, case_id, patient_id, created_at",
+            );
+          if (validCompId) {
+            q = q.eq("company_id", validCompId);
+          }
+          const { data, error } = await q.order("starts_at", { ascending: true }).limit(1000);
+          if (!error && data && data.length > 0) {
+            const map = new Map<string, RawEvent>();
+            rawList.forEach((e) => map.set(e.id, e));
+            data.forEach((e: any) => map.set(e.id, e as RawEvent));
+            rawList = Array.from(map.values());
+          }
+        } catch (error) {
+          console.warn("A fonte complementar da agenda não está disponível.", error);
+        }
       }
 
       rawList = rawList.filter((e) => !isRecordWiped(e));
@@ -141,12 +158,20 @@ export function useAgendaData(
         }
       } catch {}
 
-      const { data, error } = await supabase
-        .from("deadlines")
-        .select("id, title, description, due_date, status, assigned_to, case_id, is_double_term, created_at")
-        .eq("company_id", companyId!);
-      if (error) throw error;
-      return ((data ?? []) as RawDeadline[]).filter((d) => !isRecordWiped(d));
+      if (companyId && isUuid(companyId)) {
+        try {
+          const { data, error } = await supabase
+            .from("deadlines")
+            .select("id, title, description, due_date, status, assigned_to, case_id, is_double_term, created_at")
+            .eq("company_id", companyId);
+          if (!error && data) {
+            return (data as RawDeadline[]).filter((d) => !isRecordWiped(d));
+          }
+        } catch (e) {
+          console.warn("Aviso ao carregar prazos:", e);
+        }
+      }
+      return [] as RawDeadline[];
     },
   });
 
@@ -159,7 +184,7 @@ export function useAgendaData(
 
     window.addEventListener("medcore_events_updated", invEvents);
 
-    if (!companyId || !userId) {
+    if (!companyId || !isUuid(companyId) || !userId) {
       return () => {
         window.removeEventListener("medcore_events_updated", invEvents);
       };

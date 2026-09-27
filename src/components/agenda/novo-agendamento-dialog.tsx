@@ -977,8 +977,9 @@ export function NovoAgendamentoDialog({
           ? selectedProfs[0] || user.id
           : assignedTo || null;
 
-      const validCreatedBy = isUuid(user?.id) ? user.id : ensureValidUuid(user?.id);
-      const validCompanyId = isUuid(companyId) ? companyId : ensureValidUuid(companyId);
+      const DEFAULT_COMP_ID = "00000000-0000-0000-0000-0000000c1111";
+      const validCreatedBy = isUuid(user?.id) ? user.id : "00000000-0000-0000-0000-000000000001";
+      const validCompanyId = isUuid(companyId) ? companyId : DEFAULT_COMP_ID;
       const validAssignedTo = finalAssignedTo
         ? isUuid(finalAssignedTo)
           ? finalAssignedTo
@@ -1074,23 +1075,67 @@ export function NovoAgendamentoDialog({
           const supabaseAuthId = authData?.user?.id;
           if (supabaseAuthId && isUuid(supabaseAuthId)) remoteCreatedBy = supabaseAuthId;
 
-          const { error: eventError } = await supabase.from("events").insert({
-            id: insertedId,
-            company_id: validCompanyId,
-            created_by: remoteCreatedBy,
-            title: finalTitle,
-            description,
-            event_type: "meeting",
-            starts_at: startsAt.toISOString(),
-            ends_at: endsAt.toISOString(),
-            location,
-            case_id: validCaseId,
-            assigned_to: validAssignedTo,
-            patient_id: validPatientId,
-          });
+          // 1. Tenta salvar via RPC save_agenda_event garantida
+          let remoteSaved = false;
+          try {
+            const { data: rpcRes, error: rpcErr } = await (supabase as any).rpc("save_agenda_event", {
+              p_event: {
+                id: insertedId,
+                company_id: validCompanyId,
+                created_by: remoteCreatedBy,
+                title: finalTitle,
+                description,
+                event_type: "meeting",
+                starts_at: startsAt.toISOString(),
+                ends_at: endsAt.toISOString(),
+                location,
+                case_id: validCaseId,
+                assigned_to: validAssignedTo,
+                patient_id: validPatientId,
+              },
+            });
+            if (!rpcErr && rpcRes) {
+              remoteSaved = true;
+            }
+          } catch {}
 
-          if (eventError) {
-            console.warn("Aviso ao salvar evento no Supabase:", eventError);
+          if (!remoteSaved) {
+            const { error: eventError } = await supabase.from("events").insert({
+              id: insertedId,
+              company_id: validCompanyId,
+              created_by: remoteCreatedBy,
+              title: finalTitle,
+              description,
+              event_type: "meeting",
+              starts_at: startsAt.toISOString(),
+              ends_at: endsAt.toISOString(),
+              location,
+              case_id: validCaseId,
+              assigned_to: validAssignedTo,
+              patient_id: validPatientId,
+            });
+            if (eventError) {
+              console.warn("Aviso ao salvar evento no Supabase:", eventError);
+            }
+          }
+
+          // Se for atendimento com paciente e médico selecionados, persiste também na tabela appointments
+          if (type === "atendimento" && validPatientId && validAssignedTo) {
+            try {
+              await supabase.from("appointments").insert({
+                id: insertedId,
+                patient_id: validPatientId,
+                doctor_id: validAssignedTo,
+                date: day,
+                start_time: start,
+                end_time: end,
+                type: "consulta",
+                status: status || "agendado",
+                notes: notes.trim() || undefined,
+              });
+            } catch (apptErr) {
+              console.warn("Aviso ao salvar appointments no Supabase:", apptErr);
+            }
           } else if (
             type === "atendimento" &&
             !isIncludedInPlan &&
@@ -1245,11 +1290,14 @@ export function NovoAgendamentoDialog({
       });
       qc.invalidateQueries({ queryKey: qk.agendaLists.events(companyId) });
       qc.invalidateQueries({ queryKey: ["agenda-events"] });
+      qc.invalidateQueries({ queryKey: ["agenda"] });
       qc.invalidateQueries({ queryKey: qk.dashboard.all() });
+      qc.invalidateQueries({ queryKey: ["dashboard", "events-appointments"] });
       qc.invalidateQueries({ queryKey: ["financial-snapshot"] });
       qc.invalidateQueries({ queryKey: ["dashboard", "transactions"] });
       qc.invalidateQueries({ queryKey: ["finance-dashboard", "transactions"] });
       qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["appointments"] });
       onSaved?.(data?.createdActivity);
       onOpenChange(false);
     },
