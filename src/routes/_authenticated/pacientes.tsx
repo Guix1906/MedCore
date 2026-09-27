@@ -22,7 +22,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { usePatient } from "@/hooks/use-patient";
 import { usePermissions } from "@/hooks/use-permissions";
 import { supabase } from "@/integrations/supabase/client";
-import { deleteStoredLocalPatient, mergeWithLocalPatients } from "@/lib/local-patients";
+import { deleteStoredLocalPatient, mergeWithLocalPatients, saveStoredLocalPatient } from "@/lib/local-patients";
 import { patientAge, patientProfileData } from "@/lib/patient-display";
 import { patientsService, type Patient } from "@/services/api/patients.service";
 import { useQuery, useQueryClient } from "@tanstack/react-query";

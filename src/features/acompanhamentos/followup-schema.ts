@@ -67,6 +67,10 @@ export type FollowupTables = {
   };
 };
 export type FollowupFunctions = FinanceFunctions & {
+  delete_patient: {
+    Args: { p_id: string };
+    Returns: { success: boolean; message?: string; error?: string };
+  };
   delete_treatment: {
     Args: { p_id: string };
     Returns: boolean;
