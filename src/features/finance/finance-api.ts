@@ -766,22 +766,24 @@ function normalizeFinancialSnapshot(
 
 export async function getFinancialSnapshot(): Promise<FinanceSnapshot> {
   try {
-    const { data, error } = await supabase.rpc("get_financial_snapshot");
+    const [rpcRes, evtsRes] = await Promise.all([
+      supabase.rpc("get_financial_snapshot"),
+      supabase
+        .from("events")
+        .select("id, title, starts_at, description, patient_id, company_id, created_at")
+        .order("starts_at", { ascending: false })
+        .limit(100),
+    ]);
+
+    const { data, error } = rpcRes;
     if (error) {
       console.warn("Aviso ao carregar financial snapshot via RPC, utilizando fallback seguro:", error);
     }
 
     let remoteEvents: any[] = [];
-    try {
-      const { data: evts } = await supabase
-        .from("events")
-        .select("id, title, starts_at, description, patient_id, company_id, created_at")
-        .order("starts_at", { ascending: false })
-        .limit(100);
-      if (evts && Array.isArray(evts)) {
-        remoteEvents = evts;
-      }
-    } catch {}
+    if (evtsRes.data && Array.isArray(evtsRes.data)) {
+      remoteEvents = evtsRes.data;
+    }
 
     const raw: FinanceSnapshot = {
       titles: Array.isArray(data?.titles) ? data.titles : [],

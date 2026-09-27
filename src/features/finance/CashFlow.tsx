@@ -558,10 +558,11 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
   const query = useQuery({
     queryKey: ["cash-flow-snapshot", scope],
     enabled: !!selectedScope,
-    staleTime: 0,
-    gcTime: 0,
-    refetchOnMount: "always",
-    refetchOnWindowFocus: true,
+    staleTime: 30_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    placeholderData: (prev) => prev,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("get_cash_flow_snapshot", {
         p_company_id: scope === "legacy" ? null : scope,

@@ -116,8 +116,10 @@ function PacientesPage() {
   const [sorting, setSorting] = useState<SortingState>([{ id: "name", desc: false }]);
   const patients = useQuery({
     queryKey: ["patients-list"],
+    placeholderData: (prev) => prev,
     staleTime: 5 * 60_000,
     gcTime: 30 * 60_000,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
     queryFn: async (): Promise<Patient[]> => {
       let remote: Patient[] | undefined;

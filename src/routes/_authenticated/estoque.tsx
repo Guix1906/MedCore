@@ -68,9 +68,11 @@ function EstoquePage() {
     error: inventoryError,
   } = useQuery({
     queryKey: ["inventory-items-list"],
+    placeholderData: (prev) => prev,
     staleTime: 5 * 60_000,
     gcTime: 30 * 60_000,
-    refetchOnWindowFocus: true,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       try {
         const phpItems = await inventoryService.getItems();

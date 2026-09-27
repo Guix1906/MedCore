@@ -85,6 +85,11 @@ export function isBackendReachable(): boolean {
   if (isHttps && isLocalHost) {
     return false;
   }
+  // Se não há token do PHP armazenado, o app usa prioritariamente o Supabase;
+  // evita requisições fantasmas que atrasam o carregamento das telas com timeout
+  if (!getStoredToken()) {
+    return false;
+  }
   // Se já foi marcado como indisponível na sessão, responde 0ms sem travar a navegação
   try {
     if (sessionStorage.getItem(BACKEND_OFFLINE_KEY) === "1") {

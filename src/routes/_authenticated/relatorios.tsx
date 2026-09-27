@@ -78,13 +78,24 @@ function RelatoriosPage() {
       from.setDate(from.getDate() - periodDays);
       const fromIso = localDate(from);
 
+      const needFin = cat === "financeiro";
+      const needClin = cat === "clinico";
+      const needOp = cat === "operacional";
+      const needEst = cat === "estoque";
+
       const [tx, ap, pa, tr, inv, mv] = await Promise.all([
-        cat === "financeiro" ? getFinancialReportingRows() : Promise.resolve([]),
-        supabase.from("appointments").select("*").gte("date", fromIso),
-        supabase.from("patients").select("id,created_at,gender,birth_date"),
-        supabase.from("treatments").select("*"),
-        supabase.from("inventory_items").select("*"),
-        supabase.from("inventory_movements").select("*").gte("created_at", from.toISOString()),
+        needFin ? getFinancialReportingRows() : Promise.resolve([]),
+        needFin || needClin || needOp
+          ? supabase.from("appointments").select("*").gte("date", fromIso)
+          : Promise.resolve({ data: [] }),
+        needClin
+          ? supabase.from("patients").select("id,created_at,gender,birth_date")
+          : Promise.resolve({ data: [] }),
+        needClin ? supabase.from("treatments").select("*") : Promise.resolve({ data: [] }),
+        needEst ? supabase.from("inventory_items").select("*") : Promise.resolve({ data: [] }),
+        needEst
+          ? supabase.from("inventory_movements").select("*").gte("created_at", from.toISOString())
+          : Promise.resolve({ data: [] }),
       ]);
 
       return {

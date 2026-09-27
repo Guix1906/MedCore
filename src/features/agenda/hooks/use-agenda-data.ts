@@ -25,11 +25,11 @@ export function useAgendaData(
   const tasksQ = useQuery({
     queryKey: [...qk.agendaLists.tasks(companyId), "all"] as const,
     enabled,
-    staleTime: 0,
+    staleTime: 30_000,
     gcTime: AGENDA_GC_TIME,
     placeholderData: (prev) => prev,
-    refetchOnMount: true,
-    refetchOnWindowFocus: true,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       try {
         const phpTasks = await agendaService.getTasks();
@@ -63,11 +63,11 @@ export function useAgendaData(
   const eventsQ = useQuery({
     queryKey: [...qk.agendaLists.events(companyId), "all"] as const,
     enabled,
-    staleTime: 0,
+    staleTime: 30_000,
     gcTime: AGENDA_GC_TIME,
     placeholderData: (prev) => prev,
-    refetchOnMount: true,
-    refetchOnWindowFocus: true,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       let rawList: RawEvent[] = [];
       let loadedFromPhp = false;
@@ -119,11 +119,11 @@ export function useAgendaData(
   const deadlinesQ = useQuery({
     queryKey: [...qk.agendaLists.deadlines(companyId), "all"] as const,
     enabled,
-    staleTime: 0,
+    staleTime: 30_000,
     gcTime: AGENDA_GC_TIME,
     placeholderData: (prev) => prev,
-    refetchOnMount: true,
-    refetchOnWindowFocus: true,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       try {
         const phpDeads = await agendaService.getDeadlines();

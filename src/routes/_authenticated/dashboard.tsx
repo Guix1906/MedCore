@@ -279,9 +279,10 @@ function DashboardPage() {
         };
       }) as Appt[];
     },
-    staleTime: 0,
+    staleTime: 30_000,
     gcTime: 30 * 60_000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   const patientsQ = useQuery({
@@ -306,18 +307,20 @@ function DashboardPage() {
       }
       return mergeWithLocalPatients(list) as Patient[];
     },
-    staleTime: 0,
+    staleTime: 60_000,
     gcTime: 30 * 60_000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   const financeQ = useQuery({
     queryKey: ["financial-snapshot"],
     queryFn: getFinancialSnapshot,
-    staleTime: 0,
-    gcTime: 0,
-    refetchOnMount: "always",
-    refetchOnWindowFocus: true,
+    placeholderData: (prev) => prev,
+    staleTime: 30_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   const doctorsQ = useQuery({

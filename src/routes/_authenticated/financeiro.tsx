@@ -48,10 +48,11 @@ function FinanceiroPage() {
   const query = useQuery({
     queryKey: ["financial-snapshot"],
     queryFn: getFinancialSnapshot,
-    staleTime: 0,
-    gcTime: 0,
-    refetchOnMount: "always",
-    refetchOnWindowFocus: true,
+    staleTime: 30_000,
+    gcTime: 30 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    placeholderData: (prev) => prev,
   });
   const [selected, setSelected] = useState("");
   const [creatingType, setCreating] = useState<"receita" | "despesa" | null>(null);
@@ -69,10 +70,8 @@ function FinanceiroPage() {
     void navigate({ search: { tab, novo: false }, replace: true });
   };
 
-  // Sincronização em tempo real instantânea (0ms) ao entrar na tela, agendar ou salvar lançamentos
+  // Sincronização em tempo real instantânea quando há novos agendamentos ou lançamentos salvos
   useEffect(() => {
-    void queryClient.invalidateQueries({ queryKey: ["financial-snapshot"], refetchType: "all" });
-    void queryClient.invalidateQueries({ queryKey: ["cash-flow-snapshot"], refetchType: "all" });
 
     const handleSync = () => {
       void queryClient.invalidateQueries({ queryKey: ["financial-snapshot"], refetchType: "all" });
