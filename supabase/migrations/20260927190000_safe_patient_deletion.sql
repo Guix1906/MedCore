@@ -2,11 +2,11 @@ BEGIN;
 
 -- ============================================================================
 -- Migration: 20260927190000_safe_patient_deletion.sql
--- Permite a exclusão segura de pacientes, protegendo integridade contábil/financeira
--- e histórico de atendimentos, sem violação de chaves estrangeiras ou RLS.
+-- Remove travas que impediam a exclusão de pacientes e tratamentos com histórico
+-- financeiro, preservando os registros contábeis com desvinculação segura.
 -- ============================================================================
 
--- 1. Garante que referências de tratamentos na tabela transactions tenham ON DELETE SET NULL
+-- 1. Garante que referências de tratamentos e parcelas na tabela transactions tenham ON DELETE SET NULL
 DO $$
 DECLARE
   r RECORD;
@@ -44,8 +44,9 @@ ALTER TABLE public.transactions
   ADD CONSTRAINT transactions_installment_id_fkey
   FOREIGN KEY (installment_id) REFERENCES public.treatment_installments(id) ON DELETE SET NULL;
 
--- 2. Atualiza guard_financial_title para permitir desvincular o paciente ao excluir,
--- preservando automaticamente o nome do pagador em payer_name sem perder o histórico contábil.
+-- 2. Atualiza guard_financial_title: REMOVE a trava que impedia a desvinculação de
+-- paciente ou tratamento ao excluir. Preserva automaticamente o nome do pagador em
+-- payer_name sem perder o histórico do lançamento contábil.
 CREATE OR REPLACE FUNCTION public.guard_financial_title()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -73,18 +74,26 @@ BEGIN
     SELECT 1 FROM public.card_settlements WHERE fee_title_id = NEW.id AND reversed_at IS NOT NULL
   );
 
-  -- Se o paciente foi desvinculado (exclusão de paciente), preenche payer_name com o nome anterior caso vazio
+  -- Se o paciente foi desvinculado, preenche payer_name com o nome anterior para preservar histórico
   IF TG_OP = 'UPDATE' AND OLD.patient_id IS NOT NULL AND NEW.patient_id IS NULL AND (NEW.payer_name IS NULL OR btrim(NEW.payer_name) = '') THEN
     SELECT name INTO NEW.payer_name FROM public.patients WHERE id = OLD.patient_id;
   END IF;
 
+  -- Se o título tem pagamentos, protege amount, tipo e empresa de alterações indevidas,
+  -- mas PERMITE desvincular patient_id, treatment_id ou installment_id na exclusão de pacientes/tratamentos.
   IF TG_OP = 'UPDATE' AND has_history AND (
-    ROW(NEW.amount, NEW.type, NEW.company_id, NEW.treatment_id, NEW.installment_id, NEW.deleted_at)
-      IS DISTINCT FROM ROW(OLD.amount, OLD.type, OLD.company_id, OLD.treatment_id, OLD.installment_id, OLD.deleted_at)
-    OR (NEW.patient_id IS NOT NULL AND NEW.patient_id IS DISTINCT FROM OLD.patient_id)
-    OR (NEW.status = 'cancelado' AND NOT reversed_fee)
+    ROW(NEW.amount, NEW.type, NEW.company_id, NEW.deleted_at)
+      IS DISTINCT FROM ROW(OLD.amount, OLD.type, OLD.company_id, OLD.deleted_at)
+    OR (NEW.status = 'cancelado' AND NOT reversed_fee AND NEW.patient_id IS NOT DISTINCT FROM OLD.patient_id)
   ) THEN
-    RAISE EXCEPTION 'Preserve o titulo e seu historico; pagamentos exigem fluxo de devolucao';
+    -- Se apenas desvinculou paciente, tratamento ou parcela, não bloqueia
+    IF (OLD.patient_id IS NOT NULL AND NEW.patient_id IS NULL)
+       OR (OLD.treatment_id IS NOT NULL AND NEW.treatment_id IS NULL)
+       OR (OLD.installment_id IS NOT NULL AND NEW.installment_id IS NULL) THEN
+      NULL;
+    ELSE
+      RAISE EXCEPTION 'Preserve o titulo e seu historico; pagamentos exigem fluxo de devolucao';
+    END IF;
   END IF;
 
   IF NEW.type IN ('receita', 'despesa', 'income', 'expense') AND (
@@ -99,7 +108,78 @@ BEGIN
 END;
 $$;
 
--- 3. Função RPC delete_patient: orquestra a exclusão completa e segura do paciente
+-- 3. Atualiza delete_treatment: permite excluir acompanhamento desvinculando títulos pagos
+-- em vez de travar a operação.
+CREATE OR REPLACE FUNCTION public.delete_treatment(p_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF p_id IS NULL THEN
+    RAISE EXCEPTION 'ID do tratamento obrigatorio';
+  END IF;
+
+  -- Desvincula títulos com pagamentos mantendo o lançamento contábil
+  UPDATE public.transactions
+  SET treatment_id = NULL,
+      installment_id = NULL
+  WHERE treatment_id = p_id
+    AND (paid_amount > 0 OR status IN ('pago', 'concluido', 'completed'));
+
+  -- Remove títulos não pagos vinculados ao tratamento
+  DELETE FROM public.transactions
+  WHERE treatment_id = p_id
+    AND (paid_amount IS NULL OR paid_amount = 0)
+    AND NOT EXISTS (SELECT 1 FROM public.transaction_payments tp WHERE tp.transaction_id = transactions.id);
+
+  IF to_regclass('public.treatment_status_history') IS NOT NULL THEN
+    DELETE FROM public.treatment_status_history WHERE treatment_id = p_id;
+  END IF;
+  IF to_regclass('public.treatment_evolutions') IS NOT NULL THEN
+    DELETE FROM public.treatment_evolutions WHERE treatment_id = p_id;
+  END IF;
+  IF to_regclass('public.treatment_photos') IS NOT NULL THEN
+    DELETE FROM public.treatment_photos WHERE treatment_id = p_id;
+  END IF;
+  IF to_regclass('public.treatment_medication_uses') IS NOT NULL THEN
+    DELETE FROM public.treatment_medication_uses WHERE treatment_id = p_id;
+  END IF;
+  IF to_regclass('public.treatment_medications') IS NOT NULL THEN
+    DELETE FROM public.treatment_medications WHERE treatment_id = p_id;
+  END IF;
+  IF to_regclass('public.treatment_installments') IS NOT NULL THEN
+    DELETE FROM public.treatment_installments WHERE treatment_id = p_id;
+  END IF;
+  IF to_regclass('public.treatment_phases') IS NOT NULL THEN
+    DELETE FROM public.treatment_phases WHERE treatment_id = p_id;
+  END IF;
+  IF to_regclass('public.treatment_reminders') IS NOT NULL THEN
+    DELETE FROM public.treatment_reminders WHERE treatment_id = p_id;
+  END IF;
+  IF to_regclass('public.tasks') IS NOT NULL
+     AND EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'tasks' AND column_name = 'treatment_id'
+     ) THEN
+    EXECUTE 'DELETE FROM public.tasks WHERE treatment_id = $1' USING p_id;
+  END IF;
+  IF to_regclass('public.appointments') IS NOT NULL
+     AND EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'appointments' AND column_name = 'treatment_id'
+     ) THEN
+    EXECUTE 'UPDATE public.appointments SET treatment_id = NULL WHERE treatment_id = $1' USING p_id;
+  END IF;
+
+  DELETE FROM public.treatments WHERE id = p_id;
+
+  RETURN true;
+END;
+$$;
+
+-- 4. Função RPC delete_patient: exclui paciente de ponta a ponta sem travar em histórico de pagamento
 CREATE OR REPLACE FUNCTION public.delete_patient(p_id uuid)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -129,26 +209,14 @@ BEGIN
     RAISE EXCEPTION 'Sem permissão para excluir este paciente' USING ERRCODE = '42501', HINT = 'admin.forbidden';
   END IF;
 
-  -- 3. Validação de acompanhamentos (treatments) com títulos já pagos
-  IF EXISTS (
-    SELECT 1
-    FROM public.transactions tx
-    JOIN public.treatments tr ON tr.id = tx.treatment_id
-    WHERE tr.patient_id = p_id
-      AND (tx.paid_amount > 0 OR tx.status IN ('pago', 'concluido', 'completed'))
-      AND tx.deleted_at IS NULL
-  ) THEN
-    RAISE EXCEPTION 'Não é possível excluir o paciente: existem acompanhamentos com pagamentos já realizados no Financeiro. Estorne os pagamentos ou inative o cadastro do paciente.';
-  END IF;
-
-  -- 4. Exclusão segura dos acompanhamentos
+  -- 3. Exclusão dos acompanhamentos (desvinculando pagamentos em vez de travar)
   IF to_regclass('public.treatments') IS NOT NULL THEN
     FOR v_tr IN SELECT id FROM public.treatments WHERE patient_id = p_id LOOP
       PERFORM public.delete_treatment(v_tr.id);
     END LOOP;
   END IF;
 
-  -- 5. Tratamento de transações financeiras vinculadas diretamente ao paciente
+  -- 4. Tratamento de transações financeiras vinculadas diretamente ao paciente
   IF to_regclass('public.transactions') IS NOT NULL THEN
     -- Preserva nome do paciente como texto no payer_name para histórico contábil
     UPDATE public.transactions
@@ -164,11 +232,13 @@ BEGIN
 
     -- Para títulos com pagamentos históricos, desvincula o ID mantendo o payer_name
     UPDATE public.transactions
-    SET patient_id = NULL
+    SET patient_id = NULL,
+        treatment_id = NULL,
+        installment_id = NULL
     WHERE patient_id = p_id;
   END IF;
 
-  -- 6. Consultas (appointments) e eventos de agenda (events)
+  -- 5. Consultas (appointments) e eventos de agenda (events)
   IF to_regclass('public.appointments') IS NOT NULL THEN
     DELETE FROM public.appointments WHERE patient_id = p_id;
   END IF;
@@ -177,12 +247,12 @@ BEGIN
     DELETE FROM public.events WHERE patient_id = p_id;
   END IF;
 
-  -- 7. Tarefas da agenda (tasks)
+  -- 6. Tarefas da agenda (tasks)
   IF to_regclass('public.tasks') IS NOT NULL THEN
     DELETE FROM public.tasks WHERE patient_id = p_id;
   END IF;
 
-  -- 8. Registros clínicos e anexos
+  -- 7. Registros clínicos e anexos
   IF to_regclass('public.attachments') IS NOT NULL THEN
     IF to_regclass('public.document_comments') IS NOT NULL THEN
       DELETE FROM public.document_comments
@@ -219,7 +289,7 @@ BEGIN
     DELETE FROM public.waitlist WHERE patient_id = p_id;
   END IF;
 
-  -- 9. Desvincula casos e prazos se existirem
+  -- 8. Desvincula casos e prazos se existirem
   IF to_regclass('public.cases') IS NOT NULL THEN
     UPDATE public.cases SET patient_id = NULL WHERE patient_id = p_id;
   END IF;
@@ -228,12 +298,15 @@ BEGIN
     UPDATE public.deadlines SET patient_id = NULL WHERE patient_id = p_id;
   END IF;
 
-  -- 10. Exclui o paciente da tabela principal
+  -- 9. Exclui o paciente da tabela principal
   DELETE FROM public.patients WHERE id = p_id;
 
   RETURN jsonb_build_object('success', true, 'message', 'Paciente excluído com sucesso');
 END;
 $$;
+
+REVOKE ALL ON FUNCTION public.delete_treatment(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.delete_treatment(uuid) TO authenticated;
 
 REVOKE ALL ON FUNCTION public.delete_patient(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.delete_patient(uuid) TO authenticated;
