@@ -179,7 +179,7 @@ BEGIN
 END;
 $$;
 
--- 4. Função RPC delete_patient: exclui paciente de ponta a ponta sem travar em histórico de pagamento
+-- 4. Função RPC delete_patient: exclui paciente e desvincula títulos sem travar
 CREATE OR REPLACE FUNCTION public.delete_patient(p_id uuid)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -210,14 +210,22 @@ BEGIN
   END IF;
 
   -- 3. Exclusão dos acompanhamentos (desvinculando pagamentos em vez de travar)
-  IF to_regclass('public.treatments') IS NOT NULL THEN
+  IF to_regclass('public.treatments') IS NOT NULL
+     AND EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'treatments' AND column_name = 'patient_id'
+     ) THEN
     FOR v_tr IN SELECT id FROM public.treatments WHERE patient_id = p_id LOOP
       PERFORM public.delete_treatment(v_tr.id);
     END LOOP;
   END IF;
 
   -- 4. Tratamento de transações financeiras vinculadas diretamente ao paciente
-  IF to_regclass('public.transactions') IS NOT NULL THEN
+  IF to_regclass('public.transactions') IS NOT NULL
+     AND EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'transactions' AND column_name = 'patient_id'
+     ) THEN
     -- Preserva nome do paciente como texto no payer_name para histórico contábil
     UPDATE public.transactions
     SET payer_name = COALESCE(NULLIF(btrim(payer_name), ''), v_patient.name, 'Paciente')
@@ -239,21 +247,37 @@ BEGIN
   END IF;
 
   -- 5. Consultas (appointments) e eventos de agenda (events)
-  IF to_regclass('public.appointments') IS NOT NULL THEN
+  IF to_regclass('public.appointments') IS NOT NULL
+     AND EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'appointments' AND column_name = 'patient_id'
+     ) THEN
     DELETE FROM public.appointments WHERE patient_id = p_id;
   END IF;
 
-  IF to_regclass('public.events') IS NOT NULL THEN
-    DELETE FROM public.events WHERE patient_id = p_id;
+  IF to_regclass('public.events') IS NOT NULL
+     AND EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'events' AND column_name = 'patient_id'
+     ) THEN
+    EXECUTE 'DELETE FROM public.events WHERE patient_id = $1' USING p_id;
   END IF;
 
   -- 6. Tarefas da agenda (tasks)
-  IF to_regclass('public.tasks') IS NOT NULL THEN
-    DELETE FROM public.tasks WHERE patient_id = p_id;
+  IF to_regclass('public.tasks') IS NOT NULL
+     AND EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'tasks' AND column_name = 'patient_id'
+     ) THEN
+    EXECUTE 'DELETE FROM public.tasks WHERE patient_id = $1' USING p_id;
   END IF;
 
   -- 7. Registros clínicos e anexos
-  IF to_regclass('public.attachments') IS NOT NULL THEN
+  IF to_regclass('public.attachments') IS NOT NULL
+     AND EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'attachments' AND column_name = 'patient_id'
+     ) THEN
     IF to_regclass('public.document_comments') IS NOT NULL THEN
       DELETE FROM public.document_comments
       WHERE attachment_id IN (SELECT id FROM public.attachments WHERE patient_id = p_id);
@@ -261,41 +285,69 @@ BEGIN
     DELETE FROM public.attachments WHERE patient_id = p_id;
   END IF;
 
-  IF to_regclass('public.prescriptions') IS NOT NULL THEN
+  IF to_regclass('public.prescriptions') IS NOT NULL
+     AND EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'prescriptions' AND column_name = 'patient_id'
+     ) THEN
     DELETE FROM public.prescriptions WHERE patient_id = p_id;
   END IF;
 
-  IF to_regclass('public.exam_orders') IS NOT NULL THEN
+  IF to_regclass('public.exam_orders') IS NOT NULL
+     AND EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'exam_orders' AND column_name = 'patient_id'
+     ) THEN
     DELETE FROM public.exam_orders WHERE patient_id = p_id;
   END IF;
 
-  IF to_regclass('public.vital_signs') IS NOT NULL THEN
+  IF to_regclass('public.vital_signs') IS NOT NULL
+     AND EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'vital_signs' AND column_name = 'patient_id'
+     ) THEN
     DELETE FROM public.vital_signs WHERE patient_id = p_id;
   END IF;
 
-  IF to_regclass('public.medical_records') IS NOT NULL THEN
+  IF to_regclass('public.medical_records') IS NOT NULL
+     AND EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'medical_records' AND column_name = 'patient_id'
+     ) THEN
     DELETE FROM public.medical_records WHERE patient_id = p_id;
   END IF;
 
-  IF to_regclass('public.patient_tags') IS NOT NULL THEN
+  IF to_regclass('public.patient_tags') IS NOT NULL
+     AND EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'patient_tags' AND column_name = 'patient_id'
+     ) THEN
     DELETE FROM public.patient_tags WHERE patient_id = p_id;
   END IF;
 
-  IF to_regclass('public.patient_pipeline_history') IS NOT NULL THEN
+  IF to_regclass('public.patient_pipeline_history') IS NOT NULL
+     AND EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'patient_pipeline_history' AND column_name = 'patient_id'
+     ) THEN
     DELETE FROM public.patient_pipeline_history WHERE patient_id = p_id;
   END IF;
 
-  IF to_regclass('public.waitlist') IS NOT NULL THEN
+  IF to_regclass('public.waitlist') IS NOT NULL
+     AND EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'waitlist' AND column_name = 'patient_id'
+     ) THEN
     DELETE FROM public.waitlist WHERE patient_id = p_id;
   END IF;
 
-  -- 8. Desvincula casos e prazos se existirem
-  IF to_regclass('public.cases') IS NOT NULL THEN
-    UPDATE public.cases SET patient_id = NULL WHERE patient_id = p_id;
-  END IF;
-
-  IF to_regclass('public.deadlines') IS NOT NULL THEN
-    UPDATE public.deadlines SET patient_id = NULL WHERE patient_id = p_id;
+  -- 8. Desvincula casos se a tabela e a coluna existirem
+  IF to_regclass('public.cases') IS NOT NULL
+     AND EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'cases' AND column_name = 'patient_id'
+     ) THEN
+    EXECUTE 'UPDATE public.cases SET patient_id = NULL WHERE patient_id = $1' USING p_id;
   END IF;
 
   -- 9. Exclui o paciente da tabela principal
@@ -311,7 +363,6 @@ GRANT EXECUTE ON FUNCTION public.delete_treatment(uuid) TO authenticated;
 REVOKE ALL ON FUNCTION public.delete_patient(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.delete_patient(uuid) TO authenticated;
 
--- Garante privilégios explícitos na tabela patients
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.patients TO authenticated;
 
 NOTIFY pgrst, 'reload schema';
