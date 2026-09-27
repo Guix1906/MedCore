@@ -45,6 +45,8 @@ import {
   Plus,
   Search,
   Trash2,
+  UserCheck,
+  UserX,
   Users,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -150,35 +152,124 @@ function PacientesPage() {
   const refreshPatients = () => {
     void queryClient.invalidateQueries({ queryKey: ["patients-list"] });
     void queryClient.invalidateQueries({ queryKey: ["patient-profile"] });
+    void queryClient.invalidateQueries({ queryKey: ["patients-picker"] });
+    void queryClient.invalidateQueries({ queryKey: ["patients-mini"] });
+    void queryClient.invalidateQueries({ queryKey: ["patients"] });
   };
   const openPatient = (patient: Patient) => void navigate({ search: { patientId: patient.id } });
   const closeForm = () => {
     setEditing(null);
     if (search.novo) void navigate({ search: { ...search, novo: undefined }, replace: true });
   };
+
+  const toggleActivePatient = async (patient: Patient) => {
+    const nextActive = !patient.active;
+    const actionText = nextActive ? "ativar" : "desativar";
+    if (
+      !(await confirmDialog({
+        title: `${nextActive ? "Ativar" : "Desativar"} paciente`,
+        description: `Deseja realmente ${actionText} o cadastro de "${patient.name}"?`,
+        confirmText: nextActive ? "Ativar" : "Desativar",
+      }))
+    )
+      return;
+
+    try {
+      try {
+        await patientsService.updatePatient(patient.id, { active: nextActive });
+      } catch {
+        const { error } = await supabase
+          .from("patients")
+          .update({ active: nextActive })
+          .eq("id", patient.id);
+        if (error) throw error;
+      }
+
+      saveStoredLocalPatient({ ...patient, active: nextActive });
+      queryClient.setQueryData<Patient[]>(["patients-list"], (old = []) =>
+        old.map((p) => (p.id === patient.id ? { ...p, active: nextActive } : p)),
+      );
+      refreshPatients();
+      toast.success(`Paciente ${nextActive ? "ativado" : "desativado"} com sucesso`);
+    } catch (err: any) {
+      console.error("Erro ao alterar status do paciente:", err);
+      toast.error(`Não foi possível ${actionText} o paciente`, {
+        description: err?.message || "Tente novamente mais tarde.",
+      });
+    }
+  };
+
   const deletePatient = async (patient: Patient) => {
     if (
       !(await confirmDialog({
         title: "Excluir paciente",
-        description: `Tem certeza que deseja excluir "${patient.name}"? Os dados relacionados podem ser afetados.`,
+        description: `Tem certeza que deseja excluir "${patient.name}"? Os dados relacionados serão removidos ou desvinculados com segurança.`,
         confirmText: "Excluir",
         destructive: true,
       }))
     )
       return;
+
     try {
+      let rpcExecuted = false;
+
+      // 1. Tenta exclusão segura via RPC delete_patient no Supabase
       try {
-        await patientsService.deletePatient(patient.id);
-      } catch {
-        const { error } = await supabase.from("patients").delete().eq("id", patient.id);
-        if (error) throw error;
+        const { data, error } = await supabase.rpc("delete_patient", { p_id: patient.id });
+        if (error) {
+          const isMissingRpc =
+            error.code === "42883" ||
+            (error.message?.includes("function") && error.message?.includes("does not exist"));
+          if (!isMissingRpc) {
+            throw error;
+          }
+        } else if (data && typeof data === "object" && (data as any).success === false) {
+          throw new Error((data as any).error || "Falha na exclusão do paciente");
+        } else {
+          rpcExecuted = true;
+        }
+      } catch (err: any) {
+        const isMissingRpc =
+          err?.code === "42883" ||
+          (err?.message?.includes("function") && err?.message?.includes("does not exist"));
+        if (!isMissingRpc) {
+          throw err;
+        }
       }
+
+      // 2. Fallback backend PHP se RPC não estiver disponível
+      if (!rpcExecuted) {
+        let deletedOnService = false;
+        try {
+          await patientsService.deletePatient(patient.id);
+          deletedOnService = true;
+        } catch {
+          // 3. Fallback exclusão direta Supabase
+          const { error } = await supabase.from("patients").delete().eq("id", patient.id);
+          if (error && !error.message?.includes("not found")) {
+            throw error;
+          }
+        }
+      }
+
+      // Limpeza de cache local e de queries
       deleteStoredLocalPatient(patient.id);
+      queryClient.setQueryData<Patient[]>(["patients-list"], (old = []) =>
+        old.filter((p) => p.id !== patient.id),
+      );
+      queryClient.setQueryData<any[]>(["patients-picker"], (old = []) =>
+        old.filter((p) => p.id !== patient.id),
+      );
       refreshPatients();
-      toast.success("Paciente excluído");
-    } catch (error) {
+      toast.success("Paciente excluído com sucesso");
+    } catch (error: any) {
       console.error("Erro ao excluir paciente.", error);
-      toast.error("Não foi possível excluir o paciente. Tente novamente.");
+      toast.error("Não foi possível excluir o paciente", {
+        description:
+          error?.message ||
+          error?.details ||
+          "Verifique se o paciente possui registros protegidos ou tente desativá-lo.",
+      });
     }
   };
 
@@ -234,6 +325,19 @@ function PacientesPage() {
             <DropdownMenuItem onSelect={() => setEditing(patient)}>
               <Pencil />
               Editar cadastro
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void toggleActivePatient(patient)}>
+              {patient.active ? (
+                <>
+                  <UserX />
+                  Desativar paciente
+                </>
+              ) : (
+                <>
+                  <UserCheck />
+                  Ativar paciente
+                </>
+              )}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem

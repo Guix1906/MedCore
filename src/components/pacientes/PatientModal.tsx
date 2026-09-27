@@ -236,7 +236,7 @@ export function PatientModal({
       ...patient,
       ...payload,
       id: patient?.id ?? crypto.randomUUID(),
-      active: true,
+      active: patient ? (patient.active ?? true) : true,
       created_at: new Date().toISOString(),
     };
 
