@@ -98,9 +98,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         : "") ||
       (typeof process !== "undefined" && process.env?.VERCEL_URL
         ? `https://${process.env.VERCEL_URL}`
-        : "");
+        : "") ||
+      "https://meedcore.vercel.app";
 
-    const ogImage = origin ? `${origin.replace(/\/$/, "")}/og-image.png` : "/og-image.png";
+    const ogImage = `${origin.replace(/\/$/, "")}/og-image.png`;
 
     return {
       meta: [

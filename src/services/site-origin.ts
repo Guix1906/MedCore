@@ -23,5 +23,6 @@ export const getSiteOrigin = createServerFn({ method: "GET" }).handler(async () 
     return `https://${vercelUrl}`;
   }
 
-  return "";
+  return "https://meedcore.vercel.app";
 });
+
