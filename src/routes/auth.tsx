@@ -9,6 +9,7 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateAuthRouteCache } from "@/routes/_authenticated/route";
 import { qk } from "@/lib/query-keys";
+import { getSiteOrigin } from "@/services/site-origin";
 import {
   Activity,
   ArrowRight,
@@ -86,23 +87,75 @@ export const Route = createFileRoute("/auth")({
     redirect: safeRedirectPath(search.redirect) ?? undefined,
     modo: search.modo === "convite" || search.modo === "nova-senha" ? search.modo : undefined,
   }),
-  head: () => ({
-    meta: [
-      { title: "Acesse sua conta • Dr. Jonatas Bandeira • MedCore" },
-      {
-        name: "description",
-        content:
-          "Agenda, prontuários e acompanhamentos clínicos do consultório Dr. Jonatas Bandeira.",
-      },
-    ],
-    links: [
-      {
-        rel: "preload",
-        as: "image",
-        href: "/assets/dr-jonatas-bandeira-logo.png",
-      },
-    ],
-  }),
+  loader: async () => {
+    try {
+      const origin = await getSiteOrigin();
+      return { origin };
+    } catch {
+      return { origin: "" };
+    }
+  },
+  head: ({ loaderData }) => {
+    const origin =
+      loaderData?.origin ||
+      (typeof window !== "undefined" && window.location?.origin ? window.location.origin : "") ||
+      (typeof process !== "undefined" && process.env?.VERCEL_PROJECT_PRODUCTION_URL
+        ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+        : "") ||
+      (typeof process !== "undefined" && process.env?.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : "");
+
+    const ogImage = origin ? `${origin.replace(/\/$/, "")}/og-image.png` : "/og-image.png";
+
+    return {
+      meta: [
+        { title: "Acesse sua conta • Dr. Jonatas Bandeira • MedCore" },
+        {
+          name: "description",
+          content:
+            "Agenda, prontuários e acompanhamentos clínicos do consultório Dr. Jonatas Bandeira.",
+        },
+        { property: "og:site_name", content: "Dr. Jonatas Bandeira — Nutrologia" },
+        { property: "og:title", content: "Dr. Jonatas Bandeira — Nutrologia" },
+        {
+          property: "og:description",
+          content:
+            "Agenda, prontuários e acompanhamentos clínicos do consultório Dr. Jonatas Bandeira.",
+        },
+        { property: "og:type", content: "website" },
+        { property: "og:image", content: ogImage },
+        { property: "og:image:secure_url", content: ogImage },
+        { property: "og:image:type", content: "image/png" },
+        { property: "og:image:width", content: "1200" },
+        { property: "og:image:height", content: "630" },
+        { property: "og:image:alt", content: "Logo Dr. Jonatas Bandeira — Nutrologia" },
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:title", content: "Dr. Jonatas Bandeira — Nutrologia" },
+        {
+          name: "twitter:description",
+          content:
+            "Agenda, prontuários e acompanhamentos clínicos do consultório Dr. Jonatas Bandeira.",
+        },
+        { name: "twitter:image", content: ogImage },
+      ],
+      links: [
+        {
+          rel: "preload",
+          as: "image",
+          href: "/assets/dr-jonatas-bandeira-logo.png",
+        },
+        {
+          rel: "image_src",
+          href: ogImage,
+        },
+        {
+          rel: "apple-touch-icon",
+          href: "/apple-touch-icon.png",
+        },
+      ],
+    };
+  },
   component: AuthPage,
 });
 

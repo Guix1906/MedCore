@@ -18,6 +18,7 @@ import { autoWipeLegacyTestDataIfNeeded } from "@/lib/wipe-system";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { getSiteOrigin } from "@/services/site-origin";
 
 function NotFoundComponent() {
   return (
@@ -80,38 +81,78 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  head: () => ({
-    meta: [
-      { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "MedCore — Gestão clínica" },
-      {
-        name: "description",
-        content: "MedCore — Prontuário eletrônico, tratamentos e gestão clínica.",
-      },
-      { property: "og:title", content: "MedCore — Gestão clínica" },
-      {
-        property: "og:description",
-        content: "MedCore — Prontuário eletrônico, tratamentos e gestão clínica.",
-      },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-    ],
-    links: [
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      {
-        // Inter é o fallback fora das plataformas Apple, que usam a fonte do sistema.
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&display=swap",
-      },
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
-    ],
-  }),
+  loader: async () => {
+    try {
+      const origin = await getSiteOrigin();
+      return { origin };
+    } catch {
+      return { origin: "" };
+    }
+  },
+  head: ({ loaderData }) => {
+    const origin =
+      loaderData?.origin ||
+      (typeof window !== "undefined" && window.location?.origin ? window.location.origin : "") ||
+      (typeof process !== "undefined" && process.env?.VERCEL_PROJECT_PRODUCTION_URL
+        ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+        : "") ||
+      (typeof process !== "undefined" && process.env?.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : "");
+
+    const ogImage = origin ? `${origin.replace(/\/$/, "")}/og-image.png` : "/og-image.png";
+
+    return {
+      meta: [
+        { charSet: "utf-8" },
+        { name: "viewport", content: "width=device-width, initial-scale=1" },
+        { title: "Dr. Jonatas Bandeira — Nutrologia" },
+        {
+          name: "description",
+          content:
+            "Sistema de gestão clínica, agendamentos e prontuário médico MedCore • Dr. Jonatas Bandeira - Nutrologia.",
+        },
+        { property: "og:site_name", content: "Dr. Jonatas Bandeira — Nutrologia" },
+        { property: "og:title", content: "Dr. Jonatas Bandeira — Nutrologia" },
+        {
+          property: "og:description",
+          content:
+            "Sistema de gestão clínica, agendamentos e prontuário médico MedCore • Dr. Jonatas Bandeira - Nutrologia.",
+        },
+        { property: "og:type", content: "website" },
+        { property: "og:image", content: ogImage },
+        { property: "og:image:secure_url", content: ogImage },
+        { property: "og:image:type", content: "image/png" },
+        { property: "og:image:width", content: "1200" },
+        { property: "og:image:height", content: "630" },
+        { property: "og:image:alt", content: "Logo Dr. Jonatas Bandeira — Nutrologia" },
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:title", content: "Dr. Jonatas Bandeira — Nutrologia" },
+        {
+          name: "twitter:description",
+          content:
+            "Sistema de gestão clínica, agendamentos e prontuário médico MedCore • Dr. Jonatas Bandeira - Nutrologia.",
+        },
+        { name: "twitter:image", content: ogImage },
+      ],
+      links: [
+        { rel: "preconnect", href: "https://fonts.googleapis.com" },
+        { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+        {
+          // Inter é o fallback fora das plataformas Apple, que usam a fonte do sistema.
+          rel: "stylesheet",
+          href: "https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&display=swap",
+        },
+        {
+          rel: "stylesheet",
+          href: appCss,
+        },
+        { rel: "image_src", href: ogImage },
+        { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+        { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      ],
+    };
+  },
   shellComponent: RootShell,
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
