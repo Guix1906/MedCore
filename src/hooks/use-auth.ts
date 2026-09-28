@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { authService, getStoredToken, getStoredUser, type UserProfile } from "@/services/api";
 import { supabase } from "@/integrations/supabase/client";
+import { invalidateAuthRouteCache } from "@/routes/_authenticated/route";
+import { qk } from "@/lib/query-keys";
 
 export type Profile = {
   id: string;
@@ -13,6 +15,22 @@ export type Profile = {
 
 export function useAuth() {
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      invalidateAuthRouteCache();
+      if (session) {
+        queryClient.setQueryData(["auth", "session"], session);
+      } else if (event === "SIGNED_OUT") {
+        queryClient.setQueryData(["auth", "session"], null);
+      }
+      void queryClient.invalidateQueries({ queryKey: ["auth"] });
+      void queryClient.invalidateQueries({ queryKey: qk.access.all() });
+      void queryClient.invalidateQueries({ queryKey: ["active-company"] });
+      void queryClient.invalidateQueries({ queryKey: ["company-members"] });
+    });
+    return () => sub.subscription.unsubscribe();
+  }, [queryClient]);
 
   // 1. Sessão rápida (PHP ou Supabase)
   const sessionQuery = useQuery({
@@ -40,7 +58,7 @@ export function useAuth() {
         return null;
       }
     },
-    staleTime: 30 * 60_000,
+    staleTime: 15_000,
     gcTime: 60 * 60_000,
   });
 

@@ -6,6 +6,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { authService, getStoredToken } from "@/services/api";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { invalidateAuthRouteCache } from "@/routes/_authenticated/route";
+import { qk } from "@/lib/query-keys";
 import {
   Activity,
   ArrowRight,
@@ -128,6 +131,7 @@ function GoogleIcon() {
 
 function AuthPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const search = Route.useSearch();
   const target = search.redirect ?? "/dashboard";
   const [mode, setMode] = useState<AuthMode>(search.modo ? "password" : "signin");
@@ -169,7 +173,11 @@ function AuthPage() {
           } else if (!linkFailure) {
             setLinkError("Link inválido ou expirado. Solicite um novo e-mail.");
           }
-        } else if (data.session) goToTarget();
+        } else if (data.session) {
+          invalidateAuthRouteCache();
+          queryClient.setQueryData(["auth", "session"], data.session);
+          goToTarget();
+        }
       })
       .catch((error: unknown) => {
         console.error("Não foi possível verificar a sessão.", error);
@@ -178,7 +186,7 @@ function AuthPage() {
     return () => {
       cancelled = true;
     };
-  }, [search.modo, goToTarget]);
+  }, [search.modo, goToTarget, queryClient]);
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
@@ -200,36 +208,69 @@ function AuthPage() {
     setConfirmPassword("");
   };
 
-  const submit = async (event: FormEvent) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setFormError(null);
     setSuccessMessage(null);
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const emailEl = form.querySelector<HTMLInputElement>("#auth-email") ?? form.querySelector<HTMLInputElement>('input[type="email"]');
+    const passwordEl = form.querySelector<HTMLInputElement>("#auth-password") ?? form.querySelector<HTMLInputElement>('input[type="password"]');
+    const nameEl = form.querySelector<HTMLInputElement>("#full-name") ?? form.querySelector<HTMLInputElement>('input[name="name"]');
+
+    const resolvedEmail = ((emailEl?.value || (formData.get("email") as string) || email) ?? "").trim().toLowerCase();
+    const resolvedPassword = passwordEl?.value || (formData.get("password") as string) || password || "";
+    const resolvedFullName = ((nameEl?.value || (formData.get("name") as string) || fullName) ?? "").trim();
+
+    if (!resolvedEmail) {
+      setFormError("Informe seu e-mail para continuar.");
+      return;
+    }
+
+    if (mode !== "forgot" && !resolvedPassword) {
+      setFormError("Informe sua senha para continuar.");
+      return;
+    }
+
     setBusy(true);
     try {
       if (mode === "signin") {
+        let authSession: any = null;
         try {
-          await authService.signIn(email.trim(), password, rememberMe);
+          authSession = await authService.signIn(resolvedEmail, resolvedPassword, rememberMe);
         } catch {
-          const { error } = await supabase.auth.signInWithPassword({
-            email: email.trim(),
-            password,
+          const { data: sbData, error } = await supabase.auth.signInWithPassword({
+            email: resolvedEmail,
+            password: resolvedPassword,
           });
           if (error) throw error;
+          authSession = sbData.session;
         }
+        invalidateAuthRouteCache();
+        if (authSession) {
+          queryClient.setQueryData(["auth", "session"], authSession);
+        }
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["auth"] }),
+          queryClient.invalidateQueries({ queryKey: qk.access.all() }),
+          queryClient.invalidateQueries({ queryKey: ["active-company"] }),
+          queryClient.invalidateQueries({ queryKey: ["company-members"] }),
+        ]);
         toast.success("Bem-vindo de volta ao MedCore!");
         await router.invalidate();
         goToTarget();
       } else if (mode === "signup") {
-        if (password.length < 8) throw new Error("A senha deve ter pelo menos 8 caracteres.");
+        if (resolvedPassword.length < 8) throw new Error("A senha deve ter pelo menos 8 caracteres.");
         try {
-          await authService.signUp(email.trim(), password, fullName.trim());
+          await authService.signUp(resolvedEmail, resolvedPassword, resolvedFullName);
         } catch {
           const { data, error } = await supabase.auth.signUp({
-            email: email.trim(),
-            password,
+            email: resolvedEmail,
+            password: resolvedPassword,
             options: {
               emailRedirectTo: window.location.origin,
-              data: { full_name: fullName.trim() },
+              data: { full_name: resolvedFullName },
             },
           });
           if (error) throw error;
@@ -240,14 +281,18 @@ function AuthPage() {
             return;
           }
         }
+        invalidateAuthRouteCache();
+        await queryClient.invalidateQueries({ queryKey: ["auth"] });
         toast.success("Conta criada com sucesso!");
         await router.invalidate();
         goToTarget();
       } else if (mode === "password") {
-        if (password.length < 8) throw new Error("A senha deve ter pelo menos 8 caracteres.");
-        if (password !== confirmPassword) throw new Error("As senhas não conferem.");
-        const { error } = await supabase.auth.updateUser({ password });
+        if (resolvedPassword.length < 8) throw new Error("A senha deve ter pelo menos 8 caracteres.");
+        if (resolvedPassword !== confirmPassword) throw new Error("As senhas não conferem.");
+        const { error } = await supabase.auth.updateUser({ password: resolvedPassword });
         if (error) throw error;
+        invalidateAuthRouteCache();
+        await queryClient.invalidateQueries({ queryKey: ["auth"] });
         toast.success(
           search.modo === "convite"
             ? "Senha definida. Bem-vindo(a) ao MedCore!"
@@ -256,7 +301,7 @@ function AuthPage() {
         await router.invalidate();
         goToTarget();
       } else {
-        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        const { error } = await supabase.auth.resetPasswordForEmail(resolvedEmail, {
           redirectTo: `${window.location.origin}/auth?modo=nova-senha`,
         });
         if (error) throw error;
@@ -421,6 +466,9 @@ function AuthPage() {
                       name="email"
                       type="email"
                       autoComplete="username"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck="false"
                       value={email}
                       onChange={(event) => setEmail(event.target.value)}
                       required

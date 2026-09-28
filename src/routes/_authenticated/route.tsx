@@ -13,7 +13,7 @@ export function invalidateAuthRouteCache() {
 
 if (typeof window !== "undefined") {
   supabase.auth.onAuthStateChange((event) => {
-    if (event === "SIGNED_OUT") {
+    if (event === "SIGNED_OUT" || event === "SIGNED_IN" || event === "USER_UPDATED") {
       invalidateAuthRouteCache();
     }
   });
