@@ -10,6 +10,7 @@ import {
   FileText,
   User,
   CheckCircle2,
+  MapPinned,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Activity } from "@/components/agenda/agenda-types";
@@ -78,6 +79,19 @@ import {
 import { cn } from "@/utils/cn";
 import { qk } from "@/lib/query-keys";
 import { logClient } from "@/lib/activity-log";
+import {
+  Block,
+  PaymentMethods,
+  Pill,
+  SummaryRow,
+  TimeSlots,
+  WeekStrip,
+  brl,
+  formatLongDate,
+  fromMinutes,
+  methodLabel,
+  toMinutes,
+} from "@/components/agenda/novo-agendamento/composer-parts";
 
 // ============================================================
 // Design tokens (verde-limão premium, sem roxo)
@@ -98,6 +112,22 @@ const TYPES = [
   { id: "lembrete", label: "Lembrete" },
   { id: "evento", label: "Evento" },
 ] as const;
+
+const TYPE_SHORT: Record<string, string> = {
+  atendimento: "Consulta",
+  bloqueio: "Bloqueio",
+  lembrete: "Lembrete",
+  evento: "Evento",
+};
+
+const CONSULTATION_LABEL: Record<string, string> = {
+  nova_consulta: "Primeira consulta",
+  "1_retorno": "1º retorno",
+  retorno_recorrente: "Retorno",
+  procedimento: "Procedimento",
+};
+
+const DURATIONS = [30, 45, 60, 90];
 
 const STATUS = [
   { id: "agendado", label: "Agendado", color: "#3b82f6" },
@@ -406,6 +436,8 @@ export function NovoAgendamentoDialog({
   const [quickPatientOpen, setQuickPatientOpen] = useState(false);
   const [planCoverage, setPlanCoverage] = useState<"incluso" | "avulso" | "extra">("avulso");
   const [linkedTreatmentId, setLinkedTreatmentId] = useState<string>("");
+  const [duration, setDuration] = useState(30);
+  const [showNotes, setShowNotes] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -904,7 +936,6 @@ export function NovoAgendamentoDialog({
     return result;
   }, [members, selectedDoctorObj]);
 
-  const statusMeta = useMemo(() => STATUS.find((s) => s.id === status) ?? STATUS[0], [status]);
 
   // Deriva o título automaticamente a partir do cliente + tipo
   useEffect(() => {
@@ -919,10 +950,69 @@ export function NovoAgendamentoDialog({
 
   const [partOpen, setPartOpen] = useState(false);
 
+  // Novo agendamento: começa no próximo horário redondo (:00 ou :30).
+  useEffect(() => {
+    if (!open || activityToEdit || !start) return;
+    const m = toMinutes(start);
+    if (m % 30 !== 0) setStart(fromMinutes(Math.ceil(m / 30) * 30));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // Consulta: a hora final segue a duração escolhida.
+  useEffect(() => {
+    if (type !== "atendimento" || !start) return;
+    setEnd(fromMinutes(toMinutes(start) + duration));
+  }, [type, start, duration]);
+
+  // Consulta: a cor na agenda segue o profissional (cada um mantém sempre a mesma cor).
+  useEffect(() => {
+    if (type !== "atendimento" || activityToEdit || !assignedTo) return;
+    let hash = 0;
+    for (const ch of assignedTo) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+    setColor(COLORS[hash % COLORS.length]);
+  }, [type, assignedTo, activityToEdit]);
+
+  // Ao editar, a duração vem do próprio agendamento.
+  useEffect(() => {
+    if (!open || !activityToEdit || !start || !end) return;
+    const diff = toMinutes(end) - toMinutes(start);
+    if (diff > 0) setDuration(diff);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, activityToEdit]);
+
+  // Horários já ocupados do profissional no dia (para oferecer só horários livres).
+  const editingEventId = activityToEdit?.id?.includes(":")
+    ? activityToEdit.id.split(":")[1]
+    : activityToEdit?.id;
+  const { data: busySlots = [] } = useQuery({
+    queryKey: ["agenda-busy", companyId, day, assignedTo, editingEventId],
+    enabled: open && type === "atendimento" && !!assignedTo && isUuid(companyId ?? ""),
+    staleTime: 30_000,
+    queryFn: async () => {
+      const professional = await resolveProfessional(assignedTo);
+      const ids = [assignedTo, professional.userId].filter(Boolean);
+      const { data, error } = await supabase
+        .from("events")
+        .select("id, starts_at, ends_at, assigned_to")
+        .eq("company_id", companyId!)
+        .gte("starts_at", new Date(`T00:00:00`).toISOString())
+        .lte("starts_at", new Date(`T23:59:59`).toISOString());
+      if (error) throw error;
+      return (data ?? [])
+        .filter((e) => e.id !== editingEventId && e.assigned_to && ids.includes(e.assigned_to))
+        .map((e) => {
+          const s = new Date(e.starts_at);
+          const f = e.ends_at ? new Date(e.ends_at) : new Date(s.getTime() + 30 * 60_000);
+          return { start: s.getHours() * 60 + s.getMinutes(), end: f.getHours() * 60 + f.getMinutes() };
+        });
+    },
+  });
+
   // ------ Save ------
   const save = useMutation({
     mutationFn: async (asDraft: boolean) => {
       if (!companyId || !user) throw new Error("Empresa não selecionada");
+      if (type === "atendimento" && !clientId) throw new Error("Selecione o paciente.");
       const finalTitle = title.trim() || labelOfType(type);
       const startsAt = new Date(`${day}T${start}:00`);
       const endsAt = new Date(`${type === "evento" ? dayEnd : day}T${end}:00`);
@@ -1163,11 +1253,22 @@ export function NovoAgendamentoDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-4xl p-0 gap-0 overflow-hidden max-h-[92dvh] flex flex-col [&>button.absolute]:hidden">
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-hairline bg-card px-4 py-4 md:px-6">
-            <div>
-              <DialogTitle className="text-2xl font-semibold tracking-tight">
+        <DialogContent
+          className={cn(
+            "p-0 gap-0 overflow-hidden max-h-[92dvh] flex flex-col [&>button.absolute]:hidden",
+            type === "atendimento" ? "max-w-5xl" : "max-w-4xl",
+          )}
+          onKeyDown={(e) => {
+            if (type === "atendimento" && (e.ctrlKey || e.metaKey) && e.key === "Enter") {
+              e.preventDefault();
+              if (!save.isPending) save.mutate(false);
+            }
+          }}
+        >
+          {/* Cabeçalho: título, profissional e tipo */}
+          <div className="relative flex flex-wrap items-start justify-between gap-3 border-b border-hairline bg-card py-4 pl-5 pr-14 md:px-7 md:pr-16">
+            <div className="min-w-0">
+              <DialogTitle className="text-xl font-medium tracking-tight">
                 {activityToEdit
                   ? type === "bloqueio"
                     ? "Editar bloqueio de horário"
@@ -1175,56 +1276,365 @@ export function NovoAgendamentoDialog({
                       ? "Editar lembrete"
                       : type === "evento"
                         ? "Editar evento"
-                        : "Editar Agendamento"
+                        : "Editar agendamento"
                   : type === "bloqueio"
                     ? "Novo bloqueio de horário"
                     : type === "lembrete"
                       ? "Novo lembrete"
                       : type === "evento"
                         ? "Novo evento"
-                        : "Novo Agendamento"}
+                        : "Novo agendamento"}
               </DialogTitle>
               <DialogDescription className="sr-only">
                 {activityToEdit
-                  ? "Edite todos os detalhes do agendamento."
-                  : "Crie um novo agendamento com todos os detalhes."}
+                  ? "Edite os detalhes do agendamento."
+                  : "Escolha paciente, horário e cobrança do novo agendamento."}
               </DialogDescription>
+              {type === "atendimento" && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+                  <span>com</span>
+                  <Select
+                    value={assignedTo || "__none"}
+                    onValueChange={(v) => setAssignedTo(v === "__none" ? "" : v)}
+                  >
+                    <SelectTrigger className="h-8 w-auto gap-1.5 rounded-full px-3 text-sm text-foreground">
+                      <SelectValue placeholder="Escolher profissional">
+                        {responsible?.full_name ?? "Escolher profissional"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allMembersList.map((m: MemberOpt) => (
+                        <SelectItem key={m.id} value={m.id}>
+                          <span className="flex items-center gap-2">
+                            <Avatar name={m.full_name} url={m.avatar_url} />
+                            <span>{m.full_name ?? "Sem nome"}</span>
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewDoctorModal(true)}
+                    className="text-xs font-medium text-primary hover:underline"
+                  >
+                    Novo profissional
+                  </button>
+                </div>
+              )}
             </div>
-            <button
-              onClick={() => onOpenChange(false)}
-              aria-label="Fechar"
-              className="group grid place-items-center h-10 w-10 rounded-full hover:bg-primary/10 transition-all cursor-pointer"
-            >
-              <X className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-transform duration-300 " />
-            </button>
-          </div>
-
-
-          {/* Scroll body */}
-          <div
-            className="min-h-0 overflow-y-auto flex-1 px-4 md:px-6 py-4 space-y-4 bg-surface"
-          >
-            {/* Tipo */}
-            <div data-step="Tipo" className="scroll-mt-4 space-y-1.5">
-              <FieldLabel required>Tipo</FieldLabel>
-              <div className="flex flex-wrap gap-2 p-1.5 rounded-xl border border-border/70 bg-background">
+            <div className="flex items-center gap-2">
+              <div role="group" aria-label="Tipo" className="flex rounded-lg bg-muted/70 p-0.5">
                 {TYPES.map((t) => (
                   <button
                     key={t.id}
                     type="button"
+                    aria-pressed={type === t.id}
                     onClick={() => setType(t.id)}
                     className={cn(
-                      "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+                      "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
                       type === t.id
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
+                        ? "bg-card text-foreground shadow-xs"
+                        : "text-muted-foreground hover:text-foreground",
                     )}
                   >
-                    {t.label}
+                    {TYPE_SHORT[t.id]}
                   </button>
                 ))}
               </div>
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                aria-label="Fechar"
+                className="absolute right-3 top-3.5 grid size-9 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:right-5"
+              >
+                <X className="size-5" />
+              </button>
             </div>
+          </div>
+
+          {type === "atendimento" ? (
+            <div className="grid min-h-0 flex-1 overflow-y-auto md:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] md:overflow-hidden">
+              <div className="space-y-7 px-5 py-6 md:min-h-0 md:overflow-y-auto md:px-7">
+                <Block
+                  label="Paciente"
+                  aside={
+                    <button
+                      type="button"
+                      onClick={() => setQuickPatientOpen(true)}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                    >
+                      <UserPlus className="size-3.5" /> Cadastrar novo
+                    </button>
+                  }
+                >
+                  <ClientPicker
+                    value={clientId}
+                    onChange={(v, obj) => {
+                      setClientId(v);
+                      setSelectedClientObj(obj ?? null);
+                    }}
+                    clients={clients}
+                    selectedClient={selectedClientObj}
+                  />
+                  {clientId && (
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <Select
+                        value={consultationType}
+                        onValueChange={(v) => {
+                          setConsultationType(v);
+                          setIsNewPatient(v === "nova_consulta");
+                        }}
+                      >
+                        <SelectTrigger className="h-7 w-auto gap-1 rounded-full px-3 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(CONSULTATION_LABEL).map(([id, label]) => (
+                            <SelectItem key={id} value={id}>
+                              {label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <span className="text-muted-foreground">
+                        {patientHistory.length === 0
+                          ? "Primeiro atendimento"
+                          : `Último atendimento em ${patientHistory[0].date.toLocaleDateString("pt-BR")} · ${patientHistory.length} no histórico`}
+                      </span>
+                    </div>
+                  )}
+                </Block>
+
+                <Block
+                  label="Quando"
+                  aside={
+                    availableCities.length > 1 ? (
+                      <Select value={city} onValueChange={setCity}>
+                        <SelectTrigger className="h-7 w-auto gap-1 rounded-full px-3 text-xs">
+                          <MapPinned className="size-3.5 text-muted-foreground" />
+                          <SelectValue placeholder="Cidade" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableCities.map((c) => (
+                            <SelectItem key={c} value={c}>
+                              {c}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : city ? (
+                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                        <MapPinned className="size-3.5" /> {city}
+                      </span>
+                    ) : null
+                  }
+                >
+                  <WeekStrip value={day} onChange={setDay} />
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                    <span className="mr-1">Duração</span>
+                    {DURATIONS.map((m) => (
+                      <Pill key={m} active={duration === m} onClick={() => setDuration(m)} className="whitespace-nowrap px-2.5 py-1 text-xs">
+                        {m} min
+                      </Pill>
+                    ))}
+                  </div>
+                  <TimeSlots day={day} value={start} duration={duration} busy={busySlots} onChange={setStart} />
+                  {!assignedTo && (
+                    <p className="text-xs text-muted-foreground">
+                      Escolha o profissional no topo para ver apenas os horários livres dele.
+                    </p>
+                  )}
+                </Block>
+
+                <Block label="Atendimento e cobrança">
+                  {patientTreatments.length > 0 && (
+                    <div className="space-y-2.5 rounded-xl border border-success/30 bg-success/5 p-3">
+                      <p className="text-xs text-success">
+                        {patientTreatments.length === 1
+                          ? `Plano ativo: ${patientTreatments[0].title}`
+                          : `${patientTreatments.length} planos ativos`}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex rounded-lg bg-card p-0.5">
+                          {(
+                            [
+                              ["incluso", "Incluso no plano"],
+                              ["avulso", "Cobrar à parte"],
+                            ] as const
+                          ).map(([id, label]) => (
+                            <button
+                              key={id}
+                              type="button"
+                              aria-pressed={planCoverage === id || (id === "avulso" && planCoverage === "extra")}
+                              onClick={() => setPlanCoverage(id)}
+                              className={cn(
+                                "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                                planCoverage === id || (id === "avulso" && planCoverage === "extra")
+                                  ? "bg-primary text-primary-foreground"
+                                  : "text-muted-foreground hover:text-foreground",
+                              )}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        {patientTreatments.length > 1 && planCoverage === "incluso" && (
+                          <Select value={linkedTreatmentId} onValueChange={setLinkedTreatmentId}>
+                            <SelectTrigger className="h-8 w-auto rounded-lg text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {patientTreatments.map((t) => (
+                                <SelectItem key={t.id} value={t.id}>
+                                  {t.title}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div
+                    className={cn(
+                      "space-y-3 transition-opacity",
+                      planCoverage === "incluso" && "pointer-events-none opacity-40",
+                    )}
+                    aria-disabled={planCoverage === "incluso"}
+                  >
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)]">
+                      <Select
+                        value={selectedProcedure || "__none"}
+                        onValueChange={(v) => {
+                          const val = v === "__none" ? "" : v;
+                          setSelectedProcedure(val);
+                          const found = procedures.find((p) => p.id === val);
+                          if (found?.price) setProcedurePrice(found.price);
+                        }}
+                      >
+                        <SelectTrigger className="h-11 rounded-xl" aria-label="Procedimento">
+                          <SelectValue placeholder="Procedimento" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[320px]">
+                          <SelectItem value="__none">Sem procedimento</SelectItem>
+                          {Object.entries(groupedProceduresList).map(([cat, items]) => (
+                            <SelectGroup key={cat}>
+                              <SelectLabel className="px-2 py-1.5 text-xs text-muted-foreground">
+                                {cat.replace(/^[^\p{L}]+/u, "")}
+                              </SelectLabel>
+                              {items.map((p) => (
+                                <SelectItem key={p.id} value={p.id}>
+                                  {p.name}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <label className="space-y-1">
+                        <span className="sr-only">Valor total</span>
+                        <FinancialNumberInput
+                          placeholder="Valor"
+                          value={procedurePrice}
+                          onChange={setProcedurePrice}
+                          className="h-11 rounded-xl"
+                        />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="sr-only">Sinal recebido agora</span>
+                        <FinancialNumberInput
+                          placeholder="Sinal agora"
+                          value={downPayment}
+                          onChange={setDownPayment}
+                          className="h-11 rounded-xl"
+                        />
+                      </label>
+                    </div>
+                    {(Number(downPayment) || 0) > 0 && (
+                      <PaymentMethods value={downPaymentMethod} onChange={setDownPaymentMethod} />
+                    )}
+                  </div>
+                </Block>
+
+                {showNotes || notes ? (
+                  <Block label="Observação">
+                    <DebouncedTextarea
+                      value={notes}
+                      onChange={setNotes}
+                      placeholder="Paciente prefere horários no fim da tarde"
+                      rows={3}
+                      className="resize-none rounded-xl"
+                    />
+                  </Block>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowNotes(true)}
+                    className="text-sm font-medium text-primary hover:underline"
+                  >
+                    Adicionar observação
+                  </button>
+                )}
+              </div>
+
+              <aside className="flex flex-col border-t border-hairline bg-muted/30 px-5 py-6 md:border-l md:border-t-0 md:px-6">
+                <p className="text-xs font-medium text-muted-foreground">Resumo</p>
+                <p className="mt-3 text-base font-medium">{selectedClient?.name ?? "Selecione o paciente"}</p>
+                {clientId && <p className="text-sm text-muted-foreground">{CONSULTATION_LABEL[consultationType] ?? ""}</p>}
+                <div className="mt-4 space-y-0.5 text-sm">
+                  <p>{formatLongDate(day)}</p>
+                  <p className="tabular-nums text-muted-foreground">
+                    {start}–{end} · {duration} min
+                  </p>
+                  <p className="text-muted-foreground">
+                    {[city, responsible?.full_name].filter(Boolean).join(" · ") || "Profissional não definido"}
+                  </p>
+                </div>
+                <div className="mt-5 space-y-2 border-t border-hairline pt-4">
+                  {planCoverage === "incluso" ? (
+                    <SummaryRow label="Cobrança" value={<span className="text-success">Incluso no plano</span>} />
+                  ) : (
+                    <>
+                      <SummaryRow label="Valor" value={brl(Number(procedurePrice) || 0)} />
+                      <SummaryRow
+                        label={`Sinal${(Number(downPayment) || 0) > 0 ? ` (${methodLabel(downPaymentMethod)})` : ""}`}
+                        value={brl(Math.min(Number(downPayment) || 0, Number(procedurePrice) || Number(downPayment) || 0))}
+                      />
+                      <div className="border-t border-hairline pt-2">
+                        <SummaryRow
+                          strong
+                          label="Restante"
+                          value={brl(Math.max(0, (Number(procedurePrice) || 0) - (Number(downPayment) || 0)))}
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+                <div className="min-h-6 flex-1" />
+                <Button
+                  onClick={() => save.mutate(false)}
+                  disabled={save.isPending}
+                  size="lg"
+                  className="h-11 w-full font-medium"
+                >
+                  {save.isPending ? "Salvando…" : activityToEdit ? "Salvar alterações" : "Confirmar agendamento"}
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => onOpenChange(false)}
+                  className="mt-2 h-9 text-sm text-muted-foreground hover:text-foreground"
+                >
+                  Cancelar
+                </button>
+                <p className="mt-1 text-center text-[11px] text-muted-foreground">Ctrl + Enter para confirmar</p>
+              </aside>
+            </div>
+          ) : (
+            <>
+          {/* Scroll body */}
+          <div className="min-h-0 overflow-y-auto flex-1 px-4 md:px-6 py-4 space-y-4 bg-surface">
 
             {/* Form rendering */}
             {type === "bloqueio" ? (
@@ -1910,493 +2320,7 @@ export function NovoAgendamentoDialog({
                 </Section>
               </>
             ) : (
-              <>
-                {/* Agendamento (Default) Form */}
-                <Section title="Dados básicos" icon={FileText}>
-                  <div className="grid gap-4">
-                    {/* Paciente */}
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <FieldLabel required>Paciente</FieldLabel>
-
-                        <div className="flex items-center gap-2.5">
-                          <button
-                            type="button"
-                            onClick={() => setQuickPatientOpen(true)}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary-soft border border-primary/25 text-primary hover:bg-primary/15 text-xs font-semibold transition-colors cursor-pointer"
-                            title="Cadastrar novo paciente"
-                          >
-                            <UserPlus className="h-3.5 w-3.5" />
-                            <span>+ Novo paciente</span>
-                          </button>
-
-                        </div>
-                      </div>
-                      <ClientPicker
-                        value={clientId}
-                        onChange={(v, obj) => {
-                          setClientId(v);
-                          setSelectedClientObj(obj ?? null);
-                        }}
-                        clients={clients}
-                        selectedClient={selectedClientObj}
-                      />
-
-                      {/* Resumo/Histórico do Paciente para a Secretaria */}
-                      {clientId && (
-                        <div className="mt-2.5 p-3 rounded-xl border border-primary/20 bg-primary/5 flex flex-col gap-1.5">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                              <User className="h-3.5 w-3.5 text-primary" /> Ficha do Paciente
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={cn(
-                                  "text-xs font-semibold px-2 py-0.5 rounded-full",
-                                  isNewPatient
-                                    ? "bg-warning/15 text-warning"
-                                    : "bg-success/15 text-success",
-                                )}
-                              >
-                                {isNewPatient
-                                  ? "Novo Paciente (1ª Consulta)"
-                                  : "Paciente Recorrente"}
-                              </span>
-                              <span className="text-xs font-semibold bg-card border border-border px-2 py-0.5 rounded-full text-muted-foreground">
-                                {patientHistory.length} consulta(s) anterior(es)
-                              </span>
-                            </div>
-                          </div>
-                          {patientHistory.length > 0 && (
-                            <div className="text-xs text-muted-foreground mt-0.5">
-                              Último atendimento:{" "}
-                              <span className="font-semibold text-foreground">
-                                {patientHistory[0].date.toLocaleDateString("pt-BR")} —{" "}
-                                {patientHistory[0].title}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Cidade de Atendimento + Tipo de Consulta */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <FieldLabel required>Cidade de Atendimento</FieldLabel>
-                        <Select value={city} onValueChange={setCity}>
-                          <SelectTrigger className="h-11 rounded-xl">
-                            <SelectValue
-                              placeholder={
-                                availableCities.length === 0
-                                  ? "Nenhuma cidade cadastrada"
-                                  : "Selecione a cidade"
-                              }
-                            />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableCities.length === 0 ? (
-                              <div className="p-3 text-xs text-muted-foreground text-center">
-                                Nenhuma cidade cadastrada.
-                                <br />
-                                <span className="text-primary font-medium">
-                                  Cadastre em Configurações.
-                                </span>
-                              </div>
-                            ) : (
-                              availableCities.map((c) => (
-                                <SelectItem key={c} value={c}>
-                                  {c}
-                                </SelectItem>
-                              ))
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <FieldLabel required>Tipo de Atendimento</FieldLabel>
-                        <Select
-                          value={consultationType}
-                          onValueChange={(v) => {
-                            setConsultationType(v);
-                            if (v === "nova_consulta") {
-                              setIsNewPatient(true);
-                            } else {
-                              setIsNewPatient(false);
-                            }
-                          }}
-                        >
-                          <SelectTrigger className="h-11 rounded-xl">
-                            <SelectValue placeholder="Selecione o tipo" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="nova_consulta">Nova Consulta</SelectItem>
-                            <SelectItem value="1_retorno">1º Retorno</SelectItem>
-                            <SelectItem value="retorno_recorrente">Retorno Recorrente</SelectItem>
-                            <SelectItem value="procedimento">Procedimento / Tratamento</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    {/* Responsável + Status + Cor */}
-                    <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-4">
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <FieldLabel>Responsável</FieldLabel>
-                          <button
-                            type="button"
-                            onClick={() => setShowNewDoctorModal(true)}
-                            className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
-                          >
-                            <UserPlus size={12} />+ Novo Médico
-                          </button>
-                        </div>
-                        <Select
-                          value={assignedTo || "__none"}
-                          onValueChange={(v) => setAssignedTo(v === "__none" ? "" : v)}
-                        >
-                          <SelectTrigger className="h-11 rounded-xl">
-                            <SelectValue placeholder="Selecionar responsável">
-                              {responsible ? (
-                                <span className="flex items-center gap-2">
-                                  <Avatar
-                                    name={responsible.full_name}
-                                    url={responsible.avatar_url}
-                                  />
-                                  <span className="truncate">{responsible.full_name}</span>
-                                </span>
-                              ) : (
-                                "Selecionar responsável"
-                              )}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            {allMembersList.map((m: MemberOpt) => (
-                              <SelectItem key={m.id} value={m.id}>
-                                <span className="flex items-center gap-2">
-                                  <Avatar name={m.full_name} url={m.avatar_url} />
-                                  <span className="flex flex-col">
-                                    <span className="text-sm">{m.full_name ?? "Sem nome"}</span>
-                                    {m.role && (
-                                      <span className="text-xs text-muted-foreground">
-                                        {m.role}
-                                      </span>
-                                    )}
-                                  </span>
-                                </span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <FieldLabel>Status</FieldLabel>
-                        <Select
-                          value={status}
-                          onValueChange={(v) => setStatus(v as (typeof STATUS)[number]["id"])}
-                        >
-                          <SelectTrigger className="h-11 rounded-xl">
-                            <SelectValue>
-                              <span className="flex items-center gap-2">
-                                <span
-                                  className="h-2.5 w-2.5 rounded-full"
-                                  style={{ background: statusMeta.color }}
-                                />
-                                {statusMeta.label}
-                              </span>
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            {STATUS.map((s) => (
-                              <SelectItem key={s.id} value={s.id}>
-                                <span className="flex items-center gap-2">
-                                  <span
-                                    className="h-2.5 w-2.5 rounded-full"
-                                    style={{ background: s.color }}
-                                  />
-                                  {s.label}
-                                </span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <FieldLabel>Cor</FieldLabel>
-                        <div className="flex items-center gap-1.5 p-2 rounded-xl border border-border/70 bg-background h-11">
-                          {COLORS.map((c) => (
-                            <button
-                              key={c}
-                              type="button"
-                              aria-label={`Cor ${c}`}
-                              onClick={() => setColor(c)}
-                              className={cn(
-                                "h-6 w-6 rounded-full transition-all duration-150 hover:scale-110",
-                                color === c &&
-                                  "ring-2 ring-offset-2 ring-offset-background ring-primary scale-110",
-                              )}
-                              style={{ background: c }}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </Section>
-                <Section title="Data e horário" icon={Clock}>
-                  <div className="grid gap-4">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="space-y-1.5">
-                        <FieldLabel required>Data</FieldLabel>
-                        <div className="relative">
-                          <DebouncedInput
-                            type="date"
-                            value={day}
-                            onChange={setDay}
-                            className="h-11 rounded-xl pl-10"
-                          />
-                          <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                        </div>
-                      </div>
-                      <div className="space-y-1.5">
-                        <FieldLabel required>Hora inicial</FieldLabel>
-                        <div className="relative">
-                          <DebouncedInput
-                            type="time"
-                            value={start}
-                            onChange={setStart}
-                            className="h-11 rounded-xl pl-10"
-                          />
-                          <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                        </div>
-                      </div>
-                      <div className="space-y-1.5">
-                        <FieldLabel required>Hora final</FieldLabel>
-                        <div className="relative">
-                          <DebouncedInput
-                            type="time"
-                            value={end}
-                            onChange={setEnd}
-                            className="h-11 rounded-xl pl-10"
-                          />
-                          <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </Section>
-                <Section title="Plano, cobrança e observações" icon={FileText}>
-                  <div className="grid gap-4">
-                    {/* Cobertura de Plano de Tratamento */}
-                    {patientTreatments.length > 0 && (
-                      <div className="p-3.5 rounded-xl border border-sky-500/32 bg-sky-500/10 space-y-2.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 font-semibold text-xs text-sky-800 dark:text-sky-300 uppercase tracking-wider">
-                            <TagIcon className="h-4 w-4 text-sky-600 dark:text-sky-400" />
-                            <span>Plano / Pacote Ativo do Paciente</span>
-                          </div>
-                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-sky-500/20 dark:bg-sky-950 text-sky-800 dark:text-sky-200">
-                            {patientTreatments.length === 1
-                              ? "1 plano ativo"
-                              : `${patientTreatments.length} planos ativos`}
-                          </span>
-                        </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">
-                          O paciente está sob protocolo contínuo. Escolha se esta consulta é uma
-                          etapa coberta pelo plano ou um atendimento com cobrança avulsa.
-                        </p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                          <div className="space-y-1">
-                            <FieldLabel>Enquadramento da Consulta</FieldLabel>
-                            <Select
-                              value={planCoverage}
-                              onValueChange={(v: "incluso" | "avulso" | "extra") =>
-                                setPlanCoverage(v)
-                              }
-                            >
-                              <SelectTrigger className="h-10 rounded-xl bg-background font-medium border-sky-400/50">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="incluso">
-                                  Incluso no plano (sem cobrança)
-                                </SelectItem>
-                                <SelectItem value="avulso">
-                                  Consulta avulsa (gera cobrança)
-                                </SelectItem>
-                                <SelectItem value="extra">
-                                  Procedimento extra (gera cobrança)
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          {patientTreatments.length > 1 ? (
-                            <div className="space-y-1">
-                              <FieldLabel>Vincular ao Tratamento</FieldLabel>
-                              <Select
-                                value={linkedTreatmentId}
-                                onValueChange={setLinkedTreatmentId}
-                              >
-                                <SelectTrigger className="h-10 rounded-xl bg-background font-medium border-sky-400/50">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {patientTreatments.map((t) => (
-                                    <SelectItem key={t.id} value={t.id}>
-                                      {t.title}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          ) : (
-                            <div className="space-y-1">
-                              <FieldLabel>Plano Vinculado</FieldLabel>
-                              <div className="h-10 px-3 rounded-xl bg-background/80 border border-sky-500/16 text-xs font-semibold flex items-center text-foreground truncate">
-                                {patientTreatments[0]?.title}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        {planCoverage === "incluso" && (
-                          <div className="p-2.5 rounded-lg bg-success/10 border border-success/30 text-success dark:text-emerald-300 text-xs flex items-center gap-2 font-medium">
-                            <CheckCircle2 className="h-4 w-4 shrink-0 text-success dark:text-emerald-400" />
-                            <span>
-                              Consulta inclusa no pacote do paciente. Nenhuma cobrança financeira
-                              adicional será gerada.
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Procedimento e Valores / Sinal */}
-                    <div className="space-y-3 p-4 rounded-xl border border-border/70 bg-muted/20">
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                          <FieldLabel>Procedimento / Serviço</FieldLabel>
-                          <Select
-                            value={selectedProcedure || "__none"}
-                            onValueChange={(v) => {
-                              const val = v === "__none" ? "" : v;
-                              setSelectedProcedure(val);
-                              if (val && planCoverage !== "incluso") {
-                                const found =
-                                  procedures.find((p) => p.id === val) ||
-                                  (allProceduresList.find((p) => p.id === val) as any);
-                                if (found && found.price) {
-                                  setProcedurePrice(found.price);
-                                }
-                              }
-                            }}
-                          >
-                            <SelectTrigger className="h-11 rounded-xl bg-background font-medium border-primary/40">
-                              <SelectValue placeholder="Selecionar procedimento na lista..." />
-                            </SelectTrigger>
-                            <SelectContent className="max-h-[320px]">
-                              <SelectItem value="__none">Nenhum (Somente agendamento)</SelectItem>
-                              {Object.entries(groupedProceduresList).map(([cat, items]) => (
-                                <SelectGroup key={cat}>
-                                  <SelectLabel className="font-semibold text-xs text-primary uppercase tracking-wider px-2 py-1.5 bg-muted/40">
-                                    {cat}
-                                  </SelectLabel>
-                                  {items.map((p) => (
-                                    <SelectItem
-                                      key={p.id}
-                                      value={p.id}
-                                      className="cursor-pointer font-normal pl-4"
-                                    >
-                                      {p.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectGroup>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <FieldLabel>Valor Total (R$)</FieldLabel>
-                          {planCoverage === "incluso" ? (
-                            <Input
-                              type="text"
-                              disabled
-                              value="Incluso no Pacote (R$ 0,00)"
-                              className="h-11 rounded-xl bg-muted text-muted-foreground font-semibold cursor-not-allowed"
-                            />
-                          ) : (
-                            <FinancialNumberInput
-                              placeholder="0,00"
-                              value={procedurePrice}
-                              onChange={setProcedurePrice}
-                              className="h-11 rounded-xl bg-background font-semibold"
-                            />
-                          )}
-                        </div>
-                      </div>
-
-                      {planCoverage !== "incluso" && (
-                        <>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-1.5">
-                              <FieldLabel>Sinal recebido agora (R$)</FieldLabel>
-                              <FinancialNumberInput
-                                placeholder="0,00"
-                                value={downPayment}
-                                onChange={setDownPayment}
-                                className="h-11 rounded-xl bg-background font-semibold"
-                              />
-                            </div>
-                            <div className="space-y-1.5">
-                              <FieldLabel>Forma de pagamento do sinal</FieldLabel>
-                              <Select value={downPaymentMethod} onValueChange={setDownPaymentMethod}>
-                                <SelectTrigger className="h-11 rounded-xl bg-background">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="pix">Pix</SelectItem>
-                                  <SelectItem value="cartao_credito">Cartão de crédito</SelectItem>
-                                  <SelectItem value="cartao_debito">Cartão de débito</SelectItem>
-                                  <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                                  <SelectItem value="boleto">Boleto</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
-                          {(Number(procedurePrice) || 0) > 0 && (
-                            <p className="text-sm text-muted-foreground">
-                              Restante a receber no atendimento:{" "}
-                              <span className="font-semibold text-foreground tabular-nums">
-                                {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
-                                  Math.max(0, (Number(procedurePrice) || 0) - (Number(downPayment) || 0)),
-                                )}
-                              </span>
-                            </p>
-                          )}
-                        </>
-                      )}
-                    </div>
-
-                    {/* Observações */}
-                    <div className="space-y-1.5">
-                      <FieldLabel>Observações</FieldLabel>
-                      <DebouncedTextarea
-                        value={notes}
-                        onChange={setNotes}
-                        placeholder="Digite observações sobre este agendamento..."
-                        rows={3}
-                        className="rounded-xl resize-none"
-                      />
-                    </div>
-                  </div>
-                </Section>
-
-              </>
+              null
             )}
           </div>
 
@@ -2430,6 +2354,8 @@ export function NovoAgendamentoDialog({
                     : "Salvar Agendamento"}
               </Button>
             </div>
+          )}
+            </>
           )}
         </DialogContent>
       </Dialog>
