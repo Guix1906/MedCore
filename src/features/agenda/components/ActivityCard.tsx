@@ -760,10 +760,10 @@ export function ActivityCard({
             ...computedStyle,
             display: "flex",
             flexDirection: "column",
-            justifyContent: "center",
+            justifyContent: "flex-start",
             background: lightBg,
             borderRadius: 10,
-            padding: "6px 8px 6px 12px",
+            padding: (typeof computedStyle.height === "number" ? computedStyle.height : 36) < 58 ? "2px 6px 2px 10px" : "5px 8px 5px 11px",
             boxShadow:
               resizeState || moveState
                 ? "0 10px 25px rgba(0,0,0,0.18)"
@@ -809,66 +809,66 @@ export function ActivityCard({
             }}
           />
 
-          <div
-            style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, width: "100%" }}
-          >
-            <span
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: 999,
-                backgroundColor: accent,
-                flexShrink: 0,
-              }}
-            />
-            <div
-              style={{
-                fontFamily: FONT_STACK,
-                fontWeight: 500,
-                fontSize: 13,
-                lineHeight: 1.2,
-                color: "var(--foreground)",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              {a.title}
-            </div>
-          </div>
-
-          <div
-            style={{
+          {(() => {
+            // Altura disponível decide o layout: em blocos curtos (≤ 45 min) tudo cabe em 2 linhas.
+            const h = typeof computedStyle.height === "number" ? computedStyle.height : 36;
+            const compact = h < 58;
+            const lineTitle = {
               fontFamily: FONT_STACK,
-              fontWeight: 400,
-              fontSize: 12,
-              lineHeight: 1.3,
-              color: "var(--muted-foreground)",
-              marginTop: 3,
-              whiteSpace: "nowrap",
+              fontWeight: 500,
+              fontSize: compact ? 12 : 13,
+              lineHeight: compact ? 1.2 : 1.25,
+              color: "var(--foreground)",
               overflow: "hidden",
               textOverflow: "ellipsis",
-            }}
-          >
-            {timeRange}
-          </div>
-
-          {payBadge && (
-            <span
-              style={{
-                display: "inline-block",
-                fontSize: "12px",
-                fontWeight: 600,
-                padding: "1px 6px",
-                borderRadius: "999px",
-                background: `color-mix(in srgb, ${payBadge.tone} 14%, transparent)`,
-                color: payBadge.tone,
-                marginTop: "2px",
-              }}
-            >
-              {payBadge.label}
-            </span>
-          )}
+              ...(compact || h < 62
+                ? { whiteSpace: "nowrap" as const }
+                : { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const }),
+            };
+            const badge = payBadge && (
+              <span
+                style={{
+                  flexShrink: 0,
+                  fontSize: 11,
+                  fontWeight: 500,
+                  lineHeight: 1.3,
+                  padding: "0 6px",
+                  borderRadius: 999,
+                  background: `color-mix(in srgb, ${payBadge.tone} 14%, transparent)`,
+                  color: payBadge.tone,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {payBadge.label}
+              </span>
+            );
+            return (
+              <>
+                <div title={a.title} style={lineTitle}>
+                  {a.title}
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    minWidth: 0,
+                    marginTop: compact ? 0 : 3,
+                    flexWrap: h >= 86 ? "wrap" : "nowrap",
+                    fontFamily: FONT_STACK,
+                    fontSize: 11,
+                    lineHeight: 1.2,
+                    color: "var(--muted-foreground)",
+                  }}
+                >
+                  <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {h >= 86 ? timeRange : startLabel}
+                  </span>
+                  {badge}
+                </div>
+              </>
+            );
+          })()}
         </button>
       </HoverCardTrigger>
       <HoverCardPortal>

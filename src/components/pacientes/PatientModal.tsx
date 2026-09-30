@@ -117,7 +117,7 @@ export function PatientModal({
         setCpfError(null);
       }
     } else {
-      setCpfError(null);
+      setCpfError("Informe o CPF do paciente");
     }
   };
 
@@ -134,7 +134,12 @@ export function PatientModal({
     }
 
     const cleanCpf = f.cpf ? f.cpf.replace(/\D/g, "") : "";
-    if (cleanCpf.length > 0) {
+    if (cleanCpf.length === 0) {
+      setCpfError("Informe o CPF do paciente");
+      toast.error("O CPF do paciente é obrigatório.");
+      return;
+    }
+    {
       if (cleanCpf.length < 11) {
         setCpfError("CPF incompleto (deve conter 11 dígitos)");
         toast.error("O CPF informado está incompleto.");
@@ -290,7 +295,7 @@ export function PatientModal({
                 {patient?.id ? "Editar paciente" : "Novo paciente"}
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground">
-                Identificação, contato e informações complementares. Nome obrigatório.
+                Identificação, contato e informações complementares. Nome e CPF obrigatórios.
               </DialogDescription>
             </div>
           </div>
@@ -334,7 +339,7 @@ export function PatientModal({
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-xs text-muted-foreground font-semibold block">CPF</label>
+                <label htmlFor="patient-cpf" className="text-xs text-muted-foreground font-semibold block">CPF <span className="text-destructive">*</span></label>
                 {f.cpf &&
                   f.cpf.replace(/\D/g, "").length === 11 &&
                   (isValidCPF(f.cpf) ? (
@@ -348,6 +353,11 @@ export function PatientModal({
                   ))}
               </div>
               <input
+                id="patient-cpf"
+                required
+                inputMode="numeric"
+                autoComplete="off"
+                aria-invalid={!!cpfError}
                 value={f.cpf}
                 onChange={handleCpfChange}
                 onBlur={handleCpfBlur}
