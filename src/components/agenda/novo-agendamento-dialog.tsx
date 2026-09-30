@@ -1,25 +1,13 @@
-import { useEffect, useMemo, useRef, useState, memo, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, memo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Search,
   UserPlus,
-  MapPin,
-  ExternalLink,
-  Paperclip,
   X,
-  Plus,
   Calendar as CalendarIcon,
   Clock,
-  Bell,
-  ListChecks,
   Tag as TagIcon,
   FileText,
-  Camera,
-  ScanLine,
-  FolderOpen,
-  Trash2,
-  Download,
-  Upload,
   User,
   CheckCircle2,
 } from "lucide-react";
@@ -133,35 +121,6 @@ const COLORS = [
   "#22c55e",
   "#eab308",
   "#64748b",
-];
-
-const RECURRENCE = [
-  { id: "none", label: "Não repetir" },
-  { id: "daily", label: "Todos os dias" },
-  { id: "weekly", label: "Semanal" },
-  { id: "biweekly", label: "Quinzenal" },
-  { id: "monthly", label: "Mensal" },
-  { id: "yearly", label: "Anual" },
-  { id: "custom", label: "Personalizada" },
-] as const;
-
-const REMINDER_WHEN = [
-  { id: "5m", label: "5 minutos antes" },
-  { id: "10m", label: "10 minutos antes" },
-  { id: "15m", label: "15 minutos antes" },
-  { id: "30m", label: "30 minutos antes" },
-  { id: "1h", label: "1 hora antes" },
-  { id: "2h", label: "2 horas antes" },
-  { id: "1d", label: "1 dia antes" },
-  { id: "2d", label: "2 dias antes" },
-  { id: "1w", label: "1 semana antes" },
-];
-
-const REMINDER_KIND = [
-  { id: "system", label: "Sistema" },
-  { id: "email", label: "E-mail" },
-  { id: "whatsapp", label: "WhatsApp" },
-  { id: "push", label: "Push" },
 ];
 
 const TAG_PRESETS = [
@@ -424,7 +383,6 @@ export function NovoAgendamentoDialog({
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const [tags, setTags] = useState<string[]>([]);
-  const [dropActive, setDropActive] = useState(false);
 
   // States for Bloqueio & Lembrete
   const [selectedProfs, setSelectedProfs] = useState<string[]>([]);
@@ -959,31 +917,7 @@ export function NovoAgendamentoDialog({
     setTitle(`${clientName} - ${labelOfType(type)}`);
   }, [clientId, type, selectedClient?.name, activityToEdit]);
 
-  // ------ File drop ------
-  const inputFilesRef = useRef<HTMLInputElement | null>(null);
-  const addFiles = (list: FileList | File[]) => {
-    const items = Array.from(list).map((f) => ({
-      id: crypto.randomUUID(),
-      name: f.name,
-      size: f.size,
-    }));
-    setFiles((prev) => [...prev, ...items]);
-  };
-
-  // ------ Participants combobox ------
   const [partOpen, setPartOpen] = useState(false);
-  const addParticipant = (m: MemberOpt) => {
-    if (participants.some((p) => p.id === m.id)) return;
-    setParticipants((prev) => [
-      ...prev,
-      {
-        id: m.id,
-        name: m.full_name ?? "Sem nome",
-        role: m.role ?? "Colaborador",
-      },
-    ]);
-    setPartOpen(false);
-  };
 
   // ------ Save ------
   const save = useMutation({
@@ -1225,54 +1159,6 @@ export function NovoAgendamentoDialog({
     onError: (e: Error) => toast.error("Erro", { description: e.message }),
   });
 
-  const mapsUrl = useMemo(() => {
-    const q = [locName, locAddress, locCity, locState].filter(Boolean).join(", ");
-    if (!q) return null;
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
-  }, [locName, locAddress, locCity, locState]);
-
-  // Etapas do formulário: lidas das seções renderizadas (variam conforme o tipo).
-  // Ref de callback: o corpo só existe depois que o portal do Dialog monta.
-  const [stepsBody, setStepsBody] = useState<HTMLDivElement | null>(null);
-  const [steps, setSteps] = useState<string[]>([]);
-  const [activeStep, setActiveStep] = useState(0);
-  useEffect(() => {
-    if (!open) return;
-    const body = stepsBody;
-    if (!body) return;
-    let nodes: HTMLElement[] = [];
-    const collect = () => {
-      nodes = Array.from(body.querySelectorAll<HTMLElement>("[data-step]"));
-      const next = nodes.map((node) => node.dataset.step ?? "");
-      setSteps((prev) => (prev.join("|") === next.join("|") ? prev : next));
-    };
-    const onScroll = () => {
-      const top = body.getBoundingClientRect().top;
-      let index = 0;
-      nodes.forEach((node, i) => {
-        if (node.getBoundingClientRect().top - top <= 32) index = i;
-      });
-      if (body.scrollTop + body.clientHeight >= body.scrollHeight - 4) index = nodes.length - 1;
-      setActiveStep(Math.max(0, index));
-    };
-    collect();
-    onScroll();
-    const observer = new MutationObserver(() => {
-      collect();
-      onScroll();
-    });
-    observer.observe(body, { childList: true, subtree: true });
-    body.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      observer.disconnect();
-      body.removeEventListener("scroll", onScroll);
-    };
-  }, [open, type, stepsBody]);
-  const goToStep = (index: number) => {
-    const node = stepsBody?.querySelectorAll<HTMLElement>("[data-step]")[index];
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    node?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
-  };
 
   return (
     <>
@@ -1313,48 +1199,9 @@ export function NovoAgendamentoDialog({
             </button>
           </div>
 
-          {/* Etapas: mostram o caminho do formulário e levam direto a cada seção. */}
-          {steps.length > 1 && (
-            <nav
-              aria-label="Etapas do agendamento"
-              className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-hairline bg-glass-strong px-4 py-2 glass-blur md:px-6"
-            >
-              {steps.map((step, index) => {
-                const current = index === activeStep;
-                return (
-                  <button
-                    key={`${step}-${index}`}
-                    type="button"
-                    aria-current={current ? "step" : undefined}
-                    onClick={() => goToStep(index)}
-                    className={`inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                      current
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground"
-                    }`}
-                  >
-                    <span
-                      className={`grid size-5 place-items-center rounded-full border text-xs tabular-nums ${
-                        current
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : index < activeStep
-                            ? "border-transparent bg-foreground/10 text-foreground"
-                            : "border-border"
-                      }`}
-                      aria-hidden="true"
-                    >
-                      {index + 1}
-                    </span>
-                    {step}
-                  </button>
-                );
-              })}
-            </nav>
-          )}
 
           {/* Scroll body */}
           <div
-            ref={setStepsBody}
             className="min-h-0 overflow-y-auto flex-1 px-4 md:px-6 py-4 space-y-4 bg-surface"
           >
             {/* Tipo */}
@@ -2083,36 +1930,6 @@ export function NovoAgendamentoDialog({
                             <span>+ Novo paciente</span>
                           </button>
 
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const next = !isNewPatient;
-                                setIsNewPatient(next);
-                                if (next) {
-                                  setConsultationType("nova_consulta");
-                                } else {
-                                  setConsultationType(
-                                    patientHistory.length === 1
-                                      ? "1_retorno"
-                                      : "retorno_recorrente",
-                                  );
-                                }
-                              }}
-                              className={cn(
-                                "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                                isNewPatient ? "bg-primary" : "bg-surface-2",
-                              )}
-                            >
-                              <span
-                                className={cn(
-                                  "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-card shadow ring-0 transition duration-200 ease-in-out",
-                                  isNewPatient ? "translate-x-4" : "translate-x-0",
-                                )}
-                              />
-                            </button>
-                            <span className="text-xs font-medium text-foreground/80">1ª Vez</span>
-                          </div>
                         </div>
                       </div>
                       <ClientPicker
@@ -2370,27 +2187,6 @@ export function NovoAgendamentoDialog({
                         </div>
                       </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <FieldLabel>Recorrência</FieldLabel>
-                      <Select value={recurrence} onValueChange={setRecurrence}>
-                        <SelectTrigger className="h-11 rounded-xl">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {RECURRENCE.map((r) => (
-                            <SelectItem key={r.id} value={r.id}>
-                              {r.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {recurrence === "custom" && (
-                        <div className="mt-3 rounded-xl border border-border/70 bg-muted/40 p-4 text-xs text-muted-foreground">
-                          Recorrência personalizada — configure abaixo (intervalo, dias da semana e
-                          término). Em breve.
-                        </div>
-                      )}
-                    </div>
                   </div>
                 </Section>
                 <Section title="Plano, cobrança e observações" icon={FileText}>
@@ -2427,13 +2223,13 @@ export function NovoAgendamentoDialog({
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="incluso">
-                                  ✨ Incluso no Plano (Sem débito avulso)
+                                  Incluso no plano (sem cobrança)
                                 </SelectItem>
                                 <SelectItem value="avulso">
-                                  💵 Consulta Avulsa (Gera cobrança)
+                                  Consulta avulsa (gera cobrança)
                                 </SelectItem>
                                 <SelectItem value="extra">
-                                  ➕ Procedimento Extra (Gera cobrança)
+                                  Procedimento extra (gera cobrança)
                                 </SelectItem>
                               </SelectContent>
                             </Select>
@@ -2480,19 +2276,6 @@ export function NovoAgendamentoDialog({
 
                     {/* Procedimento e Valores / Sinal */}
                     <div className="space-y-3 p-4 rounded-xl border border-border/70 bg-muted/20">
-                      <div className="flex items-center justify-between">
-                        <div className="text-xs font-semibold text-foreground uppercase tracking-wider">
-                          Procedimento & Financeiro{" "}
-                          {planCoverage === "incluso"
-                            ? "(Coberto pelo Plano)"
-                            : "(Sinal / Restante)"}
-                        </div>
-                        {planCoverage === "incluso" && (
-                          <span className="text-xs font-semibold text-success dark:text-emerald-400 bg-success/10 px-2 py-0.5 rounded-md">
-                            Sem cobrança avulsa
-                          </span>
-                        )}
-                      </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-1.5">
@@ -2558,55 +2341,44 @@ export function NovoAgendamentoDialog({
                       </div>
 
                       {planCoverage !== "incluso" && (
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
-                          <div className="space-y-1.5">
-                            <FieldLabel>Sinal Pago (R$)</FieldLabel>
-                            <FinancialNumberInput
-                              placeholder="0,00"
-                              value={downPayment}
-                              onChange={setDownPayment}
-                              className="h-11 rounded-xl bg-background border-success/50 text-success font-semibold"
-                            />
+                        <>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                              <FieldLabel>Sinal recebido agora (R$)</FieldLabel>
+                              <FinancialNumberInput
+                                placeholder="0,00"
+                                value={downPayment}
+                                onChange={setDownPayment}
+                                className="h-11 rounded-xl bg-background font-semibold"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <FieldLabel>Forma de pagamento do sinal</FieldLabel>
+                              <Select value={downPaymentMethod} onValueChange={setDownPaymentMethod}>
+                                <SelectTrigger className="h-11 rounded-xl bg-background">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="pix">Pix</SelectItem>
+                                  <SelectItem value="cartao_credito">Cartão de crédito</SelectItem>
+                                  <SelectItem value="cartao_debito">Cartão de débito</SelectItem>
+                                  <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                                  <SelectItem value="boleto">Boleto</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
                           </div>
-
-                          <div className="space-y-1.5">
-                            <FieldLabel>Forma do Sinal</FieldLabel>
-                            <Select value={downPaymentMethod} onValueChange={setDownPaymentMethod}>
-                              <SelectTrigger className="h-11 rounded-xl bg-background">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="pix">Pix</SelectItem>
-                                <SelectItem value="cartao_credito">Cartão de Crédito</SelectItem>
-                                <SelectItem value="cartao_debito">Cartão de Débito</SelectItem>
-                                <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                                <SelectItem value="boleto">Boleto Bancário</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          <div className="space-y-1.5">
-                            <FieldLabel>Restante A Cobrar (R$)</FieldLabel>
-                            <Input
-                              type="text"
-                              readOnly
-                              value={
-                                (Number(procedurePrice) || 0) > 0 || (Number(downPayment) || 0) > 0
-                                  ? new Intl.NumberFormat("pt-BR", {
-                                      style: "currency",
-                                      currency: "BRL",
-                                    }).format(
-                                      Math.max(
-                                        0,
-                                        (Number(procedurePrice) || 0) - (Number(downPayment) || 0),
-                                      ),
-                                    )
-                                  : "R$ 0,00"
-                              }
-                              className="h-11 rounded-xl bg-warning/10 border-warning/50 text-warning font-semibold cursor-not-allowed"
-                            />
-                          </div>
-                        </div>
+                          {(Number(procedurePrice) || 0) > 0 && (
+                            <p className="text-sm text-muted-foreground">
+                              Restante a receber no atendimento:{" "}
+                              <span className="font-semibold text-foreground tabular-nums">
+                                {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
+                                  Math.max(0, (Number(procedurePrice) || 0) - (Number(downPayment) || 0)),
+                                )}
+                              </span>
+                            </p>
+                          )}
+                        </>
                       )}
                     </div>
 
@@ -2624,425 +2396,6 @@ export function NovoAgendamentoDialog({
                   </div>
                 </Section>
 
-                <Section
-                  title="Local"
-                  icon={MapPin}
-                  actions={
-                    mapsUrl && (
-                      <a
-                        href={mapsUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs font-medium text-primary hover:text-primary inline-flex items-center gap-1"
-                      >
-                        <ExternalLink className="h-3 w-3" /> Abrir no Google Maps
-                      </a>
-                    )
-                  }
-                >
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <FieldLabel>Local</FieldLabel>
-                      <DebouncedInput
-                        value={locName}
-                        onChange={setLocName}
-                        placeholder="Nome do local"
-                        className="h-11 rounded-xl"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <FieldLabel>Sala</FieldLabel>
-                      <DebouncedInput
-                        value={locRoom}
-                        onChange={setLocRoom}
-                        placeholder="Ex.: Sala 302"
-                        className="h-11 rounded-xl"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <FieldLabel>Cidade</FieldLabel>
-                      <DebouncedInput
-                        value={locCity}
-                        onChange={setLocCity}
-                        className="h-11 rounded-xl"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <FieldLabel>Estado</FieldLabel>
-                      <DebouncedInput
-                        value={locState}
-                        onChange={setLocState}
-                        className="h-11 rounded-xl"
-                      />
-                    </div>
-                    <div className="space-y-1.5 md:col-span-2">
-                      <FieldLabel>Endereço completo</FieldLabel>
-                      <DebouncedInput
-                        value={locAddress}
-                        onChange={setLocAddress}
-                        placeholder="Rua, número, bairro"
-                        className="h-11 rounded-xl"
-                      />
-                    </div>
-                  </div>
-                </Section>
-
-                <Section
-                  title="Participantes"
-                  icon={UserPlus}
-                  actions={
-                    <Popover open={partOpen} onOpenChange={setPartOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          size="sm"
-                          className={cn(" h-9", GREEN.grad, "text-white hover:opacity-90")}
-                        >
-                          <Plus className="h-4 w-4 mr-1" /> Adicionar participante
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="p-0 w-[320px]" align="end">
-                        <Command>
-                          <CommandInput placeholder="Buscar colaborador..." />
-                          <CommandList>
-                            <CommandEmpty>Nenhum colaborador.</CommandEmpty>
-                            <CommandGroup>
-                              {members.map((m: MemberOpt) => (
-                                <CommandItem
-                                  key={m.id}
-                                  value={m.full_name ?? m.id}
-                                  onSelect={() => addParticipant(m)}
-                                >
-                                  <Avatar name={m.full_name} url={m.avatar_url} />
-                                  <span className="ml-2">{m.full_name ?? "Sem nome"}</span>
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                  }
-                >
-                  {participants.length === 0 ? (
-                    <div className="text-sm text-muted-foreground text-center py-6">
-                      Nenhum participante adicionado.
-                    </div>
-                  ) : (
-                    <div className="overflow-hidden rounded-xl border border-border/70">
-                      <table className="w-full text-sm">
-                        <thead className="bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
-                          <tr>
-                            <th className="text-left px-4 py-2.5 font-medium">Nome</th>
-                            <th className="text-left px-4 py-2.5 font-medium">Cargo</th>
-                            <th className="text-left px-4 py-2.5 font-medium">Telefone</th>
-                            <th className="text-left px-4 py-2.5 font-medium">E-mail</th>
-                            <th className="w-10" />
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {participants.map((p) => (
-                            <tr key={p.id} className="border-t border-border/70 hover:bg-muted/30">
-                              <td className="px-4 py-2.5 flex items-center gap-2">
-                                <Avatar name={p.name} /> {p.name}
-                              </td>
-                              <td className="px-4 py-2.5 text-muted-foreground">{p.role ?? "—"}</td>
-                              <td className="px-4 py-2.5 text-muted-foreground">
-                                {p.phone ?? "—"}
-                              </td>
-                              <td className="px-4 py-2.5 text-muted-foreground">
-                                {p.email ?? "—"}
-                              </td>
-                              <td className="px-4 py-2.5">
-                                <button
-                                  onClick={() =>
-                                    setParticipants((prev) => prev.filter((x) => x.id !== p.id))
-                                  }
-                                  className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </Section>
-
-                <Section collapsible title="Documentos" icon={Paperclip}>
-                  <div
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      setDropActive(true);
-                    }}
-                    onDragLeave={() => setDropActive(false)}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      setDropActive(false);
-                      if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files);
-                    }}
-                    onClick={() => inputFilesRef.current?.click()}
-                    className={cn(
-                      "rounded-xl border-2 border-dashed p-8 text-center cursor-pointer transition-all",
-                      dropActive
-                        ? "border-primary bg-primary/10"
-                        : "border-border/70 hover:border-primary/50 hover:bg-primary/5",
-                    )}
-                  >
-                    <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                    <p className="text-sm font-medium">
-                      Arraste arquivos aqui ou clique para enviar
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">PDF, DOCX, imagens ou ZIP</p>
-                    <input
-                      ref={inputFilesRef}
-                      type="file"
-                      hidden
-                      multiple
-                      accept=".pdf,.doc,.docx,.zip,image/*"
-                      onChange={(e) => e.target.files && addFiles(e.target.files)}
-                    />
-                  </div>
-                  {files.length > 0 && (
-                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {files.map((f) => (
-                        <div
-                          key={f.id}
-                          className="flex items-center gap-3 rounded-xl border border-border/70 bg-card px-3 py-2.5"
-                        >
-                          <FileText className="h-5 w-5 text-primary shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{f.name}</p>
-                            <p className="text-xs text-muted-foreground">{formatSize(f.size)}</p>
-                          </div>
-                          <button
-                            className="p-1.5 rounded-lg hover:bg-muted transition"
-                            title="Baixar"
-                          >
-                            <Download className="h-4 w-4 text-muted-foreground" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setFiles((prev) => prev.filter((x) => x.id !== f.id));
-                            }}
-                            className="p-1.5 rounded-lg hover:bg-destructive/10 hover:text-destructive transition text-muted-foreground"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </Section>
-
-                <Section
-                  title="Lembretes"
-                  icon={Bell}
-                  actions={
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className=" h-9"
-                      onClick={() =>
-                        setReminders((prev) => [
-                          ...prev,
-                          { id: crypto.randomUUID(), when: "15m", kind: "system" },
-                        ])
-                      }
-                    >
-                      <Plus className="h-4 w-4 mr-1" /> Adicionar lembrete
-                    </Button>
-                  }
-                >
-                  {reminders.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      Nenhum lembrete configurado.
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {reminders.map((r) => (
-                        <div
-                          key={r.id}
-                          className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 items-center"
-                        >
-                          <Select
-                            value={r.when}
-                            onValueChange={(v) =>
-                              setReminders((prev) =>
-                                prev.map((x) => (x.id === r.id ? { ...x, when: v } : x)),
-                              )
-                            }
-                          >
-                            <SelectTrigger className="h-10 rounded-xl">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {REMINDER_WHEN.map((o) => (
-                                <SelectItem key={o.id} value={o.id}>
-                                  {o.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Select
-                            value={r.kind}
-                            onValueChange={(v) =>
-                              setReminders((prev) =>
-                                prev.map((x) => (x.id === r.id ? { ...x, kind: v } : x)),
-                              )
-                            }
-                          >
-                            <SelectTrigger className="h-10 rounded-xl">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {REMINDER_KIND.map((o) => (
-                                <SelectItem key={o.id} value={o.id}>
-                                  {o.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <button
-                            onClick={() =>
-                              setReminders((prev) => prev.filter((x) => x.id !== r.id))
-                            }
-                            className="h-10 w-10 grid place-items-center rounded-xl hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </Section>
-
-                <Section
-                  title="Checklist"
-                  icon={ListChecks}
-                  actions={
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className=" h-9"
-                      onClick={() =>
-                        setChecklist((prev) => [
-                          ...prev,
-                          { id: crypto.randomUUID(), text: "", done: false },
-                        ])
-                      }
-                    >
-                      <Plus className="h-4 w-4 mr-1" /> Adicionar item
-                    </Button>
-                  }
-                >
-                  {checklist.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      Nenhuma tarefa relacionada.
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {checklist.map((it) => (
-                        <div
-                          key={it.id}
-                          className="grid grid-cols-1 sm:grid-cols-[auto_1fr_140px_1fr_auto] gap-2 items-center"
-                        >
-                          <Checkbox
-                            checked={it.done}
-                            onCheckedChange={(v) =>
-                              setChecklist((prev) =>
-                                prev.map((x) => (x.id === it.id ? { ...x, done: !!v } : x)),
-                              )
-                            }
-                          />
-                          <Input
-                            value={it.text}
-                            onChange={(e) =>
-                              setChecklist((prev) =>
-                                prev.map((x) =>
-                                  x.id === it.id ? { ...x, text: e.target.value } : x,
-                                ),
-                              )
-                            }
-                            placeholder="Descrição da tarefa"
-                            className="h-10 rounded-xl"
-                          />
-                          <Input
-                            type="date"
-                            value={it.due ?? ""}
-                            onChange={(e) =>
-                              setChecklist((prev) =>
-                                prev.map((x) =>
-                                  x.id === it.id ? { ...x, due: e.target.value } : x,
-                                ),
-                              )
-                            }
-                            className="h-10 rounded-xl"
-                          />
-                          <Select
-                            value={it.owner ?? "__none"}
-                            onValueChange={(v) =>
-                              setChecklist((prev) =>
-                                prev.map((x) =>
-                                  x.id === it.id
-                                    ? { ...x, owner: v === "__none" ? undefined : v }
-                                    : x,
-                                ),
-                              )
-                            }
-                          >
-                            <SelectTrigger className="h-10 rounded-xl">
-                              <SelectValue placeholder="Responsável" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__none">Sem responsável</SelectItem>
-                              {members.map((m: MemberOpt) => (
-                                <SelectItem key={m.id} value={m.id}>
-                                  {m.full_name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <button
-                            onClick={() =>
-                              setChecklist((prev) => prev.filter((x) => x.id !== it.id))
-                            }
-                            className="h-10 w-10 grid place-items-center rounded-xl hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </Section>
-
-                <Section collapsible title="Anexos rápidos" icon={Paperclip}>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    <QuickAttach
-                      icon={Camera}
-                      label="Adicionar foto"
-                      onClick={() => inputFilesRef.current?.click()}
-                    />
-                    <QuickAttach
-                      icon={ScanLine}
-                      label="Escanear documento"
-                      onClick={() => toast.info("Em breve")}
-                    />
-                    <QuickAttach
-                      icon={FileText}
-                      label="Importar PDF"
-                      onClick={() => inputFilesRef.current?.click()}
-                    />
-                    <QuickAttach
-                      icon={FolderOpen}
-                      label="Importar do Processo"
-                      onClick={() => toast.info("Em breve")}
-                    />
-                  </div>
-                </Section>
               </>
             )}
           </div>
@@ -3063,14 +2416,6 @@ export function NovoAgendamentoDialog({
             <div className="flex items-center justify-end gap-2 border-t border-hairline bg-glass-strong px-4 py-3 glass-blur md:px-6">
               <Button variant="ghost" onClick={() => onOpenChange(false)} className="h-11 px-5">
                 Cancelar
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => save.mutate(true)}
-                disabled={save.isPending}
-                className="h-11 px-5"
-              >
-                Salvar rascunho
               </Button>
               <Button
                 onClick={() => save.mutate(false)}
@@ -3320,36 +2665,6 @@ function Avatar({ name, url }: { name?: string | null; url?: string | null }) {
   );
 }
 
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className="text-sm font-medium truncate">{value}</p>
-    </div>
-  );
-}
-
-function QuickAttach({
-  icon: Icon,
-  label,
-  onClick,
-}: {
-  icon: LucideIcon;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      type="button"
-      className="flex flex-col items-center justify-center gap-2 h-24 rounded-xl border border-border/70 bg-card hover:border-primary/40 hover:bg-primary/5 transition-all group"
-    >
-      <Icon className="h-5 w-5 text-primary group-hover:scale-110 transition-transform" />
-      <span className="text-xs font-medium text-foreground/80">{label}</span>
-    </button>
-  );
-}
-
 const ClientPicker = memo(function ClientPicker({
   value,
   onChange,
@@ -3578,9 +2893,4 @@ function toDateStr(d: Date) {
 }
 function toTimeStr(d: Date) {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-function formatSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
