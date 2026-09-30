@@ -1,10 +1,6 @@
-<!-- LOVABLE:BEGIN -->
-> [!IMPORTANT]
-> This project is connected to [Lovable](https://lovable.dev). Avoid rewriting
-> published git history — force pushing, or rebasing/amending/squashing commits
-> that are already pushed — as it rewrites history on Lovable's side and the
-> user will likely lose their project history.
->
-> Commits you push to the connected branch sync back to Lovable and show up in
-> the editor, so keep the branch in a working state.
-<!-- LOVABLE:END -->
+# MedCore
+
+- Deploy: push no `main` do GitHub publica automaticamente na Vercel (projeto `medcoreapp`).
+- Não reescrever o histórico publicado (force push, rebase ou amend de commits já enviados) sem combinar antes.
+- Mantenha o `main` funcionando: rode `npx tsc --noEmit` e os scripts `scripts/test-*.{js,mjs}` antes de enviar.
+- Banco: Supabase. Toda migração nova vai em `supabase/migrations/` e precisa ser aplicada manualmente no projeto.

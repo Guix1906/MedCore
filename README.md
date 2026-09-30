@@ -9,7 +9,7 @@ Sistema para clínicas médicas: pacientes, agenda, prontuário eletrônico (PEP
 - **Frontend**: [React 19](https://react.dev/), [TanStack Start](https://tanstack.com/start) (SSR + funções de servidor), TanStack Router, TanStack Query, Tailwind CSS v4, Radix UI, Framer Motion. Publicado na Vercel.
 - **Banco de dados (fonte única)**: Supabase PostgreSQL com RLS, permissões por perfil (`company_members.effective_permissions`) e RPCs `SECURITY DEFINER` com verificação de permissão.
 - **Copiloto de IA**: Google Gemini chamado somente pela função de servidor `src/services/ai.service.ts` (exige sessão e permissão `records.edit`; remove nome, CPF, telefone e e-mail antes do envio; em caso de falha devolve erro, nunca texto gerado sem a IA).
-- **Backend PHP (`backend/`)**: legado, não usado pelo frontend em produção. Mantido apenas para referência e testes; não recebe novos fluxos.
+- **Backend PHP**: removido em 30/09/2026 (continua no histórico do Git). Toda a regra de negócio está no Supabase e nas funções de servidor do TanStack Start.
 
 Nenhum dado clínico ou financeiro é mantido no navegador: o Supabase é a única fonte. Cópias locais deixadas por versões anteriores são apagadas ao abrir o sistema e no logout (`src/lib/legacy-local-data.ts`).
 
@@ -168,7 +168,7 @@ A tela `/admin` (`src/routes/_authenticated/admin.tsx`, codigo em `src/features/
 ### Limites
 
 - O escopo de agenda e um filtro de exibicao (compromissos sem responsavel continuam visiveis).
-- O backend PHP legado mantem papeis proprios; as regras valem para o Supabase, fonte usada em producao.
+- As regras de acesso valem para o Supabase, unica fonte de dados.
 - MFA, SSO, politica de senha e revogacao global de sessoes estao fora do escopo.
 
 ```bash

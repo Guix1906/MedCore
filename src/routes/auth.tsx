@@ -665,17 +665,7 @@ function AuthPage() {
                 </button>
               )
             ) : mode === "signin" ? (
-              <>
-                Ainda não tem uma conta?{" "}
-                <button
-                  type="button"
-                  disabled={busy || googleBusy}
-                  onClick={() => changeMode("signup")}
-                  className="font-medium text-primary hover:underline"
-                >
-                  Cadastre-se
-                </button>
-              </>
+              <>O acesso é liberado pelo administrador da clínica. Recebeu um convite? Use o link do e-mail.</>
             ) : (
               <button
                 type="button"

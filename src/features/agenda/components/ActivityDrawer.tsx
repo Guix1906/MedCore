@@ -48,6 +48,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { KIND_COLOR, type Activity } from "@/components/agenda/agenda-types";
 import { pad2 } from "@/lib/date-utils";
 import { AddToGoogleCalendarButton } from "./AddToGoogleCalendarButton";
+import { WhatsAppReminderButton } from "./WhatsAppReminderButton";
 import { cn } from "@/utils/cn";
 
 type Meta = {
@@ -1025,8 +1026,16 @@ export function ActivityDrawer({
               </button>
             </div>
 
-            <div className="px-5 py-4">
-              <AddToGoogleCalendarButton activity={activity} variant="full" />
+            <div className="space-y-2 px-5 py-4">
+              {meta?.clientId && (
+                <WhatsAppReminderButton
+                  patientId={meta.clientId}
+                  patientName={clientName}
+                  start={activity.start}
+                  className="w-full"
+                />
+              )}
+              <AddToGoogleCalendarButton activity={activity} variant="full" className="w-full" />
             </div>
           </div>
 

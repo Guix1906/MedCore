@@ -61,6 +61,7 @@ export function PatientModal({
   }));
   const [cpfError, setCpfError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [consent, setConsent] = useState(false);
 
   useEffect(() => {
     if (patient) {
@@ -152,6 +153,11 @@ export function PatientModal({
       }
     }
 
+    if (!patient?.id && !consent) {
+      toast.error("Confirme o consentimento do paciente para o tratamento dos dados (LGPD).");
+      return;
+    }
+
     setSaving(true);
     setCpfError(null);
 
@@ -234,6 +240,17 @@ export function PatientModal({
       if (!msg.includes("row-level") && !msg.includes("permission")) {
         toast.error("Erro ao salvar: " + (msg || "Verifique os dados informados"));
         return;
+      }
+    }
+
+    if (!patient?.id && savedData?.id) {
+      const { error: consentError } = await supabase.rpc("register_patient_consent", {
+        p_patient_id: savedData.id,
+      });
+      if (consentError) {
+        toast.warning("Paciente cadastrado, mas o consentimento não foi registrado", {
+          description: "Registre o consentimento novamente pela ficha do paciente.",
+        });
       }
     }
 
@@ -423,6 +440,22 @@ export function PatientModal({
                 placeholder="Ex: Unimed, Particular, Bradesco..."
               />
             </div>
+
+            {!patient?.id && (
+              <label className="sm:col-span-2 flex cursor-pointer items-start gap-2.5 rounded-xl border border-border bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={consent}
+                  onChange={(e) => setConsent(e.target.checked)}
+                  className="mt-0.5 size-4 shrink-0 accent-primary"
+                />
+                <span>
+                  O paciente foi informado e autorizou o tratamento dos seus dados pessoais e de
+                  saúde para fins de atendimento, conforme a LGPD.{" "}
+                  <span className="text-destructive">*</span>
+                </span>
+              </label>
+            )}
 
             <div className="sm:col-span-2 pt-2 border-t border-border-soft">
               <label className="text-xs text-muted-foreground font-semibold block mb-1">

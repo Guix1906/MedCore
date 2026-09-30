@@ -67,6 +67,14 @@ export type FollowupTables = {
   };
 };
 export type FollowupFunctions = FinanceFunctions & {
+  log_record_access: {
+    Args: { p_patient_id: string; p_action?: "view" | "export" | "print" };
+    Returns: undefined;
+  };
+  register_patient_consent: {
+    Args: { p_patient_id: string; p_term_version?: string; p_channel?: string };
+    Returns: string;
+  };
   save_agenda_event: {
     Args: { p_event: Record<string, string | null> };
     Returns: Record<string, unknown>;

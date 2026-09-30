@@ -42,6 +42,8 @@ export function usePatientClinicalHistory(
 
       // 1. Busca Registros Clínicos / Prontuários (medical_records) no Supabase
       if (patientId && !isExample) {
+        // Trilha de acesso (LGPD): quem abriu o prontuário e quando. Falha não bloqueia a leitura.
+        void supabase.rpc("log_record_access", { p_patient_id: patientId, p_action: "view" });
         try {
           const { data: recs, error } = await supabase
             .from("medical_records")
