@@ -1,6 +1,6 @@
 -- ====================================================================
--- RemediaÁ„o de SeguranÁa: Supabase Views com security_invoker = on
--- Garante que todas as Views executem sob o contexto e RLS do usu·rio chamador
+-- Remedia√ß√£o de Seguran√ßa: Supabase Views com security_invoker = on
+-- Garante que todas as Views executem sob o contexto e RLS do usu√°rio chamador
 -- ====================================================================
 
 -- 1. View de Fluxo de Caixa do Dashboard
@@ -52,7 +52,7 @@ WITH (security_invoker = on) AS
          to_char(date, 'DD/MM/YYYY') || ' ' || COALESCE(start_time::TEXT,''), created_at
     FROM public.appointments
   UNION ALL
-  SELECT 'transaction', id, company_id, COALESCE(description, 'TransaÁ„o'),
+  SELECT 'transaction', id, company_id, COALESCE(description, 'Transa√ß√£o'),
          type || ' - ' || status || ' - R$ ' || to_char(amount, 'FM999G999D00'), created_at
     FROM public.transactions
   UNION ALL
@@ -62,7 +62,7 @@ WITH (security_invoker = on) AS
   SELECT 'exam_order', id, company_id, COALESCE(exam_name, 'Exame'), COALESCE(status,''), created_at
     FROM public.exam_orders;
 
--- Permissıes restritas
+-- Permiss√µes restritas
 GRANT SELECT ON public.v_dashboard_cashflow TO authenticated;
 GRANT SELECT ON public.v_dashboard_kpis TO authenticated;
 GRANT SELECT ON public.global_search_view TO authenticated;

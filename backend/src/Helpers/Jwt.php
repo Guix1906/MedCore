@@ -85,8 +85,12 @@ class Jwt
 
         $now = time();
 
-        // 4. Validar Expiração e Not Before (com tolerância de 5 segundos)
-        if (isset($payload['exp']) && ($payload['exp'] < ($now - 5))) {
+        // 4. Claims obrigatórias: emissor, audiência e expiração (com tolerância de 5 segundos)
+        if (($payload['iss'] ?? null) !== self::ISSUER || ($payload['aud'] ?? null) !== self::AUDIENCE) {
+            return null;
+        }
+
+        if (!isset($payload['exp']) || !is_int($payload['exp']) || $payload['exp'] < ($now - 5)) {
             return null;
         }
 
@@ -94,8 +98,12 @@ class Jwt
             return null;
         }
 
+        if (empty($payload['jti'])) {
+            return null;
+        }
+
         // 5. Validar Lista de Revogação (Logout/Troca de Senha)
-        if (!empty($payload['jti']) && self::isRevoked($payload['jti'])) {
+        if (self::isRevoked($payload['jti'])) {
             return null;
         }
 
@@ -146,7 +154,8 @@ class Jwt
             ]);
             return !empty($row);
         } catch (\Throwable) {
-            return false;
+            // Sem como consultar a lista de revogação, o token é recusado (falha segura).
+            return true;
         }
     }
 

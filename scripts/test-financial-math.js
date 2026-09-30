@@ -25,9 +25,9 @@ function calcKPIs(rows) {
   };
 }
 
-console.log('=== TESTES DE MATEM罷ICA E VOCABUL罵IO FINANCEIRO ===');
+console.log('=== TESTES DE MATEM脕TICA E VOCABUL脕RIO FINANCEIRO ===');
 
-// Conjunto 1: Dados can鬾icos em portugu阺
+// Conjunto 1: Dados can么nicos em portugu锚s
 const canonicalRows = [
   { id: '1', type: 'receita', status: 'pago', amount: 1000 },
   { id: '2', type: 'receita', status: 'pendente', amount: 500 },
@@ -37,15 +37,15 @@ const canonicalRows = [
 ];
 
 const kpi1 = calcKPIs(canonicalRows);
-assert.strictEqual(kpi1.receitaPaga, 1000, 'Receita paga can鬾ica incorreta');
-assert.strictEqual(kpi1.receitaPrevista, 500, 'Receita prevista can鬾ica incorreta');
-assert.strictEqual(kpi1.despesaPaga, 300, 'Despesa paga can鬾ica incorreta');
-assert.strictEqual(kpi1.despesaPrevista, 200, 'Despesa prevista can鬾ica incorreta');
+assert.strictEqual(kpi1.receitaPaga, 1000, 'Receita paga can么nica incorreta');
+assert.strictEqual(kpi1.receitaPrevista, 500, 'Receita prevista can么nica incorreta');
+assert.strictEqual(kpi1.despesaPaga, 300, 'Despesa paga can么nica incorreta');
+assert.strictEqual(kpi1.despesaPrevista, 200, 'Despesa prevista can么nica incorreta');
 assert.strictEqual(kpi1.saldoAtual, 700, 'Saldo atual incorreto');
 assert.strictEqual(kpi1.saldoPrevisto, 1000, 'Saldo previsto incorreto');
-console.log('[PASS] Teste 1: Dados can鬾icos calculados com exatid鉶.');
+console.log('[PASS] Teste 1: Dados can么nicos calculados com exatid茫o.');
 
-// Conjunto 2: Dados mistos (legado em ingl阺 + varia珲es)
+// Conjunto 2: Dados mistos (legado em ingl锚s + varia莽玫es)
 const mixedRows = [
   { id: '1', type: 'income', status: 'completed', amount: 1000 },
   { id: '2', type: 'income', status: 'pending', amount: 500 },
@@ -55,8 +55,8 @@ const mixedRows = [
 ];
 
 const kpi2 = calcKPIs(mixedRows);
-assert.deepStrictEqual(kpi1, kpi2, 'Dados mistos legados devem produzir exatamente o mesmo resultado num閞ico que dados can鬾icos');
-console.log('[PASS] Teste 2: Equival阯cia perfeita entre formato legado (ingl阺) e can鬾ico (pt-BR).');
+assert.deepStrictEqual(kpi1, kpi2, 'Dados mistos legados devem produzir exatamente o mesmo resultado num茅rico que dados can么nicos');
+console.log('[PASS] Teste 2: Equival锚ncia perfeita entre formato legado (ingl锚s) e can么nico (pt-BR).');
 
 console.log('\n======================================================');
 console.log(' TODOS OS TESTES FINANCEIROS PASSARAM COM SUCESSO! ');

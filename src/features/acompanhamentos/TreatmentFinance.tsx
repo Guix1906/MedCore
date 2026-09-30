@@ -1,5 +1,5 @@
 import PaymentHistory from "@/features/finance/PaymentHistory";
-import { getFinancialSnapshot, refreshFinance, saveLocalPayment, saveLocalFinancialTitle } from "@/features/finance/finance-api";
+import { getFinancialSnapshot, refreshFinance } from "@/features/finance/finance-api";
 import { isFreeBalance, remaining, titleStatus } from "@/features/finance/finance-math";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -172,89 +172,20 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
           (tx: any) => tx.installments?.number === 0 || tx.description?.toLowerCase().includes("entrada")
         );
         if (downTx) {
-          const payId = crypto.randomUUID();
-          const accountId = downAccountId || ledger.data?.accounts?.[0]?.id || "00000000-0000-0000-0000-000000000001";
-          const paidDate = form.downDue || localDate();
+          const accountId = downAccountId || ledger.data?.accounts?.[0]?.id;
+          if (!accountId) throw new Error("Selecione a conta financeira que recebeu a entrada.");
           const patName = (plan as any).patient_name || (plan as any).patients?.name || plan.title || "Paciente";
 
-          try {
-            await supabase.rpc("record_financial_payment", {
-              p_id: payId,
-              p_transaction_id: downTx.id,
-              p_amount: preview.down,
-              p_paid_on: paidDate,
-              p_method: (form.downMethod || "pix").toLowerCase(),
-              p_account_id: accountId,
-              p_payer_name: patName,
-            });
-          } catch {
-            try {
-              await (supabase as any).from("transaction_payments").insert({
-                id: payId,
-                transaction_id: downTx.id,
-                amount: preview.down,
-                paid_on: paidDate,
-                payment_method: (form.downMethod || "pix").toLowerCase(),
-                account_id: accountId,
-                payer_name: patName,
-              });
-              await (supabase as any).from("transactions").update({
-                paid_amount: preview.down,
-                status: "pago",
-                paid_at: new Date().toISOString(),
-              }).eq("id", downTx.id);
-            } catch {}
-          }
-
-          if (downTx.installment_id) {
-            try {
-              await (supabase as any).from("treatment_installments").update({
-                status: "pago",
-                paid_date: paidDate,
-              }).eq("id", downTx.installment_id);
-            } catch {}
-          }
-
-          saveLocalPayment({
-            id: payId,
-            transaction_id: downTx.id,
-            amount: preview.down,
-            paid_on: paidDate,
-            payment_method: (form.downMethod || "pix").toUpperCase(),
-            account_id: accountId,
-            payer_name: patName,
-            created_by: null,
-            created_at: new Date().toISOString(),
-            legacy: false,
-            reversed_at: null,
-            reversed_by: null,
-            reversal_reason: null,
+          const { error: payError } = await supabase.rpc("record_financial_payment", {
+            p_id: crypto.randomUUID(),
+            p_transaction_id: downTx.id,
+            p_amount: preview.down,
+            p_paid_on: form.downDue || localDate(),
+            p_method: (form.downMethod || "pix").toLowerCase(),
+            p_account_id: accountId,
+            p_payer_name: patName,
           });
-
-          saveLocalFinancialTitle({
-            id: downTx.id,
-            type: "receita",
-            amount: preview.down,
-            paid_amount: preview.down,
-            due_date: paidDate,
-            date: paidDate,
-            status: "pago",
-            description: `Acompanhamento: ${plan.title} - Entrada`,
-            category: "Honorários Iniciais / Entrada",
-            patient_id: (plan as any).patient_id || null,
-            patient_name: patName,
-            payer_name: patName,
-            company_id: (plan as any).company_id || null,
-            treatment_id: plan.id,
-            installment_id: downTx.installment_id,
-            competence_date: paidDate.slice(0, 7) + "-01",
-            origin_key: null,
-            can_settle: true,
-            can_reverse: true,
-            can_cancel: false,
-          });
-
-          window.dispatchEvent(new CustomEvent("medcore_local_title_saved"));
+          if (payError) throw payError;
         }
       }
 

@@ -10,24 +10,24 @@ const rootDir = path.resolve(__dirname, '..');
 const SECRET_PATTERNS = [
   { name: 'Gemini API Key', regex: /AIzaSy[A-Za-z0-9_-]{33}|AQ\.[A-Za-z0-9_-]{40,}/ },
   { name: 'Supabase Service Role Key', regex: /eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[A-Za-z0-9_-]*service_role[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+/ },
-  { name: 'Private Key / JWT Secret', regex: /-----BEGIN PRIVATE KEY-----/ },
+  { name: 'Private Key', regex: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/ },
   { name: 'Tracked SQLite DB', regex: /\.(sqlite|sqlite3|db)$/i },
 ];
 
 export function scanStagedFiles() {
-  console.log('?? Verificando segredos e conformidade de segurança nos arquivos staged...');
+  console.log('Verificando segredos e conformidade de seguranÃ§a nos arquivos staged...');
 
   let stagedFiles = [];
   try {
     const stdout = execSync('git diff --cached --name-only', { cwd: rootDir, encoding: 'utf8' });
     stagedFiles = stdout.split('\n').map(s => s.trim()).filter(Boolean);
   } catch (err) {
-    console.warn('Não foi possível obter lista de arquivos staged do git:', err.message);
+    console.warn('NÃ£o foi possÃ­vel obter lista de arquivos staged do git:', err.message);
     return true;
   }
 
   if (!stagedFiles.length) {
-    console.log('? Nenhum arquivo staged para verificação.');
+    console.log('Nenhum arquivo staged para verificaÃ§Ã£o.');
     return true;
   }
 
@@ -36,14 +36,14 @@ export function scanStagedFiles() {
   for (const relPath of stagedFiles) {
     // 1. Proibir commit de arquivos de banco SQLite
     if (/\.(sqlite|sqlite3|db)$/i.test(relPath)) {
-      console.error(`? [BLOQUEIO DE SEGURANÇA] Tentativa de comitar banco SQLite: ${relPath}`);
+      console.error(`[BLOQUEIO DE SEGURANÃ‡A] Tentativa de comitar banco SQLite: ${relPath}`);
       foundViolation = true;
       continue;
     }
 
     // 2. Proibir commit de .env com segredos
     if (relPath === '.env' || relPath === 'backend/.env' || relPath.endsWith('.env.local')) {
-      console.error(`? [BLOQUEIO DE SEGURANÇA] Tentativa de comitar arquivo de ambiente: ${relPath}`);
+      console.error(`[BLOQUEIO DE SEGURANÃ‡A] Tentativa de comitar arquivo de ambiente: ${relPath}`);
       foundViolation = true;
       continue;
     }
@@ -53,7 +53,7 @@ export function scanStagedFiles() {
       continue;
     }
 
-    // Pular verificação de documentação de auditoria que menciona padrões sanitizados
+    // Pular verificaÃ§Ã£o de documentaÃ§Ã£o de auditoria que menciona padrÃµes sanitizados
     if (relPath.startsWith('docs/')) {
       continue;
     }
@@ -63,21 +63,21 @@ export function scanStagedFiles() {
       for (const pattern of SECRET_PATTERNS) {
         if (pattern.name.includes('SQLite')) continue;
         if (pattern.regex.test(content)) {
-          console.error(`? [BLOQUEIO DE SEGURANÇA] Possível segredo (${pattern.name}) detectado em: ${relPath}`);
+          console.error(`[BLOQUEIO DE SEGURANÃ‡A] PossÃ­vel segredo (${pattern.name}) detectado em: ${relPath}`);
           foundViolation = true;
         }
       }
     } catch {
-      // Arquivo binário
+      // Arquivo binÃ¡rio
     }
   }
 
   if (foundViolation) {
-    console.error('\n?? COMMIT ABORTADO: Remova os segredos / arquivos sensíveis antes de comitar.');
+    console.error('\nCOMMIT ABORTADO: Remova os segredos / arquivos sensÃ­veis antes de comitar.');
     return false;
   }
 
-  console.log('? Verificação de segurança concluída com sucesso. Zero segredos detectados.');
+  console.log('VerificaÃ§Ã£o de seguranÃ§a concluÃ­da com sucesso. Zero segredos detectados.');
   return true;
 }
 

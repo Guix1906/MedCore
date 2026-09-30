@@ -7,7 +7,7 @@ import { usePatientClinicalHistory } from "@/hooks/usePatientClinicalHistory";
 import { supabase } from "@/integrations/supabase/client";
 import type { StructuredConsultationResult } from "@/lib/gemini";
 import { DUR, EASE_OUT, fadeUp, staggerContainer } from "@/lib/motion";
-import { patientsService, prontuarioService } from "@/services/api";
+import { patientsService } from "@/services/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
@@ -283,58 +283,25 @@ export default function ProntuarioPage() {
     setIsFinalizing(true);
     setSaveState("saving");
 
-    const newRecord = {
-      id: crypto.randomUUID(),
-      patient_id: targetPatientId || null,
-      patient_name: patientName,
-      complaint: anamneseText || null,
-      duration_seconds: secondsRef.current,
-      created_at: new Date().toISOString(),
-      finished_at: new Date().toISOString(),
-    };
-
     let persisted = false;
     let persistenceError: any = null;
 
-    // 1. Persistência no banco de dados (PHP / Supabase)
+    // Persistência somente no banco (RLS exige records.edit); nada fica salvo no navegador.
     if (targetPatientId) {
-      try {
-        await prontuarioService.createRecord({
-          patient_id: targetPatientId,
-          complaint: anamneseText || null,
-          duration_seconds: secondsRef.current,
-          finished_at: new Date().toISOString(),
-        });
+      const { error: sbError } = await supabase.from("medical_records").insert({
+        patient_id: targetPatientId,
+        complaint: anamneseText || null,
+        duration_seconds: secondsRef.current,
+        finished_at: new Date().toISOString(),
+      });
+      if (sbError) {
+        persistenceError = sbError;
+        console.error("Falha na gravação do prontuário:", sbError);
+      } else {
         persisted = true;
-      } catch (phpErr) {
-        try {
-          const { error: sbError } = await supabase.from("medical_records").insert({
-            patient_id: targetPatientId,
-            complaint: anamneseText || null,
-            duration_seconds: secondsRef.current,
-            finished_at: new Date().toISOString(),
-          });
-          if (sbError) throw sbError;
-          persisted = true;
-        } catch (e: any) {
-          persistenceError = e;
-          console.error("Falha na gravação do prontuário:", e);
-        }
       }
     } else {
       persistenceError = new Error("Paciente sem identificador cadastrado.");
-    }
-
-    // 2. Backup isolado por ID do paciente (sem chaves abertas por nome)
-    if (targetPatientId) {
-      try {
-        const histKey = "medcore_prontuario_history_" + targetPatientId;
-        const prevHist = JSON.parse(localStorage.getItem(histKey) || "[]");
-        const nextHist = [newRecord, ...prevHist.filter((h: any) => h.id !== newRecord.id)];
-        localStorage.setItem(histKey, JSON.stringify(nextHist));
-      } catch (e) {
-        console.warn("Aviso ao atualizar cache local:", e);
-      }
     }
 
     if (!persisted) {

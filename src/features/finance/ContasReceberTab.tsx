@@ -24,7 +24,6 @@ import {
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { parseISO, startOfDay, format } from "date-fns";
-import { isRecordWiped } from "@/lib/wipe-system";
 import { getStoredLocalPatients } from "@/lib/local-patients";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,8 +46,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { CountUp } from "@/components/finance/CountUp";
 import { currency, formatClinicalDate } from "@/features/acompanhamentos/followup-utils";
-import { remaining, isFreeBalance, isTitleDeleted, getDeletedFinanceIds } from "./finance-math";
-import { extractEventId } from "./finance-api";
+import { remaining, isFreeBalance } from "./finance-math";
 import type { FinanceSnapshot, FinancialTitle } from "./finance-schema";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -108,9 +106,8 @@ export function ContasReceberTab({
 
   // Filtra todas as receitas ativas
   const receitas = useMemo(() => {
-    const deleted = getDeletedFinanceIds();
     return (finance?.titles || []).filter((t) => {
-      if (t.status === "cancelado" || isTitleDeleted(t, deleted)) return false;
+      if (t.status === "cancelado") return false;
       return t.type === "receita";
     });
   }, [finance?.titles]);

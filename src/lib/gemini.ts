@@ -12,7 +12,7 @@
  * REGRA ABSOLUTA: Fidelidade factual estrita, nunca inventa informações que não foram ditas.
  */
 
-import { apiClient } from "@/services/api/api-client";
+import { structureConsultation } from "@/services/ai.service";
 
 export const PRONTUARIO_CONDITIONS_LIST = [
   "Hipertensão",
@@ -52,39 +52,20 @@ export interface GenerateConsultationOptions {
 }
 
 /**
- * Organiza a transcrição da consulta médica distribuindo exatamente nos campos do prontuário via Proxy Seguro do Backend.
+ * Organiza a transcrição da consulta nos campos do prontuário pelo copiloto server-side.
+ * Falhas são propagadas: o profissional é avisado e nenhum texto clínico é gerado sem a IA.
  */
 export async function generateConsultationRecord({
   rawTranscript,
-  patientName = "Paciente",
+  patientName,
 }: GenerateConsultationOptions): Promise<StructuredConsultationResult> {
   const cleanedInput = rawTranscript.trim();
+  if (!cleanedInput) return buildEmptyConsultationResult();
 
-  if (!cleanedInput) {
-    return buildEmptyConsultationResult();
-  }
-
-  try {
-    const data = await apiClient.post<any>("/ai/process-consultation", {
-      rawTranscript: cleanedInput,
-      patientName,
-    });
-
-    if (data && typeof data === "object") {
-      const parsed = parseConsultationObj(data);
-      if (parsed) {
-        return parsed;
-      }
-    }
-  } catch (err) {
-    console.warn(
-      "Falha no serviço de IA server-side, utilizando sintetizador de segurança local:",
-      err,
-    );
-  }
-
-  // Fallback factual
-  return fallbackConsultationSynthesis(cleanedInput);
+  const data = await structureConsultation({ data: { rawTranscript: cleanedInput, patientName } });
+  const parsed = parseConsultationObj(data);
+  if (!parsed) throw new Error("A IA devolveu uma resposta em formato inesperado.");
+  return parsed;
 }
 
 function parseConsultationObj(rawInput: any): StructuredConsultationResult | null {
@@ -284,105 +265,10 @@ function buildEmptyConsultationResult(): StructuredConsultationResult {
   };
 }
 
-function fallbackConsultationSynthesis(transcript: string): StructuredConsultationResult {
-  const clean = transcript.replace(/\s+/g, " ").trim();
-
-  const queixaPrincipal = clean ? `Paciente relata: ${clean}` : "Não informado na consulta.";
-  const historicoFamiliar = "Não informado na consulta.";
-  const tratamentosAnteriores = "Não informado na consulta.";
-  const alergias = "Não informado na consulta.";
-  const historicoPessoal = "Não informado na consulta.";
-  const medicacoesEmUso = "Não informado na consulta.";
-  const condutaPlano = "Orientações e conduta registradas na consulta.";
-
-  const condicoesDetectadas: string[] = [];
-  const lower = clean.toLowerCase();
-  if (lower.includes("hipertens") || lower.includes("pressão alta"))
-    condicoesDetectadas.push("Hipertensão");
-  if (lower.includes("diabet") || lower.includes("glicemia")) condicoesDetectadas.push("Diabetes");
-  if (lower.includes("cardíac") || lower.includes("coração"))
-    condicoesDetectadas.push("Doenças cardíacas");
-  if (lower.includes("asma") || lower.includes("bronquite"))
-    condicoesDetectadas.push("Asma ou problemas respiratórios");
-  if (lower.includes("tireoid")) condicoesDetectadas.push("Problemas de tireoide");
-  if (lower.includes("câncer") || lower.includes("neoplasia")) condicoesDetectadas.push("Câncer");
-
-  const sections: ClinicalSectionData[] = [
-    {
-      id: "queixa",
-      title: "Queixa Principal",
-      fieldTarget: "Campo: Queixa Principal",
-      description: "Motivo relatado da consulta",
-      content: queixaPrincipal,
-      selected: true,
-    },
-    {
-      id: "historico_familiar",
-      title: "Histórico Familiar",
-      fieldTarget: "Campo: Histórico Familiar",
-      description: "Antecedentes familiares",
-      content: historicoFamiliar,
-      selected: false,
-    },
-    {
-      id: "tratamentos",
-      title: "Tratamentos Anteriores",
-      fieldTarget: "Campo: Tratamentos Anteriores",
-      description: "Procedimentos e tratamentos prévios",
-      content: tratamentosAnteriores,
-      selected: false,
-    },
-    {
-      id: "alergias",
-      title: "Alergias",
-      fieldTarget: "Campo: Alergias",
-      description: "Reações e alergias relatadas",
-      content: alergias,
-      selected: false,
-    },
-    {
-      id: "historico_pessoal",
-      title: "Histórico Médico Pessoal",
-      fieldTarget: "Campo: Condições / Outras condições",
-      description: "Condições prévias do paciente",
-      content: historicoPessoal,
-      selected: false,
-    },
-    {
-      id: "medicacoes",
-      title: "Medicações em Uso",
-      fieldTarget: "Campo: Medicações em uso atualmente",
-      description: "Fármacos e dosagens atuais",
-      content: medicacoesEmUso,
-      selected: false,
-    },
-    {
-      id: "conduta",
-      title: "Conduta e Orientações",
-      fieldTarget: "Campo: Orientações / Conduta Clínica",
-      description: "Prescrições e orientações médicas",
-      content: condutaPlano,
-      selected: true,
-    },
-  ];
-
-  return {
-    queixaPrincipal,
-    historicoFamiliar,
-    tratamentosAnteriores,
-    alergias,
-    historicoPessoal,
-    condicoesDetectadas,
-    medicacoesEmUso,
-    condutaPlano,
-    sections,
-  };
-}
-
 export async function generateMedicalRecordContent({
   sectionTitle,
   rawInput,
-  patientName = "Paciente",
+  patientName,
 }: {
   sectionTitle: string;
   rawInput: string;

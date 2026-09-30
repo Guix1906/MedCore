@@ -29,7 +29,7 @@ import {
 } from "@/features/admin/AccessScreens";
 import { firstAllowedRoute, routeRuleFor } from "@/features/admin/permissions";
 import { signOut, useAuth } from "@/hooks/use-auth";
-import { usePermissions } from "@/hooks/use-permissions";
+import { isLegacyOpen, usePermissions } from "@/hooks/use-permissions";
 import { useSessionTimeout } from "@/hooks/use-session-timeout";
 import { useTheme } from "@/hooks/use-theme";
 import { clearRecentSearches, type SearchPage } from "@/lib/global-search";
@@ -154,13 +154,15 @@ export default function AppShell({ children, title }: { children: ReactNode; tit
     if (access.mode === "loading" || access.mode === "blocked") return false;
     const rule = routeRuleFor(to);
     if (!rule) return true;
-    if (access.mode === "legacy") return rule.path !== "/admin";
+    if (access.mode === "legacy") return isLegacyOpen(access) && rule.path !== "/admin";
     if (access.isOwner) return true;
     return rule.any.some(can);
   };
   const currentRule = routeRuleFor(pathname);
   const routeAllowed =
-    !currentRule || access.mode !== "active" || access.isOwner || currentRule.any.some(can);
+    !currentRule ||
+    (access.mode === "legacy" && isLegacyOpen(access)) ||
+    (access.mode === "active" && (access.isOwner || currentRule.any.some(can)));
   const fallbackPath = access.mode === "active" ? firstAllowedRoute(can) : null;
   const redirectToFallback =
     access.mode === "active" && !routeAllowed && pathname === "/dashboard" && !!fallbackPath;
@@ -529,7 +531,7 @@ export default function AppShell({ children, title }: { children: ReactNode; tit
       </aside>
       <main id="main-content" tabIndex={-1} className="app-main min-h-[calc(100dvh-64px)]">
         <ErrorBoundary>
-          {redirectToFallback ? (
+          {redirectToFallback || (access.mode === "loading" && !!currentRule) ? (
             <div className="flex min-h-[50vh] items-center justify-center">
               <BrandLoader label="Carregando…" />
             </div>

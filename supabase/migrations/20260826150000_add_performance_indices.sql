@@ -1,5 +1,5 @@
 -- =========================================================
--- ÕNDICES DE ALTA PERFORMANCE E ISOLAMENTO MULTI-TENANT
+-- √çNDICES DE ALTA PERFORMANCE E ISOLAMENTO MULTI-TENANT
 -- =========================================================
 
 CREATE INDEX IF NOT EXISTS idx_patients_company ON public.patients(company_id);

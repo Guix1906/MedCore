@@ -33,17 +33,34 @@ type MemberOpt = {
   role?: string | null;
 };
 type IdOpt = { id: string };
+
+/**
+ * Resolve o responsável escolhido (id de médico ou de usuário) nos dois vínculos usados
+ * pela agenda: events.assigned_to (auth.users) e appointments.doctor_id (doctors).
+ */
+async function resolveProfessional(
+  id: string | null | undefined,
+): Promise<{ userId: string | null; doctorId: string | null }> {
+  if (!id || !isUuid(id)) return { userId: null, doctorId: null };
+  const { data } = await supabase
+    .from("doctors")
+    .select("id, auth_id")
+    .or(`id.eq.${id},auth_id.eq.${id}`)
+    .limit(1);
+  const doctor = data?.[0];
+  if (!doctor) return { userId: id, doctorId: null };
+  return { userId: doctor.id === id ? doctor.auth_id ?? null : id, doctorId: doctor.id };
+}
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { refreshFinance, saveLocalFinancialTitle, saveLocalPayment, deleteLocalPayment, deleteLocalFinancialTitle } from "@/features/finance/finance-api";
+import { refreshFinance } from "@/features/finance/finance-api";
 import { errorMessage } from "@/features/acompanhamentos/followup-utils";
 import { patientsService, companyService, agendaService } from "@/services/api";
 import { PatientModal } from "@/components/pacientes/PatientModal";
 import { useAuth } from "@/hooks/use-auth";
 import { useActiveCompany } from "@/hooks/use-active-company";
-import { isUuid, toValidUuid, ensureValidUuid } from "@/lib/uuid";
+import { isUuid } from "@/lib/uuid";
 import { mergeWithLocalPatients } from "@/lib/local-patients";
-import { saveStoredLocalEvent, getStoredLocalEvents } from "@/lib/local-events";
 import { getStoredLocalDoctors, saveStoredLocalDoctor } from "@/lib/local-doctors";
 import { useClinicCities } from "@/hooks/use-clinic-cities";
 import { Button } from "@/components/ui/button";
@@ -690,28 +707,6 @@ export function NovoAgendamentoDialog({
         }
       } catch {}
 
-      // 4. Consulta eventos locais armazenados (localStorage)
-      try {
-        const localEvents = getStoredLocalEvents(companyId);
-        localEvents.forEach((e: any) => {
-          const isMatch =
-            e.patient_id === clientId ||
-            e.case_id === clientId ||
-            (e.description && e.description.includes(clientId)) ||
-            (selectedClientObj?.name &&
-              e.title &&
-              e.title.toLowerCase().includes(selectedClientObj.name.toLowerCase()));
-
-          if (isMatch && !historyMap.has(e.id)) {
-            historyMap.set(e.id, {
-              id: e.id,
-              date: new Date(e.starts_at),
-              title: e.title || "Agendamento Local",
-            });
-          }
-        });
-      } catch {}
-
       const list = Array.from(historyMap.values());
       list.sort((a, b) => b.date.getTime() - a.date.getTime());
       return list;
@@ -1015,9 +1010,6 @@ export function NovoAgendamentoDialog({
       const isIncludedInPlan = type === "atendimento" && planCoverage === "incluso";
       const totalAmt = isIncludedInPlan ? 0 : parseMoney(procedurePrice);
       const sinalAmt = isIncludedInPlan ? 0 : parseMoney(downPayment);
-      const restanteAmt = Math.max(0, totalAmt - sinalAmt);
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const patientNameStr = selectedClient?.name ? ` - Paciente: ${selectedClient.name}` : "";
 
       const meta = {
         v: 1,
@@ -1081,326 +1073,90 @@ export function NovoAgendamentoDialog({
           ? selectedProfs[0] || user.id
           : assignedTo || null;
 
-      const DEFAULT_COMP_ID = "00000000-0000-0000-0000-0000000c1111";
-      const validCreatedBy = isUuid(user?.id) ? user.id : "00000000-0000-0000-0000-000000000001";
-      const validCompanyId = isUuid(companyId) ? companyId : DEFAULT_COMP_ID;
-      const validAssignedTo = finalAssignedTo
-        ? isUuid(finalAssignedTo)
-          ? finalAssignedTo
-          : finalAssignedTo === user?.id
-            ? validCreatedBy
-            : toValidUuid(finalAssignedTo)
-        : null;
-      const validCaseId = caseId && isUuid(caseId) ? caseId : toValidUuid(caseId);
-      const validPatientId = clientId && isUuid(clientId) ? clientId : toValidUuid(clientId);
+      if (!isUuid(companyId)) throw new Error("Clínica ativa inválida. Selecione a clínica e tente novamente.");
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData?.user) throw new Error("Sessão expirada. Entre novamente para salvar.");
+
+      // O responsável pode vir da lista de médicos (doctors.id) ou de usuários (auth id):
+      // events.assigned_to referencia o usuário e appointments.doctor_id o médico.
+      const professional = await resolveProfessional(finalAssignedTo);
+      const validPatientId = clientId && isUuid(clientId) ? clientId : null;
+      const validCaseId = caseId && isUuid(caseId) ? caseId : null;
 
       const rawId = activityToEdit?.id;
       const cleanRawId = rawId && rawId.includes(":") ? rawId.split(":")[1] : rawId;
       const insertedId = cleanRawId || crypto.randomUUID();
 
-      // 1. Salva imediatamente na camada local ultra-rápida (0ms de latência)
-      const clientDisplayName = selectedClient?.name || selectedClientObj?.name || "Paciente";
-      saveStoredLocalEvent(
-        {
-          id: insertedId,
-          title: finalTitle,
-          description,
-          event_type: "meeting",
-          starts_at: startsAt.toISOString(),
-          ends_at: endsAt.toISOString(),
-          location,
-          assigned_to: finalAssignedTo || null,
-          case_id: caseId || null,
-          patient_id: validPatientId || clientId || null,
-          patient_name: clientDisplayName,
-          created_at: (activityToEdit as any)?.created_at || new Date().toISOString(),
-        } as any,
-        validCompanyId,
-      );
-
-      // Salva título financeiro e entrada de caixa localmente para disponibilidade imediata (0ms)
-      if ((type === "atendimento" || totalAmt > 0 || sinalAmt > 0) && !isIncludedInPlan && (totalAmt > 0 || sinalAmt > 0)) {
-        const effectiveAmount = totalAmt > 0 ? totalAmt : sinalAmt;
-        const effectivePayment = sinalAmt > 0 ? sinalAmt : 0;
-
-        saveLocalFinancialTitle({
-          id: `evt-${insertedId}`,
-          type: "receita",
-          amount: effectiveAmount,
-          paid_amount: effectivePayment,
-          due_date: day,
-          date: todayStr,
-          competence_date: day.slice(0, 7) + "-01",
-          status: effectivePayment >= effectiveAmount && effectiveAmount > 0 ? "pago" : "pendente",
-          description: finalTitle,
-          category: "Atendimentos",
-          patient_id: validPatientId || clientId || null,
-          patient_name: clientDisplayName,
-          payer_name: clientDisplayName,
-          company_id: validCompanyId || null,
-          treatment_id: null,
-          installment_id: null,
-          origin_key: `event:${insertedId}`,
-          can_settle: true,
-          can_reverse: true,
-          can_cancel: true,
-          created_at: new Date().toISOString(),
-        } as any);
-
-        if (effectivePayment > 0) {
-          saveLocalPayment({
-            id: `pay-evt-${insertedId}`,
-            transaction_id: `evt-${insertedId}`,
-            amount: effectivePayment,
-            paid_on: todayStr,
-            payment_method: (downPaymentMethod || "pix").toUpperCase(),
-            account_id: "00000000-0000-0000-0000-000000000001",
-            payer_name: clientDisplayName,
-            created_by: null,
-            created_at: new Date().toISOString(),
-            legacy: false,
-            reversed_at: null,
-            reversed_by: null,
-            reversal_reason: null,
-          });
-        }
+      if (activityToEdit && activityToEdit.source === "task") {
+        const { error } = await supabase
+          .from("tasks")
+          .update({
+            title: finalTitle,
+            description,
+            due_date: startsAt.toISOString(),
+            assigned_to: professional.userId,
+            patient_id: validPatientId,
+          })
+          .eq("id", insertedId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.rpc("save_agenda_event", {
+          p_event: {
+            id: insertedId,
+            company_id: companyId,
+            title: finalTitle,
+            description,
+            event_type: "meeting",
+            starts_at: startsAt.toISOString(),
+            ends_at: endsAt.toISOString(),
+            location,
+            case_id: validCaseId,
+            assigned_to: professional.userId,
+            patient_id: validPatientId,
+          },
+        });
+        if (error) throw error;
       }
 
-      // Notifica em tempo real com 0ms de latência
-      window.dispatchEvent(new CustomEvent("medcore_local_title_saved"));
-      window.dispatchEvent(new CustomEvent("medcore_events_updated"));
+      const warnings: string[] = [];
 
-      // Atualiza o financeiro imediatamente no cache local
+      if (type === "atendimento" && validPatientId && professional.doctorId) {
+        const { error } = await supabase.from("appointments").upsert({
+          id: insertedId,
+          patient_id: validPatientId,
+          doctor_id: professional.doctorId,
+          date: day,
+          start_time: start,
+          end_time: end,
+          type: "consulta",
+          status: status || "agendado",
+          notes: notes.trim() || undefined,
+        });
+        if (error) warnings.push(`consulta não registrada (${error.message})`);
+      }
+
+      if (type === "atendimento" && !isIncludedInPlan && (totalAmt > 0 || sinalAmt > 0)) {
+        const { error } = await supabase.rpc("schedule_appointment_finance", {
+          p_event_id: insertedId,
+          p_amount: totalAmt > 0 ? totalAmt : sinalAmt,
+          p_sinal: sinalAmt,
+          p_sinal_method: downPaymentMethod || "pix",
+          p_due_date: day,
+        });
+        if (error) warnings.push(`cobrança não gerada (${error.message})`);
+      }
+
       void refreshFinance(qc);
 
-      // 2. Despacha sincronização remota assíncrona em background (sem bloquear o usuário)
-      void (async () => {
-        let remoteCreatedBy = validCreatedBy;
-        try {
-          const { data: authData } = await supabase.auth.getUser();
-          const supabaseAuthId = authData?.user?.id;
-          if (supabaseAuthId && isUuid(supabaseAuthId)) remoteCreatedBy = supabaseAuthId;
-
-          if (activityToEdit) {
-            try {
-              if (activityToEdit.source === "event" || !activityToEdit.source) {
-                await (supabase as any)
-                  .from("events")
-                  .update({
-                    title: finalTitle,
-                    description,
-                    starts_at: startsAt.toISOString(),
-                    ends_at: endsAt.toISOString(),
-                    location,
-                    assigned_to: validAssignedTo,
-                    patient_id: validPatientId,
-                  })
-                  .eq("id", insertedId);
-              } else if (activityToEdit.source === "task") {
-                await (supabase as any)
-                  .from("tasks")
-                  .update({
-                    title: finalTitle,
-                    description,
-                    due_date: startsAt.toISOString(),
-                    assigned_to: validAssignedTo,
-                    patient_id: validPatientId,
-                  })
-                  .eq("id", insertedId);
-              }
-            } catch (updErr) {
-              console.warn("Erro ao atualizar evento no Supabase:", updErr);
-            }
-
-            if (type === "atendimento" && validPatientId && validAssignedTo) {
-              try {
-                await (supabase as any)
-                  .from("appointments")
-                  .upsert({
-                    id: insertedId,
-                    patient_id: validPatientId,
-                    doctor_id: validAssignedTo,
-                    date: day,
-                    start_time: start,
-                    end_time: end,
-                    status: status || "agendado",
-                    notes: notes.trim() || undefined,
-                  });
-              } catch (apptErr) {
-                console.warn("Aviso ao atualizar appointments no Supabase:", apptErr);
-              }
-            }
-          } else {
-            // 1. Tenta salvar via RPC save_agenda_event garantida
-            let remoteSaved = false;
-            try {
-              const { data: rpcRes, error: rpcErr } = await (supabase as any).rpc("save_agenda_event", {
-                p_event: {
-                  id: insertedId,
-                  company_id: validCompanyId,
-                  created_by: remoteCreatedBy,
-                  title: finalTitle,
-                  description,
-                  event_type: "meeting",
-                  starts_at: startsAt.toISOString(),
-                  ends_at: endsAt.toISOString(),
-                  location,
-                  case_id: validCaseId,
-                  assigned_to: validAssignedTo,
-                  patient_id: validPatientId,
-                },
-              });
-              if (!rpcErr && rpcRes) {
-                remoteSaved = true;
-              }
-            } catch {}
-
-            if (!remoteSaved) {
-              const { error: eventError } = await supabase.from("events").insert({
-                id: insertedId,
-                company_id: validCompanyId,
-                created_by: remoteCreatedBy,
-                title: finalTitle,
-                description,
-                event_type: "meeting",
-                starts_at: startsAt.toISOString(),
-                ends_at: endsAt.toISOString(),
-                location,
-                case_id: validCaseId,
-                assigned_to: validAssignedTo,
-                patient_id: validPatientId,
-              });
-              if (eventError) {
-                console.warn("Aviso ao salvar evento no Supabase:", eventError);
-              }
-            }
-
-            // Se for atendimento com paciente e médico selecionados, persiste também na tabela appointments
-            if (type === "atendimento" && validPatientId && validAssignedTo) {
-              try {
-                await supabase.from("appointments").insert({
-                  id: insertedId,
-                  patient_id: validPatientId,
-                  doctor_id: validAssignedTo,
-                  date: day,
-                  start_time: start,
-                  end_time: end,
-                  type: "consulta",
-                  status: status || "agendado",
-                  notes: notes.trim() || undefined,
-                });
-              } catch (apptErr) {
-                console.warn("Aviso ao salvar appointments no Supabase:", apptErr);
-              }
-            }
-          }
-
-          if (
-            type === "atendimento" &&
-            !isIncludedInPlan &&
-            (totalAmt > 0 || sinalAmt > 0)
-          ) {
-            try {
-              // 1. Tenta gravar atomicamente título + sinal com conta financeira real (UUID)
-              const { data: scheduleData, error: scheduleErr } = await (supabase as any).rpc(
-                "schedule_appointment_finance",
-                {
-                  p_event_id: insertedId,
-                  p_amount: totalAmt > 0 ? totalAmt : sinalAmt,
-                  p_sinal: sinalAmt,
-                  p_sinal_method: downPaymentMethod || "pix",
-                  p_due_date: day,
-                },
-              );
-
-              if (!scheduleErr && (scheduleData as any)?.title_id) {
-                // Backend persistiu com sucesso: limpa o placeholder local para evitar duplicidade
-                deleteLocalPayment(`pay-evt-${insertedId}`);
-                deleteLocalFinancialTitle(`evt-${insertedId}`);
-              } else if (scheduleErr) {
-                // Fallback legado se a migration ainda não foi executada no banco
-                const { data: titleId, error: titleErr } = await supabase.rpc(
-                  "create_event_financial_title",
-                  {
-                    p_event_id: insertedId,
-                    p_amount: totalAmt > 0 ? totalAmt : sinalAmt,
-                    p_due_date: day,
-                  },
-                );
-
-                if (!titleErr && titleId) {
-                  deleteLocalPayment(`pay-evt-${insertedId}`);
-                  deleteLocalFinancialTitle(`evt-${insertedId}`);
-                } else if (titleErr) {
-                  // Fallback direto inserindo na tabela transactions do Supabase
-                  const directTitleId = crypto.randomUUID();
-                  const { error: directErr } = await (supabase as any).from("transactions").insert({
-                    id: directTitleId,
-                    type: "receita",
-                    amount: totalAmt > 0 ? totalAmt : sinalAmt,
-                    paid_amount: sinalAmt,
-                    date: todayStr,
-                    due_date: day,
-                    competence_date: day.slice(0, 7) + "-01",
-                    status: sinalAmt >= totalAmt && totalAmt > 0 ? "pago" : "pendente",
-                    description: finalTitle,
-                    category: "Atendimentos",
-                    origin_key: `event:${insertedId}`,
-                    patient_id: validPatientId || null,
-                    payer_name: clientDisplayName,
-                    company_id: validCompanyId || null,
-                    created_by: remoteCreatedBy || null,
-                  });
-
-                  if (!directErr && sinalAmt > 0) {
-                    await (supabase as any).from("transaction_payments").insert({
-                      id: crypto.randomUUID(),
-                      transaction_id: directTitleId,
-                      amount: sinalAmt,
-                      paid_on: todayStr,
-                      payment_method: (downPaymentMethod || "pix").toUpperCase(),
-                      account_id: "00000000-0000-0000-0000-000000000001",
-                      payer_name: clientDisplayName,
-                      created_by: remoteCreatedBy || null,
-                    });
-                  }
-
-                  if (!directErr) {
-                    deleteLocalPayment(`pay-evt-${insertedId}`);
-                    deleteLocalFinancialTitle(`evt-${insertedId}`);
-                  }
-                }
-              }
-            } catch (finErr) {
-              console.warn("Aviso ao gerar cobrança do agendamento no Supabase:", finErr);
-            }
-          }
-        } catch (error) {
-          console.warn("Erro no sync remoto:", error);
-        } finally {
-          void refreshFinance(qc);
-        }
-
-        // Sincronização PHP em background
-        agendaService
-          .createAppointment({
-            id: insertedId,
-            patient_id: clientId || undefined,
-            date: day,
-            start_time: start,
-            end_time: end,
-            type: type,
-            status: status,
-            notes: notes || undefined,
-          })
-          .catch(() => {});
-
-        if (isIncludedInPlan) {
-          toast.success(
-            "Agendamento salvo e vinculado ao plano de tratamento do paciente (sem cobrança duplicada).",
-          );
-        }
-      })();
+      if (warnings.length) {
+        toast.warning("Agendamento salvo com pendências", {
+          description: `${warnings.join("; ")}. Edite o agendamento para tentar novamente.`,
+        });
+      } else if (isIncludedInPlan) {
+        toast.success(
+          "Agendamento salvo e vinculado ao plano de tratamento do paciente (sem cobrança duplicada).",
+        );
+      }
 
       const createdActivity = {
         id: insertedId,

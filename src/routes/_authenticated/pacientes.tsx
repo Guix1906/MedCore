@@ -203,7 +203,7 @@ function PacientesPage() {
     if (
       !(await confirmDialog({
         title: "Excluir paciente",
-        description: `Tem certeza que deseja excluir "${patient.name}"? Os dados relacionados serão removidos ou desvinculados com segurança.`,
+        description: `Tem certeza que deseja excluir "${patient.name}"? Só é possível excluir pacientes sem prontuário; com prontuário, desative o cadastro.`,
         confirmText: "Excluir",
         destructive: true,
       }))
@@ -211,77 +211,12 @@ function PacientesPage() {
       return;
 
     try {
-      let rpcExecuted = false;
-
-      // 1. Tenta exclusão segura via RPC delete_patient no Supabase
-      try {
-        const { data, error } = await supabase.rpc("delete_patient", { p_id: patient.id });
-        if (error) {
-          const isMissingRpc =
-            error.code === "PGRST202" ||
-            error.code === "42883" ||
-            error.message?.includes("schema cache") ||
-            (error.message?.includes("function") && error.message?.includes("does not exist"));
-          if (!isMissingRpc) {
-            throw error;
-          }
-        } else if (data && typeof data === "object" && (data as any).success === false) {
-          throw new Error((data as any).error || "Falha na exclusão do paciente");
-        } else {
-          rpcExecuted = true;
-        }
-      } catch (err: any) {
-        const isMissingRpc =
-          err?.code === "PGRST202" ||
-          err?.code === "42883" ||
-          err?.message?.includes("schema cache") ||
-          (err?.message?.includes("function") && err?.message?.includes("does not exist"));
-        if (!isMissingRpc) {
-          throw err;
-        }
-      }
-
-      // 2. Fallback: se a RPC ainda não estiver instalada no Supabase, limpa dependências e exclui
-      if (!rpcExecuted) {
-        try {
-          await supabase.from("tasks").delete().eq("patient_id", patient.id);
-        } catch {}
-        try {
-          await supabase.from("patient_pipeline_history").delete().eq("patient_id", patient.id);
-        } catch {}
-        try {
-          await supabase.from("patient_tags").delete().eq("patient_id", patient.id);
-        } catch {}
-        try {
-          await supabase.from("waitlist").delete().eq("patient_id", patient.id);
-        } catch {}
-        try {
-          await supabase.from("vital_signs").delete().eq("patient_id", patient.id);
-        } catch {}
-        try {
-          await supabase.from("exam_orders").delete().eq("patient_id", patient.id);
-        } catch {}
-        try {
-          await supabase.from("prescriptions").delete().eq("patient_id", patient.id);
-        } catch {}
-        try {
-          await supabase.from("medical_records").delete().eq("patient_id", patient.id);
-        } catch {}
-        try {
-          await supabase.from("appointments").delete().eq("patient_id", patient.id);
-        } catch {}
-        try {
-          await supabase.from("events").delete().eq("patient_id", patient.id);
-        } catch {}
-
-        try {
-          await patientsService.deletePatient(patient.id);
-        } catch {
-          const { error } = await supabase.from("patients").delete().eq("id", patient.id);
-          if (error && !error.message?.includes("not found")) {
-            throw error;
-          }
-        }
+      // A exclusão só é feita pelo banco: exige permissão e recusa pacientes com prontuário
+      // (guarda obrigatória de 20 anos). Nesses casos, o cadastro deve ser desativado.
+      const { data, error } = await supabase.rpc("delete_patient", { p_id: patient.id });
+      if (error) throw error;
+      if (data && typeof data === "object" && (data as any).success === false) {
+        throw new Error((data as any).error || "Falha na exclusão do paciente");
       }
 
       // Limpeza de cache local e de queries

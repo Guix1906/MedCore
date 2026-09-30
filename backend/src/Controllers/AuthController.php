@@ -190,8 +190,15 @@ class AuthController
             ], 'Conta criada com sucesso', 201);
         } catch (\Throwable $e) {
             Database::rollback();
-            Response::error('Erro ao cadastrar usuário: ' . $e->getMessage(), 500);
+            Response::serverError($e);
         }
+    }
+
+    public function logout(Request $request): void
+    {
+        $user = $request->getUser() ?? [];
+        Jwt::revoke((string) ($user['jti'] ?? ''), $request->getUserId(), (int) ($user['exp'] ?? 0));
+        Response::success(null, 'Sessão encerrada');
     }
 
     public function me(Request $request): void

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { purgeLocalClinicalData } from "@/lib/legacy-local-data";
 
 const DEFAULT_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutos de inatividade
 
@@ -18,6 +19,7 @@ export function useSessionTimeout(timeoutMs: number = DEFAULT_TIMEOUT_MS) {
       timerRef.current = setTimeout(async () => {
         toast.warning("Sessão encerrada por inatividade para proteção dos dados dos pacientes.");
         try {
+          purgeLocalClinicalData();
           await supabase.auth.signOut();
           window.location.href = "/auth";
         } catch (e) {

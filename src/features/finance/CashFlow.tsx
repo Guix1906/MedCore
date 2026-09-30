@@ -15,7 +15,6 @@ import {
   Search,
   CheckCircle2,
   Clock,
-  RotateCcw,
   Pencil,
   Trash2,
   FileText,
@@ -91,8 +90,7 @@ import {
   localDate,
   moneyCents,
 } from "@/features/acompanhamentos/followup-utils";
-import { refreshFinance, extractEventId, getTitleEventKey, deleteLocalPayment, deleteLocalFinancialTitle } from "./finance-api";
-import { confirmDialog } from "@/components/app/confirm-dialog";
+import { refreshFinance, getTitleEventKey } from "./finance-api";
 import { remaining } from "./finance-math";
 import { cashFlow } from "./cash-flow-math";
 import type { CashAccount, CashFlowSnapshot } from "./cash-flow-schema";
@@ -106,7 +104,8 @@ import {
 import { CountUp } from "@/components/finance/CountUp";
 import { cn } from "@/lib/utils";
 import PaymentHistory from "./PaymentHistory";
-import { isRecordWiped, addSuppressedIds } from "@/lib/wipe-system";
+
+type CashEntry = LancamentoFluxo & { date: string };
 
 const balance = (value: number | null) =>
   value === null ? "Pendente de conferência" : currency(value);
@@ -235,21 +234,6 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
   // Painel colapsável de auditoria de saldos bancários
   const [showAccountAudit, setShowAccountAudit] = useState(false);
 
-  // Armazena IDs de movimentações excluídas/estornadas localmente para efeito imediato
-  const [deletedEntryIds, setDeletedEntryIds] = useState<string[]>(() => {
-    try {
-      const val = JSON.parse(localStorage.getItem("medcore_deleted_cash_entries") || "[]");
-      const val2 = JSON.parse(localStorage.getItem("medcore_deleted_titles") || "[]");
-      return Array.from(
-        new Set([
-          ...(Array.isArray(val) ? val.map(String) : []),
-          ...(Array.isArray(val2) ? val2.map(String) : []),
-        ]),
-      );
-    } catch {
-      return [];
-    }
-  });
 
   // Modal de Exclusão de Movimentação
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -265,123 +249,21 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
 
   const handleConfirmDelete = async () => {
     if (!entryToDelete) return;
+    const reason = deleteReason.trim();
+    if (reason.length < 5) {
+      toast.error("Informe o motivo do estorno (mínimo 5 caracteres).");
+      return;
+    }
     setIsDeleting(true);
     try {
-      const reason = deleteReason.trim() || "Exclusão manual realizada no Fluxo de Caixa";
-
-      // 1. Coleta todos os identificadores vinculados (pagamento, título e evento originário)
-      const idsToDelete = new Set<string>();
-      if (entryToDelete.id) idsToDelete.add(String(entryToDelete.id));
-      if (entryToDelete.transaction_id) idsToDelete.add(String(entryToDelete.transaction_id));
-      if (entryToDelete.title?.id) idsToDelete.add(String(entryToDelete.title.id));
-      if (entryToDelete.title?.origin_key) idsToDelete.add(String(entryToDelete.title.origin_key));
-
-      const evId =
-        extractEventId(entryToDelete.id) ||
-        extractEventId(entryToDelete.transaction_id) ||
-        extractEventId(entryToDelete.title?.origin_key) ||
-        extractEventId(entryToDelete.title?.id);
-
-      if (evId) {
-        idsToDelete.add(evId);
-        idsToDelete.add(`event:${evId}`);
-        idsToDelete.add(`evt-${evId}`);
-        idsToDelete.add(`evt-${evId}-downpayment`);
-        idsToDelete.add(`evt-${evId}-remaining`);
-        idsToDelete.add(`pay-evt-${evId}`);
-
-        (finance?.titles || []).forEach((t) => {
-          const tEv = extractEventId(t.origin_key) || extractEventId(t.id);
-          if (tEv === evId) {
-            idsToDelete.add(t.id);
-            if (t.origin_key) idsToDelete.add(t.origin_key);
-          }
-        });
-
-        (finance?.payments || []).forEach((p) => {
-          const pEv = extractEventId(p.id) || extractEventId(p.transaction_id);
-          if (pEv === evId || idsToDelete.has(p.transaction_id)) {
-            idsToDelete.add(p.id);
-            if (p.transaction_id) idsToDelete.add(p.transaction_id);
-          }
-        });
-      }
-
-      // 2. Tenta estornar o pagamento se for um pagamento real no Supabase
-      if (
-        entryToDelete.id &&
-        !entryToDelete.id.startsWith("title-pay-") &&
-        !entryToDelete.id.startsWith("syn-")
-      ) {
-        try {
-          await supabase.rpc("reverse_financial_payment", {
-            p_id: entryToDelete.id,
-            p_reason: reason,
-          });
-        } catch (err) {
-          console.warn("RPC reverse_financial_payment info:", err);
-        }
-      }
-
-      // 3. Tenta cancelar todos os títulos financeiros no Supabase
-      const isUuid = (str: string) =>
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
-      for (const id of idsToDelete) {
-        if (isUuid(id)) {
-          try {
-            await supabase.rpc("cancel_financial_title", {
-              p_id: id,
-              p_reason: reason,
-            });
-          } catch (err) {
-            console.warn("RPC cancel_financial_title info:", err);
-          }
-        }
-      }
-
-      // 4. Suprime e exclui localmente
-      const idList = Array.from(idsToDelete);
-      addSuppressedIds(idList);
-      idList.forEach((id) => {
-        deleteLocalPayment(id);
-        deleteLocalFinancialTitle(id);
+      const { error } = await supabase.rpc("reverse_financial_payment", {
+        p_id: entryToDelete.id,
+        p_reason: reason,
       });
-
-      // 5. Persistência de exclusão imediata local (sincroniza ambos os storages)
-      const currentCash = (() => {
-        try {
-          return JSON.parse(localStorage.getItem("medcore_deleted_cash_entries") || "[]");
-        } catch {
-          return [];
-        }
-      })();
-      const currentTitles = (() => {
-        try {
-          return JSON.parse(localStorage.getItem("medcore_deleted_titles") || "[]");
-        } catch {
-          return [];
-        }
-      })();
-
-      const newDeleted = Array.from(
-        new Set([
-          ...deletedEntryIds,
-          ...(Array.isArray(currentCash) ? currentCash : []),
-          ...(Array.isArray(currentTitles) ? currentTitles : []),
-          ...idList,
-        ]),
-      ).map(String);
-
-      setDeletedEntryIds(newDeleted);
-      localStorage.setItem("medcore_deleted_cash_entries", JSON.stringify(newDeleted));
-      localStorage.setItem("medcore_deleted_titles", JSON.stringify(newDeleted));
-
-      window.dispatchEvent(new CustomEvent("medcore_local_title_saved"));
-      window.dispatchEvent(new CustomEvent("medcore_events_updated"));
-
+      if (error) throw error;
       await refreshFinance(qc);
-      toast.success("Movimentação e pendências associadas excluídas com sucesso!", {
-        description: "O registro foi movido para a sub-aba Excluídos.",
+      toast.success("Movimentação estornada.", {
+        description: "O registro continua no histórico, na sub-aba Excluídos.",
       });
       setDeleteModalOpen(false);
       setEntryToDelete(null);
@@ -393,164 +275,6 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
     }
   };
 
-  const handleRestoreEntry = async (entry: any) => {
-    try {
-      const idsToRestore = new Set<string>([entry.id, entry.transaction_id]);
-      if (entry.title?.id) idsToRestore.add(entry.title.id);
-      if (entry.title?.origin_key) idsToRestore.add(entry.title.origin_key);
-      const evId =
-        extractEventId(entry.id) ||
-        extractEventId(entry.transaction_id) ||
-        extractEventId(entry.title?.origin_key) ||
-        extractEventId(entry.title?.id);
-      if (evId) {
-        idsToRestore.add(evId);
-        idsToRestore.add(`event:${evId}`);
-        idsToRestore.add(`evt-${evId}`);
-        idsToRestore.add(`evt-${evId}-remaining`);
-        idsToRestore.add(`evt-${evId}-downpayment`);
-        idsToRestore.add(`pay-evt-${evId}`);
-      }
-
-      const newDeleted = deletedEntryIds.filter((id) => !idsToRestore.has(id));
-      setDeletedEntryIds(newDeleted);
-      localStorage.setItem("medcore_deleted_cash_entries", JSON.stringify(newDeleted));
-      localStorage.setItem("medcore_deleted_titles", JSON.stringify(newDeleted));
-      window.dispatchEvent(new CustomEvent("medcore_local_title_saved"));
-      window.dispatchEvent(new CustomEvent("medcore_events_updated"));
-      await refreshFinance(qc);
-      toast.success("Movimentação restaurada com sucesso no fluxo de caixa!");
-    } catch (err: any) {
-      toast.error(errorMessage(err));
-    }
-  };
-
-  const handleDeleteAllVisible = async () => {
-    if (filteredEntries.length === 0) return;
-    const ok = await confirmDialog({
-      title: "Excluir Todas as Movimentações",
-      description: `Tem certeza que deseja excluir todas as ${filteredEntries.length} movimentações deste período do Fluxo de Caixa? As movimentações e qualquer previsão vinculada serão removidas do fluxo.`,
-      confirmText: "Excluir Todas",
-      destructive: true,
-    });
-    if (!ok) return;
-
-    const toastId = toast.loading("Excluindo todas as movimentações e previsões...");
-    try {
-      const idsToDelete = new Set<string>();
-      const reason = "Exclusão em lote realizada no Fluxo de Caixa";
-
-      for (const e of filteredEntries) {
-        if (e.id) idsToDelete.add(String(e.id));
-        if (e.transaction_id) idsToDelete.add(String(e.transaction_id));
-        if (e.title?.id) idsToDelete.add(String(e.title.id));
-        if (e.title?.origin_key) idsToDelete.add(String(e.title.origin_key));
-
-        const evId =
-          extractEventId(e.id) ||
-          extractEventId(e.transaction_id) ||
-          extractEventId(e.title?.origin_key) ||
-          extractEventId(e.title?.id);
-
-        if (evId) {
-          idsToDelete.add(evId);
-          idsToDelete.add(`event:${evId}`);
-          idsToDelete.add(`evt-${evId}`);
-          idsToDelete.add(`evt-${evId}-downpayment`);
-          idsToDelete.add(`evt-${evId}-remaining`);
-          idsToDelete.add(`pay-evt-${evId}`);
-
-          (finance?.titles || []).forEach((t) => {
-            const tEv = extractEventId(t.origin_key) || extractEventId(t.id);
-            if (tEv === evId) {
-              idsToDelete.add(t.id);
-              if (t.origin_key) idsToDelete.add(t.origin_key);
-            }
-          });
-
-          (finance?.payments || []).forEach((p) => {
-            const pEv = extractEventId(p.id) || extractEventId(p.transaction_id);
-            if (pEv === evId || idsToDelete.has(p.transaction_id)) {
-              idsToDelete.add(p.id);
-              if (p.transaction_id) idsToDelete.add(p.transaction_id);
-            }
-          });
-        }
-      }
-
-      // Estorna pagamentos
-      for (const e of filteredEntries) {
-        if (e.id && !e.id.startsWith("title-pay-") && !e.id.startsWith("syn-")) {
-          try {
-            await supabase.rpc("reverse_financial_payment", {
-              p_id: e.id,
-              p_reason: reason,
-            });
-          } catch {}
-        }
-      }
-
-      // Cancela títulos no Supabase
-      const isUuid = (str: string) =>
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
-      for (const id of idsToDelete) {
-        if (isUuid(id)) {
-          try {
-            await supabase.rpc("cancel_financial_title", {
-              p_id: id,
-              p_reason: reason,
-            });
-          } catch {}
-        }
-      }
-
-      // Suprime e exclui localmente
-      const idArray = Array.from(idsToDelete);
-      addSuppressedIds(idArray);
-      idArray.forEach((id) => {
-        deleteLocalPayment(id);
-        deleteLocalFinancialTitle(id);
-      });
-
-      const currentCash = (() => {
-        try {
-          return JSON.parse(localStorage.getItem("medcore_deleted_cash_entries") || "[]");
-        } catch {
-          return [];
-        }
-      })();
-      const currentTitles = (() => {
-        try {
-          return JSON.parse(localStorage.getItem("medcore_deleted_titles") || "[]");
-        } catch {
-          return [];
-        }
-      })();
-
-      const updated = Array.from(
-        new Set([
-          ...deletedEntryIds,
-          ...(Array.isArray(currentCash) ? currentCash : []),
-          ...(Array.isArray(currentTitles) ? currentTitles : []),
-          ...idArray,
-        ]),
-      ).map(String);
-
-      setDeletedEntryIds(updated);
-      localStorage.setItem("medcore_deleted_cash_entries", JSON.stringify(updated));
-      localStorage.setItem("medcore_deleted_titles", JSON.stringify(updated));
-
-      window.dispatchEvent(new CustomEvent("medcore_local_title_saved"));
-      window.dispatchEvent(new CustomEvent("medcore_events_updated"));
-      await refreshFinance(qc);
-
-      toast.success("Todas as movimentações e previsões foram excluídas com sucesso!", {
-        id: toastId,
-      });
-    } catch (err: any) {
-      toast.error(errorMessage(err), { id: toastId });
-    }
-  };
 
   const selectedScope = finance.scopes.find((s) => (s.id || "legacy") === scope);
 
@@ -589,401 +313,70 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
     }
   }, [availableAccounts]);
 
-  // Sincronização em tempo real instantânea (0ms) ao carregar ou criar agendamentos e lançamentos
-  useEffect(() => {
-    void qc.invalidateQueries({ queryKey: ["financial-snapshot"], refetchType: "all" });
-    void qc.invalidateQueries({ queryKey: ["cash-flow-snapshot"], refetchType: "all" });
 
-    const reloadDeleted = () => {
-      try {
-        const val = JSON.parse(localStorage.getItem("medcore_deleted_cash_entries") || "[]");
-        const val2 = JSON.parse(localStorage.getItem("medcore_deleted_titles") || "[]");
-        setDeletedEntryIds(
-          Array.from(
-            new Set([
-              ...(Array.isArray(val) ? val.map(String) : []),
-              ...(Array.isArray(val2) ? val2.map(String) : []),
-            ]),
-          ),
-        );
-      } catch {}
-    };
-
-    const handleSync = () => {
-      reloadDeleted();
-      void qc.invalidateQueries({ queryKey: ["financial-snapshot"], refetchType: "all" });
-      void qc.invalidateQueries({ queryKey: ["cash-flow-snapshot"], refetchType: "all" });
-    };
-    const handleStorage = (e: StorageEvent) => {
-      if (!e.key || e.key.startsWith("medcore_")) {
-        reloadDeleted();
-        void qc.invalidateQueries({ queryKey: ["financial-snapshot"], refetchType: "all" });
-        void qc.invalidateQueries({ queryKey: ["cash-flow-snapshot"], refetchType: "all" });
-      }
-    };
-    window.addEventListener("medcore_local_title_saved", handleSync);
-    window.addEventListener("medcore_events_updated", handleSync);
-    window.addEventListener("storage", handleStorage);
-    return () => {
-      window.removeEventListener("medcore_local_title_saved", handleSync);
-      window.removeEventListener("medcore_events_updated", handleSync);
-      window.removeEventListener("storage", handleStorage);
-    };
-  }, [qc]);
-
-  // 1. Mapeamento de todas as movimentações realizadas (entradas e saídas reais)
+  // 1. Movimentações realizadas: somente baixas registradas no banco (transaction_payments)
   const allRealizedEntries = useMemo(() => {
-    const payments = finance.payments || [];
-    const titles = finance.titles || [];
-    const accounts = finance.accounts || [];
+    const titlesById = new Map((finance.titles || []).map((t) => [t.id, t]));
+    const accountsById = new Map((finance.accounts || []).map((a) => [a.id, a]));
 
-    const result = [];
-    const handledTitleIds = new Set<string>();
-    const handledEventKeys = new Set<string>();
-
-    for (const p of payments) {
-      const t = titles.find((title) => {
-        if (title.id === p.transaction_id) return true;
-        const pEv = extractEventId(p.id) || extractEventId(p.transaction_id);
-        const tEv = extractEventId(title.origin_key) || extractEventId(title.id);
-        if (pEv && tEv && pEv === tEv) return true;
-        return false;
-      });
-
-      if (t) {
-        handledTitleIds.add(t.id);
-        if (t.origin_key) handledTitleIds.add(t.origin_key);
-      }
-      if (p.transaction_id) handledTitleIds.add(p.transaction_id);
-
-      const evKey =
-        extractEventId(p.id) ||
-        extractEventId(p.transaction_id) ||
-        (t ? extractEventId(t.origin_key) || extractEventId(t.id) : null);
-      if (evKey) handledEventKeys.add(evKey);
-
+    return (finance.payments || []).map((p): CashEntry => {
+      const t = titlesById.get(p.transaction_id);
       const isExpense = t?.type === "despesa";
-      const isIncome = !isExpense;
-      const accountObj = accounts.find((a) => a.id === p.account_id);
-      const isAgendamento =
-        Boolean(t?.origin_key && String(t.origin_key).startsWith("event:")) ||
-        Boolean(t?.id && String(t.id).startsWith("evt-")) ||
-        Boolean(p?.id && String(p.id).startsWith("pay-evt-")) ||
-        Boolean(p?.transaction_id && String(p.transaction_id).startsWith("evt-")) ||
-        (t?.category || "").toLowerCase().includes("atendimento") ||
-        (t?.description || "").toLowerCase().includes("agendamento") ||
-        (t?.description || "").toLowerCase().includes("atendimento");
-      const isPlano = !!t?.treatment_id;
-      const isManual = !isAgendamento && !isPlano;
-
-      const badgeLabel = isAgendamento
-        ? "AGENDAMENTO"
-        : isPlano
-          ? "PLANO"
-          : isManual
-            ? "MANUAL"
-            : "LANÇAMENTO";
-
-      const cleanTitleDesc = t?.description && !t.description.toLowerCase().includes("cobrança") && !t.description.toLowerCase().includes("cobranca")
-        ? t.description
-        : null;
-
-      const defaultDesc = isAgendamento
-        ? `Sinal de Agendamento - ${t?.patient_name || p.payer_name || "Paciente"}`
-        : isIncome
-          ? "Recebimento de Consulta"
-          : "Pagamento realizado";
-
-      const defaultCat = isAgendamento
-        ? "Atendimentos / Sinal"
-        : isIncome
-          ? "Consultas / Procedimentos"
-          : "Despesas Gerais";
-
-      // A data de movimentação de caixa é quando foi pago (paid_on ou data do lançamento), NUNCA o vencimento futuro
-      const payDate =
-        p.paid_on ||
-        (p.created_at ? p.created_at.slice(0, 10) : "") ||
-        new Date().toISOString().slice(0, 10);
-
-      result.push({
+      const badgeLabel = getTitleEventKey(t) ? "AGENDAMENTO" : t?.treatment_id ? "PLANO" : "MANUAL";
+      return {
         id: p.id,
         transaction_id: p.transaction_id,
-        created_at: p.created_at || (t as any)?.created_at || new Date().toISOString(),
-        date: payDate,
-        description: cleanTitleDesc || defaultDesc,
-        category: t?.category || defaultCat,
+        created_at: p.created_at,
+        date: p.paid_on,
+        description: t?.description || (isExpense ? "Pagamento realizado" : "Recebimento"),
+        category: t?.category || (isExpense ? "Despesas Gerais" : "Receitas"),
         client_name: t?.patient_name || p.payer_name || t?.payer_name || "Avulso",
-        payment_method: p.payment_method || "PIX",
-        payment_account: accountObj?.name || accounts[0]?.name || "BANCO DO BRASIL",
-        account_id: p.account_id || accounts[0]?.id || "00000000-0000-0000-0000-000000000001",
+        payment_method: p.payment_method || "—",
+        payment_account: (p.account_id && accountsById.get(p.account_id)?.name) || "Conta não informada",
+        account_id: p.account_id ?? undefined,
         company_id: t?.company_id || null,
-        type: (t?.type || "receita") as "receita" | "despesa",
+        type: t?.type || "receita",
         is_expense: isExpense,
         amount: Number(p.amount || 0),
         paid_amount: Number(p.amount || 0),
-        status: (p.reversed_at ? "cancelado" : "pago") as "pago" | "cancelado",
+        status: p.reversed_at ? "cancelado" : "pago",
         reversed_at: p.reversed_at,
         reversal_reason: p.reversal_reason,
         badgeLabel,
         title: t,
-      });
-    }
-
-    // Apenas inclui títulos manuais que foram 100% quitados (status: 'pago') e que ainda NÃO estejam em payments.
-    // Títulos de agendamento NUNCA geram entradas sintéticas aqui (o sinal é estritamente via payments e o restante em Contas a Receber).
-    for (const t of titles) {
-      const isAgendamentoTitle =
-        Boolean(t?.origin_key && String(t.origin_key).startsWith("event:")) ||
-        Boolean(t?.id && String(t.id).startsWith("evt-")) ||
-        (t?.category || "").toLowerCase().includes("atendimento") ||
-        (t?.description || "").toLowerCase().includes("agendamento") ||
-        (t?.description || "").toLowerCase().includes("atendimento");
-      if (isAgendamentoTitle) {
-        continue;
-      }
-
-      // IMPORTANTE: Fluxo de Caixa Realizado só inclui títulos 100% quitados sem registros em payments!
-      // Títulos pendentes pertencem a Contas a Receber, NÃO ao Fluxo de Caixa.
-      if (t.status !== "pago") {
-        continue;
-      }
-
-      const evKey = extractEventId(t?.origin_key) || extractEventId(t?.id);
-      if (
-        handledTitleIds.has(t.id) ||
-        (t.origin_key && handledTitleIds.has(t.origin_key)) ||
-        (evKey && handledEventKeys.has(evKey)) ||
-        payments.some((p) => p.transaction_id === t.id || (t.origin_key && p.transaction_id === t.origin_key))
-      ) {
-        continue;
-      }
-
-      const isExpense = t.type === "despesa";
-      const isIncome = !isExpense;
-      const accountObj = accounts.find((a) => a.company_id === t.company_id) || accounts[0];
-      const effectiveAmount = Number(t.paid_amount > 0 ? t.paid_amount : t.amount);
-
-      result.push({
-        id: `title-pay-${t.id}`,
-        transaction_id: t.id,
-        created_at: (t as any).created_at || new Date().toISOString(),
-        date: t.date || (t as any).created_at?.slice(0, 10) || new Date().toISOString().slice(0, 10),
-        description:
-          t.description ||
-          (isIncome
-            ? "Recebimento de Consulta"
-            : "Pagamento realizado"),
-        category:
-          t.category ||
-          (isIncome
-            ? "Consultas / Procedimentos"
-            : "Despesas Gerais"),
-        client_name: t.patient_name || t.payer_name || "Avulso",
-        payment_method: "PIX",
-        payment_account: accountObj?.name || accounts[0]?.name || "BANCO DO BRASIL",
-        account_id: accountObj?.id || accounts[0]?.id || "00000000-0000-0000-0000-000000000001",
-        company_id: t.company_id || null,
-        type: t.type as "receita" | "despesa",
-        is_expense: isExpense,
-        amount: effectiveAmount,
-        paid_amount: effectiveAmount,
-        status: "pago" as const,
-        reversed_at: null,
-        reversal_reason: null,
-        badgeLabel: t.treatment_id ? "PLANO" : "MANUAL",
-        title: t,
-      });
-
-      handledTitleIds.add(t.id);
-      if (t.origin_key) handledTitleIds.add(t.origin_key);
-      if (evKey) handledEventKeys.add(evKey);
-    }
-
-    // Deduplicação estrita: nenhum agendamento pode ter múltiplos lançamentos de sinal duplicados
-    const seenPayIds = new Set<string>();
-    const seenEventKeys = new Set<string>();
-    const seenClientDownPayments = new Map<string, any>();
-    const finalResult: LancamentoFluxo[] = [];
-
-    for (const e of result) {
-      if (!e || seenPayIds.has(e.id)) continue;
-      seenPayIds.add(e.id);
-
-      const evKey =
-        extractEventId(e.id) ||
-        extractEventId(e.transaction_id) ||
-        extractEventId(e.title?.origin_key) ||
-        extractEventId(e.title?.id);
-
-      if (evKey && !e.reversed_at) {
-        if (seenEventKeys.has(evKey)) {
-          // Já existe um lançamento de sinal para este agendamento! Ignora duplicata!
-          continue;
-        }
-        seenEventKeys.add(evKey);
-      }
-
-      // Deduplicação de sinal por paciente e valor
-      const isSinalOrAgendamento =
-        e.badgeLabel === "AGENDAMENTO" ||
-        (e.description || "").toLowerCase().includes("sinal") ||
-        (e.description || "").toLowerCase().includes("agendamento") ||
-        (e.category || "").toLowerCase().includes("atendimento");
-
-      if (isSinalOrAgendamento && !e.reversed_at) {
-        const normClient = (e.client_name || "").trim().toLowerCase();
-        const normAmount = Math.round(Number(e.amount || e.paid_amount || 0) * 100);
-        if (normClient && normClient !== "avulso" && normAmount > 0) {
-          const clientKey = `${normClient}|${normAmount}`;
-          const existing = seenClientDownPayments.get(clientKey);
-          if (existing) {
-            // Se já existe um lançamento para este paciente e valor:
-            // Mantém preferencialmente aquele com data de hoje/anterior (quando o dinheiro entrou),
-            // descartando data futura gerada por agendamento
-            const todayStr = new Date().toISOString().slice(0, 10);
-            if (e.date <= todayStr && existing.date > todayStr) {
-              const idx = finalResult.indexOf(existing);
-              if (idx !== -1) {
-                finalResult[idx] = e;
-                seenClientDownPayments.set(clientKey, e);
-              }
-            }
-            continue;
-          }
-          seenClientDownPayments.set(clientKey, e);
-        }
-      }
-
-      finalResult.push(e);
-    }
-
-    return finalResult.filter((e) => {
-      if (isRecordWiped(e)) return false;
-      if (deletedEntryIds.includes(e.id) || (e.transaction_id && deletedEntryIds.includes(e.transaction_id))) return false;
-      if (e.title?.id && deletedEntryIds.includes(e.title.id)) return false;
-      if (e.title?.origin_key && deletedEntryIds.includes(e.title.origin_key)) return false;
-      const evId =
-        extractEventId(e.id) ||
-        extractEventId(e.transaction_id) ||
-        extractEventId(e.title?.origin_key) ||
-        extractEventId(e.title?.id);
-      if (evId) {
-        if (
-          deletedEntryIds.includes(evId) ||
-          deletedEntryIds.includes(`event:${evId}`) ||
-          deletedEntryIds.includes(`evt-${evId}`) ||
-          deletedEntryIds.includes(`pay-evt-${evId}`)
-        ) {
-          return false;
-        }
-      }
-      return true;
+      };
     });
-  }, [finance.payments, finance.titles, finance.accounts, deletedEntryIds]);
+  }, [finance.payments, finance.titles, finance.accounts]);
 
-  // 2. Títulos e baixas excluídos/cancelados para a sub-aba "Excluídos"
+  // 2. Estornos e títulos cancelados (sub-aba "Excluídos"), exatamente como registrados no banco
   const excludedEntries = useMemo(() => {
-    const rawPayments = finance.payments || [];
-    const titles = finance.titles || [];
-    const accounts = finance.accounts || [];
-
-    const locallyDeleted: any[] = [];
-    if (deletedEntryIds.length > 0) {
-      rawPayments.forEach((p) => {
-        if (deletedEntryIds.includes(p.id) || deletedEntryIds.includes(p.transaction_id)) {
-          const t = titles.find((title) => title.id === p.transaction_id);
-          const isExpense = t?.type === "despesa";
-          const isIncome = !isExpense;
-          const accountObj = accounts.find((a) => a.id === p.account_id);
-          locallyDeleted.push({
-            id: p.id,
-            transaction_id: p.transaction_id,
-            date: p.paid_on || t?.due_date || t?.date || new Date().toISOString().slice(0, 10),
-            description:
-              t?.description ||
-              (isIncome ? "Recebimento de Consulta" : "Pagamento realizado"),
-            category: t?.category || (isIncome ? "Consultas / Procedimentos" : "Despesas Gerais"),
-            client_name: t?.patient_name || p.payer_name || t?.payer_name || "Avulso",
-            payment_method: p.payment_method || "PIX",
-            payment_account: accountObj?.name || accounts[0]?.name || "BANCO DO BRASIL",
-            account_id: p.account_id || accounts[0]?.id || "acc-bb",
-            company_id: t?.company_id || null,
-            type: (t?.type || "receita") as "receita" | "despesa",
-            is_expense: isExpense,
-            amount: Number(p.amount || 0),
-            paid_amount: 0,
-            status: "cancelado" as const,
-            reversed_at: p.paid_on || new Date().toISOString(),
-            reversal_reason: "Exclusão manual realizada no Fluxo de Caixa",
-            badgeLabel: "EXCLUÍDO",
-            title: t,
-          });
-        }
-      });
-
-      titles.forEach((t) => {
-        if (
-          deletedEntryIds.includes(t.id) &&
-          !locallyDeleted.some((d) => d.transaction_id === t.id || d.id === t.id)
-        ) {
-          const isExpense = t.type === "despesa";
-          const isIncome = !isExpense;
-          const accountObj = accounts.find((a) => a.company_id === t.company_id) || accounts[0];
-          locallyDeleted.push({
-            id: t.id,
-            transaction_id: t.id,
-            date: t.date || t.due_date || new Date().toISOString().slice(0, 10),
-            description:
-              t.description ||
-              (isIncome ? "Recebimento de Consulta" : "Pagamento realizado"),
-            category: t.category || (isIncome ? "Consultas / Procedimentos" : "Despesas Gerais"),
-            client_name: t.patient_name || t.payer_name || "Avulso",
-            payment_method: "PIX",
-            payment_account: accountObj?.name || "BANCO DO BRASIL",
-            account_id: accountObj?.id || "acc-bb",
-            company_id: t.company_id || null,
-            type: t.type as "receita" | "despesa",
-            is_expense: isExpense,
-            amount: Number(t.paid_amount > 0 ? t.paid_amount : t.amount),
-            paid_amount: 0,
-            status: "cancelado" as const,
-            reversed_at: t.due_date || t.date,
-            reversal_reason: "Exclusão manual realizada no Fluxo de Caixa",
-            badgeLabel: "EXCLUÍDO",
-            title: t,
-          });
-        }
-      });
-    }
-
     const fromReversed = allRealizedEntries.filter((e) => !!e.reversed_at);
     const fromCancelledTitles = (finance.titles || [])
       .filter((t) => t.status === "cancelado")
-      .map((t) => ({
-        id: t.id,
-        transaction_id: t.id,
-        date: t.due_date || t.date,
-        description: t.description || "Título cancelado",
-        category: t.category || "Geral",
-        client_name: t.patient_name || t.payer_name || "Avulso",
-        payment_method: "—",
-        payment_account: "—",
-        account_id: null,
-        company_id: t.company_id || null,
-        type: t.type as "receita" | "despesa",
-        is_expense: t.type === "despesa",
-        amount: Number(t.amount || 0),
-        paid_amount: 0,
-        status: "cancelado" as const,
-        reversed_at: t.due_date,
-        reversal_reason: "Cancelamento de título",
-        badgeLabel: "CANCELADO",
-        title: t,
-      }));
-
-    return [...locallyDeleted, ...fromReversed, ...fromCancelledTitles].filter((e) => !isRecordWiped(e));
-  }, [allRealizedEntries, finance.payments, finance.titles, finance.accounts, deletedEntryIds]);
+      .map(
+        (t): CashEntry => ({
+          id: t.id,
+          transaction_id: t.id,
+          date: t.due_date || t.date,
+          description: t.description || "Título cancelado",
+          category: t.category || "Geral",
+          client_name: t.patient_name || t.payer_name || "Avulso",
+          payment_method: "—",
+          payment_account: "—",
+          company_id: t.company_id || null,
+          type: t.type,
+          is_expense: t.type === "despesa",
+          amount: Number(t.amount || 0),
+          paid_amount: 0,
+          status: "cancelado",
+          reversed_at: t.due_date,
+          reversal_reason: "Cancelamento de título",
+          badgeLabel: "CANCELADO",
+          title: t,
+        }),
+      );
+    return [...fromReversed, ...fromCancelledTitles];
+  }, [allRealizedEntries, finance.titles]);
 
   // 3. Filtragem dos Lançamentos para exibição na tabela
   const filteredEntries = useMemo(() => {
@@ -1128,42 +521,10 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       dayMap.set(label, cur);
     });
 
-    // Conjunto completo de IDs excluídos (incluindo títulos, pagamentos e eventos)
-    const allDeletedSet = new Set<string>(deletedEntryIds);
-    try {
-      const t = JSON.parse(localStorage.getItem("medcore_deleted_titles") || "[]");
-      const c = JSON.parse(localStorage.getItem("medcore_deleted_cash_entries") || "[]");
-      if (Array.isArray(t)) t.forEach((id: string) => allDeletedSet.add(String(id)));
-      if (Array.isArray(c)) c.forEach((id: string) => allDeletedSet.add(String(id)));
-    } catch {}
-
-    // Mapeia títulos a receber (ex: restante de procedimentos agendados) para a data de vencimento
-    // SOMENTE para títulos que NÃO foram excluídos e cujas movimentações originárias NÃO foram excluídas
+    // Títulos a receber (ex.: restante de procedimentos agendados) na data de vencimento
     const titles = Array.isArray(finance?.titles) ? finance.titles : [];
     titles
-      .filter((t) => {
-        if (!t || t.type !== "receita" || t.status === "cancelado" || remaining(t) <= 0) return false;
-        if (isRecordWiped(t)) return false;
-
-        // Se o título ou origin_key estiver nos excluídos
-        if (allDeletedSet.has(t.id)) return false;
-        if (t.origin_key && allDeletedSet.has(t.origin_key)) return false;
-
-        const evId = extractEventId(t.origin_key) || extractEventId(t.id);
-        if (evId) {
-          if (
-            allDeletedSet.has(evId) ||
-            allDeletedSet.has(`event:${evId}`) ||
-            allDeletedSet.has(`evt-${evId}`) ||
-            allDeletedSet.has(`evt-${evId}-remaining`) ||
-            allDeletedSet.has(`evt-${evId}-downpayment`) ||
-            allDeletedSet.has(`pay-evt-${evId}`)
-          ) {
-            return false;
-          }
-        }
-        return true;
-      })
+      .filter((t) => t && t.type === "receita" && t.status !== "cancelado" && remaining(t) > 0)
       .forEach((t) => {
         const dStr = String(t.due_date || t.date || "").slice(0, 10);
         if (!dStr) return;
@@ -1207,7 +568,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       saldoFinal: entradas - saidas,
       chartData: chartPoints,
     };
-  }, [allRealizedEntries, finance.titles, deletedEntryIds, scope, selectedAccount, start, end]);
+  }, [allRealizedEntries, finance.titles, scope, selectedAccount, start, end]);
 
   // Execução de transferência entre contas
   const handleExecuteTransfer = async () => {
@@ -1634,18 +995,6 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
 
           {/* Botões de Ação Topo Direito (Excluir Todas, Planilha e Transferência) */}
           <div className="flex items-center gap-2 flex-wrap">
-            {activeSubTab === "lancamentos" && filteredEntries.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 bg-card border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 text-xs font-medium gap-1.5 shadow-2xs cursor-pointer"
-                onClick={handleDeleteAllVisible}
-                title="Exclui todas as movimentações exibidas e remove suas pendências do fluxo"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Excluir Todas
-              </Button>
-            )}
 
             <Button
               variant="outline"
@@ -1893,8 +1242,8 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                       }
                     }
 
-                    const contaCartao = (e.payment_account || "BANCO DO BRASIL").toUpperCase();
-                    const forma = e.payment_method || "PIX";
+                    const contaCartao = (e.payment_account || "—").toUpperCase();
+                    const forma = e.payment_method || "—";
                     const typeBadge = isDespesa ? "◆ DESPESA" : "◆ HONORÁRIO";
                     const categorySubtitle = (
                       e.category || (isDespesa ? "Despesas Gerais" : "Honorários Iniciais / Sinal")
@@ -2032,18 +1381,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
                               </>
-                            ) : (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 px-2 text-xs font-medium text-info border-info/25 hover:bg-info/10 gap-1 cursor-pointer"
-                                title="Restaurar movimentação"
-                                onClick={() => handleRestoreEntry(e)}
-                              >
-                                <RotateCcw className="h-3 w-3" />
-                                Restaurar
-                              </Button>
-                            )}
+                            ) : null}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -2369,7 +1707,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
 
               <div className="space-y-1.5">
                 <Label htmlFor="delete-reason" className="text-xs font-semibold text-foreground/80">
-                  Motivo da exclusão (opcional)
+                  Motivo do estorno (obrigatório, mínimo 5 caracteres)
                 </Label>
                 <Input
                   id="delete-reason"

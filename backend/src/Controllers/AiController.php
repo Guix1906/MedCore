@@ -7,39 +7,44 @@ use App\Core\Response;
 use App\Core\Config;
 use App\Core\Database;
 
+/**
+ * Proxy legado do copiloto de prontuário (o frontend em produção usa a função server-side
+ * src/services/ai.service.ts). Mantido com as mesmas garantias: TLS verificado, chave fora
+ * da URL, identificadores removidos e nenhum texto clínico gerado quando a IA falha.
+ */
 class AiController extends BaseController
 {
+    private const MODEL_DEFAULT = 'gemini-2.5-flash';
+
     public function processConsultation(Request $request): void
     {
         $companyId = $this->getTenantCompanyId($request);
-        $userId = $request->getUserId();
+        $userId = (string) $request->getUserId();
 
-        // 1. Feature Flag / Consentimento LGPD
         $aiEnabled = Config::get('AI_FEATURE_ENABLED', 'true');
         if ($aiEnabled !== 'true' && $aiEnabled !== '1') {
-            Response::error('Recurso de IA desativado para esta cl�nica ou requer termo de consentimento (DPA/LGPD).', 403);
+            Response::error('Recurso de IA desativado para esta clínica ou pendente de termo de consentimento (DPA/LGPD).', 403);
         }
 
         $apiKey = Config::get('GEMINI_API_KEY');
         if (empty($apiKey)) {
-            Response::error('Chave de API de IA n�o configurada no servidor.', 503);
+            Response::error('Chave de API de IA não configurada no servidor.', 503);
         }
 
         $rawTranscript = trim((string) $request->input('rawTranscript', ''));
-        if (empty($rawTranscript)) {
-            Response::error('Transcri��o da consulta � obrigat�ria', 422);
+        if ($rawTranscript === '') {
+            Response::error('Transcrição da consulta é obrigatória', 422);
+        }
+        if (mb_strlen($rawTranscript) > 20000) {
+            Response::error('Transcrição muito longa (máximo de 20.000 caracteres).', 422);
         }
 
-        // 2. Rate Limiting: m�x 15 requisi��es de IA por minuto por usu�rio
         $this->ensureAiRateLimit($userId);
 
-        // 3. Minimiza��o / Anonimiza��o de PHI antes do envio a provedores externos
-        $minimizedTranscript = $this->minimizePhi($rawTranscript);
+        $patientName = trim((string) $request->input('patientName', ''));
+        $minimizedTranscript = $this->minimizePhi($rawTranscript, $patientName);
+        $result = $this->callGeminiApi((string) $apiKey, $minimizedTranscript);
 
-        // 4. Execu��o Server-Side da chamada ao Gemini
-        $result = $this->callGeminiApi($apiKey, $minimizedTranscript);
-
-        // 5. Log de Auditoria LGPD
         try {
             Database::execute("
                 INSERT INTO activity_logs (id, company_id, user_id, entity_type, entity_id, entity_label, action, metadata)
@@ -52,109 +57,89 @@ class AiController extends BaseController
                 'meta' => json_encode([
                     'status' => 'success',
                     'timestamp' => date('Y-m-d H:i:s'),
-                    'character_count' => strlen($rawTranscript)
-                ])
+                    'character_count' => mb_strlen($rawTranscript),
+                ]),
             ]);
         } catch (\Throwable) {
-            // N�o abortar
+            // A auditoria não interrompe a resposta.
         }
 
         Response::success($result);
     }
 
-    private function minimizePhi(string $text): string
+    /** Remove identificadores diretos (nome, CPF, telefone, e-mail) antes do envio ao provedor externo. */
+    private function minimizePhi(string $text, string $patientName): string
     {
-        // Remove CPFs (XXX.XXX.XXX-XX ou 11 d�gitos)
-        $text = preg_replace('/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/', '[CPF_OMITIDO]', $text);
-        // Remove n�meros de telefone
-        $text = preg_replace('/\b(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?(?:9\d{4}|\d{4})[-\s]?\d{4}\b/', '[TELEFONE_OMITIDO]', $text);
-        // Remove e-mails
-        $text = preg_replace('/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/', '[EMAIL_OMITIDO]', $text);
-        return $text;
+        $text = preg_replace('/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/', '[CPF]', $text);
+        $text = preg_replace('/[\w.%+-]+@[\w.-]+\.[a-z]{2,}/iu', '[EMAIL]', $text);
+        $text = preg_replace('/(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?9?\d{4}[-\s]?\d{4}\b/', '[TELEFONE]', $text);
+
+        foreach (preg_split('/\s+/u', $patientName) ?: [] as $part) {
+            if (mb_strlen($part) >= 3) {
+                $text = preg_replace('/\b' . preg_quote($part, '/') . '\b/iu', '[PACIENTE]', $text);
+            }
+        }
+
+        return (string) $text;
     }
 
     private function callGeminiApi(string $apiKey, string $transcript): array
     {
-        $systemInstruction = "Você é um copiloto de documentação médica clínica em conformidade com LGPD.\nTransforme a transcrição clínica em um objeto JSON puro com as chaves: queixaPrincipal, historicoFamiliar, tratamentosAnteriores, alergias, historicoPessoal, condicoesDetectadas (array), medicacoesEmUso, condutaPlano.\nFidelidade estrita, não invente dados.";
+        $instruction = 'Você é um copiloto de documentação clínica em conformidade com a LGPD. '
+            . 'Transforme a transcrição em um objeto JSON com as chaves: queixaPrincipal, historicoFamiliar, '
+            . 'tratamentosAnteriores, alergias, historicoPessoal, condicoesDetectadas (array), medicacoesEmUso, condutaPlano. '
+            . 'Use somente o que foi dito. Quando algo não foi mencionado, use null. Nunca invente dados.';
 
-        $models = [
-            'gemini-3.6-flash',
-            'gemini-2.5-flash',
-            'gemini-2.0-flash',
-            'gemini-1.5-flash'
-        ];
-
-        $payload = [
-            'contents' => [
-                [
-                    'role' => 'user',
-                    'parts' => [
-                        ['text' => "{$systemInstruction}\n\nTranscricao:\n\"\"\"\n{$transcript}\n\"\"\""]
-                    ]
-                ]
-            ],
+        $payload = json_encode([
+            'contents' => [[
+                'role' => 'user',
+                'parts' => [['text' => "{$instruction}\n\nTranscrição:\n\"\"\"\n{$transcript}\n\"\"\""]],
+            ]],
             'generationConfig' => [
                 'temperature' => 0.1,
-                'topP' => 0.8,
                 'maxOutputTokens' => 2048,
-                'responseMimeType' => 'application/json'
-            ]
-        ];
+                'responseMimeType' => 'application/json',
+            ],
+        ], JSON_UNESCAPED_UNICODE);
 
-        $jsonPayload = json_encode($payload);
+        $model = (string) (Config::get('GEMINI_MODEL') ?: self::MODEL_DEFAULT);
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode($model) . ':generateContent';
 
-        foreach ($models as $model) {
-            $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}";
-
-            $ch = curl_init($url);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonPayload);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Content-Type: application/json'
-            ]);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 20);
-            $caBundle = ini_get('curl.cainfo') ?: ini_get('openssl.cafile');
-            if (!empty($caBundle) && file_exists($caBundle)) {
-                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-                curl_setopt($ch, CURLOPT_CAINFO, $caBundle);
-            } else {
-                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-            }
-
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $err = curl_error($ch);
-            curl_close($ch);
-
-            if ($httpCode === 200 && !empty($response)) {
-                $data = json_decode($response, true);
-                $textOutput = $data['candidates'][0]['content']['parts'][0]['text'] ?? '';
-                if (!empty($textOutput)) {
-                    $cleanJson = trim($textOutput);
-                    if (str_starts_with($cleanJson, '```json')) {
-                        $cleanJson = preg_replace('/^```json\s*/', '', $cleanJson);
-                        $cleanJson = preg_replace('/\s*```$/', '', $cleanJson);
-                    }
-                    $parsed = json_decode($cleanJson, true);
-                    if (is_array($parsed)) {
-                        return $parsed;
-                    }
-                }
-            }
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $payload,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'x-goog-api-key: ' . $apiKey],
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+        ]);
+        $caBundle = ini_get('curl.cainfo') ?: ini_get('openssl.cafile');
+        if (!empty($caBundle) && file_exists($caBundle)) {
+            curl_setopt($ch, CURLOPT_CAINFO, $caBundle);
         }
 
-        // Fallback estruturado se API externa estiver indispon�vel
-        return [
-            'queixaPrincipal' => $transcript,
-            'historicoFamiliar' => 'N�o informado na consulta.',
-            'tratamentosAnteriores' => 'N�o informado na consulta.',
-            'alergias' => 'N�o informado na consulta.',
-            'historicoPessoal' => 'N�o informado na consulta.',
-            'condicoesDetectadas' => [],
-            'medicacoesEmUso' => 'N�o informado na consulta.',
-            'condutaPlano' => 'Orienta��es registradas na consulta.'
-        ];
+        $response = curl_exec($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        if ($response === false || $httpCode !== 200) {
+            error_log(sprintf('[AI_PROXY] Falha na chamada ao Gemini: HTTP %d %s', $httpCode, $curlError));
+            Response::error('O serviço de IA não respondeu. Tente novamente em instantes.', 502);
+        }
+
+        $data = json_decode((string) $response, true);
+        $text = trim((string) ($data['candidates'][0]['content']['parts'][0]['text'] ?? ''));
+        $text = preg_replace('/^```(?:json)?\s*|\s*```$/', '', $text);
+        $parsed = json_decode((string) $text, true);
+
+        if (!is_array($parsed)) {
+            Response::error('A IA devolveu uma resposta em formato inesperado. Tente novamente.', 502);
+        }
+
+        return $parsed;
     }
 
     private function ensureAiRateLimit(string $userId): void
@@ -168,13 +153,13 @@ class AiController extends BaseController
                 )
             ");
             $window = time() - 60;
-            $count = (int) Database::fetchOne(
+            $count = (int) (Database::fetchOne(
                 "SELECT COUNT(*) as total FROM ai_rate_limits WHERE user_id = :uid AND requested_at > :window",
                 ['uid' => $userId, 'window' => $window]
-            )['total'] ?? 0;
+            )['total'] ?? 0);
 
             if ($count >= 15) {
-                Response::error('Limite de requisi��es de IA excedido (m�ximo 15 por minuto). Aguarde.', 429);
+                Response::error('Limite de requisições de IA excedido (máximo 15 por minuto). Aguarde.', 429);
             }
 
             Database::execute(
@@ -182,7 +167,7 @@ class AiController extends BaseController
                 ['id' => 'arl_' . bin2hex(random_bytes(6)), 'uid' => $userId, 'time' => time()]
             );
         } catch (\Throwable) {
-            // Silencioso
+            // Sem armazenamento do limite, a chamada segue (o provedor também limita).
         }
     }
 }

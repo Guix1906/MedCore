@@ -347,7 +347,11 @@ export function AiRecordAssistantModal({
       });
     } catch (err) {
       console.error("Erro ao estruturar consulta com IA:", err);
-      toast.error("Não foi possível organizar no momento. Tente novamente.");
+      toast.error("Não foi possível organizar com a IA", {
+        description:
+          (err instanceof Error && err.message) ||
+          "Tente novamente. Suas anotações foram mantidas e podem ser registradas manualmente.",
+      });
     } finally {
       setIsGenerating(false);
     }

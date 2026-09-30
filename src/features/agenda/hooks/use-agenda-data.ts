@@ -1,10 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { agendaService } from "@/services/api";
 import { qk } from "@/lib/query-keys";
-import { mergeWithLocalEvents } from "@/lib/local-events";
-import { isRecordWiped } from "@/lib/wipe-system";
 import { isUuid } from "@/lib/uuid";
 import { toActivities, type RawDeadline, type RawEvent, type RawTask } from "../lib/normalize";
 
@@ -32,34 +29,13 @@ export function useAgendaData(
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      try {
-        const phpTasks = await agendaService.getTasks();
-        if (phpTasks && Array.isArray(phpTasks)) {
-          return phpTasks.map((t) => ({
-            id: t.id,
-            title: t.title,
-            description: t.description || null,
-            due_date: t.due_date || null,
-            priority: t.priority,
-            status: t.status,
-            assigned_to: t.assigned_to || null,
-            case_id: null,
-          })) as RawTask[];
-        }
-      } catch {}
-
-      if (companyId && isUuid(companyId)) {
-        try {
-          const { data } = await supabase
-            .from("tasks")
-            .select("id, title, description, due_date, priority, status, assigned_to, case_id")
-            .eq("company_id", companyId);
-          return (data ?? []) as RawTask[];
-        } catch (e) {
-          console.warn("Aviso ao carregar tarefas:", e);
-        }
-      }
-      return [] as RawTask[];
+      if (!companyId || !isUuid(companyId)) return [] as RawTask[];
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("id, title, description, due_date, priority, status, assigned_to, case_id")
+        .eq("company_id", companyId);
+      if (error) throw error;
+      return (data ?? []) as RawTask[];
     },
   });
 
@@ -72,64 +48,16 @@ export function useAgendaData(
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      let rawList: RawEvent[] = [];
-      try {
-        const phpEvents = await agendaService.getEvents();
-        if (phpEvents && Array.isArray(phpEvents)) {
-          rawList = phpEvents.map((e) => ({
-            id: e.id,
-            title: e.title,
-            description: e.description || null,
-            event_type: (e.event_type as any) || "meeting",
-            starts_at: e.start_time,
-            ends_at: e.end_time || null,
-            location: e.location || null,
-            assigned_to: (e as any).assigned_to || null,
-            case_id: null,
-          })) as RawEvent[];
-        }
-      } catch {}
-
-      const validCompId = companyId && isUuid(companyId) ? companyId : null;
-
-      // 1. Tenta carregar via RPC garantida get_agenda_events
-      try {
-        const { data: rpcData, error: rpcErr } = await (supabase as any).rpc("get_agenda_events", {
-          p_company_id: validCompId,
-        });
-        if (!rpcErr && rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
-          const map = new Map<string, RawEvent>();
-          rawList.forEach((e) => map.set(e.id, e));
-          rpcData.forEach((e: any) => map.set(e.id, e as RawEvent));
-          rawList = Array.from(map.values());
-        }
-      } catch {}
-
-      // 2. Select direto caso a RPC não tenha retornado registros
-      if (rawList.length === 0) {
-        try {
-          let q = supabase
-            .from("events")
-            .select(
-              "id, title, description, event_type, starts_at, ends_at, location, assigned_to, case_id, patient_id, created_at",
-            );
-          if (validCompId) {
-            q = q.eq("company_id", validCompId);
-          }
-          const { data, error } = await q.order("starts_at", { ascending: true }).limit(1000);
-          if (!error && data && data.length > 0) {
-            const map = new Map<string, RawEvent>();
-            rawList.forEach((e) => map.set(e.id, e));
-            data.forEach((e: any) => map.set(e.id, e as RawEvent));
-            rawList = Array.from(map.values());
-          }
-        } catch (error) {
-          console.warn("A fonte complementar da agenda não está disponível.", error);
-        }
-      }
-
-      rawList = rawList.filter((e) => !isRecordWiped(e));
-      return mergeWithLocalEvents(rawList, companyId);
+      if (!companyId || !isUuid(companyId)) return [] as RawEvent[];
+      const { data, error } = await supabase
+        .from("events")
+        .select(
+          "id, title, description, event_type, starts_at, ends_at, location, assigned_to, case_id, patient_id, created_at",
+        )
+        .eq("company_id", companyId)
+        .order("starts_at", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as RawEvent[];
     },
   });
 
@@ -142,53 +70,24 @@ export function useAgendaData(
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      try {
-        const phpDeads = await agendaService.getDeadlines();
-        if (phpDeads && Array.isArray(phpDeads)) {
-          return phpDeads.map((d) => ({
-            id: d.id,
-            title: d.title,
-            description: d.description || null,
-            due_date: d.due_date,
-            status: d.status,
-            assigned_to: (d as any).assigned_to || null,
-            case_id: null,
-            is_double_term: false,
-          })) as RawDeadline[];
-        }
-      } catch {}
-
-      if (companyId && isUuid(companyId)) {
-        try {
-          const { data, error } = await supabase
-            .from("deadlines")
-            .select("id, title, description, due_date, status, assigned_to, case_id, is_double_term, created_at")
-            .eq("company_id", companyId);
-          if (!error && data) {
-            return (data as RawDeadline[]).filter((d) => !isRecordWiped(d));
-          }
-        } catch (e) {
-          console.warn("Aviso ao carregar prazos:", e);
-        }
-      }
-      return [] as RawDeadline[];
+      if (!companyId || !isUuid(companyId)) return [] as RawDeadline[];
+      const { data, error } = await supabase
+        .from("deadlines")
+        .select("id, title, description, due_date, status, assigned_to, case_id, is_double_term, created_at")
+        .eq("company_id", companyId);
+      if (error) throw error;
+      return (data ?? []) as RawDeadline[];
     },
   });
 
   useEffect(() => {
+    if (!companyId || !isUuid(companyId) || !userId) return;
+
     const invEvents = () => {
       void qc.invalidateQueries({ queryKey: [...qk.agendaLists.events(companyId), "all"] });
       void qc.invalidateQueries({ queryKey: ["agenda"] });
       void qc.invalidateQueries({ queryKey: ["dashboard", "events-appointments"] });
     };
-
-    window.addEventListener("medcore_events_updated", invEvents);
-
-    if (!companyId || !isUuid(companyId) || !userId) {
-      return () => {
-        window.removeEventListener("medcore_events_updated", invEvents);
-      };
-    }
 
     const invTasks = () =>
       qc.invalidateQueries({ queryKey: [...qk.agendaLists.tasks(companyId), "all"] });
@@ -215,7 +114,6 @@ export function useAgendaData(
       .subscribe();
 
     return () => {
-      window.removeEventListener("medcore_events_updated", invEvents);
       supabase.removeChannel(ch);
     };
   }, [companyId, userId, qc]);

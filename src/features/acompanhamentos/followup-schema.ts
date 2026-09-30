@@ -67,6 +67,24 @@ export type FollowupTables = {
   };
 };
 export type FollowupFunctions = FinanceFunctions & {
+  save_agenda_event: {
+    Args: { p_event: Record<string, string | null> };
+    Returns: Record<string, unknown>;
+  };
+  schedule_appointment_finance: {
+    Args: {
+      p_event_id: string;
+      p_amount: number;
+      p_sinal: number;
+      p_sinal_method: string;
+      p_due_date: string;
+    };
+    Returns: { title_id: string; payment_id: string | null; remaining: number; status: string };
+  };
+  cancel_appointment_finance: {
+    Args: { p_event_id: string; p_action?: "retain" | "refund" | "cancel_unpaid"; p_reason?: string };
+    Returns: { success: boolean; action: string; title_id?: string };
+  };
   delete_patient: {
     Args: { p_id: string };
     Returns: { success: boolean; message?: string; error?: string };

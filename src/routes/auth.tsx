@@ -4,7 +4,6 @@ import { Input } from "@/components/ui/input";
 import { safeRedirectPath } from "@/features/admin/permissions";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { authService, getStoredToken } from "@/services/api";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateAuthRouteCache } from "@/routes/_authenticated/route";
@@ -205,10 +204,6 @@ function AuthPage() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!search.modo && getStoredToken()) {
-      goToTarget();
-      return;
-    }
     const linkFailure = search.modo ? readLinkError() : null;
     if (linkFailure) setLinkError(linkFailure);
     supabase.auth
@@ -290,17 +285,12 @@ function AuthPage() {
     setBusy(true);
     try {
       if (mode === "signin") {
-        let authSession: any = null;
-        try {
-          authSession = await authService.signIn(resolvedEmail, resolvedPassword, rememberMe);
-        } catch {
-          const { data: sbData, error } = await supabase.auth.signInWithPassword({
-            email: resolvedEmail,
-            password: resolvedPassword,
-          });
-          if (error) throw error;
-          authSession = sbData.session;
-        }
+        const { data: sbData, error } = await supabase.auth.signInWithPassword({
+          email: resolvedEmail,
+          password: resolvedPassword,
+        });
+        if (error) throw error;
+        const authSession = sbData.session;
         invalidateAuthRouteCache();
         if (authSession) {
           queryClient.setQueryData(["auth", "session"], authSession);
@@ -316,24 +306,20 @@ function AuthPage() {
         goToTarget();
       } else if (mode === "signup") {
         if (resolvedPassword.length < 8) throw new Error("A senha deve ter pelo menos 8 caracteres.");
-        try {
-          await authService.signUp(resolvedEmail, resolvedPassword, resolvedFullName);
-        } catch {
-          const { data, error } = await supabase.auth.signUp({
-            email: resolvedEmail,
-            password: resolvedPassword,
-            options: {
-              emailRedirectTo: window.location.origin,
-              data: { full_name: resolvedFullName },
-            },
-          });
-          if (error) throw error;
-          if (!data.session) {
-            setSuccessMessage(
-              "Cadastro recebido. Verifique seu e-mail para confirmar a conta antes de entrar.",
-            );
-            return;
-          }
+        const { data, error } = await supabase.auth.signUp({
+          email: resolvedEmail,
+          password: resolvedPassword,
+          options: {
+            emailRedirectTo: window.location.origin,
+            data: { full_name: resolvedFullName },
+          },
+        });
+        if (error) throw error;
+        if (!data.session) {
+          setSuccessMessage(
+            "Cadastro recebido. Verifique seu e-mail para confirmar a conta antes de entrar.",
+          );
+          return;
         }
         invalidateAuthRouteCache();
         await queryClient.invalidateQueries({ queryKey: ["auth"] });

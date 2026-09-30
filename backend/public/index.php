@@ -57,6 +57,7 @@ $auth = [AuthMiddleware::class];
 
 // Auth & Perfil
 $router->get('/api/auth/me', [AuthController::class, 'me'], $auth);
+$router->post('/api/auth/logout', [AuthController::class, 'logout'], $auth);
 
 // Pacientes
 $router->get('/api/patients', [PatientController::class, 'index'], $auth);

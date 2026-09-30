@@ -1,8 +1,7 @@
 import { PageHeader } from "@/components/ui-app/PageHeader";
 import { createFileRoute, useBlocker, type SearchSchemaInput } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
 import FinanceTabs, {
   resolveFinanceTab,
@@ -10,10 +9,8 @@ import FinanceTabs, {
 } from "@/components/finance/FinanceTabs";
 import { errorMessage } from "@/features/acompanhamentos/followup-utils";
 import { getFinancialSnapshot, refreshFinance } from "@/features/finance/finance-api";
-import { confirmDialog } from "@/components/app/confirm-dialog";
-import { wipeAllAppointments } from "@/lib/local-events";
 import { Button } from "@/components/ui/button";
-import { Trash2, Tags } from "lucide-react";
+import { Tags } from "lucide-react";
 import TitleList from "@/features/finance/TitleList";
 import CashFlow from "@/features/finance/CashFlow";
 import { ContasPagarTab } from "@/features/finance/ContasPagarTab";
@@ -70,103 +67,6 @@ function FinanceiroPage() {
     void navigate({ search: { tab, novo: false }, replace: true });
   };
 
-  // Sincronização em tempo real instantânea quando há novos agendamentos ou lançamentos salvos
-  useEffect(() => {
-
-    const handleSync = () => {
-      void queryClient.invalidateQueries({ queryKey: ["financial-snapshot"], refetchType: "all" });
-      void queryClient.invalidateQueries({ queryKey: ["cash-flow-snapshot"], refetchType: "all" });
-      void query.refetch();
-    };
-    const handleStorage = (e: StorageEvent) => {
-      if (!e.key || e.key.startsWith("medcore_")) {
-        void queryClient.invalidateQueries({ queryKey: ["financial-snapshot"], refetchType: "all" });
-        void queryClient.invalidateQueries({ queryKey: ["cash-flow-snapshot"], refetchType: "all" });
-        void query.refetch();
-      }
-    };
-    window.addEventListener("medcore_local_title_saved", handleSync);
-    window.addEventListener("medcore_events_updated", handleSync);
-    window.addEventListener("storage", handleStorage);
-    return () => {
-      window.removeEventListener("medcore_local_title_saved", handleSync);
-      window.removeEventListener("medcore_events_updated", handleSync);
-      window.removeEventListener("storage", handleStorage);
-    };
-  }, [queryClient]);
-
-  const handleWipeAll = async () => {
-    const ok = await confirmDialog({
-      title: "Zerar Dados de Teste",
-      description:
-        "Tem certeza que deseja apagar todos os lançamentos, pagamentos e agendamentos de teste? Essa ação zera o sistema para você iniciar testes do zero.",
-      confirmText: "Zerar Tudo",
-      destructive: true,
-    });
-    if (!ok) return;
-    const toastId = toast.loading("Zerando todo o sistema...");
-    try {
-      await wipeAllAppointments();
-      await refreshFinance(queryClient);
-      await query.refetch();
-      toast.success("Sistema zerado com sucesso! Todos os dados de teste foram removidos.", {
-        id: toastId,
-      });
-    } catch (err) {
-      toast.error(errorMessage(err), { id: toastId });
-    }
-  };
-
-  const handleDeleteReceber = async (id: string) => {
-    const ok = await confirmDialog({
-      title: "Excluir conta a receber",
-      description: "Tem certeza que deseja excluir esta conta a receber?",
-      confirmText: "Excluir",
-      destructive: true,
-    });
-    if (!ok) return;
-
-    const toastId = toast.loading("Excluindo conta a receber...");
-    try {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-      if (isUuid) {
-        try {
-          const result = await supabase.rpc("cancel_financial_title", {
-            p_id: id,
-            p_reason: "Exclusão manual realizada em Contas a Receber",
-          });
-          if (result.error) {
-            console.warn("RPC cancel_financial_title:", result.error);
-          }
-        } catch (rpcErr) {
-          console.warn("Falha ao cancelar via RPC:", rpcErr);
-        }
-      }
-
-      // Persiste a exclusão imediata localmente (para títulos sintéticos e atualização instantânea)
-      if (typeof window !== "undefined" && window.localStorage) {
-        try {
-          const currentDeleted = JSON.parse(localStorage.getItem("medcore_deleted_titles") || "[]");
-          const updated = Array.from(new Set([...currentDeleted, id]));
-          localStorage.setItem("medcore_deleted_titles", JSON.stringify(updated));
-
-          const currentCash = JSON.parse(
-            localStorage.getItem("medcore_deleted_cash_entries") || "[]",
-          );
-          const updatedCash = Array.from(new Set([...currentCash, id]));
-          localStorage.setItem("medcore_deleted_cash_entries", JSON.stringify(updatedCash));
-        } catch (storageErr) {
-          console.warn("Erro ao salvar no localStorage:", storageErr);
-        }
-      }
-
-      await refreshFinance(queryClient);
-      await query.refetch();
-      toast.success("Conta a receber excluída com sucesso.", { id: toastId });
-    } catch (err: any) {
-      toast.error(errorMessage(err), { id: toastId });
-    }
-  };
   return (
     <AppShell title="Financeiro">
       <OperationLock.Provider value={{ active, setActive }}>
@@ -186,16 +86,7 @@ function FinanceiroPage() {
                   <Tags className="h-3.5 w-3.5" />
                   Categorias
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-xs text-muted-foreground hover:text-destructive hover:border-destructive/40 gap-1.5 cursor-pointer"
-                  onClick={handleWipeAll}
-                  title="Zera todos os lançamentos e agendamentos de teste para iniciar do zero"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Zerar Dados de Teste
-                </Button>
+
               </div>
             }
           />
@@ -247,7 +138,7 @@ function FinanceiroPage() {
                       }}
                       onEdit={(item) => setSelected(item.id)}
                       onReceive={(item) => setSelected(item.id)}
-                      onDelete={handleDeleteReceber}
+                      onDelete={(id) => setCancelId(id)}
                     />
                   ) : (
                     <BankReconciliation
@@ -295,29 +186,14 @@ function FinanceiroPage() {
                     <OperationForm
                       title="Confirmar cancelamento"
                       execute={async (form) => {
-                        const isUuid =
-                          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-                            cancelId,
-                          );
-                        let result: any = { error: null };
-                        if (isUuid) {
-                          result = await supabase.rpc("cancel_financial_title", {
-                            p_id: cancelId,
-                            p_reason: formText(form, "reason"),
-                          });
+                        const result = await supabase.rpc("cancel_financial_title", {
+                          p_id: cancelId,
+                          p_reason: formText(form, "reason"),
+                        });
+                        if (!result.error) {
+                          setCancelId("");
+                          void refreshFinance(queryClient);
                         }
-                        if (typeof window !== "undefined" && window.localStorage) {
-                          try {
-                            const current = JSON.parse(
-                              localStorage.getItem("medcore_deleted_titles") || "[]",
-                            );
-                            localStorage.setItem(
-                              "medcore_deleted_titles",
-                              JSON.stringify([...current, cancelId]),
-                            );
-                          } catch {}
-                        }
-                        if (!result.error) setCancelId("");
                         return result;
                       }}
                     >

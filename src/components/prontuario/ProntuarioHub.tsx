@@ -19,7 +19,7 @@ import {
   Activity,
   History,
 } from "lucide-react";
-import { patientsService, agendaService, prontuarioService } from "@/services/api";
+import { patientsService, agendaService } from "@/services/api";
 import { supabase } from "@/integrations/supabase/client";
 
 const EASE_OUT = [0.16, 1, 0.3, 1];
@@ -114,40 +114,33 @@ export function ProntuarioHub({
     },
   });
 
-  // 3. Pacientes recentes (recuperados do histórico do localStorage ou banco)
-  const [recentPatients, setRecentPatients] = useState<
-    { id: string; name: string; date: string }[]
-  >([]);
-
-  useEffect(() => {
-    try {
-      const keys = Object.keys(localStorage).filter((k) =>
-        k.startsWith("medcore_prontuario_history_"),
-      );
+  // 3. Pacientes atendidos recentemente (últimos prontuários gravados no banco)
+  const { data: recentPatients = [] } = useQuery({
+    queryKey: ["prontuario-hub-recent-patients"],
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("medical_records")
+        .select("patient_id, created_at, patients(name)")
+        .order("created_at", { ascending: false })
+        .limit(30);
+      if (error) throw error;
       const items: { id: string; name: string; date: string }[] = [];
       const seen = new Set<string>();
-
-      for (const k of keys) {
-        const raw = localStorage.getItem(k);
-        if (raw) {
-          const list = JSON.parse(raw);
-          if (Array.isArray(list) && list.length > 0) {
-            const first = list[0];
-            const pId = first.patient_id || first.patient_name;
-            if (pId && !seen.has(pId)) {
-              seen.add(pId);
-              items.push({
-                id: first.patient_id || "",
-                name: first.patient_name || "Paciente",
-                date: first.created_at || new Date().toISOString(),
-              });
-            }
-          }
-        }
+      for (const row of (data ?? []) as any[]) {
+        if (!row.patient_id || seen.has(row.patient_id)) continue;
+        seen.add(row.patient_id);
+        items.push({
+          id: row.patient_id,
+          name: row.patients?.name || "Paciente",
+          date: row.created_at,
+        });
+        if (items.length === 5) break;
       }
-      setRecentPatients(items.slice(0, 5));
-    } catch {}
-  }, []);
+      return items;
+    },
+  });
 
   const handleStartConsultation = (patientId: string, patientName: string) => {
     onSelectPatient({ id: patientId, name: patientName });

@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Tipagem
+        run: npx tsc --noEmit
+
+      - name: Testes financeiros e de permissões
+        run: |
+          node scripts/test-financial-math.js
+          node scripts/test-financial-ledger.mjs
+          node scripts/test-cash-flow.mjs
+          node scripts/test-financial-operations.mjs
+          node scripts/test-financial-layout.mjs
+          node scripts/test-treatment-followup.mjs
+          node scripts/test-user-permissions.mjs
+
+      - name: Segredos no repositório
+        run: |
+          if git ls-files | grep -E '\.(sqlite3?|db)$|(^|/)\.env$'; then
+            echo "Arquivo sensível versionado"; exit 1
+          fi

@@ -14,7 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import SmoothScroll from "@/components/motion/SmoothScroll";
 import { useTheme } from "@/hooks/use-theme";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
-import { autoWipeLegacyTestDataIfNeeded } from "@/lib/wipe-system";
+import { purgeLocalClinicalData } from "@/lib/legacy-local-data";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -182,7 +182,8 @@ function RootComponent() {
   useTheme();
 
   useEffect(() => {
-    autoWipeLegacyTestDataIfNeeded();
+    // Remove dados de pacientes/financeiro gravados no navegador por versões anteriores.
+    purgeLocalClinicalData();
   }, []);
 
   // Stale deploy: a hashed route chunk from an old build no longer exists.

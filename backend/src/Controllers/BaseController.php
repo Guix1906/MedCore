@@ -9,20 +9,20 @@ use App\Core\Database;
 abstract class BaseController
 {
     /**
-     * Extrai com seguranÁa o company_id exclusivo do JWT validado.
+     * Extrai com seguran√ßa o company_id exclusivo do JWT validado.
      */
     protected function getTenantCompanyId(Request $request): string
     {
         $companyId = $request->getCompanyId();
         if (empty($companyId)) {
-            Response::unauthorized('ClÌnica n„o associada ou token de acesso inv·lido');
+            Response::unauthorized('Cl√≠nica n√£o associada ou token de acesso inv√°lido');
         }
         return (string) $companyId;
     }
 
     /**
      * Busca um recurso garantindo que ele pertence ao tenant.
-     * Retorna HTTP 404 caso pertenÁa a outro tenant ou n„o exista (evita enumeraÁ„o de IDs).
+     * Retorna HTTP 404 caso perten√ßa a outro tenant ou n√£o exista (evita enumera√ß√£o de IDs).
      */
     protected function findTenantResource(string $table, string $id, string $companyId, string $label = 'Recurso'): array
     {
@@ -33,14 +33,14 @@ abstract class BaseController
         ]);
 
         if (!$resource) {
-            Response::notFound("{$label} n„o encontrado");
+            Response::notFound("{$label} n√£o encontrado");
         }
 
         return $resource;
     }
 
     /**
-     * Executa exclus„o com escopo obrigatÛrio de tenant.
+     * Executa exclus√£o com escopo obrigat√≥rio de tenant.
      */
     protected function deleteTenantResource(string $table, string $id, string $companyId, string $label = 'Recurso'): void
     {
@@ -53,7 +53,7 @@ abstract class BaseController
     }
 
     /**
-     * Valida e clamp bounds em par‚metros de paginaÁ„o (LIMIT).
+     * Valida e clamp bounds em par√¢metros de pagina√ß√£o (LIMIT).
      */
     protected function sanitizeLimit(mixed $limit, int $default = 20, int $min = 1, int $max = 100): int
     {
@@ -76,7 +76,7 @@ abstract class BaseController
     }
 
     /**
-     * Sanitiza ORDER BY contra allowlist explÌcita de colunas.
+     * Sanitiza ORDER BY contra allowlist expl√≠cita de colunas.
      */
     protected function sanitizeOrderBy(?string $column, array $allowedColumns, string $defaultColumn = 'created_at'): string
     {
@@ -87,7 +87,7 @@ abstract class BaseController
     }
 
     /**
-     * Sanitiza direÁ„o de ordenaÁ„o (ASC ou DESC).
+     * Sanitiza dire√ß√£o de ordena√ß√£o (ASC ou DESC).
      */
     protected function sanitizeOrderDir(?string $direction, string $defaultDir = 'DESC'): string
     {

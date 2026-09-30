@@ -19,9 +19,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { CountUp } from "@/components/finance/CountUp";
 import { currency, formatClinicalDate } from "@/features/acompanhamentos/followup-utils";
-import { remaining, isTitleDeleted, getDeletedFinanceIds } from "./finance-math";
+import { remaining } from "./finance-math";
 import type { FinanceSnapshot, FinancialTitle } from "./finance-schema";
-import { isRecordWiped } from "@/lib/wipe-system";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/ui-app/StatusBadge";
 import { AlertCircle, Clock3 } from "lucide-react";
@@ -51,9 +50,8 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
 
   // Filtra todas as despesas ativas do sistema
   const despesas = useMemo(() => {
-    const deleted = getDeletedFinanceIds();
     return (finance?.titles || []).filter((t) => {
-      if (t.status === "cancelado" || isTitleDeleted(t, deleted)) return false;
+      if (t.status === "cancelado") return false;
       return t.type === "despesa";
     });
   }, [finance?.titles]);

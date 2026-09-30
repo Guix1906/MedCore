@@ -1,5 +1,4 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { getStoredToken, removeStoredToken, authService } from "@/services/api";
 import { supabase } from "@/integrations/supabase/client";
 
 let cachedUser: any = null;
@@ -27,22 +26,6 @@ export const Route = createFileRoute("/_authenticated")({
       return { user: cachedUser };
     }
 
-    // 1. Validação do Token do backend PHP em memória/storage se configurado
-    const token = getStoredToken();
-    if (token) {
-      try {
-        const me = await authService.getMe();
-        if (me && me.user) {
-          cachedUser = me.user;
-          cachedAt = Date.now();
-          return { user: me.user };
-        }
-      } catch (err) {
-        removeStoredToken();
-      }
-    }
-
-    // 2. Validação instantânea da sessão do Supabase em memória/cache local (0ms)
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       if (sessionData?.session?.user) {
@@ -63,7 +46,7 @@ export const Route = createFileRoute("/_authenticated")({
     cachedUser = null;
     cachedAt = 0;
 
-    // 3. Redirecionar para login caso não haja sessão
+    // Sem sessão: volta ao login
     throw redirect({
       to: "/auth",
       search: {

@@ -12,11 +12,9 @@ import { getFinancialSnapshot, refreshFinance } from "@/features/finance/finance
 import { reportingRows } from "@/features/finance/finance-math";
 import { useResolvedTheme } from "@/hooks/use-theme";
 import { supabase } from "@/integrations/supabase/client";
-import { getStoredLocalEvents, wipeAllAppointments } from "@/lib/local-events";
-import { isRecordWiped } from "@/lib/wipe-system";
 import { mergeWithLocalPatients } from "@/lib/local-patients";
 import { calcCashFlow } from "@/lib/finance";
-import { agendaService, companyService, patientsService } from "@/services/api";
+import { companyService, patientsService } from "@/services/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import type { ApexOptions } from "apexcharts";
@@ -31,7 +29,6 @@ import {
   Eye,
   EyeOff,
   Inbox,
-  Trash2,
   Users,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -162,11 +159,11 @@ function DashboardPage() {
     // 3. Realtime do Supabase para alterações no banco
     const ch = supabase
       .channel("dashboard-financial-sync")
-      .on("postgres_changes", { event: "*", schema: "public", table: "financial_titles" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => {
         setFinanceVersion((v) => v + 1);
         void refreshFinance(qc);
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "financial_payments" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "transaction_payments" }, () => {
         setFinanceVersion((v) => v + 1);
         void refreshFinance(qc);
       })
@@ -190,83 +187,38 @@ function DashboardPage() {
     queryKey: ["dashboard", "events-appointments"],
     placeholderData: (prev) => prev,
     queryFn: async () => {
-      let rawList: any[] = [];
-      try {
-        const phpEvents = await agendaService.getEvents();
-        if (phpEvents && Array.isArray(phpEvents) && phpEvents.length > 0) {
-          rawList = phpEvents;
-        }
-      } catch {}
+      const { data: eventRows, error: eventsError } = await supabase
+        .from("events")
+        .select("id, title, description, starts_at, ends_at, assigned_to, case_id, patient_id, created_at")
+        .order("starts_at", { ascending: true });
+      if (eventsError) throw eventsError;
+      const rawList: any[] = [...(eventRows ?? [])];
 
-      // 1. Tenta carregar via RPC garantida get_agenda_events
-      try {
-        const { data: rpcData, error: rpcErr } = await (supabase as any).rpc("get_agenda_events");
-        if (!rpcErr && rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
-          const map = new Map<string, any>();
-          rawList.forEach((e) => map.set(e.id, e));
-          rpcData.forEach((e: any) => map.set(e.id, e));
-          rawList = Array.from(map.values());
-        }
-      } catch {}
-
-      // 2. Complementa via tabela events do Supabase
-      if (rawList.length === 0) {
-        try {
-          const { data } = await supabase
-            .from("events")
-            .select("id, title, description, starts_at, ends_at, assigned_to, case_id, patient_id, created_at")
-            .order("starts_at", { ascending: true });
-          if (data && Array.isArray(data)) {
-            rawList = data;
-          }
-        } catch (e) {
-          console.warn("Aviso ao carregar eventos no dashboard:", e);
-        }
-      }
-
-      // 3. Complementa com agendamentos clínicos da tabela appointments se existirem
-      try {
-        const { data: apptRows } = await supabase
-          .from("appointments")
-          .select("id, date, start_time, end_time, patient_id, doctor_id, type, status, notes, created_at")
-          .order("date", { ascending: true })
-          .limit(200);
-        if (apptRows && Array.isArray(apptRows)) {
-          const existingIds = new Set(rawList.map((e) => e.id));
-          apptRows.forEach((a: any) => {
-            if (!existingIds.has(a.id)) {
-              const startIso = `${a.date}T${a.start_time || "08:00"}:00`;
-              rawList.push({
-                id: a.id,
-                title: a.type || "Consulta",
-                description: a.notes,
-                starts_at: startIso,
-                ends_at: `${a.date}T${a.end_time || a.start_time || "08:30"}:00`,
-                assigned_to: a.doctor_id,
-                patient_id: a.patient_id,
-                status: a.status || "agendado",
-                event_type: a.type || "atendimento",
-                created_at: a.created_at,
-              });
-            }
-          });
-        }
-      } catch {}
-
-      // 4. Merge com agendamentos salvos localmente
-      const localEvents = getStoredLocalEvents();
-      const eventMap = new Map<string, any>();
-      rawList.forEach((e) => {
-        if (e?.id && !isRecordWiped(e)) eventMap.set(e.id, e);
-      });
-      localEvents.forEach((le) => {
-        if (le?.id && !isRecordWiped(le)) {
-          const existing = eventMap.get(le.id);
-          eventMap.set(le.id, existing ? { ...existing, ...le } : le);
-        }
+      // Consultas registradas apenas na tabela appointments (mesmo id do evento quando criadas pela agenda)
+      const { data: apptRows, error: apptError } = await supabase
+        .from("appointments")
+        .select("id, date, start_time, end_time, patient_id, doctor_id, type, status, notes, created_at")
+        .order("date", { ascending: true })
+        .limit(200);
+      if (apptError) throw apptError;
+      const existingIds = new Set(rawList.map((e) => e.id));
+      (apptRows ?? []).forEach((a: any) => {
+        if (existingIds.has(a.id)) return;
+        rawList.push({
+          id: a.id,
+          title: a.type || "Consulta",
+          description: a.notes,
+          starts_at: `${a.date}T${a.start_time || "08:00"}:00`,
+          ends_at: `${a.date}T${a.end_time || a.start_time || "08:30"}:00`,
+          assigned_to: a.doctor_id,
+          patient_id: a.patient_id,
+          status: a.status || "agendado",
+          event_type: a.type || "atendimento",
+          created_at: a.created_at,
+        });
       });
 
-      const allMerged = Array.from(eventMap.values()).filter((e) => !isRecordWiped(e));
+      const allMerged = rawList;
 
       return allMerged.map((e) => {
         const meta = parseMeta(e.description);
@@ -804,31 +756,6 @@ function DashboardPage() {
                     : `${next24h.length} agendamento${next24h.length === 1 ? "" : "s"}${
                         next24h.length > 6 ? " · mostrando os 6 primeiros" : ""
                       }`
-                }
-                action={
-                  appts.length > 0 ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-7 px-2"
-                      title="Zerar todos os agendamentos"
-                      onClick={async () => {
-                        if (
-                          window.confirm(
-                            "Deseja excluir todos os agendamentos salvos para reiniciar do zero?",
-                          )
-                        ) {
-                          await wipeAllAppointments();
-                          void qc.invalidateQueries({ queryKey: ["dashboard"] });
-                          void qc.invalidateQueries({ queryKey: ["financial-snapshot"] });
-                          void qc.invalidateQueries({ queryKey: ["agenda"] });
-                        }
-                      }}
-                    >
-                      <Trash2 className="size-3.5 mr-1" />
-                      Zerar agendamentos
-                    </Button>
-                  ) : undefined
                 }
               />
               {next24h.length === 0 ? (

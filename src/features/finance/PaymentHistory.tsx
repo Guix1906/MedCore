@@ -18,7 +18,7 @@ import {
   moneyCents,
   PAYMENT_METHODS,
 } from "@/features/acompanhamentos/followup-utils";
-import { refreshFinance, saveLocalPayment, reverseLocalPayment, saveLocalTitle } from "./finance-api";
+import { refreshFinance } from "./finance-api";
 import { remaining } from "./finance-math";
 import type { FinanceSnapshot, FinancialTitle, FinancialPayment } from "./finance-schema";
 
@@ -65,95 +65,21 @@ export default function PaymentHistory({
         throw new Error("Informe um valor positivo até o saldo em aberto.");
       setSubmitted(true);
 
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        title.id,
-      );
-      let rpcSuccess = false;
+      const accountId =
+        (account && selectableAccounts.some((a) => a.id === account) ? account : "") ||
+        selectableAccounts[0]?.id;
+      if (!accountId) throw new Error("Selecione a conta financeira que recebeu o valor.");
 
-      if (isUuid) {
-        try {
-          const isAccountUuid = (id?: string) =>
-            !!id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-          const resolvedAccountId = isAccountUuid(account)
-            ? account
-            : selectableAccounts.find((a) => isAccountUuid(a.id))?.id ||
-              "00000000-0000-0000-0000-000000000001";
-
-          const { error } = await supabase.rpc("record_financial_payment", {
-            p_id: requestId,
-            p_transaction_id: title.id,
-            p_amount: value,
-            p_paid_on: date,
-            p_method: method,
-            p_account_id: resolvedAccountId,
-            p_payer_name: payer || null,
-          });
-          if (!error) {
-            rpcSuccess = true;
-          } else {
-            console.warn("Aviso ao registrar pagamento via RPC:", error);
-          }
-        } catch (rpcErr) {
-          console.warn("Falha na chamada RPC de pagamento:", rpcErr);
-        }
-      }
-
-      // Se não foi persistido no banco remoto (título local evt- ou erro RPC), salva localmente
-      if (!rpcSuccess) {
-        saveLocalPayment({
-          id: requestId,
-          transaction_id: title.id,
-          amount: value,
-          paid_on: date,
-          payment_method: method.toUpperCase(),
-          account_id: account || "acc-bb",
-          payer_name: payer || title.patient_name || "Cliente",
-          created_by: null,
-          created_at: new Date().toISOString(),
-          legacy: false,
-          reversed_at: null,
-          reversed_by: null,
-          reversal_reason: null,
-        });
-      }
-
-      // Atualiza o título imediatamente para que o status 'pago' e o saldo zero sejam refletidos
-      const currentPaid = Number(title.paid_amount) || 0;
-      const newPaidTotal = currentPaid + value;
-      const isPaidNow = newPaidTotal >= Number(title.amount) - 0.01;
-
-      saveLocalTitle({
-        ...title,
-        paid_amount: isPaidNow ? Number(title.amount) : newPaidTotal,
-        status: isPaidNow ? "pago" : title.status,
+      const { error } = await supabase.rpc("record_financial_payment", {
+        p_id: requestId,
+        p_transaction_id: title.id,
+        p_amount: value,
+        p_paid_on: date,
+        p_method: method,
+        p_account_id: accountId,
+        p_payer_name: payer || null,
       });
-
-      if (isUuid) {
-        try {
-          await (supabase as any)
-            .from("transactions")
-            .update({
-              paid_amount: isPaidNow ? Number(title.amount) : newPaidTotal,
-              status: isPaidNow ? "pago" : "pendente",
-              paid_at: isPaidNow ? new Date().toISOString() : null,
-            })
-            .eq("id", title.id);
-        } catch {}
-      }
-
-      if (title.installment_id) {
-        try {
-          await supabase
-            .from("treatment_installments")
-            .update({
-              status: isPaidNow ? "pago" : "pendente",
-              paid_date: isPaidNow ? date : null,
-            })
-            .eq("id", title.installment_id);
-        } catch {}
-      }
-
-      window.dispatchEvent(new CustomEvent("medcore_local_title_saved"));
+      if (error) throw error;
 
       setRequestId(crypto.randomUUID());
       setSubmitted(false);
@@ -172,24 +98,11 @@ export default function PaymentHistory({
     if (busy) return;
     setBusy(true);
     try {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        reversing,
-      );
-      let rpcSuccess = false;
-      if (isUuid) {
-        try {
-          const { error } = await supabase.rpc("reverse_financial_payment", {
-            p_id: reversing,
-            p_reason: reason,
-          });
-          if (!error) rpcSuccess = true;
-        } catch (rpcErr) {
-          console.warn("Falha no estorno via RPC:", rpcErr);
-        }
-      }
-      if (!rpcSuccess) {
-        reverseLocalPayment(reversing, reason);
-      }
+      const { error } = await supabase.rpc("reverse_financial_payment", {
+        p_id: reversing,
+        p_reason: reason,
+      });
+      if (error) throw error;
       setReversing("");
       setReason("");
       setReceipt(null);

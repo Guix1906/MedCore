@@ -4,7 +4,6 @@ import { toast } from "sonner";
 import { CheckSquare, Users, AlertCircle, Gavel, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { isUuid, toValidUuid, ensureValidUuid } from "@/lib/uuid";
-import { saveStoredLocalEvent } from "@/lib/local-events";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -387,70 +386,26 @@ export function AddEventModal({
       const end = f.ends_at ? new Date(f.ends_at) : null;
       if (f.all_day) start.setHours(0, 0, 0, 0);
 
-      const validCreatedBy = isUuid(ctx.userId) ? ctx.userId : ensureValidUuid(ctx.userId);
-      const validCompanyId = isUuid(ctx.companyId) ? ctx.companyId : ensureValidUuid(ctx.companyId);
-      const validAssignedTo =
-        f.assigned_to && isUuid(f.assigned_to) ? f.assigned_to : toValidUuid(f.assigned_to);
-      const validCaseId = f.case_id && isUuid(f.case_id) ? f.case_id : toValidUuid(f.case_id);
+      if (!isUuid(ctx.companyId)) throw new Error("Clínica ativa inválida.");
+      const { data: authData } = await supabase.auth.getUser();
+      if (!authData?.user) throw new Error("Sessão expirada. Entre novamente para salvar.");
       const location = f.location
         ? `${f.location}${f.location_kind !== "presencial" ? ` (${f.location_kind})` : ""}`
         : null;
 
-      const insertedId = crypto.randomUUID();
-
-      // Salva na camada local imediatamente (0ms)
-      saveStoredLocalEvent(
-        {
-          id: insertedId,
-          title: f.title.trim(),
-          description: f.description || null,
-          event_type: "meeting",
-          starts_at: start.toISOString(),
-          ends_at: end ? end.toISOString() : null,
-          location,
-          case_id: f.case_id || null,
-          assigned_to: f.assigned_to || null,
-        },
-        validCompanyId,
-      );
-
-      // Sincronização remota em background
-      void (async () => {
-        try {
-          const { data: authData } = await supabase.auth.getUser();
-          const supabaseAuthId = authData?.user?.id;
-          const remoteCreatedBy =
-            supabaseAuthId && isUuid(supabaseAuthId) ? supabaseAuthId : validCreatedBy;
-
-          const { error } = await supabase.from("events").insert({
-            id: insertedId,
-            company_id: validCompanyId,
-            created_by: remoteCreatedBy,
-            title: f.title.trim(),
-            description: f.description || null,
-            event_type: "meeting",
-            starts_at: start.toISOString(),
-            ends_at: end ? end.toISOString() : null,
-            location,
-            case_id: validCaseId,
-            assigned_to: validAssignedTo,
-          });
-
-          if (error) {
-            await supabase.from("events").insert({
-              id: insertedId,
-              company_id: validCompanyId,
-              created_by: remoteCreatedBy,
-              title: f.title.trim(),
-              description: f.description || null,
-              event_type: "meeting",
-              starts_at: start.toISOString(),
-              ends_at: end ? end.toISOString() : null,
-              location,
-            });
-          }
-        } catch {}
-      })();
+      const { error } = await supabase.from("events").insert({
+        company_id: ctx.companyId,
+        created_by: authData.user.id,
+        title: f.title.trim(),
+        description: f.description || null,
+        event_type: "meeting",
+        starts_at: start.toISOString(),
+        ends_at: end ? end.toISOString() : null,
+        location,
+        case_id: isUuid(f.case_id) ? f.case_id : null,
+        assigned_to: isUuid(f.assigned_to) ? f.assigned_to : null,
+      });
+      if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Evento criado com sucesso");
@@ -739,67 +694,23 @@ export function AddHearingModal({
         ? `🔗 ${f.location || ""} (virtual)`
         : `${f.court} • ${f.location || ""}`.trim();
 
-      const validCreatedBy = isUuid(ctx.userId) ? ctx.userId : ensureValidUuid(ctx.userId);
-      const validCompanyId = isUuid(ctx.companyId) ? ctx.companyId : ensureValidUuid(ctx.companyId);
-      const validAssignedTo =
-        f.assigned_to && isUuid(f.assigned_to) ? f.assigned_to : toValidUuid(f.assigned_to);
-      const validCaseId = f.case_id && isUuid(f.case_id) ? f.case_id : toValidUuid(f.case_id);
+      if (!isUuid(ctx.companyId)) throw new Error("Clínica ativa inválida.");
+      const { data: authData } = await supabase.auth.getUser();
+      if (!authData?.user) throw new Error("Sessão expirada. Entre novamente para salvar.");
 
-      const insertedId = crypto.randomUUID();
-
-      // Salva na camada local imediatamente (0ms)
-      saveStoredLocalEvent(
-        {
-          id: insertedId,
-          title: titleFinal,
-          description: desc || null,
-          event_type: "hearing",
-          starts_at: start.toISOString(),
-          ends_at: end.toISOString(),
-          location: locFinal,
-          case_id: f.case_id || null,
-          assigned_to: f.assigned_to || null,
-        },
-        validCompanyId,
-      );
-
-      // Sincronização remota em background
-      void (async () => {
-        try {
-          const { data: authData } = await supabase.auth.getUser();
-          const supabaseAuthId = authData?.user?.id;
-          const remoteCreatedBy =
-            supabaseAuthId && isUuid(supabaseAuthId) ? supabaseAuthId : validCreatedBy;
-
-          const { error } = await supabase.from("events").insert({
-            id: insertedId,
-            company_id: validCompanyId,
-            created_by: remoteCreatedBy,
-            title: titleFinal,
-            description: desc || null,
-            event_type: "hearing",
-            starts_at: start.toISOString(),
-            ends_at: end.toISOString(),
-            location: locFinal,
-            case_id: validCaseId,
-            assigned_to: validAssignedTo,
-          });
-
-          if (error) {
-            await supabase.from("events").insert({
-              id: insertedId,
-              company_id: validCompanyId,
-              created_by: remoteCreatedBy,
-              title: titleFinal,
-              description: desc || null,
-              event_type: "hearing",
-              starts_at: start.toISOString(),
-              ends_at: end.toISOString(),
-              location: locFinal,
-            });
-          }
-        } catch {}
-      })();
+      const { error } = await supabase.from("events").insert({
+        company_id: ctx.companyId,
+        created_by: authData.user.id,
+        title: titleFinal,
+        description: desc || null,
+        event_type: "hearing",
+        starts_at: start.toISOString(),
+        ends_at: end.toISOString(),
+        location: locFinal,
+        case_id: isUuid(f.case_id) ? f.case_id : null,
+        assigned_to: isUuid(f.assigned_to) ? f.assigned_to : null,
+      });
+      if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Audiência agendada com sucesso");

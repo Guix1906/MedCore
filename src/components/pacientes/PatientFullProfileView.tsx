@@ -29,7 +29,6 @@ import {
 } from "@/hooks/usePatientClinicalHistory";
 import { supabase } from "@/integrations/supabase/client";
 import type { StructuredConsultationResult } from "@/lib/gemini";
-import { prontuarioService } from "@/services/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -214,12 +213,8 @@ export function PatientFullProfileView({
       finished_at: new Date().toISOString(),
     };
     try {
-      try {
-        await prontuarioService.createRecord(payload);
-      } catch {
-        const { error } = await supabase.from("medical_records").insert(payload);
-        if (error) throw error;
-      }
+      const { error } = await supabase.from("medical_records").insert(payload);
+      if (error) throw error;
       toast.success("Atendimento salvo no histórico do paciente.");
       setAnamnese("");
       void refreshHistory();
@@ -250,65 +245,15 @@ export function PatientFullProfileView({
     }
     setIsUpdating(true);
     try {
-      // 1. Atualiza no Supabase se id válido
       if (data.id && !isExample && editingItem.kind === "prontuario") {
-        try {
-          await supabase
-            .from("medical_records")
-            .update({
-              complaint: editComplaint.trim(),
-              conduct: editConduct.trim() || null,
-            })
-            .eq("id", editingItem.id);
-        } catch (e) {
-          console.warn("Supabase medical_records update fallback:", e);
-        }
-      }
-
-      // 2. Atualiza via API PHP
-      if (editingItem.kind === "prontuario") {
-        try {
-          await prontuarioService.updateRecord(editingItem.id, {
+        const { error } = await supabase
+          .from("medical_records")
+          .update({
             complaint: editComplaint.trim(),
             conduct: editConduct.trim() || null,
-          });
-        } catch {}
-      }
-
-      // 3. Atualiza no LocalStorage
-      const updateLocal = (key: string) => {
-        try {
-          const raw = localStorage.getItem(key);
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed)) {
-              const next = parsed.map((r: any) =>
-                r.id === editingItem.id
-                  ? { ...r, complaint: editComplaint.trim(), conduct: editConduct.trim() || null }
-                  : r,
-              );
-              localStorage.setItem(key, JSON.stringify(next));
-            } else if (parsed && parsed.id === editingItem.id) {
-              localStorage.setItem(
-                key,
-                JSON.stringify({
-                  ...parsed,
-                  complaint: editComplaint.trim(),
-                  conduct: editConduct.trim() || null,
-                }),
-              );
-            }
-          }
-        } catch {}
-      };
-
-      if (data.id) {
-        updateLocal("medcore_prontuario_history_" + data.id);
-        updateLocal("medcore_prontuario_" + data.id);
-      }
-      if (data.name) {
-        updateLocal("medcore_prontuario_history_" + data.name);
-        updateLocal("medcore_prontuario_" + data.name);
+          })
+          .eq("id", editingItem.id);
+        if (error) throw error;
       }
 
       toast.success("Prontuário atualizado com sucesso!");
@@ -333,53 +278,17 @@ export function PatientFullProfileView({
     if (!deletingItem) return;
     setIsDeleting(true);
     try {
-      // 1. Exclui no Supabase
       if (data.id && !isExample) {
-        if (deletingItem.kind === "prontuario") {
-          try {
-            await supabase.from("medical_records").delete().eq("id", deletingItem.id);
-          } catch (e) {
-            console.warn("Supabase medical_records delete fallback:", e);
-          }
-        } else if (deletingItem.kind === "consulta") {
-          try {
-            await supabase.from("appointments").delete().eq("id", deletingItem.id);
-          } catch (e) {
-            console.warn("Supabase appointments delete fallback:", e);
-          }
+        const table =
+          deletingItem.kind === "prontuario"
+            ? "medical_records"
+            : deletingItem.kind === "consulta"
+              ? "appointments"
+              : null;
+        if (table) {
+          const { error } = await supabase.from(table).delete().eq("id", deletingItem.id);
+          if (error) throw error;
         }
-      }
-
-      // 2. Exclui via API PHP
-      if (deletingItem.kind === "prontuario") {
-        try {
-          await prontuarioService.deleteRecord(deletingItem.id);
-        } catch {}
-      }
-
-      // 3. Remove do LocalStorage
-      const deleteLocal = (key: string) => {
-        try {
-          const raw = localStorage.getItem(key);
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed)) {
-              const next = parsed.filter((r: any) => r.id !== deletingItem.id);
-              localStorage.setItem(key, JSON.stringify(next));
-            } else if (parsed && parsed.id === deletingItem.id) {
-              localStorage.removeItem(key);
-            }
-          }
-        } catch {}
-      };
-
-      if (data.id) {
-        deleteLocal("medcore_prontuario_history_" + data.id);
-        deleteLocal("medcore_prontuario_" + data.id);
-      }
-      if (data.name) {
-        deleteLocal("medcore_prontuario_history_" + data.name);
-        deleteLocal("medcore_prontuario_" + data.name);
       }
 
       toast.success("Prontuário excluído com sucesso!");

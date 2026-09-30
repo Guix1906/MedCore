@@ -1,93 +1,69 @@
-# MedCore � Sistema de Gest�o Cl�nica e Prontu�rio Eletr�nico
+# MedCore — Sistema de Gestão Clínica e Prontuário Eletrônico
 
-Sistema completo para cl�nicas m�dicas, gest�o de pacientes, agenda inteligente, prontu�rio eletr�nico (PEP), financeiro e copiloto de IA cl�nica, em estrita conformidade com a **LGPD (Lei Geral de Prote��o de Dados)** e padr�es de seguran�a de dados de sa�de (**PHI**).
-
----
-
-## ??? Arquitetura do Sistema
-
-- **Frontend**: [React 19](https://react.dev/), [TanStack Start](https://tanstack.com/start), [TanStack Router](https://tanstack.com/router), [TanStack Query](https://tanstack.com/query), Tailwind CSS v4, Radix UI, Framer Motion.
-- **Backend (BFF / Core API)**: PHP 8.2+ REST API de alta performance com arquitetura MVC limpa, JWT HS256 com claims RFC 7519, rate limiting e isolamento multi-tenant estrito.
-- **Banco de Dados Prim�rio**: Supabase PostgreSQL (com RLS e `security_invoker = on`) + SQLite local para armazenamento de storage e BFF.
-- **IA / Copiloto Cl�nico**: Google Gemini (executado 100% via Proxy Server-Side com anonimiza��o e minimiza��o pr�via de PHI).
+Sistema para clínicas médicas: pacientes, agenda, prontuário eletrônico (PEP), financeiro e copiloto de IA clínica, com foco na **LGPD (Lei Geral de Proteção de Dados)** e na proteção de dados de saúde.
 
 ---
 
-## ?? Seguran�a e Conformidade LGPD
+## Arquitetura
 
-1. **Isolamento Multi-Tenant**: Toda consulta, atualiza��o e exclus�o � estritamente vinculada ao `company_id` validado criptograficamente no token JWT. Acesso cruzado entre cl�nicas retorna `HTTP 404 Not Found`.
-2. **Prote��o de PHI**: Nenhum dado de sa�de � armazenado em texto claro no `localStorage` ou `sessionStorage` do navegador.
-3. **Chaves de API Isoladas**: Chaves mestras (`GEMINI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) residem exclusivamente no servidor e nunca vazam para o bundle JavaScript de produ��o.
-4. **JWT Hardening**: Tokens com validade curta (30 minutos), identificador �nico `jti`, claims `iss`/`aud`, rejei��o de `alg: none` e lista de revoga��o de tokens (logout seguro).
-5. **CORS Restrito**: Apenas origens explicitamente configuradas em `CORS_ALLOWED_ORIGINS` recebem cabe�alhos de acesso com credenciais.
-6. **Pre-commit Secrets Scanner**: Script automatizado (`scripts/check-secrets.js`) que impede commits acidentais de segredos ou bancos de dados.
+- **Frontend**: [React 19](https://react.dev/), [TanStack Start](https://tanstack.com/start) (SSR + funções de servidor), TanStack Router, TanStack Query, Tailwind CSS v4, Radix UI, Framer Motion. Publicado na Vercel.
+- **Banco de dados (fonte única)**: Supabase PostgreSQL com RLS, permissões por perfil (`company_members.effective_permissions`) e RPCs `SECURITY DEFINER` com verificação de permissão.
+- **Copiloto de IA**: Google Gemini chamado somente pela função de servidor `src/services/ai.service.ts` (exige sessão e permissão `records.edit`; remove nome, CPF, telefone e e-mail antes do envio; em caso de falha devolve erro, nunca texto gerado sem a IA).
+- **Backend PHP (`backend/`)**: legado, não usado pelo frontend em produção. Mantido apenas para referência e testes; não recebe novos fluxos.
+
+Nenhum dado clínico ou financeiro é mantido no navegador: o Supabase é a única fonte. Cópias locais deixadas por versões anteriores são apagadas ao abrir o sistema e no logout (`src/lib/legacy-local-data.ts`).
 
 ---
 
-## ?? Instala��o e Execu��o
+## Segurança e conformidade LGPD
 
-### Pr�-requisitos
-- **Node.js**: v20+ e npm
-- **PHP**: v8.2+ com extens�es `pdo_sqlite` e `curl`
+1. **Isolamento por clínica**: as políticas RLS usam `is_company_member` (vínculo ativo) e as guardas `perm_guard_*` exigem a permissão do módulo. A migração `20260929120000_security_hardening.sql` restaura esse isolamento, que havia sido anulado em `20260927200000`.
+2. **Prontuário preservado**: pacientes com prontuário (registros, prescrições, exames, sinais vitais, anexos, evoluções) não podem ser excluídos — a guarda é obrigatória por 20 anos (Lei 13.787/2018, Res. CFM 1.821/2007). Desative o cadastro.
+3. **Chaves de API no servidor**: `GEMINI_API_KEY` só existe nas variáveis de ambiente da Vercel; o bundle do navegador contém apenas a chave pública (anon) do Supabase.
+4. **Cabeçalhos HTTP**: `vercel.json` define HSTS, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy` e `Permissions-Policy`.
+5. **Sessão**: encerramento automático após 15 minutos de inatividade.
+6. **Pre-commit Secrets Scanner**: `scripts/check-secrets.js` impede commits de segredos e bancos de dados.
 
-### 1. Clonar e Instalar Depend�ncias
+### Variáveis de ambiente (Vercel)
+
+| Variável | Uso |
+|---|---|
+| `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Validação da sessão nas funções de servidor |
+| `GEMINI_API_KEY` | Copiloto de IA (obrigatória para o recurso funcionar) |
+| `GEMINI_MODEL` | Opcional; padrão `gemini-2.5-flash` |
+
+---
+
+## Instalação e execução
+
+Pré-requisitos: **Node.js** v20+ e npm.
+
 ```bash
 git clone https://github.com/Guix1906/MedCore.git
 cd MedCore
 npm install
-```
-
-### 2. Configurar Vari�veis de Ambiente
-Copie os modelos de vari�veis de ambiente:
-```bash
-# Frontend (.env)
 cp .env.example .env
-
-# Backend (backend/.env)
-cp backend/.env.example backend/.env
-```
-
-Gere uma chave segura para `JWT_SECRET` no arquivo `backend/.env` (m�nimo 32 caracteres).
-
-### 3. Migra��o do Banco de Dados
-```bash
-php backend/cli/migrate.php
-```
-
-### 4. Executar em Desenvolvimento
-```bash
-# Terminal 1: Backend PHP
-php -S 127.0.0.1:8000 -t backend/public
-
-# Terminal 2: Frontend TanStack Start / Vite
 npm run dev
 ```
 
 ---
 
-## ?? Testes Automatizados
-
-O projeto inclui su�tes de testes de seguran�a, multi-tenant e regras financeiras:
+## Verificações automatizadas
 
 ```bash
-# 1. Testes de Isolamento Multi-Tenant (Garante que Cl�nica A n�o acessa Cl�nica B)
-php -c backend/php.ini backend/tests/test_multitenant.php
-
-# 2. Testes de Seguran�a Criptogr�fica do JWT (Validade, Algoritmos, Revoga��o)
-php -c backend/php.ini backend/tests/test_jwt.php
-
-# 3. Testes de Matem�tica e Equival�ncia Financeira
-node scripts/test-financial-math.js
-
-# 4. Verifica��o Est�tica de Tipos TypeScript
 npx tsc --noEmit
-
-# 5. Verifica��o de Linter
-npm run lint
+node scripts/test-financial-math.js
+node scripts/test-financial-ledger.mjs
+node scripts/test-cash-flow.mjs
+node scripts/test-financial-operations.mjs
+node scripts/test-financial-layout.mjs
+node scripts/test-treatment-followup.mjs
+node scripts/test-user-permissions.mjs
 ```
 
----
+O workflow `.github/workflows/ci.yml` executa essas verificações a cada push e pull request.
 
+---
 ## Financeiro: titulos e baixas
 
 O financeiro do frontend usa o Supabase como fonte unica; nao alterna para o PHP em caso de falha. A API PHP legada nao recebe novas baixas deste fluxo. Antes da troca em producao, reconcilie eventuais registros exclusivos do PHP: estas migracoes nao os importam automaticamente.
@@ -98,7 +74,7 @@ Baixas novas exigem valor, data, forma, conta da mesma clinica e identificador d
 
 Recebido/pago sao calculados pelos eventos ativos, em suas datas; a receber/pagar usa saldo residual por vencimento. O resultado das baixas inclui recebiveis de cartao: nao e lucro nem saldo bancario. Comprovantes impressos nao sao documentos fiscais.
 
-A agenda gera uma unica cobranca pendente por evento. Conclusao de atendimento e sinal informado na agenda nao confirmam pagamento: a baixa deve ser registrada no Financeiro. Falhas de sincronizacao sao apresentadas e nao criam registros sem paciente/origem como alternativa.
+A agenda gera uma unica cobranca por evento (`schedule_appointment_finance`, exige permissao financeira de criacao). O sinal informado no agendamento e registrado como baixa somente para quem tem `finance.receive`; conclusao de atendimento nao confirma pagamento. Falhas na gravacao do agendamento ou da cobranca sao exibidas ao usuario; nada e mantido apenas no navegador. Excluir um agendamento cancela a cobranca sem pagamento ou retem o sinal ja recebido (`cancel_appointment_finance`).
 
 Revise os papeis antes da publicacao: owner/admin/finance_admin podem administrar; finance_edit pode lancar/baixar; finance_view pode consultar. No cadastro legado sem company_id, administradores e recepcionistas ativos tem acesso operacional, mas recepcionistas nao pagam despesas nem estornam. Registros legados sem empresa continuam explicitamente separados, sem atribuicao automatica de clinica. As permissoes financeiras nao concedem acesso ao prontuario.
 
@@ -207,7 +183,7 @@ WHERE a.action = 'migration.backfill'
 ORDER BY a.id;
 ```
 
-## ?? Build de Produ��o
+## Build de produção
 
 ```bash
 npm run build
@@ -215,5 +191,5 @@ npm run build
 
 ---
 
-## ?? Licen�a
+## Licença
 Propriedade de MedCore Health Hub. Todos os direitos reservados.

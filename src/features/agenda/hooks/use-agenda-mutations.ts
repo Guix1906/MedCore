@@ -2,8 +2,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { pad2 } from "@/lib/date-utils";
-import { deleteStoredLocalEvent, updateStoredLocalEventTimes } from "@/lib/local-events";
-import { deleteLocalFinancialTitle, deleteLocalPayment } from "@/features/finance/finance-api";
 import type { Activity } from "@/components/agenda/agenda-types";
 
 /**
@@ -41,14 +39,14 @@ export function useAgendaMutations(onDone: (a: Activity | null) => void) {
       const tbl = a.source === "task" ? "tasks" : a.source === "event" ? "events" : "deadlines";
       const id = a.id && a.id.includes(":") ? a.id.split(":")[1] : a.id;
       if (a.source === "event") {
-        deleteStoredLocalEvent(id);
-        deleteLocalFinancialTitle(`evt-${id}`);
-        deleteLocalPayment(`pay-evt-${id}`);
-        try {
-          await (supabase as any).from("transactions").delete().like("origin_key", `event:${id}`);
-          await (supabase as any).from("financial_titles").delete().like("origin_key", `event:${id}`);
-          await (supabase as any).from("financial_payments").delete().like("id", `pay-evt-${id}`);
-        } catch {}
+        // Cobrança do agendamento: sem pagamento é cancelada; sinal já recebido é mantido
+        // como receita (o histórico financeiro não é apagado).
+        const { error: financeError } = await supabase.rpc("cancel_appointment_finance", {
+          p_event_id: id,
+          p_action: "retain",
+          p_reason: "Agendamento excluído",
+        });
+        if (financeError) throw financeError;
       }
       const { error } = await supabase.from(tbl).delete().eq("id", id);
       if (error) throw error;
@@ -77,10 +75,6 @@ export function useAgendaMutations(onDone: (a: Activity | null) => void) {
       const targetId = a.id && a.id.includes(":") ? a.id.split(":")[1] : a.id;
 
       if (a.source === "event") {
-        // 1. Salva localmente de forma síncrona
-        updateStoredLocalEventTimes(targetId, validStart.toISOString(), validEnd.toISOString());
-
-        // 2. Atualiza o cache do React Query
         qc.setQueriesData({ queryKey: ["agenda-events"] }, (old: any) => {
           if (!Array.isArray(old)) return old;
           return old.map((evt: any) =>
@@ -105,8 +99,6 @@ export function useAgendaMutations(onDone: (a: Activity | null) => void) {
           .eq("id", targetId);
         if (error) throw error;
       } else if (a.source === "event") {
-        updateStoredLocalEventTimes(targetId, newStart.toISOString(), newEnd.toISOString());
-
         const { error } = await supabase
           .from("events")
           .update({
@@ -147,10 +139,6 @@ export function useAgendaMutations(onDone: (a: Activity | null) => void) {
 
       const targetId = a.id && a.id.includes(":") ? a.id.split(":")[1] : a.id || "";
       if (a.source === "event") {
-        // 1. Salva localmente de forma síncrona
-        updateStoredLocalEventTimes(targetId, validStart.toISOString(), validEnd.toISOString());
-
-        // 2. Atualiza o cache do React Query
         qc.setQueriesData({ queryKey: ["agenda-events"] }, (old: any) => {
           if (!Array.isArray(old)) return old;
           return old.map((evt: any) =>
@@ -180,8 +168,6 @@ export function useAgendaMutations(onDone: (a: Activity | null) => void) {
       const targetId = a.id && a.id.includes(":") ? a.id.split(":")[1] : a.id || "";
 
       if (a.source === "event") {
-        updateStoredLocalEventTimes(targetId, validStart.toISOString(), validEnd.toISOString());
-
         const { error } = await supabase
           .from("events")
           .update({

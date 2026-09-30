@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { authService, getStoredToken, getStoredUser, type UserProfile } from "@/services/api";
+import { removeStoredToken } from "@/services/api";
 import { supabase } from "@/integrations/supabase/client";
+import { purgeLocalClinicalData } from "@/lib/legacy-local-data";
 import { invalidateAuthRouteCache } from "@/routes/_authenticated/route";
 import { qk } from "@/lib/query-keys";
 
@@ -32,25 +33,9 @@ export function useAuth() {
     return () => sub.subscription.unsubscribe();
   }, [queryClient]);
 
-  // 1. Sessão rápida (PHP ou Supabase)
   const sessionQuery = useQuery({
     queryKey: ["auth", "session"],
     queryFn: async () => {
-      // Prioridade 1: Token PHP em memória / storage
-      const token = getStoredToken();
-      const phpUser = getStoredUser();
-      if (token && phpUser) {
-        return {
-          access_token: token,
-          user: {
-            id: phpUser.id,
-            email: phpUser.email,
-            user_metadata: { full_name: phpUser.full_name, avatar_url: phpUser.avatar_url },
-          },
-        };
-      }
-
-      // Prioridade 2: Fallback Supabase
       try {
         const { data } = await supabase.auth.getSession();
         return data.session;
@@ -68,18 +53,6 @@ export function useAuth() {
   const profileQuery = useQuery({
     queryKey: ["auth", "profile", user?.id],
     queryFn: async () => {
-      const phpUser = getStoredUser();
-      if (phpUser && phpUser.id === user?.id) {
-        return {
-          id: phpUser.id,
-          full_name: phpUser.full_name ?? null,
-          avatar_url: phpUser.avatar_url ?? null,
-          phone: phpUser.phone ?? null,
-          doctor_id: null,
-        } as Profile;
-      }
-
-      // Consulta Supabase como fallback
       try {
         const { data } = await supabase
           .from("profiles")
@@ -106,8 +79,7 @@ export function useAuth() {
 }
 
 export async function signOut() {
-  await authService.signOut();
-  try {
-    await supabase.auth.signOut();
-  } catch {}
+  removeStoredToken();
+  purgeLocalClinicalData();
+  await supabase.auth.signOut();
 }

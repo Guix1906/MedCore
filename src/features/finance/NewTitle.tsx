@@ -34,7 +34,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { FinanceSnapshot, FinancialTitle } from "./finance-schema";
-import { refreshFinance, saveLocalFinancialTitle, saveLocalPayment } from "./finance-api";
+import { refreshFinance } from "./finance-api";
 import { CategoryModal } from "./CategoriesManager";
 import { getFinanceCategories } from "./finance-categories";
 
@@ -148,123 +148,43 @@ export default function NewTitle({
       const competenceStr = dueDate.slice(0, 7) + "-01";
       const resolvedPayer = payer.trim() || (isExpense ? "Despesa da clínica" : "Cliente");
 
-      // 1. Tenta salvar via RPC no banco de dados
-      let rpcSuccess = false;
-      try {
-        const { error: rpcErr } = await supabase.rpc("create_financial_title", {
-          p_id: titleId,
-          p_type: type,
-          p_amount: numAmount,
-          p_due_date: dueDate,
-          p_competence_date: competenceStr,
-          p_description: description.trim(),
-          p_category: category,
-          p_company_id: company,
-          p_patient_id: type === "receita" ? patient || null : null,
-          p_payer_name: resolvedPayer,
-        });
-        if (!rpcErr) rpcSuccess = true;
-        else console.warn("Aviso ao salvar título via RPC:", rpcErr);
-      } catch (errRpc) {
-        console.warn("RPC create_financial_title indisponível:", errRpc);
-      }
-
-      // 2. Fallback direto se a RPC falhar
-      if (!rpcSuccess) {
-        try {
-          const { error: directErr } = await (supabase as any).from("transactions").insert({
-            id: titleId,
-            type: type,
-            amount: numAmount,
-            paid_amount: isPaidNow ? numAmount : 0,
-            date: todayStr,
-            due_date: dueDate,
-            competence_date: competenceStr,
-            status: isPaidNow ? "pago" : "pendente",
-            description: description.trim(),
-            category: category,
-            company_id: company,
-            patient_id: type === "receita" ? patient || null : null,
-            payer_name: resolvedPayer,
-            created_by: (await supabase.auth.getUser()).data.user?.id || null,
-          });
-          if (!directErr) rpcSuccess = true;
-        } catch (directErr) {
-          console.warn("Fallback direto transactions info:", directErr);
-        }
-      }
-
-      // 3. Salva no cache local para resposta imediata (0ms)
-      saveLocalFinancialTitle({
-        id: titleId,
-        type: type,
-        amount: numAmount,
-        paid_amount: isPaidNow ? numAmount : 0,
-        due_date: dueDate,
-        date: todayStr,
-        competence_date: competenceStr,
-        status: isPaidNow ? "pago" : "pendente",
-        description: description.trim(),
-        category: category,
-        company_id: company,
-        patient_id: type === "receita" ? patient || null : null,
-        patient_name: type === "receita" ? resolvedPayer : null,
-        payer_name: resolvedPayer,
-        treatment_id: null,
-        installment_id: null,
-        origin_key: null,
-        can_settle: true,
-        can_reverse: true,
-        can_cancel: true,
+      const { error: titleError } = await supabase.rpc("create_financial_title", {
+        p_id: titleId,
+        p_type: type,
+        p_amount: numAmount,
+        p_due_date: dueDate,
+        p_competence_date: competenceStr,
+        p_description: description.trim(),
+        p_category: category,
+        p_company_id: company,
+        p_patient_id: type === "receita" ? patient || null : null,
+        p_payer_name: resolvedPayer,
       });
+      if (titleError) throw titleError;
 
-      // 4. Se o usuário marcou como já pago, dá baixa imediata no caixa
+      // Se o usuário marcou como já pago, registra a baixa no mesmo fluxo do Financeiro
       if (isPaidNow) {
-        const payId = crypto.randomUUID();
-        const accountId = selectedAccount || finance.accounts[0]?.id || "00000000-0000-0000-0000-000000000001";
-
-        try {
-          await supabase.rpc("record_financial_payment", {
-            p_id: payId,
-            p_transaction_id: titleId,
-            p_amount: numAmount,
-            p_paid_on: todayStr,
-            p_method: paymentMethod.toLowerCase(),
-            p_account_id: accountId,
-            p_payer_name: resolvedPayer,
+        const accountId = selectedAccount || finance.accounts[0]?.id;
+        const { error: payError } = accountId
+          ? await supabase.rpc("record_financial_payment", {
+              p_id: crypto.randomUUID(),
+              p_transaction_id: titleId,
+              p_amount: numAmount,
+              p_paid_on: todayStr,
+              p_method: paymentMethod.toLowerCase(),
+              p_account_id: accountId,
+              p_payer_name: resolvedPayer,
+            })
+          : { error: new Error("nenhuma conta financeira selecionada") };
+        if (payError) {
+          await refreshFinance(qc);
+          toast.warning("Lançamento criado, mas a baixa não foi registrada", {
+            description: `${errorMessage(payError)}. Registre o pagamento pelo histórico do título.`,
           });
-        } catch (payErr) {
-          try {
-            await (supabase as any).from("transaction_payments").insert({
-              id: payId,
-              transaction_id: titleId,
-              amount: numAmount,
-              paid_on: todayStr,
-              payment_method: paymentMethod.toLowerCase(),
-              account_id: accountId,
-              payer_name: resolvedPayer,
-            });
-          } catch {}
+          onClose();
+          return;
         }
-
-        saveLocalPayment({
-          id: payId,
-          transaction_id: titleId,
-          amount: numAmount,
-          paid_on: todayStr,
-          payment_method: paymentMethod.toUpperCase(),
-          account_id: accountId,
-          payer_name: resolvedPayer,
-          created_by: null,
-          created_at: new Date().toISOString(),
-          legacy: false,
-          reversed_at: null,
-          reversed_by: null,
-          reversal_reason: null,
-        });
       }
-
-      window.dispatchEvent(new CustomEvent("medcore_local_title_saved"));
       await refreshFinance(qc);
       toast.success(
         isExpense

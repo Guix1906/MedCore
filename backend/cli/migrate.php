@@ -20,7 +20,7 @@ try {
     $schemaFile = __DIR__ . '/../database/schema.sql';
 
     if (!file_exists($schemaFile)) {
-        throw new RuntimeException("Arquivo de schema não encontrado: {$schemaFile}");
+        throw new RuntimeException("Arquivo de schema nÃ£o encontrado: {$schemaFile}");
     }
 
     echo "Executando schema.sql...\n";
@@ -29,6 +29,6 @@ try {
 
     echo "[SUCESSO] Banco de dados migrado com sucesso!\n";
 } catch (\Throwable $e) {
-    echo "[ERRO] Falha na migração: " . $e->getMessage() . "\n";
+    echo "[ERRO] Falha na migraÃ§Ã£o: " . $e->getMessage() . "\n";
     exit(1);
 }

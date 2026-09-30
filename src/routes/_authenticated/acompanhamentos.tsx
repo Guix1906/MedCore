@@ -2,7 +2,7 @@ import { PageHeader } from "@/components/ui-app/PageHeader";
 import { KPICard } from "@/components/ds/Card";
 import TreatmentAlerts from "@/features/acompanhamentos/TreatmentAlerts";
 import { changeTreatmentStatus } from "@/features/acompanhamentos/ClinicalFollowup";
-import { localDate, protocolDeadline } from "@/features/acompanhamentos/followup-utils";
+import { errorMessage, localDate, protocolDeadline } from "@/features/acompanhamentos/followup-utils";
 import type { DbRow } from "@/lib/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, Outlet, useRouterState, useNavigate } from "@tanstack/react-router";
@@ -44,7 +44,7 @@ import AppShell from "@/components/AppShell";
 import { confirmDialog } from "@/components/app/confirm-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { refreshFinance, saveLocalPayment, saveLocalFinancialTitle } from "@/features/finance/finance-api";
+import { refreshFinance } from "@/features/finance/finance-api";
 import { patientsService, companyService } from "@/services/api";
 import { getStoredLocalPatients, mergeWithLocalPatients } from "@/lib/local-patients";
 import { PatientModal } from "@/components/pacientes/PatientModal";
@@ -721,7 +721,7 @@ async function recordImmediateTreatmentPayment({
     .select("id, amount, paid_amount, status, installment_id, installments:installment_id(number), description, company_id")
     .eq("treatment_id", treatmentId);
 
-  if (!createdTxs || createdTxs.length === 0) return;
+  if (!createdTxs || createdTxs.length === 0) throw new Error("O plano de pagamento ainda não gerou títulos financeiros.");
 
   // Identifica a transação correspondente (Entrada número 0 ou Parcela número 1 para à vista)
   const targetTx = createdTxs.find((tx: any) => {
@@ -738,118 +738,26 @@ async function recordImmediateTreatmentPayment({
     }
   });
 
-  if (!targetTx) return;
+  if (!targetTx) throw new Error("Título financeiro do acompanhamento não encontrado.");
 
   // Se já estiver quitada, não duplica
   if (targetTx.status === "pago" || Number(targetTx.paid_amount) >= amount) {
     return;
   }
 
-  const payId = crypto.randomUUID();
-  const safeAccountId = accountId || "00000000-0000-0000-0000-000000000001";
-  const safeMethod = (method || "pix").toLowerCase();
-  const safeDate = paidDate || new Date().toISOString().slice(0, 10);
+  if (!accountId) throw new Error("Selecione a conta financeira que recebeu o valor.");
 
-  // 2. Registra o pagamento via RPC oficial
-  let rpcSuccess = false;
-  try {
-    const { error: rpcErr } = await supabase.rpc("record_financial_payment", {
-      p_id: payId,
-      p_transaction_id: targetTx.id,
-      p_amount: amount,
-      p_paid_on: safeDate,
-      p_method: safeMethod,
-      p_account_id: safeAccountId,
-      p_payer_name: payerName,
-    });
-    if (!rpcErr) {
-      rpcSuccess = true;
-    } else {
-      console.warn("Aviso ao liquidar pagamento via RPC:", rpcErr);
-    }
-  } catch (errRpc) {
-    console.warn("RPC record_financial_payment indisponível:", errRpc);
-  }
-
-  // 3. Fallback direto caso a RPC encontre conflito de permissão ou conta
-  if (!rpcSuccess) {
-    try {
-      await (supabase as any).from("transaction_payments").insert({
-        id: payId,
-        transaction_id: targetTx.id,
-        amount: amount,
-        paid_on: safeDate,
-        payment_method: safeMethod,
-        account_id: safeAccountId,
-        payer_name: payerName,
-      });
-      await (supabase as any).from("transactions").update({
-        paid_amount: amount,
-        status: "pago",
-        paid_at: new Date().toISOString(),
-      }).eq("id", targetTx.id);
-
-      if (targetTx.installment_id) {
-        await (supabase as any).from("treatment_installments").update({
-          status: "pago",
-          paid_date: safeDate,
-        }).eq("id", targetTx.installment_id);
-      }
-    } catch (fallbackErr) {
-      console.warn("Fallback direto entrada info:", fallbackErr);
-    }
-  }
-
-  // 4. Salva no cache local para resposta imediata (0ms) no Fluxo de Caixa e Contas a Receber
-  saveLocalPayment({
-    id: payId,
-    transaction_id: targetTx.id,
-    amount: amount,
-    paid_on: safeDate,
-    payment_method: safeMethod.toUpperCase(),
-    account_id: safeAccountId,
-    payer_name: payerName,
-    created_by: null,
-    created_at: new Date().toISOString(),
-    legacy: false,
-    reversed_at: null,
-    reversed_by: null,
-    reversal_reason: null,
+  // Registra a baixa pelo fluxo oficial (atualiza título e parcela no banco)
+  const { error } = await supabase.rpc("record_financial_payment", {
+    p_id: crypto.randomUUID(),
+    p_transaction_id: targetTx.id,
+    p_amount: amount,
+    p_paid_on: paidDate || new Date().toISOString().slice(0, 10),
+    p_method: (method || "pix").toLowerCase(),
+    p_account_id: accountId,
+    p_payer_name: payerName,
   });
-
-  saveLocalFinancialTitle({
-    id: targetTx.id,
-    type: "receita",
-    amount: Number(targetTx.amount) || amount,
-    paid_amount: Number(targetTx.amount) || amount,
-    due_date: safeDate,
-    date: safeDate,
-    status: "pago",
-    description: targetTx.description || (isDown ? "Entrada de acompanhamento" : "Acompanhamento à vista"),
-    category: isDown ? "Honorários Iniciais / Entrada" : "Honorários Clínicos",
-    patient_id: null,
-    patient_name: payerName,
-    payer_name: payerName,
-    company_id: (targetTx as any).company_id || null,
-    treatment_id: treatmentId,
-    installment_id: targetTx.installment_id,
-    competence_date: safeDate.slice(0, 7) + "-01",
-    origin_key: null,
-    can_settle: true,
-    can_reverse: true,
-    can_cancel: false,
-  });
-
-  if (targetTx.installment_id) {
-    try {
-      await (supabase as any).from("treatment_installments").update({
-        status: "pago",
-        paid_date: safeDate,
-      }).eq("id", targetTx.installment_id);
-    } catch {}
-  }
-
-  window.dispatchEvent(new CustomEvent("medcore_local_title_saved"));
+  if (error) throw error;
 }
 
 // ============== MODAL DE GERENCIAMENTO & EDIÇÃO DE ACOMPANHAMENTO ==============
@@ -1183,7 +1091,9 @@ function TreatmentManageModal({
           });
         }
       } catch (err) {
-        console.error("Erro ao integrar financeiro:", err);
+        toast.warning("Acompanhamento salvo, mas o recebimento não foi registrado", {
+          description: `${errorMessage(err)}. Registre a baixa pelo Financeiro.`,
+        });
       }
     }
 
@@ -2416,7 +2326,9 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
           });
         }
       } catch (err) {
-        console.error("Erro ao integrar financeiro:", err);
+        toast.warning("Acompanhamento salvo, mas o recebimento não foi registrado", {
+          description: `${errorMessage(err)}. Registre a baixa pelo Financeiro.`,
+        });
       }
     }
 

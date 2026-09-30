@@ -11,12 +11,16 @@ const ADMIN_ONLY = new Set<string>(ADMIN_PERMISSIONS);
 /**
  * Acesso do usuário na clínica ativa (consulta get_my_access).
  *
- * - "legacy": migração ainda não aplicada ou sessão sem Supabase. A interface
- *   mantém o comportamento anterior (tudo visível), exceto a Administração.
+ * - "legacy": somente com legacyReason "migration" (banco sem a migração de permissões)
+ *   a interface mantém o comportamento anterior (tudo visível, exceto a Administração).
+ *   Falha de consulta ou sessão ausente não libera nada.
  * - "blocked": cadastro pendente, suspenso, removido ou sem clínica.
- * - Falhas temporárias preservam o último resultado; sem resultado, a interface
- *   não bloqueia (o banco continua aplicando as regras).
+ * - Falhas temporárias preservam o último resultado do mesmo usuário.
  */
+export function isLegacyOpen(access: MyAccess): boolean {
+  return access.mode === "legacy" && access.legacyReason === "migration";
+}
+
 export function usePermissions() {
   const { user } = useAuth();
   const { companyId } = useActiveCompany();
@@ -38,30 +42,14 @@ export function usePermissions() {
   const access: MyAccess = useMemo(() => {
     if (query.data) return query.data;
     if (query.isError) return emptyAccess("legacy", "unavailable");
-    return user?.id ? emptyAccess("legacy") : emptyAccess("loading");
-  }, [query.data, query.isError, user?.id]);
+    return emptyAccess("loading");
+  }, [query.data, query.isError]);
 
   const can = useCallback(
     (key: PermissionKey) => {
-      if (access.mode === "legacy") return !ADMIN_ONLY.has(key);
-      if (access.isOwner) return true;
+      if (access.mode === "legacy") return isLegacyOpen(access) && !ADMIN_ONLY.has(key);
       if (access.mode !== "active") return false;
-      if (
-        key === "finance.view" ||
-        key === "finance.receive" ||
-        key === "finance.pay" ||
-        key === "finance.accounts"
-      ) {
-        if (
-          access.isOwner ||
-          access.doctorId ||
-          access.permissions.has("finance.view") ||
-          access.permissions.has("agenda.manage") ||
-          access.permissions.has("dashboard.view")
-        ) {
-          return true;
-        }
-      }
+      if (access.isOwner) return true;
       return access.permissions.has(key);
     },
     [access],
