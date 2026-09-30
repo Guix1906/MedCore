@@ -1,4 +1,5 @@
 import { PatientFinanceTab } from "@/components/pacientes/PatientFinanceTab";
+import { RecordAddenda } from "@/components/pacientes/RecordAddenda";
 import { PatientPackagesTab } from "@/components/pacientes/PatientPackagesTab";
 import {
   AiRecordAssistantModal,
@@ -798,27 +799,37 @@ export function PatientFullProfileView({
                               </button>
                             )}
 
-                            {/* Botão Editar */}
-                            <button
-                              type="button"
-                              onClick={() => handleOpenEdit(item)}
-                              className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-primary bg-muted hover:bg-primary-soft px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-                              title="Editar anotações deste atendimento"
-                            >
-                              <Pencil size={12} />
-                              <span>Editar</span>
-                            </button>
+                            {item.kind === "prontuario" && item.raw?.signed_at && (
+                              <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-success/15 text-success">
+                                Assinado
+                              </span>
+                            )}
 
-                            {/* Botão Excluir */}
-                            <button
-                              type="button"
-                              onClick={() => handleOpenDelete(item)}
-                              className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-destructive bg-muted hover:bg-destructive/10 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-                              title="Excluir este prontuário"
-                            >
-                              <Trash2 size={12} />
-                              <span>Excluir</span>
-                            </button>
+                            {/* Editar: prontuário assinado só recebe adendos; cada edição guarda a versão anterior */}
+                            {!(item.kind === "prontuario" && item.raw?.signed_at) && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEdit(item)}
+                                className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-primary bg-muted hover:bg-primary-soft px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                                title="Editar anotações deste atendimento (a versão anterior fica guardada)"
+                              >
+                                <Pencil size={12} />
+                                <span>Editar</span>
+                              </button>
+                            )}
+
+                            {/* Excluir: prontuário não é excluído (guarda de 20 anos); só consultas */}
+                            {item.kind !== "prontuario" && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenDelete(item)}
+                                className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-destructive bg-muted hover:bg-destructive/10 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                                title="Excluir este registro"
+                              >
+                                <Trash2 size={12} />
+                                <span>Excluir</span>
+                              </button>
+                            )}
                           </div>
                         </div>
 
@@ -845,6 +856,10 @@ export function PatientFullProfileView({
                           <div className="text-xs text-muted-foreground">
                             <strong>Diagnóstico:</strong> {item.diagnosis}
                           </div>
+                        )}
+
+                        {item.kind === "prontuario" && data.id && (
+                          <RecordAddenda recordId={item.id} patientId={data.id} />
                         )}
                       </div>
                     ))}

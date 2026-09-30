@@ -55,10 +55,24 @@ export type TreatmentAlert = {
   amount: number | null;
 };
 type ReadTable<Row> = { Row: Row; Insert: never; Update: never; Relationships: [] };
+export type RecordAddendum = {
+  id: string;
+  record_id: string;
+  patient_id: string;
+  author_id: string;
+  content: string;
+  created_at: string;
+};
 export type FollowupTables = {
   treatment_evolutions: ReadTable<Evolution>;
   treatment_status_history: ReadTable<StatusHistory>;
   treatment_medication_uses: ReadTable<MedicationUse>;
+  medical_record_addenda: {
+    Row: RecordAddendum;
+    Insert: { record_id: string; patient_id: string; content: string };
+    Update: never;
+    Relationships: [];
+  };
   treatment_photos: {
     Row: ClinicalPhoto;
     Insert: Omit<ClinicalPhoto, "id" | "created_at" | "created_by"> & { id?: string };
