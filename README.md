@@ -61,7 +61,7 @@ node scripts/test-treatment-followup.mjs
 node scripts/test-user-permissions.mjs
 ```
 
-O workflow `.github/workflows/ci.yml` executa essas verificações a cada push e pull request.
+O workflow de CI está pronto em `docs/ci-workflow.yml`: copie-o para `.github/workflows/ci.yml` pelo site do GitHub (ou com um token que tenha o escopo `workflow`) para rodar essas verificações a cada push e pull request.
 
 ---
 ## Financeiro: titulos e baixas
