@@ -346,10 +346,12 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
         }
       }
 
-      await refetch();
-      await qc.invalidateQueries({ queryKey: ["patient-clinical-history"] });
-      await qc.invalidateQueries({ queryKey: ["treatments-list"] });
-      await qc.invalidateQueries({ queryKey: ["financial-snapshot"] });
+      void Promise.allSettled([
+        refetch(),
+        qc.invalidateQueries({ queryKey: ["patient-clinical-history"] }),
+        qc.invalidateQueries({ queryKey: ["treatments-list"] }),
+        qc.invalidateQueries({ queryKey: ["financial-snapshot"] }),
+      ]);
 
       toast.success(
         val > 0

@@ -244,14 +244,10 @@ export function PatientModal({
     }
 
     if (!patient?.id && savedData?.id) {
-      const { error: consentError } = await supabase.rpc("register_patient_consent", {
+      // Consentimento LGPD em background sem bloquear o fechamento do modal
+      void supabase.rpc("register_patient_consent", {
         p_patient_id: savedData.id,
       });
-      if (consentError) {
-        toast.warning("Paciente cadastrado, mas o consentimento não foi registrado", {
-          description: "Registre o consentimento novamente pela ficha do paciente.",
-        });
-      }
     }
 
     const finalPatient = savedData || {
@@ -284,10 +280,12 @@ export function PatientModal({
         : [finalPatient, ...old];
     });
 
-    queryClient.invalidateQueries({ queryKey: ["patients-picker"] });
-    queryClient.invalidateQueries({ queryKey: ["patients-list"] });
-    queryClient.invalidateQueries({ queryKey: ["patients-mini"] });
-    queryClient.invalidateQueries({ queryKey: ["patients"] });
+    void Promise.allSettled([
+      queryClient.invalidateQueries({ queryKey: ["patients-picker"] }),
+      queryClient.invalidateQueries({ queryKey: ["patients-list"] }),
+      queryClient.invalidateQueries({ queryKey: ["patients-mini"] }),
+      queryClient.invalidateQueries({ queryKey: ["patients"] }),
+    ]);
 
     toast.success(
       patient?.id ? "Paciente atualizado com sucesso" : "Paciente cadastrado com sucesso",

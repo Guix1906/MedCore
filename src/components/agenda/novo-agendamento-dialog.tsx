@@ -1098,8 +1098,8 @@ export function NovoAgendamentoDialog({
           : assignedTo || null;
 
       if (!isUuid(companyId)) throw new Error("Clínica ativa inválida. Selecione a clínica e tente novamente.");
-      const { data: authData, error: authError } = await supabase.auth.getUser();
-      if (authError || !authData?.user) throw new Error("Sessão expirada. Entre novamente para salvar.");
+      const activeUserId = user?.id || (await supabase.auth.getSession()).data.session?.user?.id;
+      if (!activeUserId) throw new Error("Sessão expirada. Entre novamente para salvar.");
 
       // O responsável pode vir da lista de médicos (doctors.id) ou de usuários (auth id):
       // events.assigned_to referencia o usuário e appointments.doctor_id o médico.
@@ -1143,31 +1143,47 @@ export function NovoAgendamentoDialog({
       }
 
       const warnings: string[] = [];
+      const secondaryWrites: PromiseLike<any>[] = [];
 
       if (type === "atendimento" && validPatientId && professional.doctorId) {
-        const { error } = await supabase.from("appointments").upsert({
-          id: insertedId,
-          patient_id: validPatientId,
-          doctor_id: professional.doctorId,
-          date: day,
-          start_time: start,
-          end_time: end,
-          type: "consulta",
-          status: status || "agendado",
-          notes: notes.trim() || undefined,
-        });
-        if (error) warnings.push(`consulta não registrada (${error.message})`);
+        secondaryWrites.push(
+          supabase
+            .from("appointments")
+            .upsert({
+              id: insertedId,
+              patient_id: validPatientId,
+              doctor_id: professional.doctorId,
+              date: day,
+              start_time: start,
+              end_time: end,
+              type: "consulta",
+              status: status || "agendado",
+              notes: notes.trim() || undefined,
+            })
+            .then(({ error }) => {
+              if (error) warnings.push(`consulta não registrada (${error.message})`);
+            }),
+        );
       }
 
       if (type === "atendimento" && !isIncludedInPlan && (totalAmt > 0 || sinalAmt > 0)) {
-        const { error } = await supabase.rpc("schedule_appointment_finance", {
-          p_event_id: insertedId,
-          p_amount: totalAmt > 0 ? totalAmt : sinalAmt,
-          p_sinal: sinalAmt,
-          p_sinal_method: downPaymentMethod || "pix",
-          p_due_date: day,
-        });
-        if (error) warnings.push(`cobrança não gerada (${error.message})`);
+        secondaryWrites.push(
+          supabase
+            .rpc("schedule_appointment_finance", {
+              p_event_id: insertedId,
+              p_amount: totalAmt > 0 ? totalAmt : sinalAmt,
+              p_sinal: sinalAmt,
+              p_sinal_method: downPaymentMethod || "pix",
+              p_due_date: day,
+            })
+            .then(({ error }) => {
+              if (error) warnings.push(`cobrança não gerada (${error.message})`);
+            }),
+        );
+      }
+
+      if (secondaryWrites.length > 0) {
+        await Promise.all(secondaryWrites);
       }
 
       void refreshFinance(qc);
@@ -1233,16 +1249,18 @@ export function NovoAgendamentoDialog({
         entity_type: "agendamento",
         entity_label: title.trim() || labelOfType(type),
       });
-      qc.invalidateQueries({ queryKey: qk.agendaLists.events(companyId) });
-      qc.invalidateQueries({ queryKey: ["agenda-events"] });
-      qc.invalidateQueries({ queryKey: ["agenda"] });
-      qc.invalidateQueries({ queryKey: qk.dashboard.all() });
-      qc.invalidateQueries({ queryKey: ["dashboard", "events-appointments"] });
-      qc.invalidateQueries({ queryKey: ["financial-snapshot"] });
-      qc.invalidateQueries({ queryKey: ["dashboard", "transactions"] });
-      qc.invalidateQueries({ queryKey: ["finance-dashboard", "transactions"] });
-      qc.invalidateQueries({ queryKey: ["transactions"] });
-      qc.invalidateQueries({ queryKey: ["appointments"] });
+      void Promise.allSettled([
+        qc.invalidateQueries({ queryKey: qk.agendaLists.events(companyId) }),
+        qc.invalidateQueries({ queryKey: ["agenda-events"] }),
+        qc.invalidateQueries({ queryKey: ["agenda"] }),
+        qc.invalidateQueries({ queryKey: qk.dashboard.all() }),
+        qc.invalidateQueries({ queryKey: ["dashboard", "events-appointments"] }),
+        qc.invalidateQueries({ queryKey: ["financial-snapshot"] }),
+        qc.invalidateQueries({ queryKey: ["dashboard", "transactions"] }),
+        qc.invalidateQueries({ queryKey: ["finance-dashboard", "transactions"] }),
+        qc.invalidateQueries({ queryKey: ["transactions"] }),
+        qc.invalidateQueries({ queryKey: ["appointments"] }),
+      ]);
       onSaved?.(data?.createdActivity);
       onOpenChange(false);
     },

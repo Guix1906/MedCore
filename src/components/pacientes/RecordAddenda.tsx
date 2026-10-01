@@ -36,9 +36,11 @@ export function RecordAddenda({ recordId, patientId }: { recordId: string; patie
       return;
     }
     setSaving(true);
-    const { error } = await supabase
+    const { data: inserted, error } = await supabase
       .from("medical_record_addenda")
-      .insert({ record_id: recordId, patient_id: patientId, content });
+      .insert({ record_id: recordId, patient_id: patientId, content })
+      .select()
+      .single();
     setSaving(false);
     if (error) {
       toast.error("Não foi possível salvar o adendo", { description: error.message });
@@ -47,6 +49,10 @@ export function RecordAddenda({ recordId, patientId }: { recordId: string; patie
     toast.success("Adendo registrado.");
     setText("");
     setOpen(false);
+
+    if (inserted) {
+      queryClient.setQueryData(["record-addenda", recordId], (old: any = []) => [...old, inserted]);
+    }
     void queryClient.invalidateQueries({ queryKey: ["record-addenda", recordId] });
   };
 

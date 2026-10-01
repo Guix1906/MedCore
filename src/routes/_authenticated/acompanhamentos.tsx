@@ -1098,14 +1098,16 @@ function TreatmentManageModal({
     }
 
     try {
-      await refreshFinance(queryClient);
-      await queryClient.invalidateQueries({ queryKey: ["treatments-list"] });
-      await queryClient.invalidateQueries({ queryKey: ["treatment-finance-plans"] });
-      await queryClient.invalidateQueries({ queryKey: ["treatment-manage-titles", treatment.id] });
-      await queryClient.invalidateQueries({ queryKey: ["treatment-alerts"] });
-      await queryClient.invalidateQueries({ queryKey: ["financial-snapshot"] });
-      await queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      await queryClient.invalidateQueries({ queryKey: ["cash-flow-snapshot"] });
+      void refreshFinance(queryClient);
+      void Promise.allSettled([
+        queryClient.invalidateQueries({ queryKey: ["treatments-list"] }),
+        queryClient.invalidateQueries({ queryKey: ["treatment-finance-plans"] }),
+        queryClient.invalidateQueries({ queryKey: ["treatment-manage-titles", treatment.id] }),
+        queryClient.invalidateQueries({ queryKey: ["treatment-alerts"] }),
+        queryClient.invalidateQueries({ queryKey: ["financial-snapshot"] }),
+        queryClient.invalidateQueries({ queryKey: ["transactions"] }),
+        queryClient.invalidateQueries({ queryKey: ["cash-flow-snapshot"] }),
+      ]);
     } catch {}
 
     setSaving(false);
@@ -2333,13 +2335,15 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
     }
 
     try {
-      await refreshFinance(queryClient);
-      await queryClient.invalidateQueries({ queryKey: ["treatments-list"] });
-      await queryClient.invalidateQueries({ queryKey: ["treatment-finance-plans"] });
-      await queryClient.invalidateQueries({ queryKey: ["treatment-alerts"] });
-      await queryClient.invalidateQueries({ queryKey: ["financial-snapshot"] });
-      await queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      await queryClient.invalidateQueries({ queryKey: ["cash-flow-snapshot"] });
+      void refreshFinance(queryClient);
+      void Promise.allSettled([
+        queryClient.invalidateQueries({ queryKey: ["treatments-list"] }),
+        queryClient.invalidateQueries({ queryKey: ["treatment-finance-plans"] }),
+        queryClient.invalidateQueries({ queryKey: ["treatment-alerts"] }),
+        queryClient.invalidateQueries({ queryKey: ["financial-snapshot"] }),
+        queryClient.invalidateQueries({ queryKey: ["transactions"] }),
+        queryClient.invalidateQueries({ queryKey: ["cash-flow-snapshot"] }),
+      ]);
     } catch {}
 
     setSaving(false);

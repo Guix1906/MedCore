@@ -332,26 +332,34 @@ export default function ProntuarioPage() {
     const targetPatientId = patient?.id || dbPatient?.id || paramPatientId;
     const patientName = patient?.name || dbPatient?.name || paramPatientName || "Paciente";
     const anamneseText = queixaRef.current?.getText() || "";
+    const elapsedSeconds = secondsRef.current;
 
     setIsFinalizing(true);
     setSaveState("saving");
 
     let persisted = false;
     let persistenceError: any = null;
+    let savedRecord: any = null;
 
     // Persistência somente no banco (RLS exige records.edit); nada fica salvo no navegador.
     if (targetPatientId) {
-      const { error: sbError } = await supabase.from("medical_records").insert({
-        patient_id: targetPatientId,
-        complaint: anamneseText || null,
-        duration_seconds: secondsRef.current,
-        finished_at: new Date().toISOString(),
-      });
+      const { data: inserted, error: sbError } = await supabase
+        .from("medical_records")
+        .insert({
+          patient_id: targetPatientId,
+          complaint: anamneseText || null,
+          duration_seconds: elapsedSeconds,
+          finished_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
       if (sbError) {
         persistenceError = sbError;
         console.error("Falha na gravação do prontuário:", sbError);
       } else {
         persisted = true;
+        savedRecord = inserted;
       }
     } else {
       persistenceError = new Error("Paciente sem identificador cadastrado.");
@@ -366,15 +374,61 @@ export default function ProntuarioPage() {
       return;
     }
 
+    // 1. Atualização otimista imediata do histórico clínico do paciente no React Query
+    if (savedRecord) {
+      const now = new Date();
+      const newHistoryItem: ClinicalHistoryItem = {
+        id: savedRecord.id,
+        kind: "prontuario",
+        title: "Atendimento Clínico",
+        date: savedRecord.created_at || savedRecord.finished_at || now.toISOString(),
+        formattedDate: now.toLocaleDateString("pt-BR", {
+          weekday: "short",
+          day: "2-digit",
+          month: "long",
+          year: "numeric",
+        }),
+        time: now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+        durationSeconds: savedRecord.duration_seconds || elapsedSeconds || undefined,
+        complaint: savedRecord.complaint || anamneseText || undefined,
+        status: "Finalizado",
+        raw: savedRecord,
+      };
+
+      queryClient.setQueriesData(
+        { queryKey: ["patient-clinical-history"] },
+        (old: any) => {
+          if (!Array.isArray(old)) return [newHistoryItem];
+          const exists = old.some((it: any) => it.id === savedRecord.id);
+          return exists ? old : [newHistoryItem, ...old];
+        },
+      );
+    }
+
+    const durationFormatted = formatTime(elapsedSeconds);
     setSaveState("saved");
-    queryClient.invalidateQueries({ queryKey: ["patient-medical-records"] });
-    queryClient.invalidateQueries({ queryKey: ["patient-clinical-history"] });
+    setIsFinalizing(false);
+    secondsRef.current = 0;
+    queixaRef.current?.setText("");
+
+    // Alterna imediatamente para a aba organizada de Prontuários com visão do histórico atualizado
+    setTab("prontuarios");
 
     toast.success("Atendimento finalizado com sucesso!", {
-      description: `Duração: ${formatTime(secondsRef.current)}. Prontuário clínico gravado para ${patientName}.`,
+      description: `Duração: ${durationFormatted}. Prontuário gravado para ${patientName}.`,
+      action: {
+        label: "Lista de pacientes",
+        onClick: () => navigate({ to: "/pacientes" }),
+      },
     });
 
-    setTimeout(() => navigate({ to: "/pacientes" }), 600);
+    // Invalidação em paralelo em background sem travar a navegação nem a tela
+    void Promise.allSettled([
+      queryClient.invalidateQueries({ queryKey: ["patient-medical-records"] }),
+      queryClient.invalidateQueries({ queryKey: ["patient-clinical-history"] }),
+      queryClient.invalidateQueries({ queryKey: ["prontuario-hub-recent-patients"] }),
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+    ]);
   };
 
   if (!hasActivePatient) {

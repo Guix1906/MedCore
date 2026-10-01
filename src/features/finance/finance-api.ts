@@ -64,20 +64,22 @@ export async function getFinancialReportingRows() {
   return reportingRows(data);
 }
 
-export async function refreshFinance(qc: QueryClient) {
-  await Promise.all(
-    [
-      "financial-snapshot",
-      "cash-flow-snapshot",
-      "financial-operations",
-      "transactions",
-      "treatment-installments",
-      "treatment-finance-plans",
-      "treatment-ledger",
-      "treatment-alerts",
-      "treatments-list",
-      "dashboard",
-      "reports-data",
-    ].map((key) => qc.invalidateQueries({ queryKey: [key], refetchType: "all" })),
-  );
+export function refreshFinance(qc: QueryClient): Promise<void> {
+  const keys = [
+    "financial-snapshot",
+    "cash-flow-snapshot",
+    "financial-operations",
+    "transactions",
+    "treatment-installments",
+    "treatment-finance-plans",
+    "treatment-ledger",
+    "treatment-alerts",
+    "treatments-list",
+    "dashboard",
+    "reports-data",
+  ];
+  // Dispara invalidações em paralelo em background sem bloquear o fechamento do modal ou UI
+  void Promise.allSettled(keys.map((key) => qc.invalidateQueries({ queryKey: [key] })));
+  return Promise.resolve();
 }
+

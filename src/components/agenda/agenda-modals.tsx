@@ -274,10 +274,8 @@ export function AddTaskModal({
       if (!f.due_date) throw new Error("Data é obrigatória");
       if (!f.assigned_to) throw new Error("Responsável é obrigatório");
 
-      const { data: authData } = await supabase.auth.getUser();
-      const supabaseAuthId = authData?.user?.id;
       const validCreatedBy =
-        supabaseAuthId && isUuid(supabaseAuthId) ? supabaseAuthId : ensureValidUuid(ctx.userId);
+        ctx.userId && isUuid(ctx.userId) ? ctx.userId : ensureValidUuid(ctx.userId);
       const validCompanyId = isUuid(ctx.companyId) ? ctx.companyId : ensureValidUuid(ctx.companyId);
       const validAssignedTo = isUuid(f.assigned_to)
         ? f.assigned_to
@@ -387,15 +385,15 @@ export function AddEventModal({
       if (f.all_day) start.setHours(0, 0, 0, 0);
 
       if (!isUuid(ctx.companyId)) throw new Error("Clínica ativa inválida.");
-      const { data: authData } = await supabase.auth.getUser();
-      if (!authData?.user) throw new Error("Sessão expirada. Entre novamente para salvar.");
+      const activeUserId = ctx.userId;
+      if (!activeUserId) throw new Error("Sessão expirada. Entre novamente para salvar.");
       const location = f.location
         ? `${f.location}${f.location_kind !== "presencial" ? ` (${f.location_kind})` : ""}`
         : null;
 
       const { error } = await supabase.from("events").insert({
         company_id: ctx.companyId,
-        created_by: authData.user.id,
+        created_by: activeUserId,
         title: f.title.trim(),
         description: f.description || null,
         event_type: "meeting",
@@ -537,10 +535,8 @@ export function AddDeadlineModal({
       const meta =
         `[${f.kind.toUpperCase()} • limite ${f.hour_limit}]\n${f.description ?? ""}`.trim();
 
-      const { data: authData } = await supabase.auth.getUser();
-      const supabaseAuthId = authData?.user?.id;
       const validCreatedBy =
-        supabaseAuthId && isUuid(supabaseAuthId) ? supabaseAuthId : ensureValidUuid(ctx.userId);
+        ctx.userId && isUuid(ctx.userId) ? ctx.userId : ensureValidUuid(ctx.userId);
       const validCompanyId = isUuid(ctx.companyId) ? ctx.companyId : ensureValidUuid(ctx.companyId);
       const validAssignedTo =
         f.assigned_to && isUuid(f.assigned_to) ? f.assigned_to : toValidUuid(f.assigned_to);
@@ -695,12 +691,12 @@ export function AddHearingModal({
         : `${f.court} • ${f.location || ""}`.trim();
 
       if (!isUuid(ctx.companyId)) throw new Error("Clínica ativa inválida.");
-      const { data: authData } = await supabase.auth.getUser();
-      if (!authData?.user) throw new Error("Sessão expirada. Entre novamente para salvar.");
+      const activeUserId = ctx.userId;
+      if (!activeUserId) throw new Error("Sessão expirada. Entre novamente para salvar.");
 
       const { error } = await supabase.from("events").insert({
         company_id: ctx.companyId,
-        created_by: authData.user.id,
+        created_by: activeUserId,
         title: titleFinal,
         description: desc || null,
         event_type: "hearing",

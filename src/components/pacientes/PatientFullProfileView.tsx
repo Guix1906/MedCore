@@ -208,19 +208,51 @@ export function PatientFullProfileView({
       return;
     }
     setIsSavingRecord(true);
+    const textToSave = anamnese.trim();
     const payload = {
       patient_id: data.id,
-      complaint: anamnese.trim(),
+      complaint: textToSave,
       finished_at: new Date().toISOString(),
     };
     try {
-      const { error } = await supabase.from("medical_records").insert(payload);
+      const { data: inserted, error } = await supabase
+        .from("medical_records")
+        .insert(payload)
+        .select()
+        .single();
       if (error) throw error;
       toast.success("Atendimento salvo no histórico do paciente.");
       setAnamnese("");
-      void refreshHistory();
-      void queryClient.invalidateQueries({ queryKey: ["patient-clinical-history"] });
-      void queryClient.invalidateQueries({ queryKey: ["patient-medical-records"] });
+
+      if (inserted) {
+        const now = new Date();
+        const newItem: ClinicalHistoryItem = {
+          id: inserted.id,
+          kind: "prontuario",
+          title: "Atendimento Clínico",
+          date: inserted.created_at || now.toISOString(),
+          formattedDate: now.toLocaleDateString("pt-BR", {
+            weekday: "short",
+            day: "2-digit",
+            month: "long",
+            year: "numeric",
+          }),
+          time: now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+          complaint: inserted.complaint || textToSave,
+          status: "Finalizado",
+          raw: inserted,
+        };
+        queryClient.setQueriesData(
+          { queryKey: ["patient-clinical-history"] },
+          (old: any) => (Array.isArray(old) ? [newItem, ...old] : [newItem]),
+        );
+      }
+
+      void Promise.allSettled([
+        refreshHistory(),
+        queryClient.invalidateQueries({ queryKey: ["patient-clinical-history"] }),
+        queryClient.invalidateQueries({ queryKey: ["patient-medical-records"] }),
+      ]);
     } catch (error) {
       console.error("Não foi possível salvar o atendimento.", error);
       toast.error(

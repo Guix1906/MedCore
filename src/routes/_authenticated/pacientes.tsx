@@ -175,15 +175,12 @@ function PacientesPage() {
       return;
 
     try {
-      try {
-        await patientsService.updatePatient(patient.id, { active: nextActive });
-      } catch {
-        const { error } = await supabase
-          .from("patients")
-          .update({ active: nextActive })
-          .eq("id", patient.id);
-        if (error) throw error;
-      }
+      const { error } = await supabase
+        .from("patients")
+        .update({ active: nextActive })
+        .eq("id", patient.id);
+      if (error) throw error;
+      patientsService.updatePatient(patient.id, { active: nextActive }).catch(() => {});
 
       saveStoredLocalPatient({ ...patient, active: nextActive });
       queryClient.setQueryData<Patient[]>(["patients-list"], (old = []) =>

@@ -79,10 +79,12 @@ let backendOfflineUntil = 0;
 
 export function isBackendReachable(): boolean {
   if (typeof window === "undefined") return false;
-  // Bloqueio imediato de Mixed Content e localhost em ambientes HTTPS (Vercel/produção)
+  // Bloqueio imediato de Mixed Content e localhost em ambientes HTTPS ou remotos (Vercel/produção)
   const isHttps = window.location.protocol === "https:";
   const isLocalHost = API_BASE_URL.includes("localhost") || API_BASE_URL.includes("127.0.0.1");
-  if (isHttps && isLocalHost) {
+  const isRemoteSite =
+    window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
+  if ((isHttps || isRemoteSite) && isLocalHost) {
     return false;
   }
   // Se não há token do PHP armazenado, o app usa prioritariamente o Supabase;
@@ -140,7 +142,7 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}): Pr
 
   const fetchWithRetry = async (): Promise<T> => {
     const controller = new AbortController();
-    const timeoutMs = 400; // 400ms max para resposta instantânea
+    const timeoutMs = 250; // 250ms max para fail-fast imediato
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
