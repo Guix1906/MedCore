@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { ALL_PERIOD, PeriodFilter, inPeriod, type Period } from "./PeriodFilter";
+import { ALL_PERIOD, PeriodFilter, dateSearchText, inPeriod, type Period } from "./PeriodFilter";
 import {
   ArrowDownLeft,
   Clock,
@@ -197,7 +197,14 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
         const cat = (e.category || "").toLowerCase();
         const patient = (e.patient_name || "").toLowerCase();
         const payer = (e.payer_name || "").toLowerCase();
-        return desc.includes(q) || cat.includes(q) || patient.includes(q) || payer.includes(q);
+        const dates = dateSearchText(e.due_date, e.date);
+        return (
+          desc.includes(q) ||
+          cat.includes(q) ||
+          patient.includes(q) ||
+          payer.includes(q) ||
+          dates.includes(q.trim())
+        );
       }
 
       return true;
@@ -303,7 +310,7 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
         <div className="relative w-full sm:w-[320px] md:w-[360px]">
           <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Buscar por descrição, categoria, cliente ou conta..."
+            placeholder="Buscar por descrição, favorecido ou data (dd/mm)..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="h-9 pl-8 text-xs bg-card border-border rounded-lg placeholder:text-muted-foreground shadow-2xs"

@@ -92,6 +92,7 @@ import {
 } from "@/features/acompanhamentos/followup-utils";
 import { refreshFinance, getTitleEventKey } from "./finance-api";
 import { remaining, reportingRows } from "./finance-math";
+import { dateSearchText } from "./PeriodFilter";
 import { CashFlowChartCard, type CashFlowPeriod } from "@/components/finance/CashFlowChartCard";
 import { cashFlow } from "./cash-flow-math";
 import type { CashAccount, CashFlowSnapshot } from "./cash-flow-schema";
@@ -465,7 +466,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       // Busca textual
       if (q) {
         const text =
-          `${e.description} ${e.category} ${e.client_name} ${e.payment_method} ${e.payment_account}`.toLowerCase();
+          `${e.description} ${e.category} ${e.client_name} ${e.payment_method} ${e.payment_account} ${dateSearchText(e.date, e.title?.due_date)}`.toLowerCase();
         if (!text.includes(q)) return false;
       }
 

@@ -41,6 +41,21 @@ function presetRange(key: PresetKey): Period {
   }
 }
 
+/**
+ * Texto pesquisável das datas de um lançamento: permite buscar por "01/10", "01/10/2026"
+ * ou "2026-10-01" no campo de busca.
+ */
+export function dateSearchText(...dates: (string | null | undefined)[]): string {
+  return dates
+    .map((raw) => String(raw || "").slice(0, 10))
+    .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
+    .map((d) => {
+      const [y, m, day] = d.split("-");
+      return `${day}/${m}/${y} ${day}/${m} ${d}`;
+    })
+    .join(" ");
+}
+
 /** Data (yyyy-mm-dd) dentro do período. Sem período: tudo passa. Sem data: só passa sem período. */
 export function inPeriod(date: string | null | undefined, period: Period): boolean {
   if (!period.from && !period.to) return true;

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { ALL_PERIOD, PeriodFilter, inPeriod, type Period } from "./PeriodFilter";
+import { ALL_PERIOD, PeriodFilter, dateSearchText, inPeriod, type Period } from "./PeriodFilter";
 import {
   ArrowUpRight,
   Clock,
@@ -113,6 +113,28 @@ export function ContasReceberTab({
       return t.type === "receita";
     });
   }, [finance?.titles]);
+
+  // Parcelas por plano de acompanhamento: "Parcela 3 de 7" e o valor total do plano
+  const planInfo = useMemo(() => {
+    const map = new Map<string, { parcelas: number; total: number }>();
+    receitas.forEach((t) => {
+      if (!t.treatment_id) return;
+      const cur = map.get(t.treatment_id) || { parcelas: 0, total: 0 };
+      if (!/entrada/i.test(t.description || "")) cur.parcelas++;
+      cur.total += Number(t.amount) || 0;
+      map.set(t.treatment_id, cur);
+    });
+    return map;
+  }, [receitas]);
+
+  const parcelaLabel = (t: FinancialTitle) => {
+    if (!t.treatment_id || isFreeBalance(t)) return null;
+    const info = planInfo.get(t.treatment_id);
+    if (!info) return null;
+    if (/entrada/i.test(t.description || "")) return `Entrada · Plano ${currency(info.total)}`;
+    const n = (t.description || "").match(/Parcela\s+(\d+)/i)?.[1];
+    return `${n ? `Parcela ${n} de ${info.parcelas}` : `${info.parcelas} parcela(s)`} · Plano ${currency(info.total)}`;
+  };
 
   // Helper para verificar status de liquidação estrito cruzando título e pagamentos
   const getTitleStatus = (t: FinancialTitle) => {
@@ -270,6 +292,36 @@ export function ContasReceberTab({
     };
   }, [receitas]);
 
+  // Previsão mês a mês (mês atual + 5) do saldo em aberto com vencimento
+  const monthlyForecast = useMemo(() => {
+    const now = new Date();
+    const months = Array.from({ length: 6 }, (_, k) => {
+      const d = new Date(now.getFullYear(), now.getMonth() + k, 1);
+      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      return {
+        key: format(d, "yyyy-MM"),
+        label: d.toLocaleDateString("pt-BR", { month: "long", year: "numeric" }),
+        from: format(d, "yyyy-MM-dd"),
+        to: format(end, "yyyy-MM-dd"),
+        total: 0,
+        count: 0,
+        clients: new Set<string>(),
+      };
+    });
+    receitas.forEach((t) => {
+      if (!t.due_date || isFreeBalance(t)) return;
+      const { rem, isPaid } = getTitleStatus(t);
+      if (isPaid || rem <= 0) return;
+      const m = months.find((x) => x.key === t.due_date!.slice(0, 7));
+      if (!m) return;
+      m.total += rem;
+      m.count++;
+      m.clients.add(t.patient_id || t.patient_name || t.payer_name || t.id);
+    });
+    return months;
+  }, [receitas, finance?.payments]);
+  const forecastMax = Math.max(1, ...monthlyForecast.map((m) => m.total));
+
   // Lista filtrada de títulos para exibição
   const filteredTitles = useMemo(() => {
     const today = startOfDay(new Date());
@@ -331,7 +383,14 @@ export function ContasReceberTab({
         const cat = (e.category || "").toLowerCase();
         const pat = (e.patient_name || "").toLowerCase();
         const pay = (e.payer_name || "").toLowerCase();
-        if (!desc.includes(q) && !cat.includes(q) && !pat.includes(q) && !pay.includes(q)) {
+        const dates = dateSearchText(e.due_date, e.date);
+        if (
+          !desc.includes(q) &&
+          !cat.includes(q) &&
+          !pat.includes(q) &&
+          !pay.includes(q) &&
+          !dates.includes(q.trim())
+        ) {
           return false;
         }
       }
@@ -810,22 +869,52 @@ export function ContasReceberTab({
             </div>
             <div>
               <h2 className="font-semibold text-sm text-foreground">Recebimentos Previstos</h2>
-              <p className="text-xs text-muted-foreground">Próximos 6 meses</p>
+              <p className="text-xs text-muted-foreground">
+                Saldo em aberto por mês de vencimento · clique para ver os lançamentos
+              </p>
             </div>
           </div>
 
-          <div className="py-12 flex flex-col items-center justify-center text-center">
-            <div className="h-10 w-10 rounded-full bg-success/7 text-success flex items-center justify-center mb-2.5">
-              <ArrowUpRight className="h-5 w-5" />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Nenhum recebimento previsto além do período
-            </p>
+          <div className="divide-y divide-border-soft py-2">
+            {monthlyForecast.map((m) => {
+              const active = period.from === m.from && period.to === m.to;
+              return (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() =>
+                    setPeriod(active ? ALL_PERIOD : { from: m.from, to: m.to, preset: "custom" })
+                  }
+                  className={cn(
+                    "w-full py-2 px-2 rounded-lg text-left text-xs cursor-pointer hover:bg-muted/40 transition-colors",
+                    active && "bg-success/10",
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="capitalize font-medium text-foreground">{m.label}</span>
+                    <div className="flex items-center gap-4">
+                      <span className="text-muted-foreground">
+                        {m.count} parcela(s) · {m.clients.size} cliente(s)
+                      </span>
+                      <strong className="font-semibold text-success tabular-nums min-w-[85px] text-right">
+                        {currency(m.total)}
+                      </strong>
+                    </div>
+                  </div>
+                  <div className="mt-1.5 h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-success"
+                      style={{ width: `${(m.total / forecastMax) * 100}%` }}
+                    />
+                  </div>
+                </button>
+              );
+            })}
           </div>
 
           <div className="border-t border-border-soft pt-3 text-center">
             <p className="text-xs text-muted-foreground">
-              Atualizado automaticamente com parcelamentos de honorários
+              Para um dia específico, use o filtro de vencimento abaixo (Hoje ou Personalizado)
             </p>
           </div>
         </div>
@@ -840,7 +929,7 @@ export function ContasReceberTab({
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar lançamento ou cliente..."
+            placeholder="Buscar lançamento, cliente ou data (dd/mm)..."
             className="pl-8 h-9 text-xs bg-card border-border rounded-lg placeholder:text-muted-foreground shadow-2xs"
           />
         </div>
@@ -922,9 +1011,17 @@ export function ContasReceberTab({
       {/* 6. LISTA PRINCIPAL: HONORÁRIOS E RECEBIMENTOS                             */}
       {/* ========================================================================= */}
       <div className="rounded-xl border border-border bg-card p-5 shadow-xs space-y-3">
-        <h3 className="font-semibold text-sm text-foreground">
-          Honorários e Recebimentos ({filteredTitles.length})
-        </h3>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className="font-semibold text-sm text-foreground">
+            Honorários e Recebimentos ({filteredTitles.length})
+          </h3>
+          <span className="text-xs text-muted-foreground">
+            Em aberto nesta lista:{" "}
+            <strong className="text-success tabular-nums">
+              {currency(filteredTitles.reduce((s, t) => s + getTitleStatus(t).rem, 0))}
+            </strong>
+          </span>
+        </div>
 
         {filteredTitles.length === 0 ? (
           <div className="py-12 text-center text-sm text-muted-foreground">
@@ -981,7 +1078,8 @@ export function ContasReceberTab({
                               : t.due_date
                                 ? formatClinicalDate(t.due_date)
                                 : "Sem data"}{" "}
-                            · Total: {currency(t.amount)}
+                            · Valor: {currency(t.amount)}
+                            {parcelaLabel(t) && ` · ${parcelaLabel(t)}`}
                             {rem > 0 && ` · Saldo a receber: ${currency(rem)}`}
                           </p>
                         </div>
@@ -1069,6 +1167,12 @@ export function ContasReceberTab({
                       >
                         {isFreeBalance(t) ? "Saldo Livre" : tagCategory}
                       </span>
+
+                      {parcelaLabel(t) && (
+                        <span className="inline-flex items-center text-xs font-semibold px-2.5 py-0.5 rounded-full border bg-muted text-foreground/80 border-border">
+                          {parcelaLabel(t)}
+                        </span>
+                      )}
 
                       {/* Tag Sinal se houver */}
                       {paidAmt > 0 && rem > 0 && (
