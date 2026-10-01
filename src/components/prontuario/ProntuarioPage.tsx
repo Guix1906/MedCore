@@ -132,6 +132,28 @@ function ageFrom(birthDate?: string | null): string {
   return age >= 0 ? `${age} anos` : "";
 }
 
+/** Idade completa: "34 anos, 6 meses, 20 dias". */
+function fullAgeFrom(birthDate?: string | null): string {
+  if (!birthDate) return "";
+  const b = new Date(`${String(birthDate).slice(0, 10)}T12:00:00`);
+  if (Number.isNaN(b.getTime())) return "";
+  const now = new Date();
+  let years = now.getFullYear() - b.getFullYear();
+  let months = now.getMonth() - b.getMonth();
+  let days = now.getDate() - b.getDate();
+  if (days < 0) {
+    months--;
+    days += new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+  }
+  if (months < 0) {
+    years--;
+    months += 12;
+  }
+  if (years < 0) return "";
+  const part = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  return [part(years, "ano", "anos"), part(months, "mês", "meses"), part(days, "dia", "dias")].join(", ");
+}
+
 function groupByMonth(items: ClinicalHistoryItem[]): [string, ClinicalHistoryItem[]][] {
   const groups = new Map<string, ClinicalHistoryItem[]>();
   for (const item of items) {
@@ -512,70 +534,32 @@ export default function ProntuarioPage() {
   return (
     <DirtyCtx.Provider value={markDirty}>
       <div className="min-h-[calc(100dvh-64px)] bg-surface text-foreground">
-        <div className="page-container pb-40 lg:pb-28">
-         <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
-          {/* Coluna lateral do paciente: identificação, alertas clínicos e seções */}
-          <aside className="w-full min-w-0 shrink-0 space-y-4 rounded-2xl border border-border bg-card p-4 lg:sticky lg:top-4 lg:w-[260px]">
-            <button
-              type="button"
-              onClick={() =>
-                navigate({
-                  to: "/prontuario",
-                  search: { patientId: undefined, patientName: undefined },
-                })
-              }
-              className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-primary"
-            >
-              <ArrowLeft size={14} /> Central de atendimentos
-            </button>
-
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/15 text-base font-semibold text-primary">
+        <div className="flex min-h-[calc(100dvh-64px)] flex-col pb-40 lg:flex-row lg:pb-28">
+          {/* Coluna lateral presa à esquerda: paciente + seções */}
+          <aside className="w-full shrink-0 border-b border-border bg-card lg:sticky lg:top-0 lg:h-[calc(100dvh-64px)] lg:w-[300px] lg:overflow-y-auto lg:border-b-0 lg:border-r">
+            <div className="flex items-center gap-3 border-b border-border px-3 py-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-primary/40 bg-primary-soft text-base font-semibold text-primary">
                 {patient.initials}
               </div>
               <div className="min-w-0 flex-1">
-                <h1 className="text-base font-semibold leading-snug tracking-tight text-foreground [overflow-wrap:anywhere]">
+                <h1 className="truncate text-sm font-semibold text-foreground" title={patient.name}>
                   {patient.name}
                 </h1>
-                {patientFacts.length > 0 && (
-                  <p className="text-sm text-muted-foreground">{patientFacts.join(" · ")}</p>
-                )}
+                <p className="truncate text-sm text-muted-foreground">
+                  {fullAgeFrom(dbPatient?.birth_date) || dbPatient?.phone || "Idade não informada"}
+                </p>
               </div>
               <button
                 onClick={copyPatient}
-                className="shrink-0 cursor-pointer self-start rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="shrink-0 cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                 aria-label="Copiar dados do paciente"
                 title="Copiar dados do paciente"
               >
-                <Copy size={14} />
+                <ClipboardList size={18} />
               </button>
             </div>
 
-            {(clinicalAlerts.allergies || clinicalAlerts.medications) && (
-              <div className="space-y-2 text-xs">
-                {clinicalAlerts.allergies && (
-                  <div className="flex items-start gap-1.5 rounded-lg border border-destructive/25 bg-destructive/8 px-2.5 py-1.5 text-foreground">
-                    <AlertTriangle size={13} className="mt-px shrink-0 text-destructive" />
-                    <span className="line-clamp-3">
-                      <strong className="text-destructive">Alergias:</strong> {clinicalAlerts.allergies}
-                    </span>
-                  </div>
-                )}
-                {clinicalAlerts.medications && (
-                  <div className="flex items-start gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-foreground">
-                    <ClipboardList size={13} className="mt-px shrink-0 text-primary" />
-                    <span className="line-clamp-3">
-                      <strong>Em uso:</strong> {clinicalAlerts.medications}
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <nav
-              className="-mx-1 flex gap-1 overflow-x-auto border-t border-border-soft pt-3 lg:flex-col"
-              aria-label="Seções do prontuário"
-            >
+            <nav className="flex gap-1 overflow-x-auto p-2 lg:flex-col" aria-label="Seções do prontuário">
               {TABS.map((t) => {
                 const active = t.key === tab;
                 return (
@@ -584,26 +568,19 @@ export default function ProntuarioPage() {
                     type="button"
                     aria-current={active ? "page" : undefined}
                     onClick={() => setTab(t.key)}
-                    className={`relative flex shrink-0 cursor-pointer items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold transition-colors lg:w-full ${
-                      active ? "text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className={`flex shrink-0 cursor-pointer items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition-colors lg:w-full ${
+                      active
+                        ? "bg-primary text-primary-foreground"
+                        : "text-foreground/80 hover:bg-muted hover:text-foreground"
                     }`}
                   >
-                    {active && (
-                      <motion.span
-                        layoutId="prontuario-tab-active"
-                        className="absolute inset-0 rounded-lg bg-primary"
-                        transition={{ type: "spring", stiffness: 400, damping: 35 }}
-                      />
-                    )}
-                    <span className="relative z-10">{t.label}</span>
-                    {t.key === "anamnese" && attendanceStarted && (
-                      <span className="relative z-10 h-2 w-2 rounded-full bg-success" aria-label="em andamento" />
+                    {t.label}
+                    {t.key === "anamnese" && attendanceStarted && !active && (
+                      <span className="h-2 w-2 rounded-full bg-success" aria-label="em andamento" />
                     )}
                     {t.key === "prontuarios" && clinicalHistory.length > 0 && (
                       <span
-                        className={`relative z-10 rounded-full px-1.5 text-xs ${
-                          active ? "bg-white/20" : "bg-primary/12 text-primary"
-                        }`}
+                        className={`rounded-full px-1.5 text-xs ${active ? "bg-white/20" : "bg-primary/12 text-primary"}`}
                       >
                         {clinicalHistory.length}
                       </span>
@@ -614,95 +591,37 @@ export default function ProntuarioPage() {
             </nav>
           </aside>
 
-          <main className="min-w-0 flex-1 space-y-5">
+          <main className="min-w-0 flex-1 space-y-5 px-4 py-6 md:px-6">
 
           {/* ATENDIMENTO — fica sempre montado para não perder o texto ao trocar de aba */}
-          <div
-            className={`${tab === "anamnese" ? "grid" : "hidden"} gap-5 xl:grid-cols-[minmax(0,1fr)_300px]`}
-          >
-            <section className="min-w-0 space-y-3">
-              <div className="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-semibold tracking-tight text-foreground">
-                    Atendimento de hoje
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    Escreva, dite ou grave a consulta. Nada é salvo até você finalizar.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    openAiModal({ key: "anamnese_geral", title: "Anamnese Geral" })
-                  }
-                  className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-full bg-[linear-gradient(135deg,#ff7a59,#d946ef_50%,#6366f1)] px-4 text-sm font-semibold text-white shadow-sm transition-[filter] hover:brightness-110"
-                >
-                  <Sparkles size={16} />
-                  Assistente IA
-                </button>
-              </div>
+          <section className={`${tab === "anamnese" ? "block" : "hidden"} space-y-3`}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold tracking-tight text-foreground">Anamnese Geral</h2>
+              <button
+                type="button"
+                onClick={() => openAiModal({ key: "anamnese_geral", title: "Anamnese Geral" })}
+                className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg bg-primary px-3.5 text-sm font-semibold text-primary-foreground shadow-xs transition-colors hover:bg-primary-hover"
+              >
+                <Sparkles size={15} />
+                Preencher com IA
+              </button>
+            </div>
 
-              {lastRecord && (
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-border bg-surface/60 px-3.5 py-2 text-sm">
-                  <span className="text-muted-foreground">
-                    Último atendimento: <strong className="text-foreground">{lastRecord.formattedDate}</strong>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => pullIntoAttendance(lastRecord)}
-                    className="cursor-pointer text-sm font-semibold text-primary hover:underline"
-                  >
-                    Trazer para este atendimento
-                  </button>
-                </div>
-              )}
+            {clinicalAlerts.allergies && (
+              <p className="flex items-start gap-1.5 rounded-lg border border-destructive/25 bg-destructive/8 px-3 py-2 text-sm text-foreground">
+                <AlertTriangle size={15} className="mt-0.5 shrink-0 text-destructive" />
+                <span>
+                  <strong className="text-destructive">Alergias:</strong> {clinicalAlerts.allergies}
+                </span>
+              </p>
+            )}
 
-              <RichEditor
-                ref={queixaRef}
-                placeholder="Queixa, história, exame físico, hipóteses e conduta... ou use o Assistente IA para gravar a consulta."
-                minHeight={420}
-              />
-            </section>
-
-            <aside className="min-w-0 space-y-3 xl:sticky xl:top-4 xl:self-start" aria-label="Histórico recente">
-              <div className="flex items-center justify-between">
-                <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-                  <History size={15} className="text-primary" />
-                  Histórico recente
-                </h3>
-                {clinicalHistory.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setTab("prontuarios")}
-                    className="cursor-pointer text-xs font-semibold text-primary hover:underline"
-                  >
-                    Ver tudo ({clinicalHistory.length})
-                  </button>
-                )}
-              </div>
-              {loadingClinicalHistory ? (
-                <p className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
-                  Carregando…
-                </p>
-              ) : clinicalHistory.length === 0 ? (
-                <p className="rounded-xl border border-dashed border-border bg-card p-4 text-sm text-muted-foreground">
-                  Primeiro atendimento deste paciente.
-                </p>
-              ) : (
-                <div className="max-h-[calc(100dvh-16rem)] space-y-2 overflow-y-auto pr-1">
-                  {clinicalHistory.slice(0, 8).map((rec) => (
-                    <HistoryCard
-                      key={rec.id}
-                      rec={rec}
-                      compact
-                      onPull={() => pullIntoAttendance(rec)}
-                      onPrint={() => setRecordToPrint(rec)}
-                    />
-                  ))}
-                </div>
-              )}
-            </aside>
-          </div>
+            <RichEditor
+              ref={queixaRef}
+              placeholder="Descreva a anamnese geral do paciente (queixa principal, histórico de saúde, exame clínico, hipóteses e conduta médica)..."
+              minHeight={460}
+            />
+          </section>
 
           {/* HISTÓRICO */}
           {tab === "prontuarios" && (
@@ -820,7 +739,6 @@ export default function ProntuarioPage() {
             />
           )}
           </main>
-         </div>
         </div>
 
         {/* Modal do Assistente de Prontuário IA */}
