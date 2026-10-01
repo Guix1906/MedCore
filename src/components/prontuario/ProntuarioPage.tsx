@@ -534,7 +534,7 @@ export default function ProntuarioPage() {
   return (
     <DirtyCtx.Provider value={markDirty}>
       <div className="min-h-[calc(100dvh-64px)] bg-surface text-foreground">
-        <div className="flex min-h-[calc(100dvh-64px)] flex-col pb-40 lg:flex-row lg:pb-28">
+        <div className="flex min-h-[calc(100dvh-64px)] flex-col lg:flex-row">
           {/* Coluna lateral presa à esquerda: paciente + seções */}
           <aside className="w-full shrink-0 border-b border-border bg-card lg:sticky lg:top-0 lg:h-[calc(100dvh-64px)] lg:w-[300px] lg:overflow-y-auto lg:border-b-0 lg:border-r">
             <div className="flex items-center gap-3 border-b border-border px-3 py-3">
@@ -568,7 +568,7 @@ export default function ProntuarioPage() {
                     type="button"
                     aria-current={active ? "page" : undefined}
                     onClick={() => setTab(t.key)}
-                    className={`flex shrink-0 cursor-pointer items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition-colors lg:w-full ${
+                    className={`flex shrink-0 cursor-pointer items-center justify-between gap-2 rounded-md px-3 py-2.5 text-left text-sm font-semibold transition-colors lg:w-full ${
                       active
                         ? "bg-primary text-primary-foreground"
                         : "text-foreground/80 hover:bg-muted hover:text-foreground"
@@ -591,7 +591,7 @@ export default function ProntuarioPage() {
             </nav>
           </aside>
 
-          <main className="min-w-0 flex-1 space-y-5 px-4 py-6 md:px-6">
+          <main className="flex min-w-0 flex-1 flex-col gap-5 px-4 pt-6 pb-6 md:px-6">
 
           {/* ATENDIMENTO — fica sempre montado para não perder o texto ao trocar de aba */}
           <section className={`${tab === "anamnese" ? "block" : "hidden"} space-y-3`}>
@@ -600,7 +600,7 @@ export default function ProntuarioPage() {
               <button
                 type="button"
                 onClick={() => openAiModal({ key: "anamnese_geral", title: "Anamnese Geral" })}
-                className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg bg-primary px-3.5 text-sm font-semibold text-primary-foreground shadow-xs transition-colors hover:bg-primary-hover"
+                className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md bg-primary px-3.5 text-sm font-semibold text-primary-foreground shadow-xs transition-colors hover:bg-primary-hover"
               >
                 <Sparkles size={15} />
                 Preencher com IA
@@ -738,6 +738,45 @@ export default function ProntuarioPage() {
               patientId={dbPatient?.id || paramPatientId || undefined}
             />
           )}
+
+          {/* Rodapé do atendimento: cronômetro à esquerda (junto à coluna lateral), ações à direita.
+              Sempre montado para o cronômetro não zerar ao trocar de aba. */}
+          <footer
+            className={`${tab === "anamnese" ? "flex" : "hidden"} sticky bottom-0 z-30 -mx-4 -mb-6 mt-auto flex-wrap items-center justify-between gap-3 border-t border-border bg-card/95 px-4 py-3 backdrop-blur md:-mx-6 md:px-6`}
+          >
+            <div className="flex items-center gap-4">
+              <ConsultationTimer
+                onTick={(seconds) => {
+                  secondsRef.current = seconds;
+                }}
+              />
+              <SaveIndicator state={saveState} />
+            </div>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCancel}
+                disabled={isFinalizing}
+                className="h-10 cursor-pointer rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleFinalize}
+                disabled={isFinalizing}
+                aria-keyshortcuts="Control+S Meta+S"
+                className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-xs hover:bg-primary-hover disabled:opacity-50"
+              >
+                {isFinalizing ? "Gravando…" : "Finalizar atendimento"}
+                {!isFinalizing && (
+                  <kbd className="hidden rounded bg-primary-foreground/20 px-1.5 py-0.5 font-sans text-xs font-medium sm:inline">
+                    {isMac ? "⌘S" : "Ctrl S"}
+                  </kbd>
+                )}
+              </button>
+            </div>
+          </footer>
           </main>
         </div>
 
@@ -808,48 +847,6 @@ export default function ProntuarioPage() {
           </AlertDialogContent>
         </AlertDialog>
 
-        {/* Sempre montado: o cronômetro não zera ao trocar de aba */}
-        {(
-          <footer
-            hidden={tab !== "anamnese"}
-            className="app-fixed-footer pointer-events-none fixed bottom-0 right-0 z-30 px-3 pb-3 md:px-6 md:pb-4"
-          >
-            <div className="pointer-events-auto mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 rounded-2xl border border-hairline bg-glass px-4 py-2.5 shadow-(--glass-shadow-lg) glass-blur">
-              <div className="flex items-center gap-4">
-                <ConsultationTimer
-                  onTick={(seconds) => {
-                    secondsRef.current = seconds;
-                  }}
-                />
-                <SaveIndicator state={saveState} />
-              </div>
-              <div className="ml-auto flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleCancel}
-                  disabled={isFinalizing}
-                  className="h-10 rounded-full px-3 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleFinalize}
-                  disabled={isFinalizing}
-                  aria-keyshortcuts="Control+S Meta+S"
-                  className="inline-flex h-10 items-center gap-2 rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground shadow-xs hover:bg-primary-hover disabled:opacity-50"
-                >
-                  {isFinalizing ? "Gravando…" : "Finalizar atendimento"}
-                  {!isFinalizing && (
-                    <kbd className="hidden rounded-md bg-primary-foreground/20 px-1.5 py-0.5 font-sans text-xs font-medium sm:inline">
-                      {isMac ? "⌘S" : "Ctrl S"}
-                    </kbd>
-                  )}
-                </button>
-              </div>
-            </div>
-          </footer>
-        )}
 
         {/* Modal de Impressão e Visualização Completa do Prontuário */}
         <Dialog
