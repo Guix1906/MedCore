@@ -52,7 +52,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/ui-app/StatusBadge";
-import { AlertCircle, Clock3 } from "lucide-react";
+import { AlertCircle, Clock3, Plus } from "lucide-react";
 
 export interface ContasReceberTabProps {
   finance: FinanceSnapshot;
@@ -413,6 +413,14 @@ export function ContasReceberTab({
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
+          {onOpenNew && (
+            <Button
+              onClick={() => onOpenNew("receita")}
+              className="h-9 px-4 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary-hover text-white shadow-xs rounded-xl cursor-pointer"
+            >
+              <Plus className="h-3.5 w-3.5" strokeWidth={2.5} /> Nova Receita
+            </Button>
+          )}
           <Button
             variant="outline"
             size="icon"
