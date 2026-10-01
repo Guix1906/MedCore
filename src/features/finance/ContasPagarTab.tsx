@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { ALL_PERIOD, PeriodFilter, inPeriod, type Period } from "./PeriodFilter";
 import {
   ArrowDownLeft,
   Clock,
@@ -47,6 +48,7 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
   const [subTab, setSubTab] = useState<"a-pagar" | "historico" | "todas">("a-pagar");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"todos" | "pendente" | "vencido">("todos");
+  const [period, setPeriod] = useState<Period>(ALL_PERIOD);
 
   // Filtra todas as despesas ativas do sistema
   const despesas = useMemo(() => {
@@ -185,7 +187,10 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
         if (isPaid || !isVencido) return false;
       }
 
-      // 3. Busca por texto
+      // 3. Período por vencimento
+      if (!inPeriod(e.due_date, period)) return false;
+
+      // 4. Busca por texto
       if (search.trim()) {
         const q = search.toLowerCase();
         const desc = (e.description || "").toLowerCase();
@@ -197,7 +202,7 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
 
       return true;
     });
-  }, [despesas, subTab, statusFilter, search]);
+  }, [despesas, subTab, statusFilter, search, period]);
 
   return (
     <div className="space-y-6 pb-12">
@@ -304,6 +309,8 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
             className="h-9 pl-8 text-xs bg-card border-border rounded-lg placeholder:text-muted-foreground shadow-2xs"
           />
         </div>
+
+        <PeriodFilter value={period} onChange={setPeriod} />
 
         <div className="inline-flex items-center bg-muted/60 p-0.5 rounded-lg border border-border shadow-2xs">
           <button

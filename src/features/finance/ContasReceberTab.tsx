@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { ALL_PERIOD, PeriodFilter, inPeriod, type Period } from "./PeriodFilter";
 import {
   ArrowUpRight,
   Clock,
@@ -78,6 +79,7 @@ export function ContasReceberTab({
   >("geral");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"todos" | "pendente" | "vencido" | "pago">("todos");
+  const [period, setPeriod] = useState<Period>(ALL_PERIOD);
   const [selectedAssociado, setSelectedAssociado] = useState<string>("todos");
   const [associadosList, setAssociadosList] = useState<string[]>([]);
 
@@ -319,6 +321,9 @@ export function ContasReceberTab({
         if (!payer.includes(sel) && !desc.includes(sel)) return false;
       }
 
+      // Período por vencimento
+      if (!inPeriod(e.due_date, period)) return false;
+
       // Busca textual
       if (search.trim()) {
         const q = search.toLowerCase();
@@ -333,7 +338,7 @@ export function ContasReceberTab({
 
       return true;
     });
-  }, [receitas, subTab, statusFilter, selectedAssociado, search, finance?.payments]);
+  }, [receitas, subTab, statusFilter, selectedAssociado, search, period, finance?.payments]);
 
   // Agrupamento por cliente para a sub-aba "Central de Recebíveis por Cliente"
   const clientsGrouped = useMemo(() => {
@@ -839,6 +844,8 @@ export function ContasReceberTab({
             className="pl-8 h-9 text-xs bg-card border-border rounded-lg placeholder:text-muted-foreground shadow-2xs"
           />
         </div>
+
+        <PeriodFilter value={period} onChange={setPeriod} />
 
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2">
