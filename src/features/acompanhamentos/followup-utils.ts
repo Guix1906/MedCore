@@ -29,8 +29,25 @@ export const PAYMENT_METHODS = {
 export const currency = (value: number) =>
   value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+/** Aceita formatos digitados no Brasil: "600", "600,5", "1.200,00", "R$ 1.200,00", "1200.50". */
+function normalizeMoneyInput(value: string): string {
+  let s = value.trim().replace(/^R\$\s*/i, "").replace(/\s/g, "");
+  if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
+  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, "");
+  return s;
+}
+
+/** Versão que não lança erro: devolve null quando o texto ainda não é um valor válido. */
+export function tryMoneyCents(value: string): number | null {
+  try {
+    return moneyCents(value);
+  } catch {
+    return null;
+  }
+}
+
 export function moneyCents(value: string): number {
-  const normalized = value.trim().replace(",", ".");
+  const normalized = normalizeMoneyInput(value);
   if (!/^\d+(\.\d{1,2})?$/.test(normalized))
     throw new Error("Informe valores positivos com até duas casas decimais.");
   const cents = Math.round(Number(normalized) * 100);

@@ -16,6 +16,7 @@ import {
   formatClinicalDate,
   localDate,
   moneyCents,
+  tryMoneyCents,
   PAYMENT_METHODS,
 } from "@/features/acompanhamentos/followup-utils";
 import { refreshFinance } from "./finance-api";
@@ -295,7 +296,13 @@ export default function PaymentHistory({
                   disabled={busy || selectableAccounts.length === 0}
                   className="h-10 cursor-pointer rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {busy ? "Registrando..." : submitted ? "Repetir mesma solicitação" : `Confirmar ${currency(moneyCents(amount) / 100)}`}
+                  {busy
+                    ? "Registrando..."
+                    : submitted
+                      ? "Repetir mesma solicitação"
+                      : tryMoneyCents(amount) !== null
+                        ? `Confirmar ${currency((tryMoneyCents(amount) as number) / 100)}`
+                        : "Confirmar pagamento"}
                 </button>
               </div>
             </form>
