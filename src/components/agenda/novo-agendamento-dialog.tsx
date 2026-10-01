@@ -480,6 +480,10 @@ export function NovoAgendamentoDialog({
       setDay(toDateStr(startDate));
       setStart(toTimeStr(startDate));
       setEnd(toTimeStr(endDate));
+      // A duração precisa vir junto com início/fim: o efeito "fim = início + duração"
+      // rodaria com os 30 min padrão e encurtaria o agendamento ao salvar.
+      const editMinutes = Math.round((endDate.getTime() - startDate.getTime()) / 60_000);
+      if (editMinutes > 0) setDuration(editMinutes);
       setDayEnd(toDateStr(endDate));
       setRecurrence(meta?.recurrence || "none");
 
@@ -538,7 +542,8 @@ export function NovoAgendamentoDialog({
     setNotes("");
     setDay(toDateStr(d));
     setStart(toTimeStr(d));
-    setEnd(toTimeStr(new Date(d.getTime() + 60 * 60_000)));
+    setEnd(toTimeStr(new Date(d.getTime() + 30 * 60_000)));
+    setDuration(30);
     setRecurrence("none");
     setLocName("");
     setLocRoom("");
@@ -971,14 +976,6 @@ export function NovoAgendamentoDialog({
     for (const ch of assignedTo) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
     setColor(COLORS[hash % COLORS.length]);
   }, [type, assignedTo, activityToEdit]);
-
-  // Ao editar, a duração vem do próprio agendamento.
-  useEffect(() => {
-    if (!open || !activityToEdit || !start || !end) return;
-    const diff = toMinutes(end) - toMinutes(start);
-    if (diff > 0) setDuration(diff);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, activityToEdit]);
 
   // Horários já ocupados do profissional no dia (para oferecer só horários livres).
   const editingEventId = activityToEdit?.id?.includes(":")

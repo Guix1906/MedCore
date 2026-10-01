@@ -601,6 +601,7 @@ export function ActivityDrawer({
       search: {
         patientName: clientName,
         patientId: clientId || undefined,
+        tab: "anamnese",
         startTimer: true,
       } as any,
     });

@@ -186,15 +186,16 @@ export default function ProntuarioPage() {
       : "prontuarios",
   );
 
+  // Só reage quando a aba pedida na URL muda (searchParams é recriado a cada render).
   useEffect(() => {
-    const pTab = searchParams.get("tab") as TabKey | null;
+    const pTab = paramTab;
     if (
       pTab &&
       ["prontuarios", "anamnese", "fotos", "orcamento", "plano", "injetaveis"].includes(pTab)
     ) {
       setTab(pTab);
     }
-  }, [searchParams]);
+  }, [paramTab, paramPatientId]);
 
   const hasActivePatient = Boolean(paramPatientId || paramPatientName);
 
@@ -524,6 +525,7 @@ export default function ProntuarioPage() {
             search: {
               patientId: p.id || undefined,
               patientName: p.name || undefined,
+              tab: targetTab,
             },
           });
         }}
