@@ -39,14 +39,10 @@ export function useAgendaMutations(onDone: (a: Activity | null) => void) {
       const tbl = a.source === "task" ? "tasks" : a.source === "event" ? "events" : "deadlines";
       const id = a.id && a.id.includes(":") ? a.id.split(":")[1] : a.id;
       if (a.source === "event") {
-        // Cobrança do agendamento: sem pagamento é cancelada; sinal já recebido é mantido
-        // como receita (o histórico financeiro não é apagado).
-        const { error: financeError } = await supabase.rpc("cancel_appointment_finance", {
-          p_event_id: id,
-          p_action: "retain",
-          p_reason: "Agendamento excluído",
-        });
-        if (financeError) throw financeError;
+        // Função do banco: resolve a cobrança do agendamento (apaga ou estorna) e apaga o evento.
+        const { error } = await (supabase.rpc as any)("delete_agenda_event", { p_event_id: id });
+        if (error) throw error;
+        return;
       }
       const { error } = await supabase.from(tbl).delete().eq("id", id);
       if (error) throw error;
