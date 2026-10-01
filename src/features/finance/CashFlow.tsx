@@ -91,7 +91,8 @@ import {
   moneyCents,
 } from "@/features/acompanhamentos/followup-utils";
 import { refreshFinance, getTitleEventKey } from "./finance-api";
-import { remaining } from "./finance-math";
+import { remaining, reportingRows } from "./finance-math";
+import { CashFlowChartCard, type CashFlowPeriod } from "@/components/finance/CashFlowChartCard";
 import { cashFlow } from "./cash-flow-math";
 import type { CashAccount, CashFlowSnapshot } from "./cash-flow-schema";
 import type { FinanceSnapshot, FinancialTitle } from "./finance-schema";
@@ -612,6 +613,31 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
     };
   }, [allRealizedEntries, finance.titles, scope, selectedAccount, start, end]);
 
+  // Dados do gráfico compartilhado: pagamentos (realizado) + saldo em aberto (previsto), por clínica
+  const [flowChartPeriod, setFlowChartPeriod] = useState<CashFlowPeriod>("week");
+  const flowChartRows = useMemo(() => {
+    const inScope = (companyId: string | null | undefined) =>
+      scope === "all" || !companyId || companyId === scope;
+    const titles = (finance.titles || []).filter((t) => inScope(t.company_id));
+    const ids = new Set(titles.map((t) => t.id));
+    try {
+      return reportingRows({
+        ...finance,
+        titles,
+        payments: (finance.payments || []).filter((p) => ids.has(p.transaction_id)),
+      } as FinanceSnapshot);
+    } catch {
+      return [];
+    }
+  }, [finance, scope]);
+  const flowChartRange = useMemo<[Date, Date]>(() => {
+    const s = start ? parseISO(start) : startOfMonth(new Date());
+    const e = end ? parseISO(end) : endOfMonth(new Date());
+    s.setHours(0, 0, 0, 0);
+    e.setHours(23, 59, 59, 999);
+    return [s, e];
+  }, [start, end]);
+
   // Execução de transferência entre contas
   const handleExecuteTransfer = async () => {
     if (transferring) return;
@@ -1041,25 +1067,13 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       {/* GRÁFICO PRINCIPAL ("MOVIMENTO POR DIA / SEMANA / ANO" - APEXCHARTS)        */}
       {/* ========================================================================= */}
       {showChart && (
-        <GraficoFluxoDeCaixa
-          customChartData={chartData}
-          granularity={chartGranularity}
-          onGranularityChange={setChartGranularity}
-          periodLabel={periodLabel}
-          startDate={start}
-          endDate={end}
-          onDateRangeChange={(s, e) => {
-            setCustomStartDate(s);
-            setCustomEndDate(e);
-            setPeriodMode("custom");
-          }}
-          onSelectPeriodPreset={(preset) => {
-            setPeriodMode(preset);
-            if (preset === "ano") setChartGranularity("anual");
-            else if (preset === "mes") setChartGranularity("mes");
-            else if (preset === "semana") setChartGranularity("semana");
-            else setChartGranularity("dia");
-          }}
+        // Mesmo gráfico do Dashboard (componente compartilhado), no período e clínica desta tela
+        <CashFlowChartCard
+          rows={flowChartRows}
+          range={flowChartRange}
+          period={flowChartPeriod}
+          onPeriodChange={setFlowChartPeriod}
+          className="border border-border"
         />
       )}
 

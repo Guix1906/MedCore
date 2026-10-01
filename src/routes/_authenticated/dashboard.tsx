@@ -1,6 +1,7 @@
 import AppShell from "@/components/AppShell";
 import { Card, CardHeader, KPICard, StatNumber } from "@/components/ds";
 import { Chart, CHART_COLORS, chartColor } from "@/components/ds/Chart";
+import { CashFlowChartCard } from "@/components/finance/CashFlowChartCard";
 import { RevealGroup, RevealItem } from "@/components/motion/Reveal";
 import { PageHeader } from "@/components/ui-app/PageHeader";
 import { SegmentedControl } from "@/components/ui-app/SegmentedControl";
@@ -667,28 +668,6 @@ function DashboardPage() {
       }`;
   const count = (value: number) => (loading ? "—" : value.toLocaleString("pt-BR"));
 
-  // Fluxo de caixa no modelo de referência: realizado + previsto empilhados, saldo do período em linha
-  const flowRows = cashflow.map((d) => ({
-    label: d.label,
-    entradas: d.entradas,
-    entradasPrev: d.entradasPrev,
-    saidas: d.saidas,
-    saidasPrev: d.saidasPrev,
-    saldo: d.entradas - d.saidas,
-    saldoPrev: d.entradas + d.entradasPrev - (d.saidas + d.saidasPrev),
-  }));
-  const flowAxis = niceAxis(
-    Math.max(0, ...flowRows.map((r) => Math.max(r.entradas + r.entradasPrev, r.saldo, r.saldoPrev))),
-    Math.min(0, ...flowRows.map((r) => Math.min(-(r.saidas + r.saidasPrev), r.saldo, r.saldoPrev))),
-  );
-  const flowSeries = [
-    { name: "Entradas", type: "column", data: flowRows.map((r) => r.entradas) },
-    { name: "Entradas previstas", type: "column", data: flowRows.map((r) => r.entradasPrev) },
-    { name: "Saídas", type: "column", data: flowRows.map((r) => -r.saidas) },
-    { name: "Saídas previstas", type: "column", data: flowRows.map((r) => -r.saidasPrev) },
-    { name: "Saldo", type: "line", data: flowRows.map((r) => r.saldo) },
-    { name: "Saldo previsto", type: "line", data: flowRows.map((r) => r.saldoPrev) },
-  ];
   const hidden = "R$ ••••••";
   const reportIcons = { prof: User, type: ClipboardList, insurance: Smile, cat: LayoutGrid } as const;
 
@@ -697,99 +676,16 @@ function DashboardPage() {
       <div className="page-container space-y-6 pb-12">
         {/* Linha 1: Fluxo de caixa | Filtros + Balanço */}
         <section className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
-          <div className="rounded-2xl bg-card p-5 shadow-xs">
-            <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
-              <h2 className="flex items-center gap-1.5 text-[15px] font-semibold text-foreground">
-                Fluxo de caixa <Help text="Entradas e saídas realizadas e previstas por período." />
-              </h2>
-              <div className="flex items-center gap-5" role="tablist" aria-label="Agrupamento do fluxo de caixa">
-                {(
-                  [
-                    ["day", "Diária"],
-                    ["week", "Semanal"],
-                    ["month", "Mensal"],
-                    ["year", "Anual"],
-                  ] as const
-                ).map(([key, label]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    role="tab"
-                    aria-selected={period === key}
-                    onClick={() => setPeriod(key)}
-                    className={`-mt-1 cursor-pointer border-t-2 pt-1 text-sm font-semibold transition-colors ${
-                      period === key
-                        ? "border-primary text-primary"
-                        : "border-transparent text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {financeQ.error ? (
-              <div role="alert" className="rounded-xl bg-destructive/10 p-4 text-sm text-destructive">
-                Financeiro indisponível: {errorMessage(financeQ.error)}{" "}
-                <button onClick={() => financeQ.refetch()} className="font-medium underline">
-                  Tentar novamente
-                </button>
-              </div>
-            ) : (
-              <div className="h-[300px]" key={period}>
-                {financeQ.isLoading ? (
-                  <Skeleton />
-                ) : (
-                  <Chart
-                    key={`${period}-${flowRows.map((r) => r.label).join()}`}
-                    type="line"
-                    height={300}
-                    summary="Fluxo de caixa: entradas, saídas, previstos e saldo por período."
-                    series={flowSeries as NonNullable<ApexOptions["series"]>}
-                    options={{
-                      chart: { id: "cashflow", type: "line", stacked: true },
-                      colors: FLOW_COLORS,
-                      stroke: { width: [0, 0, 0, 0, 2, 2], curve: "straight", dashArray: [0, 0, 0, 0, 0, 5] },
-                      markers: {
-                        size: [0, 0, 0, 0, 5, 5],
-                        colors: [FLOW_COLORS[4], FLOW_COLORS[5]],
-                        strokeWidth: 0,
-                        hover: { size: 7 },
-                      },
-                      plotOptions: { bar: { columnWidth: "50%", borderRadius: 0 } },
-                      dataLabels: { enabled: false },
-                      grid: { strokeDashArray: 0, padding: { left: 10, right: 10 } },
-                      xaxis: { categories: flowRows.map((r) => r.label) },
-                      yaxis: {
-                        min: flowAxis.min,
-                        max: flowAxis.max,
-                        tickAmount: flowAxis.ticks,
-                        forceNiceScale: false,
-                        labels: { formatter: shortBRL },
-                      },
-                      annotations: { yaxis: [{ y: 0, borderColor: "var(--border)", strokeDashArray: 0 }] },
-                      legend: { show: false },
-                      tooltip: {
-                        shared: true,
-                        intersect: false,
-                        y: { formatter: (v: number) => (showBalance ? BRL(Math.abs(v)) : hidden) },
-                      },
-                    }}
-                  />
-                )}
-              </div>
-            )}
-
-            <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
-              <LegendSquare color={FLOW_COLORS[0]} label="Entradas" />
-              <LegendSquare color={FLOW_COLORS[1]} label="Entradas previstas" />
-              <LegendSquare color={FLOW_COLORS[2]} label="Saídas" />
-              <LegendSquare color={FLOW_COLORS[3]} label="Saídas previstas" />
-              <LegendDot color={FLOW_COLORS[4]} label="Saldo" line />
-              <LegendDot color={FLOW_COLORS[5]} label="Saldo previsto" line dashed />
-            </div>
-          </div>
+          <CashFlowChartCard
+            rows={tx}
+            range={range}
+            period={period}
+            onPeriodChange={setPeriod}
+            loading={financeQ.isLoading}
+            error={financeQ.error ? errorMessage(financeQ.error) : null}
+            onRetry={() => void financeQ.refetch()}
+            hideValues={!showBalance}
+          />
 
           <div className="flex flex-col gap-3">
             <SectionTitle title="Filtros" />
