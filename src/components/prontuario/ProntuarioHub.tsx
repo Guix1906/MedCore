@@ -227,302 +227,326 @@ export function ProntuarioHub({
     },
   });
 
+  // Navegação por teclado na busca (↑ ↓ Enter) e atalho "/" para focar
+  const [activeIndex, setActiveIndex] = useState(0);
+  useEffect(() => setActiveIndex(0), [searchResults]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (e.key !== "/" || target?.closest("input, textarea, [contenteditable=true]")) return;
+      e.preventDefault();
+      document.getElementById("hub-patient-search")?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Situação de cada item da fila em relação ao horário atual
+  const nowHHMM = new Date().toTimeString().slice(0, 5);
+  const isDone = (status: string) => /conclu|finaliz|atendid|realizad|done|completed/i.test(status);
+  const isCancelled = (status: string) => /cancel|falt|no.?show/i.test(status);
+  const pending = todayQueue.filter((i) => !isDone(i.status) && !isCancelled(i.status));
+  const nextItem = pending.find((i) => i.startTime >= nowHHMM) ?? pending[pending.length - 1];
+  const doneCount = todayQueue.filter((i) => isDone(i.status)).length;
+  const showResults = search.trim().length > 0;
+
+  const initials = (name: string) =>
+    name
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase();
+
   return (
     <div className="page-container min-h-full">
-      <div className="mx-auto max-w-[1400px] space-y-6">
-        {/* Banner de Boas-Vindas & Busca */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.28 }}
-          className="rounded-2xl border border-border bg-card p-6 md:p-8 shadow-sm"
-        >
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 text-primary">
-                <Stethoscope size={22} className="shrink-0" />
-                <span className="text-sm font-semibold uppercase tracking-wider">Prontuário</span>
-              </div>
-              <h1 className="mt-1 text-2xl md:text-[28px] font-semibold text-foreground">
-                Central de Atendimentos & Prontuários
-              </h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Busque um paciente ou clique na fila para visualizar seus prontuários organizados ou
-                iniciar uma nova consulta.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Link
-                to="/pacientes"
-                search={{ novo: true }}
-                className="inline-flex items-center gap-2 h-10 px-4 rounded-xl border border-border text-sm font-semibold text-foreground/80 hover:bg-surface transition-colors"
-              >
-                <UserPlus size={16} className="text-primary" /> Novo paciente
-              </Link>
-              <Link
-                to="/agenda"
-                search={{ taskId: undefined, deadlineId: undefined, eventId: undefined }}
-                className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-hover transition-colors shadow-sm"
-              >
-                <Calendar size={16} /> Ver agenda completa
-              </Link>
-            </div>
+      <div className="mx-auto max-w-[1200px] space-y-6">
+        {/* Cabeçalho enxuto */}
+        <header className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium capitalize text-muted-foreground">{todayFormatted}</p>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground md:text-[28px]">
+              Atendimentos
+            </h1>
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              to="/pacientes"
+              search={{ novo: true }}
+              className="inline-flex h-10 items-center gap-2 rounded-full border border-border bg-card px-4 text-sm font-semibold text-foreground transition-colors hover:bg-surface"
+            >
+              <UserPlus size={16} className="text-primary" /> Novo paciente
+            </Link>
+            <Link
+              to="/agenda"
+              search={{ taskId: undefined, deadlineId: undefined, eventId: undefined }}
+              className="inline-flex h-10 items-center gap-2 rounded-full border border-border bg-card px-4 text-sm font-semibold text-foreground transition-colors hover:bg-surface"
+            >
+              <Calendar size={16} className="text-primary" /> Agenda
+            </Link>
+          </div>
+        </header>
 
-          {/* Campo de Busca Rápida */}
-          <div className="relative mt-6">
-            <div className="relative flex items-center">
-              <Search
-                size={18}
-                className="absolute left-4 text-muted-foreground pointer-events-none"
-              />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar paciente por nome, CPF ou telefone para abrir prontuário ou atender…"
-                className="w-full h-12 pl-11 pr-4 rounded-xl border border-border bg-surface text-sm text-foreground placeholder:text-muted-foreground focus:bg-card focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
-                autoFocus
-              />
-              {isSearching && (
-                <div className="absolute right-4 text-xs font-medium text-primary">Buscando…</div>
-              )}
-            </div>
+        {/* Busca: ação principal da tela */}
+        <div className="relative">
+          <Search
+            size={20}
+            className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-muted-foreground"
+          />
+          <input
+            id="hub-patient-search"
+            type="search"
+            role="combobox"
+            aria-expanded={showResults}
+            aria-controls="hub-search-results"
+            aria-activedescendant={showResults && searchResults[activeIndex] ? `hub-result-${activeIndex}` : undefined}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (!searchResults.length) return;
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setActiveIndex((i) => Math.min(i + 1, searchResults.length - 1));
+              } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setActiveIndex((i) => Math.max(i - 1, 0));
+              } else if (e.key === "Enter") {
+                const p = searchResults[activeIndex];
+                if (p) onSelectPatient({ id: p.id, name: p.name, tab: e.shiftKey ? "anamnese" : "prontuarios" });
+              } else if (e.key === "Escape") {
+                setSearch("");
+              }
+            }}
+            placeholder="Buscar paciente por nome, CPF ou telefone"
+            aria-label="Buscar paciente"
+            autoFocus
+            className="h-14 w-full rounded-2xl border border-border bg-card pl-14 pr-24 text-base text-foreground shadow-xs outline-none transition-all placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-primary/10"
+          />
+          <span className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+            {isSearching ? "Buscando…" : <kbd className="rounded-md border border-border px-1.5 py-0.5 font-sans">/</kbd>}
+          </span>
 
-            {/* Dropdown de Resultados da Busca */}
-            <AnimatePresence>
-              {searchResults.length > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 4 }}
-                  transition={{ duration: 0.18 }}
-                  className="absolute left-0 right-0 top-14 z-50 overflow-hidden rounded-xl border border-hairline bg-glass-strong p-2 shadow-(--glass-shadow-lg) glass-blur-strong"
-                >
-                  <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Pacientes encontrados ({searchResults.length})
+          <AnimatePresence>
+            {showResults && !isSearching && (
+              <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 4 }}
+                transition={{ duration: 0.16 }}
+                className="absolute left-0 right-0 top-16 z-50 overflow-hidden rounded-2xl border border-hairline bg-glass-strong p-1.5 shadow-(--glass-shadow-lg) glass-blur-strong"
+              >
+                {searchResults.length === 0 ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-3 text-sm text-muted-foreground">
+                    Nenhum paciente encontrado para "{search.trim()}".
+                    <Link
+                      to="/pacientes"
+                      search={{ novo: true }}
+                      className="font-semibold text-primary hover:underline"
+                    >
+                      Cadastrar novo paciente
+                    </Link>
                   </div>
-                  <div className="divide-y divide-border-soft max-h-72 overflow-y-auto">
-                    {searchResults.map((p) => (
-                      <div
+                ) : (
+                  <ul id="hub-search-results" role="listbox" className="max-h-80 overflow-y-auto">
+                    {searchResults.map((p, idx) => (
+                      <li
                         key={p.id}
-                        className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-primary-soft/60 transition-colors text-left group"
+                        id={`hub-result-${idx}`}
+                        role="option"
+                        aria-selected={idx === activeIndex}
+                        onMouseEnter={() => setActiveIndex(idx)}
+                        className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${idx === activeIndex ? "bg-primary-soft/70" : ""}`}
                       >
                         <button
                           type="button"
-                          onClick={() =>
-                            onSelectPatient({ id: p.id, name: p.name, tab: "prontuarios" })
-                          }
-                          className="flex items-center gap-3 min-w-0 flex-1 text-left cursor-pointer"
+                          onClick={() => onSelectPatient({ id: p.id, name: p.name, tab: "prontuarios" })}
+                          className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
                         >
-                          <div className="h-9 w-9 rounded-full bg-primary/10 text-primary font-semibold text-sm flex items-center justify-center shrink-0">
-                            {p.name.slice(0, 2).toUpperCase()}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors truncate">
-                              {p.name}
-                            </div>
-                            <div className="text-xs text-muted-foreground truncate">
-                              {p.insurance || "Particular"} • {p.phone || p.cpf || "Sem contato"}
-                            </div>
-                          </div>
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                            {initials(p.name)}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-semibold text-foreground">{p.name}</span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {[p.insurance || "Particular", p.phone || p.cpf].filter(Boolean).join(" · ")}
+                            </span>
+                          </span>
                         </button>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              onSelectPatient({ id: p.id, name: p.name, tab: "prontuarios" })
-                            }
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-surface text-foreground text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-                            title="Ver prontuários anteriores"
-                          >
-                            <FileText size={13} className="text-primary" /> Prontuário
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              onSelectPatient({ id: p.id, name: p.name, tab: "anamnese" })
-                            }
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold shadow-xs hover:bg-primary-hover transition-colors cursor-pointer"
-                            title="Iniciar novo atendimento"
-                          >
-                            <Play size={13} fill="currentColor" /> Atender
-                          </button>
-                        </div>
-                      </div>
+                        <button
+                          type="button"
+                          onClick={() => onSelectPatient({ id: p.id, name: p.name, tab: "anamnese" })}
+                          className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary-hover"
+                        >
+                          <Play size={12} fill="currentColor" /> Atender
+                        </button>
+                      </li>
                     ))}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </motion.div>
+                  </ul>
+                )}
+                <p className="border-t border-border-soft px-3 pt-1.5 pb-1 text-xs text-muted-foreground">
+                  Enter abre o prontuário · Shift + Enter inicia o atendimento
+                </p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
-        {/* Fila do Dia & Histórico Recente */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Fila de Atendimento do Dia (2 Colunas) */}
-          <div className="lg:col-span-2 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CalendarCheck size={18} className="text-success" />
-                <h2 className="text-[15px] font-semibold text-foreground">
-                  Fila de Atendimento de Hoje
-                </h2>
-              </div>
-              <span className="text-xs font-medium text-muted-foreground capitalize">
-                {todayFormatted}
-              </span>
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+          {/* Fila de hoje */}
+          <section className="space-y-3" aria-labelledby="hub-queue-title">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 id="hub-queue-title" className="text-base font-semibold text-foreground">
+                Fila de hoje
+              </h2>
+              {todayQueue.length > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  <strong className="text-foreground">{pending.length}</strong> a atender ·{" "}
+                  <strong className="text-foreground">{doneCount}</strong> atendidos
+                </p>
+              )}
             </div>
 
-            <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-xs">
-              {loadingQueue ? (
-                <div className="p-8 text-center text-sm text-muted-foreground">
-                  Carregando fila de agendamentos…
-                </div>
-              ) : todayQueue.length === 0 ? (
-                <div className="p-10 text-center space-y-3">
-                  <div className="mx-auto h-12 w-12 rounded-full bg-muted text-muted-foreground flex items-center justify-center">
-                    <Calendar size={22} />
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold text-foreground">
-                      Nenhum agendamento para hoje
-                    </div>
-                    <p className="text-sm text-muted-foreground max-w-sm mx-auto mt-0.5">
-                      Você pode utilizar a busca acima para abrir os prontuários ou iniciar o
-                      atendimento de qualquer paciente cadastrado.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="divide-y divide-border-soft">
-                  {todayQueue.map((item) => (
-                    <div
+            {loadingQueue ? (
+              <div className="space-y-2" aria-busy="true">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="h-[68px] animate-pulse rounded-2xl bg-muted/60" />
+                ))}
+              </div>
+            ) : todayQueue.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border bg-card px-6 py-10 text-center">
+                <CalendarCheck size={26} className="mx-auto text-muted-foreground/70" />
+                <p className="mt-3 text-sm font-semibold text-foreground">Nenhum agendamento para hoje</p>
+                <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
+                  Busque um paciente acima para atender sem agendamento.
+                </p>
+                <Link
+                  to="/agenda"
+                  search={{ taskId: undefined, deadlineId: undefined, eventId: undefined }}
+                  className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
+                >
+                  Agendar paciente <ArrowRight size={14} />
+                </Link>
+              </div>
+            ) : (
+              <ol className="space-y-2">
+                {todayQueue.map((item) => {
+                  const done = isDone(item.status);
+                  const cancelled = isCancelled(item.status);
+                  const isNext = item.id === nextItem?.id;
+                  const late = !done && !cancelled && item.startTime < nowHHMM && !isNext;
+                  return (
+                    <li
                       key={item.id}
-                      className="p-4 flex items-center justify-between gap-4 hover:bg-surface transition-colors"
+                      className={`flex items-center gap-4 rounded-2xl border bg-card p-3 pr-4 transition-colors ${
+                        isNext ? "border-primary/40 shadow-sm ring-1 ring-primary/15" : "border-border"
+                      } ${done || cancelled ? "opacity-60" : ""}`}
                     >
+                      <div
+                        className={`flex w-14 shrink-0 flex-col items-center rounded-xl py-1.5 ${
+                          isNext ? "bg-primary text-primary-foreground" : "bg-surface text-foreground"
+                        }`}
+                      >
+                        <span className="text-sm font-semibold tabular-nums">{item.startTime}</span>
+                      </div>
+
                       <button
                         type="button"
                         onClick={() =>
-                          onSelectPatient({
-                            id: item.patientId,
-                            name: item.patientName,
-                            tab: "prontuarios",
-                          })
+                          item.patientId &&
+                          onSelectPatient({ id: item.patientId, name: item.patientName, tab: "prontuarios" })
                         }
-                        className="flex items-center gap-3.5 min-w-0 flex-1 text-left cursor-pointer group"
+                        disabled={!item.patientId}
+                        className="min-w-0 flex-1 cursor-pointer text-left disabled:cursor-default"
+                        title="Abrir prontuário"
                       >
-                        <div className="h-10 w-12 rounded-xl bg-primary-soft border border-primary/25 text-primary flex flex-col items-center justify-center font-semibold text-xs shrink-0">
-                          <Clock size={12} className="mb-0.5" />
-                          {item.startTime}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors truncate">
+                        <span className="flex items-center gap-2">
+                          <span className="truncate text-sm font-semibold text-foreground hover:text-primary">
                             {item.patientName}
-                          </div>
-                          <div className="text-xs text-muted-foreground truncate">
-                            {item.type} • {item.insurance || "Particular"}{" "}
-                            {item.phone ? `• ${item.phone}` : ""}
-                          </div>
-                        </div>
+                          </span>
+                          {isNext && (
+                            <span className="shrink-0 rounded-full bg-primary/12 px-2 py-0.5 text-xs font-semibold text-primary">
+                              Próximo
+                            </span>
+                          )}
+                          {late && (
+                            <span className="shrink-0 rounded-full bg-warning/12 px-2 py-0.5 text-xs font-semibold text-warning">
+                              Atrasado
+                            </span>
+                          )}
+                          {(done || cancelled) && (
+                            <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                              {done ? "Atendido" : "Cancelado"}
+                            </span>
+                          )}
+                        </span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {[item.type, item.insurance].filter(Boolean).join(" · ")}
+                        </span>
                       </button>
 
-                      <div className="flex items-center gap-2 shrink-0">
+                      {item.patientId && !done && !cancelled && (
                         <button
                           type="button"
                           onClick={() =>
-                            onSelectPatient({
-                              id: item.patientId,
-                              name: item.patientName,
-                              tab: "prontuarios",
-                            })
+                            onSelectPatient({ id: item.patientId, name: item.patientName, tab: "anamnese" })
                           }
-                          className="inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border border-border bg-card hover:bg-surface text-foreground text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-                          title="Abrir prontuários deste paciente"
-                        >
-                          <FileText size={13} className="text-primary" /> Prontuário
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onSelectPatient({
-                              id: item.patientId,
-                              name: item.patientName,
-                              tab: "anamnese",
-                            })
-                          }
-                          className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl bg-primary text-white text-xs font-semibold hover:bg-primary-hover transition-colors shrink-0 shadow-xs cursor-pointer"
-                          title="Iniciar atendimento de hoje"
+                          className={`inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-4 text-sm font-semibold transition-colors ${
+                            isNext
+                              ? "bg-primary text-primary-foreground hover:bg-primary-hover"
+                              : "border border-border text-foreground hover:bg-surface"
+                          }`}
                         >
                           <Play size={13} fill="currentColor" /> Atender
                         </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+          </section>
 
-          {/* Atendimentos Recentes & Atalhos (1 Coluna) */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <History size={18} className="text-primary" />
-              <h2 className="text-[15px] font-semibold text-foreground">Prontuários Recentes</h2>
+          {/* Recentes */}
+          <aside className="space-y-3" aria-labelledby="hub-recent-title">
+            <div className="flex items-baseline justify-between">
+              <h2 id="hub-recent-title" className="text-base font-semibold text-foreground">
+                Atendidos recentemente
+              </h2>
+              <Link to="/pacientes" className="text-sm font-semibold text-primary hover:underline">
+                Todos
+              </Link>
             </div>
-
-            <div className="rounded-2xl border border-border bg-card p-4 shadow-xs space-y-3">
-              {recentPatients.length === 0 ? (
-                <div className="py-8 text-center text-sm text-muted-foreground">
-                  Nenhum prontuário registrado ainda.
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {recentPatients.map((rp, idx) => (
+            {recentPatients.length === 0 ? (
+              <p className="rounded-2xl border border-dashed border-border bg-card p-5 text-sm text-muted-foreground">
+                Os pacientes atendidos aparecerão aqui para acesso rápido.
+              </p>
+            ) : (
+              <ul className="divide-y divide-border-soft overflow-hidden rounded-2xl border border-border bg-card">
+                {recentPatients.map((rp) => (
+                  <li key={rp.id}>
                     <button
-                      key={idx}
                       type="button"
-                      onClick={() =>
-                        onSelectPatient({ id: rp.id, name: rp.name, tab: "prontuarios" })
-                      }
-                      className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-primary-soft transition-colors text-left group cursor-pointer"
+                      onClick={() => onSelectPatient({ id: rp.id, name: rp.name, tab: "prontuarios" })}
+                      className="group flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-surface"
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="h-8 w-8 rounded-lg bg-muted text-muted-foreground flex items-center justify-center font-semibold text-xs shrink-0 group-hover:bg-primary group-hover:text-white transition-colors">
-                          {rp.name.slice(0, 2).toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="text-sm font-semibold text-foreground truncate">
-                            {rp.name}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {new Date(rp.date).toLocaleDateString("pt-BR")}{" "}
-                            {rp.insurance ? `• ${rp.insurance}` : ""}
-                          </div>
-                        </div>
-                      </div>
-
-                      <ChevronRight
-                        size={16}
-                        className="text-muted-foreground group-hover:text-primary transition-colors shrink-0"
-                      />
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground group-hover:bg-primary/12 group-hover:text-primary">
+                        {initials(rp.name)}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold text-foreground">{rp.name}</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {new Date(rp.date).toLocaleDateString("pt-BR")}
+                          {rp.insurance ? ` · ${rp.insurance}` : ""}
+                        </span>
+                      </span>
+                      <ChevronRight size={16} className="shrink-0 text-muted-foreground group-hover:text-primary" />
                     </button>
-                  ))}
-                </div>
-              )}
-
-              <div className="pt-2 border-t border-border-soft">
-                <Link
-                  to="/pacientes"
-                  className="flex items-center justify-center gap-1.5 w-full py-2 text-sm font-semibold text-primary hover:underline"
-                >
-                  Ver todos os pacientes <ArrowRight size={13} />
-                </Link>
-              </div>
-            </div>
-          </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </aside>
         </div>
       </div>
     </div>
