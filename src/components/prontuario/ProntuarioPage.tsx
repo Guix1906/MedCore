@@ -3,7 +3,10 @@ import {
   type AiSectionContext,
 } from "@/components/prontuario/AiRecordAssistantModal";
 import ClinicalPhotos from "@/features/acompanhamentos/ClinicalPhotos";
-import { usePatientClinicalHistory } from "@/hooks/usePatientClinicalHistory";
+import {
+  usePatientClinicalHistory,
+  type ClinicalHistoryItem,
+} from "@/hooks/usePatientClinicalHistory";
 import { supabase } from "@/integrations/supabase/client";
 import type { StructuredConsultationResult } from "@/lib/gemini";
 import { DUR, EASE_OUT, fadeUp, staggerContainer } from "@/lib/motion";
@@ -30,6 +33,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Activity,
   AlertCircle,
   AlertTriangle,
   AlignCenter,
@@ -38,10 +42,12 @@ import {
   AlignRight,
   ArrowLeft,
   Bold,
+  Calendar,
   Check,
   ChevronDown,
   CircleDot,
   ClipboardList,
+  Clock,
   CloudUpload,
   Copy,
   FileDigit,
@@ -52,16 +58,19 @@ import {
   List,
   ListOrdered,
   PlusCircle,
+  Printer,
   Redo2,
   RemoveFormatting,
   Search,
   Settings,
   Sparkles,
+  Stethoscope,
   Strikethrough,
   Timer,
   Type,
   Underline,
   Undo2,
+  User,
 } from "lucide-react";
 import {
   createContext,
@@ -88,20 +97,20 @@ export interface RichEditorHandle {
 type SaveState = "saved" | "saving" | "dirty";
 const DirtyCtx = createContext<() => void>(() => {});
 
-type TabKey = "anamnese" | "orcamento" | "plano" | "fotos" | "injetaveis";
+type TabKey = "prontuarios" | "anamnese" | "orcamento" | "plano" | "fotos" | "injetaveis";
 
 const TABS: { key: TabKey; label: string }[] = [
-  { key: "anamnese", label: "Anamnese" },
+  { key: "prontuarios", label: "Prontuários" },
+  { key: "anamnese", label: "Novo Atendimento" },
+  { key: "fotos", label: "Fotos clínicas" },
   { key: "orcamento", label: "Orçamento" },
   { key: "plano", label: "Plano de tratamento" },
-  { key: "fotos", label: "Fotos clínicas" },
   { key: "injetaveis", label: "Injetáveis" },
 ];
 
 export default function ProntuarioPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<TabKey>("anamnese");
 
   // Lê parâmetros da URL caso o atendimento tenha sido iniciado a partir da agenda ou paciente
   const searchParams = new URLSearchParams(
@@ -110,6 +119,24 @@ export default function ProntuarioPage() {
   const paramPatientId = searchParams.get("patientId") || searchParams.get("id");
   const paramPatientName =
     searchParams.get("patientName") || searchParams.get("name") || searchParams.get("patient");
+  const paramTab = searchParams.get("tab") as TabKey | null;
+
+  const [tab, setTab] = useState<TabKey>(
+    paramTab &&
+      ["prontuarios", "anamnese", "fotos", "orcamento", "plano", "injetaveis"].includes(paramTab)
+      ? paramTab
+      : "prontuarios",
+  );
+
+  useEffect(() => {
+    const pTab = searchParams.get("tab") as TabKey | null;
+    if (
+      pTab &&
+      ["prontuarios", "anamnese", "fotos", "orcamento", "plano", "injetaveis"].includes(pTab)
+    ) {
+      setTab(pTab);
+    }
+  }, [searchParams]);
 
   const hasActivePatient = Boolean(paramPatientId || paramPatientName);
 
@@ -183,21 +210,47 @@ export default function ProntuarioPage() {
     usePatientClinicalHistory(patient.id, patient.name);
 
   const [historySearch, setHistorySearch] = useState("");
+  const [historyFilterKind, setHistoryFilterKind] = useState<
+    "todos" | "prontuario" | "consulta" | "evolucao"
+  >("todos");
   const [showHistoryTimeline, setShowHistoryTimeline] = useState(true);
+  const [recordToPrint, setRecordToPrint] = useState<ClinicalHistoryItem | null>(null);
 
   const filteredHistory = useMemo(() => {
-    if (!historySearch.trim()) return clinicalHistory;
-    const q = historySearch.toLowerCase();
     return clinicalHistory.filter((item) => {
+      if (historyFilterKind !== "todos" && item.kind !== historyFilterKind) {
+        return false;
+      }
+      if (!historySearch.trim()) return true;
+      const q = historySearch.toLowerCase();
       return (
         item.title.toLowerCase().includes(q) ||
         (item.doctorName || "").toLowerCase().includes(q) ||
         (item.complaint || "").toLowerCase().includes(q) ||
+        (item.clinicalHistory || "").toLowerCase().includes(q) ||
+        (item.evolution || "").toLowerCase().includes(q) ||
         (item.conduct || "").toLowerCase().includes(q) ||
-        (item.diagnosis || "").toLowerCase().includes(q)
+        (item.diagnosis || "").toLowerCase().includes(q) ||
+        (item.diagnosisCode || "").toLowerCase().includes(q) ||
+        (item.medications || "").toLowerCase().includes(q) ||
+        (item.allergies || "").toLowerCase().includes(q) ||
+        item.formattedDate.toLowerCase().includes(q)
       );
     });
-  }, [clinicalHistory, historySearch]);
+  }, [clinicalHistory, historyFilterKind, historySearch]);
+
+  const prontuariosCount = useMemo(
+    () => clinicalHistory.filter((i) => i.kind === "prontuario").length,
+    [clinicalHistory],
+  );
+  const consultasCount = useMemo(
+    () => clinicalHistory.filter((i) => i.kind === "consulta").length,
+    [clinicalHistory],
+  );
+  const evolucoesCount = useMemo(
+    () => clinicalHistory.filter((i) => i.kind === "evolucao").length,
+    [clinicalHistory],
+  );
 
   // Estado do modal de Assistente IA
   const [aiModalOpen, setAiModalOpen] = useState(false);
@@ -328,6 +381,8 @@ export default function ProntuarioPage() {
     return (
       <ProntuarioHub
         onSelectPatient={(p) => {
+          const targetTab = p.tab || "prontuarios";
+          setTab(targetTab as TabKey);
           navigate({
             to: "/prontuario",
             search: {
@@ -382,18 +437,16 @@ export default function ProntuarioPage() {
             <nav className="flex max-w-full gap-2 overflow-x-auto border-t border-border pt-3 lg:flex-col">
               {TABS.map((t) => {
                 const active = t.key === tab;
+                const isAvailable =
+                  t.key === "prontuarios" || t.key === "anamnese" || t.key === "fotos";
                 return (
                   <button
                     key={t.key}
-                    disabled={t.key !== "anamnese" && t.key !== "fotos"}
-                    title={
-                      t.key !== "anamnese" && t.key !== "fotos"
-                        ? "Indisponível nesta tela"
-                        : undefined
-                    }
+                    disabled={!isAvailable}
+                    title={!isAvailable ? "Indisponível nesta tela" : undefined}
                     aria-current={active ? "page" : undefined}
                     onClick={() => setTab(t.key)}
-                    className={`group relative flex shrink-0 items-center whitespace-nowrap disabled:opacity-40 w-auto lg:w-full rounded-lg px-3 py-2 text-left text-sm transition-all duration-150 focus-ring cursor-pointer ${
+                    className={`group relative flex shrink-0 items-center justify-between whitespace-nowrap disabled:opacity-40 w-auto lg:w-full rounded-lg px-3 py-2 text-left text-sm transition-all duration-150 focus-ring cursor-pointer ${
                       active
                         ? "text-white font-semibold"
                         : "text-muted-foreground font-semibold hover:bg-primary/10 hover:text-primary"
@@ -407,6 +460,15 @@ export default function ProntuarioPage() {
                       />
                     )}
                     <span className="relative z-10">{t.label}</span>
+                    {t.key === "prontuarios" && clinicalHistory.length > 0 && (
+                      <span
+                        className={`relative z-10 text-xs px-2 py-0.5 rounded-full font-bold ${
+                          active ? "bg-white/20 text-white" : "bg-primary/15 text-primary"
+                        }`}
+                      >
+                        {clinicalHistory.length}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -423,6 +485,385 @@ export default function ProntuarioPage() {
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: DUR.base, ease: EASE_OUT }}
               >
+                {tab === "prontuarios" && (
+                  <motion.div
+                    className="space-y-6"
+                    variants={staggerContainer(0.07, 0.05)}
+                    initial="hidden"
+                    animate="show"
+                  >
+                    {/* 1. Header do Paciente & Resumo Clínico */}
+                    <motion.div variants={fadeUp}>
+                      <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                          <div>
+                            <div className="flex items-center gap-2 text-primary">
+                              <FileText size={18} className="shrink-0" />
+                              <span className="text-xs font-semibold uppercase tracking-wider">
+                                Prontuários do Paciente
+                              </span>
+                            </div>
+                            <h2 className="mt-1 text-2xl font-semibold text-foreground">
+                              Histórico Clínico Organizado
+                            </h2>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              Visualização cronológica de consultas, evoluções, diagnósticos e condutas de{" "}
+                              <strong className="text-foreground">{patient.name}</strong>.
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => setTab("anamnese")}
+                            className="inline-flex items-center gap-2 h-11 px-5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-hover shadow-sm transition-all shrink-0 cursor-pointer"
+                          >
+                            <Stethoscope size={18} /> Iniciar Atendimento de Hoje
+                          </button>
+                        </div>
+
+                        {/* Informações rápidas em pílulas */}
+                        <div className="mt-5 pt-4 border-t border-border-soft flex flex-wrap items-center gap-2.5 text-xs">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface border border-border font-medium text-foreground">
+                            <User size={13} className="text-primary" /> {patient.name}
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface border border-border font-medium text-foreground">
+                            🏷️ {patient.age}
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-soft/60 border border-primary/20 font-semibold text-primary">
+                            🩺 {clinicalHistory.length}{" "}
+                            {clinicalHistory.length === 1
+                              ? "registro clínico"
+                              : "registros clínicos"}
+                          </span>
+                          {dbPatient?.cpf && (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface border border-border font-medium text-muted-foreground">
+                              CPF: {dbPatient.cpf}
+                            </span>
+                          )}
+                          {dbPatient?.phone && (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface border border-border font-medium text-muted-foreground">
+                              Tel: {dbPatient.phone}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+
+                    {/* 2. Barra de Busca e Filtros de Tipo */}
+                    <motion.div variants={fadeUp}>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        {/* Chips de Filtro */}
+                        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                          <button
+                            type="button"
+                            onClick={() => setHistoryFilterKind("todos")}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                              historyFilterKind === "todos"
+                                ? "bg-primary text-white shadow-xs"
+                                : "bg-card border border-border text-muted-foreground hover:bg-surface hover:text-foreground"
+                            }`}
+                          >
+                            Todos ({clinicalHistory.length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setHistoryFilterKind("prontuario")}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                              historyFilterKind === "prontuario"
+                                ? "bg-primary text-white shadow-xs"
+                                : "bg-card border border-border text-muted-foreground hover:bg-surface hover:text-foreground"
+                            }`}
+                          >
+                            🩺 Prontuários ({prontuariosCount})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setHistoryFilterKind("consulta")}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                              historyFilterKind === "consulta"
+                                ? "bg-primary text-white shadow-xs"
+                                : "bg-card border border-border text-muted-foreground hover:bg-surface hover:text-foreground"
+                            }`}
+                          >
+                            📅 Consultas ({consultasCount})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setHistoryFilterKind("evolucao")}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                              historyFilterKind === "evolucao"
+                                ? "bg-primary text-white shadow-xs"
+                                : "bg-card border border-border text-muted-foreground hover:bg-surface hover:text-foreground"
+                            }`}
+                          >
+                            📈 Evoluções ({evolucoesCount})
+                          </button>
+                        </div>
+
+                        {/* Campo de Busca no Histórico */}
+                        <div className="relative min-w-[260px]">
+                          <Search
+                            size={14}
+                            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+                          />
+                          <input
+                            type="text"
+                            value={historySearch}
+                            onChange={(e) => setHistorySearch(e.target.value)}
+                            placeholder="Buscar por queixa, CID, conduta, médico..."
+                            className="w-full h-9 pl-9 pr-8 rounded-xl border border-border bg-card text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none transition-all"
+                          />
+                          {historySearch && (
+                            <button
+                              type="button"
+                              onClick={() => setHistorySearch("")}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+
+                    {/* 3. Lista de Registros Clínicos Organizados */}
+                    <motion.div variants={fadeUp} className="space-y-4">
+                      {loadingClinicalHistory ? (
+                        <div className="p-12 text-center text-sm text-muted-foreground rounded-2xl border border-border bg-card">
+                          Carregando prontuários do paciente…
+                        </div>
+                      ) : filteredHistory.length === 0 ? (
+                        <div className="rounded-2xl border border-border bg-card p-12 text-center space-y-4">
+                          <div className="mx-auto h-12 w-12 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                            <FileText size={24} />
+                          </div>
+                          <div className="max-w-md mx-auto">
+                            <h3 className="text-base font-semibold text-foreground">
+                              {historySearch
+                                ? `Nenhum registro corresponde à busca "${historySearch}"`
+                                : "Nenhum prontuário registrado ainda"}
+                            </h3>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              {historySearch
+                                ? "Tente buscar por outro termo ou limpe os filtros."
+                                : `Este é o momento ideal para iniciar a primeira consulta ou anamnese de ${patient.name}.`}
+                            </p>
+                          </div>
+                          <div>
+                            <button
+                              type="button"
+                              onClick={() => setTab("anamnese")}
+                              className="inline-flex items-center gap-2 h-10 px-5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-hover shadow-sm transition-all cursor-pointer"
+                            >
+                              <Stethoscope size={16} /> Iniciar Primeiro Atendimento
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {filteredHistory.map((rec) => (
+                            <div
+                              key={rec.id}
+                              className="p-5 rounded-2xl bg-card border border-border shadow-xs space-y-4 hover:border-primary/30 transition-all"
+                            >
+                              {/* Header do Card */}
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border-soft">
+                                <div className="flex items-center gap-2.5 flex-wrap">
+                                  {rec.kind === "prontuario" && (
+                                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg bg-primary-soft text-primary border border-primary/20">
+                                      <Stethoscope size={13} /> Prontuário Clínico
+                                    </span>
+                                  )}
+                                  {rec.kind === "consulta" && (
+                                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg bg-info/15 text-info border border-info/20">
+                                      <Calendar size={13} /> {rec.type || "Consulta"}
+                                    </span>
+                                  )}
+                                  {rec.kind === "evolucao" && (
+                                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg bg-success/15 text-success border border-success/20">
+                                      <Activity size={13} /> Evolução
+                                    </span>
+                                  )}
+
+                                  <span className="font-semibold text-foreground text-sm flex items-center gap-1.5">
+                                    <Clock size={13} className="text-muted-foreground" />
+                                    {rec.formattedDate} {rec.time ? `às ${rec.time}` : ""}
+                                  </span>
+
+                                  {rec.doctorName && (
+                                    <span className="text-xs text-muted-foreground font-medium bg-surface border border-border px-2 py-0.5 rounded-md">
+                                      {rec.doctorName}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {rec.durationSeconds ? (
+                                    <span className="text-xs text-muted-foreground font-medium bg-surface border border-border px-2 py-0.5 rounded-md">
+                                      ⏱️ {Math.round(rec.durationSeconds / 60)} min
+                                    </span>
+                                  ) : null}
+
+                                  {rec.status && (
+                                    <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-surface border border-border text-muted-foreground">
+                                      {rec.status}
+                                    </span>
+                                  )}
+
+                                  {/* Ações do Card */}
+                                  <div className="flex items-center gap-1.5 ml-auto">
+                                    <button
+                                      type="button"
+                                      onClick={() => setRecordToPrint(rec)}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border bg-card hover:bg-surface text-xs font-medium text-foreground transition-colors cursor-pointer"
+                                      title="Imprimir prontuário formatado"
+                                    >
+                                      <Printer size={13} className="text-primary" /> Imprimir
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const textToCopy = [
+                                          `[Prontuário - ${rec.formattedDate} - ${rec.doctorName || patient.name}]`,
+                                          rec.complaint ? `Queixa Principal: ${rec.complaint}` : "",
+                                          rec.clinicalHistory
+                                            ? `Histórico Clínico: ${rec.clinicalHistory}`
+                                            : "",
+                                          rec.evolution ? `Evolução: ${rec.evolution}` : "",
+                                          rec.diagnosis
+                                            ? `Diagnóstico: ${rec.diagnosis} ${rec.diagnosisCode ? `(${rec.diagnosisCode})` : ""}`
+                                            : "",
+                                          rec.conduct ? `Conduta: ${rec.conduct}` : "",
+                                        ]
+                                          .filter(Boolean)
+                                          .join("\n\n");
+                                        navigator.clipboard.writeText(textToCopy);
+                                        toast.success(
+                                          "Prontuário copiado para a área de transferência",
+                                        );
+                                      }}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border bg-card hover:bg-surface text-xs font-medium text-foreground transition-colors cursor-pointer"
+                                      title="Copiar texto do prontuário"
+                                    >
+                                      <Copy size={13} /> Copiar
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const snippet = [
+                                          `[Histórico importado de ${rec.formattedDate}]:`,
+                                          rec.complaint ? `Queixa: ${rec.complaint}` : "",
+                                          rec.evolution
+                                            ? `Evolução anterior: ${rec.evolution}`
+                                            : "",
+                                          rec.diagnosis
+                                            ? `Diagnóstico prévio: ${rec.diagnosis}`
+                                            : "",
+                                          rec.conduct ? `Conduta anterior: ${rec.conduct}` : "",
+                                        ]
+                                          .filter(Boolean)
+                                          .join("\n");
+                                        queixaRef.current?.insertText(`\n${snippet}\n\n`);
+                                        setTab("anamnese");
+                                        toast.success(
+                                          "Histórico importado para o atendimento atual!",
+                                        );
+                                      }}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary-soft text-primary text-xs font-semibold hover:bg-primary-hover hover:text-white transition-colors cursor-pointer"
+                                      title="Importar anotações para o atendimento de hoje"
+                                    >
+                                      Puxar p/ hoje
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Conteúdo Estruturado */}
+                              <div className="space-y-3">
+                                {/* Queixa Principal */}
+                                {rec.complaint && (
+                                  <div className="space-y-1">
+                                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                                      <ClipboardList size={12} className="text-primary" /> Queixa
+                                      Principal & Motivo
+                                    </span>
+                                    <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed bg-surface/70 p-3 rounded-xl border border-border/70">
+                                      {rec.complaint}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Histórico / Anamnese / Evolução */}
+                                {(rec.clinicalHistory || rec.evolution) && (
+                                  <div className="space-y-1">
+                                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                                      <FileText size={12} className="text-primary" /> Histórico &
+                                      Evolução Clínica
+                                    </span>
+                                    <div className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed bg-surface/50 p-3 rounded-xl border border-border/70">
+                                      {rec.clinicalHistory || rec.evolution}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Diagnóstico & CID */}
+                                {(rec.diagnosis || rec.diagnosisCode) && (
+                                  <div className="inline-flex items-center gap-2 p-2.5 rounded-xl bg-info/10 border border-info/20 text-xs">
+                                    <strong className="text-info font-semibold">
+                                      Diagnóstico:
+                                    </strong>
+                                    <span className="text-foreground font-medium">
+                                      {rec.diagnosis}{" "}
+                                      {rec.diagnosisCode ? `(${rec.diagnosisCode})` : ""}
+                                    </span>
+                                  </div>
+                                )}
+
+                                {/* Conduta & Prescrição */}
+                                {rec.conduct && (
+                                  <div className="space-y-1">
+                                    <span className="text-xs font-semibold uppercase tracking-wider text-primary flex items-center gap-1">
+                                      <Stethoscope size={12} /> Conduta & Prescrições
+                                    </span>
+                                    <div className="text-xs text-foreground bg-primary-soft/40 p-3 rounded-xl border border-primary/20 whitespace-pre-wrap leading-relaxed">
+                                      {rec.conduct}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Retorno ou Alergias registradas */}
+                                {(rec.returnDate || rec.allergies || rec.medications) && (
+                                  <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-muted-foreground">
+                                    {rec.allergies && (
+                                      <span className="px-2 py-0.5 rounded-md bg-destructive/10 text-destructive border border-destructive/20">
+                                        Alergias: {rec.allergies}
+                                      </span>
+                                    )}
+                                    {rec.medications && (
+                                      <span className="px-2 py-0.5 rounded-md bg-warning/10 text-warning border border-warning/20">
+                                        Medicações: {rec.medications}
+                                      </span>
+                                    )}
+                                    {rec.returnDate && (
+                                      <span className="px-2 py-0.5 rounded-md bg-muted border border-border">
+                                        Retorno:{" "}
+                                        {new Date(rec.returnDate).toLocaleDateString("pt-BR")}
+                                        {rec.returnNotes ? ` (${rec.returnNotes})` : ""}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </motion.div>
+                  </motion.div>
+                )}
+
                 {tab === "anamnese" && (
                   <motion.div
                     className="space-y-6"
@@ -430,6 +871,38 @@ export default function ProntuarioPage() {
                     initial="hidden"
                     animate="show"
                   >
+                    {/* Banner de Atendimento Ativo */}
+                    <motion.div variants={fadeUp}>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-card border border-border shadow-xs">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                            <span className="text-xs font-semibold uppercase tracking-wider text-primary">
+                              Atendimento Ativo de Hoje
+                            </span>
+                          </div>
+                          <h2 className="text-lg font-semibold text-foreground mt-0.5">
+                            Anamnese & Registro Clínico
+                          </h2>
+                          <p className="text-xs text-muted-foreground">
+                            Paciente: <strong className="text-foreground">{patient.name}</strong> •{" "}
+                            {patient.age}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setTab("prontuarios")}
+                            className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl border border-border bg-surface hover:bg-muted text-xs font-semibold text-foreground transition-colors cursor-pointer"
+                          >
+                            <FileText size={14} className="text-primary" />
+                            Ver Prontuários Anteriores ({clinicalHistory.length})
+                          </button>
+                        </div>
+                      </div>
+                    </motion.div>
+
                     {/* 1. Editor do Atendimento Atual */}
                     <motion.div variants={fadeUp}>
                       <Section
@@ -713,46 +1186,186 @@ export default function ProntuarioPage() {
           </AlertDialogContent>
         </AlertDialog>
 
-        <footer className="app-fixed-footer pointer-events-none fixed bottom-0 right-0 z-30 px-3 pb-3 md:px-6 md:pb-4">
-          <div className="pointer-events-auto mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 rounded-2xl border border-hairline bg-glass px-4 py-2.5 shadow-(--glass-shadow-lg) glass-blur">
-            <div className="flex items-center gap-4">
-              <ConsultationTimer
-                onTick={(seconds) => {
-                  secondsRef.current = seconds;
-                }}
-              />
-              <p className="text-xs text-muted-foreground">
-                {saveState === "saving"
-                  ? "Gravando no servidor…"
-                  : "As anotações são gravadas ao finalizar."}
-              </p>
+        {tab === "anamnese" && (
+          <footer className="app-fixed-footer pointer-events-none fixed bottom-0 right-0 z-30 px-3 pb-3 md:px-6 md:pb-4">
+            <div className="pointer-events-auto mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 rounded-2xl border border-hairline bg-glass px-4 py-2.5 shadow-(--glass-shadow-lg) glass-blur">
+              <div className="flex items-center gap-4">
+                <ConsultationTimer
+                  onTick={(seconds) => {
+                    secondsRef.current = seconds;
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {saveState === "saving"
+                    ? "Gravando no servidor…"
+                    : "As anotações são gravadas ao finalizar."}
+                </p>
+              </div>
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  disabled={isFinalizing}
+                  className="h-10 rounded-full px-3 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleFinalize}
+                  disabled={isFinalizing}
+                  aria-keyshortcuts="Control+S Meta+S"
+                  className="inline-flex h-10 items-center gap-2 rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground shadow-xs hover:bg-primary-hover disabled:opacity-50"
+                >
+                  {isFinalizing ? "Gravando…" : "Finalizar atendimento"}
+                  {!isFinalizing && (
+                    <kbd className="hidden rounded-md bg-primary-foreground/20 px-1.5 py-0.5 font-sans text-xs font-medium sm:inline">
+                      {isMac ? "⌘S" : "Ctrl S"}
+                    </kbd>
+                  )}
+                </button>
+              </div>
             </div>
-            <div className="ml-auto flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleCancel}
-                disabled={isFinalizing}
-                className="h-10 rounded-full px-3 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleFinalize}
-                disabled={isFinalizing}
-                aria-keyshortcuts="Control+S Meta+S"
-                className="inline-flex h-10 items-center gap-2 rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground shadow-xs hover:bg-primary-hover disabled:opacity-50"
-              >
-                {isFinalizing ? "Gravando…" : "Finalizar atendimento"}
-                {!isFinalizing && (
-                  <kbd className="hidden rounded-md bg-primary-foreground/20 px-1.5 py-0.5 font-sans text-xs font-medium sm:inline">
-                    {isMac ? "⌘S" : "Ctrl S"}
-                  </kbd>
+          </footer>
+        )}
+
+        {/* Modal de Impressão e Visualização Completa do Prontuário */}
+        <Dialog
+          open={Boolean(recordToPrint)}
+          onOpenChange={(open) => !open && setRecordToPrint(null)}
+        >
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader className="border-b border-border pb-3">
+              <DialogTitle className="flex items-center gap-2 text-foreground text-lg">
+                <FileText className="text-primary h-5 w-5" />
+                <span>Prontuário Médico Oficial • MedCore</span>
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">
+                Documento clínico de atendimento de {patient.name}.
+              </DialogDescription>
+            </DialogHeader>
+
+            {recordToPrint && (
+              <div className="space-y-5 py-3" id="printable-record">
+                {/* Identificação do Paciente e Consulta */}
+                <div className="p-4 rounded-xl bg-surface border border-border space-y-2.5">
+                  <div className="flex justify-between items-center text-xs text-muted-foreground border-b border-border-soft pb-2">
+                    <span>
+                      <strong>Data da Consulta:</strong> {recordToPrint.formattedDate}{" "}
+                      {recordToPrint.time ? `às ${recordToPrint.time}` : ""}
+                    </span>
+                    <span className="font-semibold text-primary">
+                      {recordToPrint.status || "Atendimento Realizado"}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-foreground">
+                    <div>
+                      <strong className="text-muted-foreground">Paciente:</strong> {patient.name}
+                    </div>
+                    <div>
+                      <strong className="text-muted-foreground">Idade/Nascimento:</strong>{" "}
+                      {patient.age}
+                    </div>
+                    <div>
+                      <strong className="text-muted-foreground">Médico Responsável:</strong>{" "}
+                      {recordToPrint.doctorName || "Corpo Clínico MedCore"}
+                    </div>
+                    <div>
+                      <strong className="text-muted-foreground">Duração:</strong>{" "}
+                      {recordToPrint.durationSeconds
+                        ? `${Math.round(recordToPrint.durationSeconds / 60)} min`
+                        : "Não computada"}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Queixa Principal */}
+                {recordToPrint.complaint && (
+                  <div className="space-y-1.5">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                      <ClipboardList size={13} className="text-primary" /> Queixa Principal & Motivo
+                    </h4>
+                    <div className="p-3.5 rounded-xl border border-border bg-card text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+                      {recordToPrint.complaint}
+                    </div>
+                  </div>
                 )}
-              </button>
-            </div>
-          </div>
-        </footer>
+
+                {/* Histórico / Anamnese / Evolução */}
+                {(recordToPrint.clinicalHistory || recordToPrint.evolution) && (
+                  <div className="space-y-1.5">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                      <FileText size={13} className="text-primary" /> Anamnese & Evolução Clínica
+                    </h4>
+                    <div className="p-3.5 rounded-xl border border-border bg-card text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
+                      {recordToPrint.clinicalHistory || recordToPrint.evolution}
+                    </div>
+                  </div>
+                )}
+
+                {/* Diagnóstico & CID */}
+                {(recordToPrint.diagnosis || recordToPrint.diagnosisCode) && (
+                  <div className="space-y-1.5">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                      <Stethoscope size={13} className="text-primary" /> Hipótese Diagnóstica / CID-10
+                    </h4>
+                    <div className="p-3.5 rounded-xl border border-info/20 bg-info/10 text-sm text-foreground">
+                      <strong>Diagnóstico:</strong> {recordToPrint.diagnosis}{" "}
+                      {recordToPrint.diagnosisCode ? `(CID-10: ${recordToPrint.diagnosisCode})` : ""}
+                    </div>
+                  </div>
+                )}
+
+                {/* Conduta & Prescrições */}
+                {recordToPrint.conduct && (
+                  <div className="space-y-1.5">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                      <Check size={13} /> Conduta Clínica, Prescrições & Recomendações
+                    </h4>
+                    <div className="p-3.5 rounded-xl border border-primary/20 bg-primary-soft/40 text-xs text-foreground whitespace-pre-wrap leading-relaxed">
+                      {recordToPrint.conduct}
+                    </div>
+                  </div>
+                )}
+
+                {/* Retorno Previsto */}
+                {recordToPrint.returnDate && (
+                  <div className="p-3 rounded-xl border border-border bg-surface text-xs text-muted-foreground">
+                    <strong>Previsão de Retorno:</strong>{" "}
+                    {new Date(recordToPrint.returnDate).toLocaleDateString("pt-BR")}{" "}
+                    {recordToPrint.returnNotes ? `— ${recordToPrint.returnNotes}` : ""}
+                  </div>
+                )}
+
+                {/* Espaço para Assinatura e Carimbo Médico */}
+                <div className="pt-8 text-center space-y-1 text-xs text-muted-foreground border-t border-border mt-6">
+                  <div className="w-64 mx-auto border-t border-foreground/30 pt-1 font-medium text-foreground">
+                    {recordToPrint.doctorName || "Assinatura do Médico"}
+                  </div>
+                  <div>CRM / Registro Profissional</div>
+                </div>
+
+                {/* Botões do Rodapé do Modal */}
+                <div className="flex items-center justify-end gap-2 pt-4 border-t border-border">
+                  <button
+                    type="button"
+                    onClick={() => setRecordToPrint(null)}
+                    className="px-4 py-2 rounded-xl border border-border text-xs font-semibold text-foreground hover:bg-surface cursor-pointer"
+                  >
+                    Fechar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-white text-xs font-semibold hover:bg-primary-hover shadow-sm cursor-pointer"
+                  >
+                    <Printer size={14} /> Imprimir Prontuário
+                  </button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </DirtyCtx.Provider>
   );

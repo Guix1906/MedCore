@@ -1,10 +1,9 @@
 import { useState, useMemo, useEffect } from "react";
-import { useNavigate, Link } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
-  User,
   Calendar,
   Clock,
   Play,
@@ -12,24 +11,24 @@ import {
   FileText,
   UserPlus,
   ChevronRight,
-  Sparkles,
-  CheckCircle2,
   CalendarCheck,
   Stethoscope,
-  Activity,
   History,
 } from "lucide-react";
 import { patientsService, agendaService } from "@/services/api";
 import { supabase } from "@/integrations/supabase/client";
 
-const EASE_OUT = [0.16, 1, 0.3, 1];
+export interface HubPatientSelect {
+  id: string;
+  name: string;
+  tab?: "prontuarios" | "anamnese";
+}
 
 export function ProntuarioHub({
   onSelectPatient,
 }: {
-  onSelectPatient: (patient: { id: string; name: string }) => void;
+  onSelectPatient: (patient: HubPatientSelect) => void;
 }) {
-  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -81,36 +80,121 @@ export function ProntuarioHub({
     });
   }, []);
 
-  const { data: todayEvents = [], isLoading: loadingEvents } = useQuery({
-    queryKey: ["prontuario-hub-today-events", todayStr],
+  const { data: todayQueue = [], isLoading: loadingQueue } = useQuery({
+    queryKey: ["prontuario-hub-today-queue", todayStr],
     staleTime: 2 * 60_000,
     gcTime: 10 * 60_000,
     queryFn: async () => {
+      const items: {
+        id: string;
+        patientId: string;
+        patientName: string;
+        phone?: string;
+        insurance?: string;
+        startTime: string;
+        type: string;
+        status: string;
+      }[] = [];
+      const seenPatientIds = new Set<string>();
+
+      // 1. Tenta buscar agendamentos (appointments) para hoje via Supabase
       try {
-        const events = await agendaService.getEvents();
+        const { data: appts } = await supabase
+          .from("appointments")
+          .select(
+            "id, patient_id, date, start_time, status, type, insurance, patients(id, name, phone, insurance)",
+          )
+          .eq("date", todayStr)
+          .order("start_time", { ascending: true });
+
+        if (appts && Array.isArray(appts)) {
+          for (const a of appts as any[]) {
+            const pId = a.patient_id || a.patients?.id || "";
+            const pName = a.patients?.name || "Paciente sem nome";
+            items.push({
+              id: a.id,
+              patientId: pId,
+              patientName: pName,
+              phone: a.patients?.phone || undefined,
+              insurance: a.insurance || a.patients?.insurance || "Particular",
+              startTime: a.start_time ? String(a.start_time).slice(0, 5) : "00:00",
+              type: a.type || "Consulta Clínica",
+              status: a.status || "Agendado",
+            });
+            if (pId) seenPatientIds.add(pId);
+          }
+        }
+      } catch (err) {
+        console.warn("Aviso ao buscar appointments de hoje:", err);
+      }
+
+      // 2. Se vazio ou para complementar, busca via agendaService
+      if (items.length === 0) {
+        try {
+          const apiAppts = await agendaService.getAppointments({ date: todayStr });
+          if (Array.isArray(apiAppts) && apiAppts.length > 0) {
+            for (const a of apiAppts) {
+              if (items.some((i) => i.id === a.id)) continue;
+              items.push({
+                id: a.id,
+                patientId: a.patient_id || "",
+                patientName: a.patient_name || "Paciente",
+                phone: a.patient_phone || undefined,
+                insurance: a.insurance || "Particular",
+                startTime: a.start_time ? String(a.start_time).slice(0, 5) : "00:00",
+                type: a.type || "Consulta",
+                status: a.status || "Agendado",
+              });
+            }
+          }
+        } catch {}
+      }
+
+      // 3. Complementa com eventos (events) marcados para hoje com paciente associado
+      try {
+        const { data: events } = await supabase
+          .from("events")
+          .select(
+            "id, patient_id, title, starts_at, event_type, patients(id, name, phone, insurance)",
+          )
+          .gte("starts_at", `${todayStr}T00:00:00`)
+          .lte("starts_at", `${todayStr}T23:59:59`)
+          .order("starts_at", { ascending: true });
+
         if (events && Array.isArray(events)) {
-          return events.filter((e) => {
-            const dateOnly = (e.start_time || "").slice(0, 10);
-            return dateOnly === todayStr;
-          });
+          for (const ev of events as any[]) {
+            const pId = ev.patient_id || ev.patients?.id || "";
+            if (pId && seenPatientIds.has(pId)) continue;
+
+            const pName =
+              ev.patients?.name ||
+              ev.title.replace(/^(consulta|atendimento|retorno)\s*[:-]?\s*/i, "").trim() ||
+              ev.title;
+
+            const timeStr = ev.starts_at
+              ? new Date(ev.starts_at).toLocaleTimeString("pt-BR", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              : "00:00";
+
+            items.push({
+              id: ev.id,
+              patientId: pId,
+              patientName: pName,
+              phone: ev.patients?.phone || undefined,
+              insurance: ev.patients?.insurance || "Particular",
+              startTime: timeStr,
+              type: ev.event_type || "Atendimento Clínico",
+              status: "Agendado",
+            });
+          }
         }
       } catch {}
 
-      // Fallback Supabase
-      const { data } = await supabase
-        .from("events")
-        .select("id, title, description, starts_at, ends_at, assigned_to")
-        .gte("starts_at", `${todayStr}T00:00:00`)
-        .lte("starts_at", `${todayStr}T23:59:59`)
-        .order("starts_at", { ascending: true });
-
-      return (data || []).map((e) => ({
-        id: e.id,
-        title: e.title,
-        start_time: e.starts_at,
-        end_time: e.ends_at,
-        assigned_to: e.assigned_to,
-      }));
+      // Ordena por horário
+      items.sort((a, b) => a.startTime.localeCompare(b.startTime));
+      return items;
     },
   });
 
@@ -122,11 +206,11 @@ export function ProntuarioHub({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("medical_records")
-        .select("patient_id, created_at, patients(name)")
+        .select("patient_id, created_at, patients(id, name, insurance)")
         .order("created_at", { ascending: false })
         .limit(30);
       if (error) throw error;
-      const items: { id: string; name: string; date: string }[] = [];
+      const items: { id: string; name: string; date: string; insurance?: string }[] = [];
       const seen = new Set<string>();
       for (const row of (data ?? []) as any[]) {
         if (!row.patient_id || seen.has(row.patient_id)) continue;
@@ -135,16 +219,13 @@ export function ProntuarioHub({
           id: row.patient_id,
           name: row.patients?.name || "Paciente",
           date: row.created_at,
+          insurance: row.patients?.insurance || undefined,
         });
-        if (items.length === 5) break;
+        if (items.length === 6) break;
       }
       return items;
     },
   });
-
-  const handleStartConsultation = (patientId: string, patientName: string) => {
-    onSelectPatient({ id: patientId, name: patientName });
-  };
 
   return (
     <div className="page-container min-h-full">
@@ -163,11 +244,11 @@ export function ProntuarioHub({
                 <span className="text-sm font-semibold uppercase tracking-wider">Prontuário</span>
               </div>
               <h1 className="mt-1 text-2xl md:text-[28px] font-semibold text-foreground">
-                Central de atendimentos
+                Central de Atendimentos & Prontuários
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                Busque um paciente ou selecione um agendamento da fila de hoje para iniciar a
-                Anamnese.
+                Busque um paciente ou clique na fila para visualizar seus prontuários organizados ou
+                iniciar uma nova consulta.
               </p>
             </div>
 
@@ -200,7 +281,7 @@ export function ProntuarioHub({
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar paciente por nome, CPF ou telefone para iniciar atendimento imediato…"
+                placeholder="Buscar paciente por nome, CPF ou telefone para abrir prontuário ou atender…"
                 className="w-full h-12 pl-11 pr-4 rounded-xl border border-border bg-surface text-sm text-foreground placeholder:text-muted-foreground focus:bg-card focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
                 autoFocus
               />
@@ -224,29 +305,53 @@ export function ProntuarioHub({
                   </div>
                   <div className="divide-y divide-border-soft max-h-72 overflow-y-auto">
                     {searchResults.map((p) => (
-                      <button
+                      <div
                         key={p.id}
-                        onClick={() => handleStartConsultation(p.id, p.name)}
-                        className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-primary-soft transition-colors text-left group"
+                        className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-primary-soft/60 transition-colors text-left group"
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-full bg-primary/10 text-primary font-semibold text-sm flex items-center justify-center">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onSelectPatient({ id: p.id, name: p.name, tab: "prontuarios" })
+                          }
+                          className="flex items-center gap-3 min-w-0 flex-1 text-left cursor-pointer"
+                        >
+                          <div className="h-9 w-9 rounded-full bg-primary/10 text-primary font-semibold text-sm flex items-center justify-center shrink-0">
                             {p.name.slice(0, 2).toUpperCase()}
                           </div>
-                          <div>
-                            <div className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
+                          <div className="min-w-0">
+                            <div className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors truncate">
                               {p.name}
                             </div>
-                            <div className="text-xs text-muted-foreground">
+                            <div className="text-xs text-muted-foreground truncate">
                               {p.insurance || "Particular"} • {p.phone || p.cpf || "Sem contato"}
                             </div>
                           </div>
-                        </div>
+                        </button>
 
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold shadow-xs">
-                          <Play size={13} fill="currentColor" /> Iniciar
-                        </span>
-                      </button>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onSelectPatient({ id: p.id, name: p.name, tab: "prontuarios" })
+                            }
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-surface text-foreground text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                            title="Ver prontuários anteriores"
+                          >
+                            <FileText size={13} className="text-primary" /> Prontuário
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onSelectPatient({ id: p.id, name: p.name, tab: "anamnese" })
+                            }
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold shadow-xs hover:bg-primary-hover transition-colors cursor-pointer"
+                            title="Iniciar novo atendimento"
+                          >
+                            <Play size={13} fill="currentColor" /> Atender
+                          </button>
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </motion.div>
@@ -272,11 +377,11 @@ export function ProntuarioHub({
             </div>
 
             <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-xs">
-              {loadingEvents ? (
+              {loadingQueue ? (
                 <div className="p-8 text-center text-sm text-muted-foreground">
                   Carregando fila de agendamentos…
                 </div>
-              ) : todayEvents.length === 0 ? (
+              ) : todayQueue.length === 0 ? (
                 <div className="p-10 text-center space-y-3">
                   <div className="mx-auto h-12 w-12 rounded-full bg-muted text-muted-foreground flex items-center justify-center">
                     <Calendar size={22} />
@@ -286,50 +391,76 @@ export function ProntuarioHub({
                       Nenhum agendamento para hoje
                     </div>
                     <p className="text-sm text-muted-foreground max-w-sm mx-auto mt-0.5">
-                      Você pode utilizar a busca acima para iniciar o atendimento de qualquer
-                      paciente cadastrado.
+                      Você pode utilizar a busca acima para abrir os prontuários ou iniciar o
+                      atendimento de qualquer paciente cadastrado.
                     </p>
                   </div>
                 </div>
               ) : (
                 <div className="divide-y divide-border-soft">
-                  {todayEvents.map((evt: any) => {
-                    const startTime = evt.start_time
-                      ? new Date(evt.start_time).toLocaleTimeString("pt-BR", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })
-                      : "00:00";
-
-                    return (
-                      <div
-                        key={evt.id}
-                        className="p-4 flex items-center justify-between gap-4 hover:bg-surface transition-colors"
+                  {todayQueue.map((item) => (
+                    <div
+                      key={item.id}
+                      className="p-4 flex items-center justify-between gap-4 hover:bg-surface transition-colors"
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onSelectPatient({
+                            id: item.patientId,
+                            name: item.patientName,
+                            tab: "prontuarios",
+                          })
+                        }
+                        className="flex items-center gap-3.5 min-w-0 flex-1 text-left cursor-pointer group"
                       >
-                        <div className="flex items-center gap-3.5 min-w-0">
-                          <div className="h-10 w-12 rounded-xl bg-primary-soft border border-primary/25 text-primary flex flex-col items-center justify-center font-semibold text-xs shrink-0">
-                            <Clock size={12} className="mb-0.5" />
-                            {startTime}
+                        <div className="h-10 w-12 rounded-xl bg-primary-soft border border-primary/25 text-primary flex flex-col items-center justify-center font-semibold text-xs shrink-0">
+                          <Clock size={12} className="mb-0.5" />
+                          {item.startTime}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors truncate">
+                            {item.patientName}
                           </div>
-                          <div className="min-w-0">
-                            <div className="text-sm font-semibold text-foreground truncate">
-                              {evt.title}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              Consulta / Atendimento Clínico
-                            </div>
+                          <div className="text-xs text-muted-foreground truncate">
+                            {item.type} • {item.insurance || "Particular"}{" "}
+                            {item.phone ? `• ${item.phone}` : ""}
                           </div>
                         </div>
+                      </button>
 
+                      <div className="flex items-center gap-2 shrink-0">
                         <button
-                          onClick={() => handleStartConsultation("", evt.title)}
-                          className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-hover transition-colors shrink-0 shadow-xs"
+                          type="button"
+                          onClick={() =>
+                            onSelectPatient({
+                              id: item.patientId,
+                              name: item.patientName,
+                              tab: "prontuarios",
+                            })
+                          }
+                          className="inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border border-border bg-card hover:bg-surface text-foreground text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                          title="Abrir prontuários deste paciente"
+                        >
+                          <FileText size={13} className="text-primary" /> Prontuário
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onSelectPatient({
+                              id: item.patientId,
+                              name: item.patientName,
+                              tab: "anamnese",
+                            })
+                          }
+                          className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl bg-primary text-white text-xs font-semibold hover:bg-primary-hover transition-colors shrink-0 shadow-xs cursor-pointer"
+                          title="Iniciar atendimento de hoje"
                         >
                           <Play size={13} fill="currentColor" /> Atender
                         </button>
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -339,21 +470,24 @@ export function ProntuarioHub({
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <History size={18} className="text-primary" />
-              <h2 className="text-[15px] font-semibold text-foreground">Atendimentos Recentes</h2>
+              <h2 className="text-[15px] font-semibold text-foreground">Prontuários Recentes</h2>
             </div>
 
             <div className="rounded-2xl border border-border bg-card p-4 shadow-xs space-y-3">
               {recentPatients.length === 0 ? (
                 <div className="py-8 text-center text-sm text-muted-foreground">
-                  Nenhum atendimento recente gravado neste dispositivo.
+                  Nenhum prontuário registrado ainda.
                 </div>
               ) : (
                 <div className="space-y-2">
                   {recentPatients.map((rp, idx) => (
                     <button
                       key={idx}
-                      onClick={() => handleStartConsultation(rp.id, rp.name)}
-                      className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-primary-soft transition-colors text-left group"
+                      type="button"
+                      onClick={() =>
+                        onSelectPatient({ id: rp.id, name: rp.name, tab: "prontuarios" })
+                      }
+                      className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-primary-soft transition-colors text-left group cursor-pointer"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <div className="h-8 w-8 rounded-lg bg-muted text-muted-foreground flex items-center justify-center font-semibold text-xs shrink-0 group-hover:bg-primary group-hover:text-white transition-colors">
@@ -364,7 +498,8 @@ export function ProntuarioHub({
                             {rp.name}
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            {new Date(rp.date).toLocaleDateString("pt-BR")}
+                            {new Date(rp.date).toLocaleDateString("pt-BR")}{" "}
+                            {rp.insurance ? `• ${rp.insurance}` : ""}
                           </div>
                         </div>
                       </div>

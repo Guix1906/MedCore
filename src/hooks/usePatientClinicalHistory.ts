@@ -15,9 +15,18 @@ export interface ClinicalHistoryItem {
   status?: string;
   durationSeconds?: number;
   complaint?: string;
+  clinicalHistory?: string;
   evolution?: string;
   conduct?: string;
   diagnosis?: string;
+  diagnosisCode?: string;
+  allergies?: string;
+  medications?: string;
+  habits?: string;
+  surgicalHistory?: string;
+  familyHistory?: string;
+  returnDate?: string;
+  returnNotes?: string;
   insurance?: string;
   type?: string;
   raw: any;
@@ -28,7 +37,6 @@ export function usePatientClinicalHistory(
   patientName?: string | null,
 ) {
   const isExample =
-    !patientId ||
     Boolean(patientName?.toLowerCase().includes("exemplo")) ||
     patientId === "example";
 
@@ -40,29 +48,49 @@ export function usePatientClinicalHistory(
       const items: ClinicalHistoryItem[] = [];
       const seenIds = new Set<string>();
 
+      // Se patientId não foi informado mas temos patientName, busca o ID no Supabase
+      let resolvedId = patientId && patientId.trim() !== "" ? patientId : null;
+      if (!resolvedId && patientName && !isExample) {
+        const clean = patientName.replace(/\(.*?\)/g, "").trim();
+        if (clean.length >= 2) {
+          try {
+            const { data: p } = await supabase
+              .from("patients")
+              .select("id")
+              .ilike("name", `%${clean}%`)
+              .limit(1)
+              .maybeSingle();
+            if (p?.id) {
+              resolvedId = p.id;
+            }
+          } catch {}
+        }
+      }
+
       // 1. Busca Registros Clínicos / Prontuários (medical_records) no Supabase
-      if (patientId && !isExample) {
+      if (resolvedId && !isExample) {
         // Trilha de acesso (LGPD): quem abriu o prontuário e quando. Falha não bloqueia a leitura.
-        void supabase.rpc("log_record_access", { p_patient_id: patientId, p_action: "view" });
+        void supabase.rpc("log_record_access", { p_patient_id: resolvedId, p_action: "view" });
         try {
           const { data: recs, error } = await supabase
             .from("medical_records")
-            .select("*")
-            .eq("patient_id", patientId)
+            .select("*, doctors(name)")
+            .eq("patient_id", resolvedId)
             .order("created_at", { ascending: false });
 
           if (!error && recs) {
-            for (const r of recs) {
+            for (const r of recs as any[]) {
               if (seenIds.has(r.id)) continue;
               seenIds.add(r.id);
 
               const dateIso = r.created_at || r.finished_at || new Date().toISOString();
               const d = new Date(dateIso);
+              const docName = r.doctors?.name ? `Dr(a). ${r.doctors.name}` : undefined;
 
               items.push({
                 id: r.id,
                 kind: "prontuario",
-                title: "Atendimento Clínico & Prontuário",
+                title: r.diagnosis || (r.complaint ? "Atendimento Clínico" : "Prontuário Médico"),
                 date: dateIso,
                 formattedDate: d.toLocaleDateString("pt-BR", {
                   weekday: "short",
@@ -73,8 +101,19 @@ export function usePatientClinicalHistory(
                 time: d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
                 durationSeconds: r.duration_seconds || undefined,
                 complaint: r.complaint || undefined,
+                clinicalHistory: r.clinical_history || undefined,
+                evolution: r.evolution || undefined,
                 conduct: r.conduct || undefined,
                 diagnosis: r.diagnosis || undefined,
+                diagnosisCode: r.diagnosis_code || undefined,
+                allergies: r.allergies || undefined,
+                medications: r.medications || undefined,
+                habits: r.habits || undefined,
+                surgicalHistory: r.surgical_history || undefined,
+                familyHistory: r.family_history || undefined,
+                returnDate: r.return_date || undefined,
+                returnNotes: r.return_notes || undefined,
+                doctorName: docName,
                 status: "Finalizado",
                 raw: r,
               });
@@ -86,7 +125,7 @@ export function usePatientClinicalHistory(
 
         // Tenta também via API PHP de prontuários caso haja registros adicionais
         try {
-          const phpRecs = await prontuarioService.getRecords(patientId);
+          const phpRecs = await prontuarioService.getRecords(resolvedId);
           if (Array.isArray(phpRecs)) {
             for (const r of phpRecs) {
               if (seenIds.has(r.id)) continue;
@@ -98,7 +137,7 @@ export function usePatientClinicalHistory(
               items.push({
                 id: r.id,
                 kind: "prontuario",
-                title: "Atendimento Clínico",
+                title: r.diagnosis || "Atendimento Clínico",
                 date: dateIso,
                 formattedDate: d.toLocaleDateString("pt-BR", {
                   weekday: "short",
@@ -109,8 +148,22 @@ export function usePatientClinicalHistory(
                 time: d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
                 durationSeconds: r.duration_seconds || undefined,
                 complaint: r.complaint || undefined,
+                clinicalHistory: r.clinical_history || undefined,
+                evolution: r.evolution || undefined,
                 conduct: r.conduct || undefined,
                 diagnosis: r.diagnosis || undefined,
+                diagnosisCode: r.diagnosis_code || undefined,
+                allergies: r.allergies || undefined,
+                medications:
+                  (r as any).medications ||
+                  (Array.isArray((r as any).prescriptions)
+                    ? (r as any).prescriptions.map((p: any) => p.medication).filter(Boolean).join(", ")
+                    : undefined),
+                habits: r.habits || undefined,
+                surgicalHistory: r.surgical_history || undefined,
+                familyHistory: r.family_history || undefined,
+                returnDate: r.return_date || undefined,
+                returnNotes: r.return_notes || undefined,
                 doctorName: r.doctor_name || undefined,
                 status: "Finalizado",
                 raw: r,
@@ -121,12 +174,12 @@ export function usePatientClinicalHistory(
       }
 
       // 2. Busca Consultas e Agendamentos (appointments) para este paciente
-      if (patientId && !isExample) {
+      if (resolvedId && !isExample) {
         try {
           const { data: appts, error } = await supabase
             .from("appointments")
             .select("id, date, start_time, end_time, status, type, notes, insurance, amount, doctor_id, doctors(name, specialty)")
-            .eq("patient_id", patientId)
+            .eq("patient_id", resolvedId)
             .order("date", { ascending: false });
 
           if (!error && appts) {
@@ -167,7 +220,7 @@ export function usePatientClinicalHistory(
 
         // Tenta também via agendaService
         try {
-          const phpAppts = await agendaService.getAppointments({ patient_id: patientId });
+          const phpAppts = await agendaService.getAppointments({ patient_id: resolvedId });
           if (Array.isArray(phpAppts)) {
             for (const a of phpAppts) {
               if (seenIds.has(a.id)) continue;
@@ -202,12 +255,12 @@ export function usePatientClinicalHistory(
       }
 
       // 3. Busca Evoluções de Tratamentos (treatment_evolutions)
-      if (patientId && !isExample) {
+      if (resolvedId && !isExample) {
         try {
           const { data: treatments } = await supabase
             .from("treatments")
             .select("id, title")
-            .eq("patient_id", patientId);
+            .eq("patient_id", resolvedId);
 
           if (treatments && treatments.length > 0) {
             const tIds = treatments.map((t) => t.id);

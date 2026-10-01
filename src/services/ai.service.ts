@@ -65,25 +65,57 @@ export const structureConsultation = createServerFn({ method: "POST" })
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) throw new Error("Copiloto de IA não configurado no servidor.");
-    const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+    const configuredModel = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
 
     const transcript = minimizePhi(data.rawTranscript, data.patientName);
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: `${INSTRUCTION}\n\nTranscrição:\n"""\n${transcript}\n"""` }] }],
-          generationConfig: { temperature: 0.1, maxOutputTokens: 2048, responseMimeType: "application/json" },
-        }),
-        signal: AbortSignal.timeout(30_000),
-      },
-    );
+    const bodyPayload = JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: `${INSTRUCTION}\n\nTranscrição:\n"""\n${transcript}\n"""` }] }],
+      generationConfig: { temperature: 0.1, maxOutputTokens: 2048, responseMimeType: "application/json" },
+    });
+
+    const callGemini = async (modelName: string) => {
+      return fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+          body: bodyPayload,
+          signal: AbortSignal.timeout(30_000),
+        },
+      );
+    };
+
+    let activeModel = configuredModel;
+    let response = await callGemini(configuredModel);
+
+    // Se o modelo configurado falhar com 404 (descontinuado) ou 503 (alta demanda), tenta o fallback estável
+    if (!response.ok && (response.status === 404 || response.status === 503) && configuredModel !== "gemini-3.5-flash-lite") {
+      console.warn(`[structureConsultation] Modelo ${configuredModel} retornou ${response.status}. Tentando fallback gemini-3.5-flash-lite...`);
+      activeModel = "gemini-3.5-flash-lite";
+      response = await callGemini(activeModel);
+    }
 
     if (!response.ok) {
-      console.error("[structureConsultation] Gemini HTTP", response.status, await response.text().catch(() => ""));
-      throw new Error("O serviço de IA não respondeu. Tente novamente em instantes.");
+      const errorText = await response.text().catch(() => "");
+      console.error("[structureConsultation] Gemini HTTP", response.status, errorText);
+      let errorMsg = "O serviço de IA não respondeu. Tente novamente em instantes.";
+      try {
+        const errJson = JSON.parse(errorText);
+        if (errJson?.error?.message) {
+          if (response.status === 429) {
+            errorMsg = "Limite de requisições da IA atingido. Aguarde alguns instantes e tente novamente.";
+          } else if (response.status === 503) {
+            errorMsg = "O serviço do Google Gemini está temporariamente sobrecarregado. Tente novamente em 1 minuto.";
+          } else if (response.status === 404) {
+            errorMsg = `Modelo de IA (${activeModel}) indisponível ou descontinuado.`;
+          } else if (response.status === 400 || response.status === 403) {
+            errorMsg = `Chave de API do Gemini inválida ou não autorizada.`;
+          } else {
+            errorMsg = errJson.error.message;
+          }
+        }
+      } catch {}
+      throw new Error(errorMsg);
     }
 
     const payload = (await response.json()) as {
