@@ -71,6 +71,7 @@ import {
   Stethoscope,
   Strikethrough,
   Timer,
+  Trash2,
   Type,
   Underline,
   Undo2,
@@ -91,6 +92,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { ProntuarioHub } from "./ProntuarioHub";
+import { confirmDialog } from "@/components/app/confirm-dialog";
 import InjectablesTab from "./InjectablesTab";
 import QuotesTab from "./QuotesTab";
 import { PatientPackagesTab } from "@/components/pacientes/PatientPackagesTab";
@@ -355,6 +357,50 @@ export default function ProntuarioPage() {
     }
     return { allergies, medications };
   }, [clinicalHistory]);
+
+  // Excluir um item do histórico (prontuário, consulta ou evolução)
+  const deleteHistoryItem = async (rec: ClinicalHistoryItem) => {
+    const kindLabel =
+      rec.kind === "prontuario" ? "prontuário" : rec.kind === "consulta" ? "consulta" : "evolução";
+    const ok = await confirmDialog({
+      title: `Excluir ${kindLabel} de ${rec.formattedDate}?`,
+      description:
+        rec.kind === "prontuario"
+          ? "O prontuário e seus adendos serão excluídos. A lei exige guardar prontuários por 20 anos; a exclusão é responsabilidade da clínica."
+          : rec.kind === "consulta"
+            ? "A consulta sai da agenda. Se tiver cobrança, recebimentos são estornados e a cobrança cancelada."
+            : "A evolução será excluída do plano de acompanhamento.",
+      confirmText: "Excluir",
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      if (rec.kind === "prontuario") {
+        const { error } = await (supabase.rpc as any)("delete_medical_record", { p_id: rec.id });
+        if (error) throw error;
+      } else if (rec.kind === "consulta") {
+        // Agendamento da agenda (mesmo id) + registro da consulta
+        const { error: evErr } = await (supabase.rpc as any)("delete_agenda_event", { p_event_id: rec.id });
+        if (evErr && !/not find the function/i.test(evErr.message)) throw evErr;
+        const { error } = await supabase.from("appointments").delete().eq("id", rec.id);
+        if (error) throw error;
+      } else {
+        const { error } = await (supabase as any).from("treatment_evolutions").delete().eq("id", rec.id);
+        if (error) throw error;
+      }
+      toast.success(`${kindLabel.charAt(0).toUpperCase()}${kindLabel.slice(1)} excluído(a).`);
+      void Promise.allSettled([
+        queryClient.invalidateQueries({ queryKey: ["patient-clinical-history"] }),
+        queryClient.invalidateQueries({ queryKey: ["patient-medical-records"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+        queryClient.invalidateQueries({ queryKey: ["agenda-events"] }),
+      ]);
+    } catch (err) {
+      toast.error("Não foi possível excluir", {
+        description: err instanceof Error ? err.message : String((err as any)?.message ?? err),
+      });
+    }
+  };
 
   const pullIntoAttendance = (rec: ClinicalHistoryItem) => {
     const snippet = [
@@ -711,6 +757,7 @@ export default function ProntuarioPage() {
                               String(r.date).slice(0, 10) === String(rec.date).slice(0, 10),
                           )}
                           onStartAttendance={() => setTab("anamnese")}
+                          onDelete={() => void deleteHistoryItem(rec)}
                         />
                       ))}
                     </li>
@@ -1614,7 +1661,9 @@ function HistoryCard({
   onPrint,
   related = [],
   onStartAttendance,
+  onDelete,
 }: {
+  onDelete?: () => void;
   rec: ClinicalHistoryItem;
   compact?: boolean;
   onPull: () => void;
@@ -1789,6 +1838,17 @@ function HistoryCard({
           >
             <Printer size={14} />
           </button>
+          {onDelete && (
+            <button
+              type="button"
+              onClick={onDelete}
+              className="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              aria-label="Excluir"
+              title="Excluir"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
         </span>
       </div>
     </article>
