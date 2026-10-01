@@ -520,7 +520,13 @@ export function AiRecordAssistantModal({
 
   const buildFinalResult = (): StructuredConsultationResult | null => {
     if (!result) return null;
-    const final: StructuredConsultationResult = { ...result, condicoesDetectadas: conditions, cid10 };
+    const final: StructuredConsultationResult = {
+      ...result,
+      condicoesDetectadas: conditions,
+      cid10,
+      receitaTexto: docs.receita,
+      orientacoesTexto: docs.orientacoes,
+    };
     for (const sec of CLINICAL_SECTIONS) {
       final[sec.key] = selected[sec.key] ? (edited[sec.key] ?? "").trim() : "";
     }
@@ -1195,9 +1201,15 @@ export function AiRecordAssistantModal({
                 })}
 
                 <section className="space-y-2.5">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Documentos
-                  </h3>
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Documentos
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      A receita e as orientações também são gravadas no prontuário ao inserir. O
+                      pedido de exames já entra pelo campo "Exames solicitados".
+                    </p>
+                  </div>
                   <div className="rounded-xl border border-border bg-card">
                     <div role="tablist" className="flex flex-wrap gap-1 border-b border-border-soft p-1.5">
                       {DOC_TABS.map((tab) => (

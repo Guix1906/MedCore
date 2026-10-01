@@ -153,6 +153,9 @@ export type StructuredConsultationResult = Record<ClinicalFieldKey, string> & {
   orientacoesPaciente: string;
   alertasAlergia: string[];
   mudancasDesdeUltima: string;
+  /** Textos finais (editados pelo médico) que também vão para o prontuário. */
+  receitaTexto?: string;
+  orientacoesTexto?: string;
 };
 
 export async function generateConsultationRecord({
@@ -317,6 +320,12 @@ export function formatConsultationRecord(result: StructuredConsultationResult): 
     if (sec.key === "hipotesesDiagnosticas" && result.cid10.length > 0) {
       parts.push(`CID-10:\n${result.cid10.map((c) => `${c.codigo} — ${c.descricao}`).join("\n")}`);
     }
+    if (sec.key === "condutaPlano" && result.receitaTexto?.trim()) {
+      parts.push(`RECEITA EMITIDA:\n${result.receitaTexto.trim()}`);
+    }
+  }
+  if (result.orientacoesTexto?.trim()) {
+    parts.push(`ORIENTAÇÕES ENTREGUES AO PACIENTE:\n${result.orientacoesTexto.trim()}`);
   }
   return parts.join("\n\n");
 }
