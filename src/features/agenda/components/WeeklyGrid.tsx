@@ -267,25 +267,32 @@ export function WeeklyGrid({
           {/* Coluna de horários estilo imagem de referência (media_1786217017772.png) */}
           <div className="relative z-[1] bg-card border-r border-border/90">
             {Array.from({ length: 48 }, (_, i) => {
-              const h = Math.floor(i / 2);
-              const m = (i % 2) * 30;
-              const timeStr = `${pad2(h)}:${pad2(m)}`;
               const isHalfHour = i % 2 === 0;
-
               return (
                 <div
-                  key={i}
+                  key={`row-${i}`}
                   className={cn(
-                    "absolute left-0 right-0 flex items-center justify-center px-1 text-sm font-normal tabular-nums text-muted-foreground border-b",
+                    "absolute left-0 right-0 border-b",
                     isHalfHour ? "border-dashed border-border/90" : "border-solid border-border/90",
                   )}
-                  style={{
-                    top: i * (HOUR_H / 2),
-                    height: HOUR_H / 2,
-                  }}
+                  style={{ top: i * (HOUR_H / 2), height: HOUR_H / 2 }}
+                />
+              );
+            })}
+            {/* Cada horário fica SOBRE a linha correspondente: um card 09:30–10:30
+                termina exatamente na marca 10:30 (antes o rótulo ficava no meio da faixa). */}
+            {Array.from({ length: 47 }, (_, k) => {
+              const i = k + 1;
+              const h = Math.floor(i / 2);
+              const m = (i % 2) * 30;
+              return (
+                <span
+                  key={`label-${i}`}
+                  className="absolute left-0 right-0 -translate-y-1/2 bg-card px-1 text-center text-xs font-normal tabular-nums leading-none text-muted-foreground"
+                  style={{ top: i * (HOUR_H / 2) }}
                 >
-                  {timeStr}
-                </div>
+                  {`${pad2(h)}:${pad2(m)}`}
+                </span>
               );
             })}
           </div>

@@ -103,11 +103,12 @@ function shiftRange(
   return [s, e];
 }
 function initialRange(): [Date, Date] {
-  // Mês atual (antes estava fixo em setembro/2026 e escondia os dados dos outros meses)
+  // Últimos 30 dias + próximos 30 dias: mostra o que já entrou (ex.: sinal pago) e o que está
+  // previsto (ex.: restante da consulta) mesmo quando caem em meses diferentes.
   const base = new Date();
-  const start = new Date(base.getFullYear(), base.getMonth(), 1);
+  const start = new Date(base.getFullYear(), base.getMonth(), base.getDate() - 30);
   start.setHours(0, 0, 0, 0);
-  const end = new Date(base.getFullYear(), base.getMonth() + 1, 0);
+  const end = new Date(base.getFullYear(), base.getMonth(), base.getDate() + 30);
   end.setHours(23, 59, 59, 999);
   return [start, end];
 }
