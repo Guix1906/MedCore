@@ -115,14 +115,27 @@ export function ContasReceberTab({
   }, [finance?.titles]);
 
   // Parcelas por plano de acompanhamento: "Parcela 3 de 7" e o valor total do plano
+  // Numeração pela ordem de vencimento (após repactuação os números gravados ficam salteados)
   const planInfo = useMemo(() => {
-    const map = new Map<string, { parcelas: number; total: number }>();
+    const map = new Map<
+      string,
+      { parcelas: number; total: number; open: number; order: Map<string, number> }
+    >();
+    const byPlan = new Map<string, FinancialTitle[]>();
     receitas.forEach((t) => {
       if (!t.treatment_id) return;
-      const cur = map.get(t.treatment_id) || { parcelas: 0, total: 0 };
-      if (!/entrada/i.test(t.description || "")) cur.parcelas++;
-      cur.total += Number(t.amount) || 0;
-      map.set(t.treatment_id, cur);
+      byPlan.set(t.treatment_id, [...(byPlan.get(t.treatment_id) ?? []), t]);
+    });
+    byPlan.forEach((titles, planId) => {
+      const parts = titles
+        .filter((t) => !/entrada/i.test(t.description || ""))
+        .sort((a, b) => (a.due_date || "").localeCompare(b.due_date || ""));
+      map.set(planId, {
+        parcelas: parts.length,
+        total: titles.reduce((s, t) => s + (Number(t.amount) || 0), 0),
+        open: titles.reduce((s, t) => s + remaining(t), 0),
+        order: new Map(parts.map((t, idx) => [t.id, idx + 1])),
+      });
     });
     return map;
   }, [receitas]);
@@ -131,9 +144,10 @@ export function ContasReceberTab({
     if (!t.treatment_id || isFreeBalance(t)) return null;
     const info = planInfo.get(t.treatment_id);
     if (!info) return null;
-    if (/entrada/i.test(t.description || "")) return `Entrada · Plano ${currency(info.total)}`;
-    const n = (t.description || "").match(/Parcela\s+(\d+)/i)?.[1];
-    return `${n ? `Parcela ${n} de ${info.parcelas}` : `${info.parcelas} parcela(s)`} · Plano ${currency(info.total)}`;
+    const plano = `Plano ${currency(info.total)}${info.open > 0 ? ` (falta ${currency(info.open)})` : " (quitado)"}`;
+    if (/entrada/i.test(t.description || "")) return `Entrada · ${plano}`;
+    const n = info.order.get(t.id);
+    return `${n ? `Parcela ${n} de ${info.parcelas}` : `${info.parcelas} parcela(s)`} · ${plano}`;
   };
 
   // Helper para verificar status de liquidação estrito cruzando título e pagamentos
@@ -1154,7 +1168,10 @@ export function ContasReceberTab({
                           new RegExp(`^${person.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*[-–·:]\\s*`, "i"),
                           "",
                         )
-                      : t.description) || "Atendimento";
+                      : t.description
+                    )
+                      // "Parcela N" já aparece abaixo como "Parcela X de Y" (numerada pelo vencimento)
+                      ?.replace(/\s*-\s*Parcela\s+\d+\s*$/i, "") || "Atendimento";
                   const details = [free ? "Saldo livre" : t.category, parcelaLabel(t)].filter(Boolean).join(" · ");
                   const status = isPaid
                     ? { label: "Recebido", dot: "bg-success", text: "text-success" }

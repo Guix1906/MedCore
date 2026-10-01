@@ -53,6 +53,13 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
   const selected = planTitles.find((t) => t.id === selectedTitle);
 
   const freeBalanceTitle = planTitles.find((t) => isFreeBalance(t) && remaining(t) > 0);
+  // Saldo em aberto do plano (todas as parcelas não quitadas): base da repactuação
+  const openBalance = planTitles
+    .filter((t) => t.status !== "cancelado")
+    .reduce((sum, t) => sum + remaining(t), 0);
+  const paidTotal = planTitles
+    .filter((t) => t.status !== "cancelado")
+    .reduce((sum, t) => sum + (Number(t.paid_amount) || 0), 0);
 
   const [form, setForm] = useState({
     total: String(plan.total_value),
@@ -204,10 +211,8 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
 
   const handleRepactuate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!freeBalanceTitle) return;
-    const rem = remaining(freeBalanceTitle);
-    if (rem <= 0) {
-      toast.error("Este saldo já está totalmente quitado.");
+    if (openBalance <= 0) {
+      toast.error("Este plano não tem saldo em aberto.");
       return;
     }
     const count = Number(repactCount) || 1;
@@ -218,93 +223,21 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
 
     setBusy(true);
     try {
-      const freeBalanceInstallment = plan.installments.find(
-        (i) => i.id === freeBalanceTitle.installment_id,
-      );
-
-      // 1. Quitar/encerrar o título de saldo livre anterior
-      if (freeBalanceTitle.paid_amount > 0) {
-        await supabase
-          .from("transactions")
-          .update({
-            amount: freeBalanceTitle.paid_amount,
-            status: "pago",
-            description: `${freeBalanceTitle.description} (Saldo anterior quitado - Repactuado)`,
-          })
-          .eq("id", freeBalanceTitle.id);
-
-        if (freeBalanceInstallment) {
-          await supabase
-            .from("treatment_installments")
-            .update({
-              amount: freeBalanceTitle.paid_amount,
-              status: "pago",
-            })
-            .eq("id", freeBalanceInstallment.id);
-        }
-      } else {
-        await supabase
-          .from("transactions")
-          .update({
-            status: "cancelado",
-            description: `${freeBalanceTitle.description} (Repactuado em parcelas)`,
-          })
-          .eq("id", freeBalanceTitle.id);
-
-        if (freeBalanceInstallment) {
-          await supabase
-            .from("treatment_installments")
-            .update({
-              status: "cancelado",
-            })
-            .eq("id", freeBalanceInstallment.id);
-        }
-      }
-
-      // 2. Buscar maior número de parcela já existente no plano
-      const { data: existingInsts } = await supabase
-        .from("treatment_installments")
-        .select("number")
-        .eq("treatment_id", plan.id);
-      const maxNum = (existingInsts || []).reduce((max, cur) => Math.max(max, cur.number), 0);
-
-      // 3. Criar as novas parcelas no treatment_installments
-      const eachCents = Math.floor((rem * 100) / count);
-      const remainderCents = Math.round(rem * 100) - eachCents * count;
-      const [y, m, d] = repactFirstDue.split("-").map(Number);
-
-      for (let k = 1; k <= count; k++) {
-        const partAmount = (eachCents + (k <= remainderCents ? 1 : 0)) / 100;
-        const targetDate = new Date(y, m - 1 + (k - 1), d);
-        const targetDateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, "0")}-${String(targetDate.getDate()).padStart(2, "0")}`;
-
-        const { error: insErr } = await supabase.from("treatment_installments").insert({
-          treatment_id: plan.id,
-          number: maxNum + k,
-          amount: partAmount,
-          due_date: targetDateStr,
-          payment_method: repactMethod,
-          status: "pendente",
-        });
-        if (insErr) throw insErr;
-      }
-
-      // 4. Atualizar metadados do plano
-      await supabase
-        .from("treatments")
-        .update({
-          installments_count: maxNum + count,
-          payment_type: "parcelado",
-        })
-        .eq("id", plan.id);
-
+      // Função do banco: atômica, preserva pagamentos e recria as cobranças das novas parcelas
+      const { error } = await (supabase.rpc as any)("repactuate_treatment_balance", {
+        p_treatment_id: plan.id,
+        p_count: count,
+        p_first_due: repactFirstDue,
+        p_method: repactMethod,
+      });
+      if (error) throw error;
       toast.success(
-        `Saldo de ${currency(rem)} repactuado em ${count}x parcelas com sucesso! Histórico de pagamentos preservado.`,
+        `Saldo de ${currency(openBalance)} repactuado em ${count}x. Pagamentos já feitos foram preservados.`,
       );
       setRepactOpen(false);
       await refresh();
     } catch (err: any) {
-      toast.error(err.message || "Erro ao repactuar saldo.");
+      toast.error(errorMessage(err) || "Erro ao repactuar saldo.");
     } finally {
       setBusy(false);
     }
@@ -313,10 +246,44 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
   return (
     <div className="space-y-4">
       {paid && (
-        <p className="text-sm text-warning">
-          Este plano já possui recebimentos. As condições não podem ser regeneradas para preservar o
-          histórico. Caso necessário, utilize a repactuação do saldo restante abaixo.
-        </p>
+        <div className="space-y-3 rounded-2xl border border-border p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h4 className="text-sm font-semibold text-foreground">Condições contratadas</h4>
+              <p className="text-xs text-muted-foreground">
+                O plano já tem recebimentos, por isso as condições não são recalculadas. Para mudar o
+                parcelamento do que falta, repactue o saldo em aberto.
+              </p>
+            </div>
+            {openBalance > 0 && plan.can_configure && (
+              <button
+                type="button"
+                onClick={() => {
+                  setRepactCount(String(Math.max(1, plan.installments_count || 1)));
+                  setRepactFirstDue(localDate());
+                  setRepactMethod(plan.payment_method || "pix");
+                  setRepactOpen(true);
+                }}
+                className="inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-primary/40 px-3 text-sm font-semibold text-primary hover:bg-primary/10"
+              >
+                <RefreshCw size={14} /> Repactuar saldo em aberto
+              </button>
+            )}
+          </div>
+          <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+            {[
+              ["Valor total", currency(Number(plan.total_value) - Number(plan.discount || 0))],
+              ["Entrada", currency(Number(plan.down_payment) || 0)],
+              ["Recebido", currency(paidTotal)],
+              ["Em aberto", currency(openBalance)],
+            ].map(([label, value]) => (
+              <div key={label}>
+                <dt className="text-xs text-muted-foreground">{label}</dt>
+                <dd className="font-semibold tabular-nums text-foreground">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
       )}
 
       {/* Banner de Saldo Livre e Ação Rápida de Repactuação */}
@@ -358,6 +325,7 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
         </div>
       )}
 
+      {!paid && (<>
       <form onSubmit={configure}>
         <fieldset
           disabled={busy || paid || !plan.can_configure || !ledger.data || !!ledger.error}
@@ -521,7 +489,9 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
           Entrada: {currency(preview.down)}. Saldo: {currency(preview.balance)}
           {modality === "parcelado" &&
             preview.parts.length > 0 &&
-            ` em ${preview.parts.length} parcela(s): ${preview.parts.map(currency).join(" + ")}`}
+            (new Set(preview.parts).size === 1
+              ? ` em ${preview.parts.length}x de ${currency(preview.parts[0])}`
+              : ` em ${preview.parts.length}x (de ${currency(Math.min(...preview.parts))} a ${currency(Math.max(...preview.parts))})`)}
           {modality === "livre" && preview.balance > 0 && " (saldo sem vencimento fixo)"}. Total
           líquido: {currency(preview.total - preview.discount)}.
         </p>
@@ -530,136 +500,140 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
           {previewError}
         </p>
       )}
+      </>)}
 
       {ledger.isPending && <p>Carregando baixas...</p>}
       {ledger.data && !ledger.error && (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead>
-              <tr className="border-b text-muted-foreground text-xs uppercase">
-                <th className="py-2.5">Cobrança</th>
-                <th>Valor / liquidado / saldo</th>
-                <th>Vencimento</th>
-                <th>Forma prevista</th>
-                <th>Situação</th>
-                <th>Baixas / Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {plan.installments.map((i) => {
-                const title = planTitles.find(
-                  (t) =>
-                    t.installment_id === i.id ||
-                    (i.number === 0 && t.description?.toLowerCase().includes("entrada")),
-                );
-                const isFree = title && isFreeBalance(title);
-                const relatedPayments = (ledger.data?.payments || []).filter(
-                  (p) =>
-                    !p.reversed_at &&
-                    ((title && p.transaction_id === title.id) ||
-                      p.transaction_id === i.id ||
-                      (title?.origin_key && p.transaction_id === title.origin_key)),
-                );
-                const sumPaid = relatedPayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
-                const titlePaid = Math.max(Number(title?.paid_amount) || 0, sumPaid);
-                const safeAmount = Number(i.amount) || Number(title?.amount) || 0;
-                const rem = Math.max(0, safeAmount - titlePaid);
-                const isPaid = i.status === "pago" || title?.status === "pago" || (safeAmount > 0 && rem <= 0.01);
-                const valorPago = isPaid ? safeAmount : titlePaid;
-                const valorRestante = isPaid ? 0 : rem;
+          {(() => {
+            // Parcelas substituídas numa repactuação ficam fora da lista principal
+            const active = plan.installments.filter(
+              (i) => i.status !== "cancelado" && i.status !== "renegociado",
+            );
+            const replaced = plan.installments.length - active.length;
+            const totalParts = active.filter((i) => i.number > 0).length;
+            const partIndex = new Map(
+              active
+                .filter((i) => i.number > 0)
+                .sort((a, b) => a.number - b.number)
+                .map((i, idx) => [i.id, idx + 1]),
+            );
+            return (
+              <>
+                <table className="w-full min-w-[720px] text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs font-medium text-muted-foreground">
+                      <th className="py-2 pr-3 font-medium">Parcela</th>
+                      <th className="py-2 pr-3 font-medium">Vencimento</th>
+                      <th className="py-2 pr-3 font-medium">Forma</th>
+                      <th className="py-2 pr-3 text-right font-medium">Valor</th>
+                      <th className="py-2 pr-3 text-right font-medium">Pago</th>
+                      <th className="py-2 pr-3 text-right font-medium">Em aberto</th>
+                      <th className="py-2 pr-3 font-medium">Situação</th>
+                      <th className="py-2 text-right font-medium">
+                        <span className="sr-only">Ações</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border-soft">
+                    {active.map((i) => {
+                      const title = planTitles.find(
+                        (t) =>
+                          t.installment_id === i.id ||
+                          (i.number === 0 && t.description?.toLowerCase().includes("entrada")),
+                      );
+                      const isFree = title && isFreeBalance(title);
+                      const relatedPayments = (ledger.data?.payments || []).filter(
+                        (p) => !p.reversed_at && title && p.transaction_id === title.id,
+                      );
+                      const sumPaid = relatedPayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
+                      const titlePaid = Math.max(Number(title?.paid_amount) || 0, sumPaid);
+                      const amount = Number(i.amount) || Number(title?.amount) || 0;
+                      const isPaid =
+                        i.status === "pago" || title?.status === "pago" || (amount > 0 && amount - titlePaid <= 0.01);
+                      const paidValue = isPaid ? amount : titlePaid;
+                      const openValue = isPaid ? 0 : Math.max(0, amount - titlePaid);
+                      const overdue = !isPaid && !isFree && !!i.due_date && i.due_date < localDate();
+                      const status = isPaid
+                        ? { label: "Quitada", dot: "bg-success", text: "text-success" }
+                        : overdue
+                          ? { label: "Vencida", dot: "bg-destructive", text: "text-destructive" }
+                          : paidValue > 0
+                            ? { label: "Parcial", dot: "bg-warning", text: "text-warning" }
+                            : { label: "A receber", dot: "bg-info", text: "text-info" };
 
-                return (
-                  <tr key={i.id} className="border-t hover:bg-muted/30">
-                    <td className="py-3">
-                      {isFree ? (
-                        <div>
-                          <span className="font-semibold text-primary">Saldo Livre</span>
-                          <span className="block text-xs text-muted-foreground font-normal">
-                            Sem vencimento fixo
-                          </span>
-                        </div>
-                      ) : i.number === 0 ? (
-                        <span className="font-semibold text-foreground">Entrada</span>
-                      ) : (
-                        <span className="font-medium text-foreground">Parcela {i.number}</span>
-                      )}
-                    </td>
-                    <td>
-                      {currency(safeAmount)} / {currency(valorPago)} / {currency(valorRestante)}
-                    </td>
-                    <td>
-                      {isFree ? (
-                        <span className="text-muted-foreground italic text-xs">Sem vencimento</span>
-                      ) : (
-                        formatClinicalDate(i.due_date)
-                      )}
-                    </td>
-                    <td>{methodLabel(i.payment_method)}</td>
-                    <td>
-                      <span
-                        className={cn(
-                          "px-2 py-0.5 rounded-md text-xs font-semibold",
-                          isPaid
-                            ? "bg-success/10 text-success"
-                            : isFree
-                              ? "bg-primary-soft text-primary"
-                              : i.due_date && i.due_date < localDate()
-                                ? "bg-destructive/10 text-destructive"
-                                : "bg-muted text-foreground/80",
-                        )}
-                      >
-                        {isPaid
-                          ? "Quitado"
-                          : isFree
-                            ? valorPago > 0
-                              ? "Parcial (sem vencimento)"
-                              : "Em aberto sem vencimento"
-                            : i.due_date && i.due_date < localDate()
-                              ? "Vencido"
-                              : "Pendente"}
-                      </span>
-                    </td>
-                    <td>
-                      {title ? (
-                        <div className="flex items-center gap-2">
-                          {isPaid ? (
-                            <button
-                              type="button"
-                              className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1 shadow-2xs"
-                              onClick={() => setSelectedTitle(title.id)}
-                              title="Visualizar histórico de baixas e comprovante"
-                            >
-                              <CheckCircle2 size={13} />
-                              Recebido
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="px-2.5 py-1 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-semibold transition cursor-pointer shadow-2xs"
-                              onClick={() => setSelectedTitle(title.id)}
-                            >
-                              Receber / Baixas
-                            </button>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground italic">Não sincronizado</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {plan.installments.length === 0 && (
-            <p className="py-4 text-muted-foreground">Nenhuma cobrança gerada.</p>
-          )}
+                      return (
+                        <tr key={i.id} className="align-middle hover:bg-muted/40">
+                          <td className="whitespace-nowrap py-3 pr-3 font-medium text-foreground">
+                            {isFree
+                              ? "Saldo livre"
+                              : i.number === 0
+                                ? "Entrada"
+                                : `${partIndex.get(i.id) ?? i.number} de ${totalParts}`}
+                          </td>
+                          <td className="whitespace-nowrap py-3 pr-3 tabular-nums">
+                            {isFree ? <span className="text-muted-foreground">Sem vencimento</span> : formatClinicalDate(i.due_date)}
+                          </td>
+                          <td className="whitespace-nowrap py-3 pr-3 text-muted-foreground">{methodLabel(i.payment_method)}</td>
+                          <td className="whitespace-nowrap py-3 pr-3 text-right tabular-nums text-foreground">{currency(amount)}</td>
+                          <td className="whitespace-nowrap py-3 pr-3 text-right tabular-nums text-muted-foreground">
+                            {paidValue > 0 ? currency(paidValue) : "—"}
+                          </td>
+                          <td className="whitespace-nowrap py-3 pr-3 text-right font-semibold tabular-nums text-foreground">
+                            {openValue > 0 ? currency(openValue) : "—"}
+                          </td>
+                          <td className="whitespace-nowrap py-3 pr-3">
+                            <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${status.text}`}>
+                              <span className={`size-1.5 rounded-full ${status.dot}`} aria-hidden="true" />
+                              {status.label}
+                            </span>
+                          </td>
+                          <td className="whitespace-nowrap py-3 text-right">
+                            {title ? (
+                              isPaid ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedTitle(title.id)}
+                                  className="h-8 cursor-pointer rounded-md px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                                  title="Ver pagamentos e comprovante"
+                                >
+                                  Ver
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedTitle(title.id)}
+                                  className="h-8 cursor-pointer rounded-md bg-success px-3 text-xs font-semibold text-white hover:bg-success/90"
+                                >
+                                  Receber
+                                </button>
+                              )
+                            ) : (
+                              <span className="text-xs text-muted-foreground">Sem cobrança</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {active.length === 0 && (
+                  <p className="py-4 text-muted-foreground">Nenhuma cobrança gerada.</p>
+                )}
+                {replaced > 0 && (
+                  <p className="pt-2 text-xs text-muted-foreground">
+                    {replaced} parcela(s) substituída(s) em repactuação não aparecem na lista.
+                  </p>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 
       {/* Modal de Repactuação do Saldo Restante */}
       <Dialog
-        open={repactOpen && !!freeBalanceTitle}
+        open={repactOpen && openBalance > 0}
         onOpenChange={(open) => {
           if (!open && !busy) setRepactOpen(false);
         }}
@@ -675,25 +649,25 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
             <div>
               <DialogTitle className="text-base">Repactuar Saldo Restante</DialogTitle>
               <DialogDescription className="text-xs">
-                Transformar saldo livre em parcelas com data
+                Dividir o que falta receber em novas parcelas com vencimento
               </DialogDescription>
             </div>
           </DialogHeader>
-          {freeBalanceTitle && (
+          {openBalance > 0 && (
             <>
               <div className="p-3.5 bg-primary-soft rounded-2xl border border-primary/15 text-sm space-y-1.5">
                 <div className="flex justify-between">
                   <span className="text-primary">Saldo em aberto a parcelar:</span>
                   <strong className="text-primary-hover font-semibold">
-                    {currency(remaining(freeBalanceTitle))}
+                    {currency(openBalance)}
                   </strong>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-primary">Pagamentos já realizados (preservados):</span>
-                  <strong className="text-success">{currency(freeBalanceTitle.paid_amount)}</strong>
+                  <strong className="text-success">{currency(paidTotal)}</strong>
                 </div>
                 <p className="text-xs text-primary/80 pt-1 border-t border-primary/15">
-                  Nenhum histórico será apagado. O saldo livre anterior será encerrado e substituído
+                  Nenhum pagamento é apagado. As parcelas em aberto (ou o saldo livre) serão substituídas
                   pelas novas parcelas programadas.
                 </p>
               </div>
@@ -709,9 +683,9 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
                       onChange={(e) => setRepactCount(e.target.value)}
                       className="w-full px-3 py-2 rounded-xl border border-border text-sm bg-muted/60 focus:bg-card outline-none focus:border-primary"
                     >
-                      {[1, 2, 3, 4, 5, 6, 10, 12].map((n) => (
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 18, 24].map((n) => (
                         <option key={n} value={n}>
-                          {n}x de {currency(remaining(freeBalanceTitle) / n)}
+                          {n}x de {currency(openBalance / n)}
                         </option>
                       ))}
                     </select>
