@@ -101,6 +101,9 @@ export function reportingRows(data: FinanceSnapshot) {
         due_date: t.due_date,
         status: "pago",
         category: t.category,
+        description: t.description,
+        person: t.patient_name || t.payer_name,
+        method: p.payment_method,
       };
     });
   const pending = data.titles
@@ -114,6 +117,9 @@ export function reportingRows(data: FinanceSnapshot) {
       due_date: t.due_date,
       status: "pendente",
       category: t.category,
+      description: t.description,
+      person: t.patient_name || t.payer_name,
+      method: null as string | null,
     }));
   return [...paid, ...pending];
 }

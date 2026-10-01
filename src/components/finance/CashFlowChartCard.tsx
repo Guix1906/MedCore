@@ -1,7 +1,9 @@
 import type { ApexOptions } from "apexcharts";
 import { CircleHelp } from "lucide-react";
 import { Chart } from "@/components/ds/Chart";
+import { useMemo, useState } from "react";
 import { calcCashFlow, projectOverdueToToday } from "@/lib/finance";
+import { CashFlowDetailsDialog } from "./CashFlowDetailsDialog";
 
 /**
  * Gráfico "Fluxo de caixa" usado no Dashboard e no Financeiro → Fluxo de caixa.
@@ -21,6 +23,10 @@ export interface CashFlowRow {
   date: string;
   status: string;
   due_date?: string | null;
+  description?: string | null;
+  category?: string | null;
+  person?: string | null;
+  method?: string | null;
 }
 
 export const FLOW_COLORS = ["#22d061", "#aef0c4", "#ff3358", "#ffa3b3", "#3b82f6", "#9cc3fb"];
@@ -32,7 +38,10 @@ const PERIODS: [CashFlowPeriod, string][] = [
   ["year", "Anual"],
 ];
 
-const BRL = (v: number) =>
+// Janela fixa por agrupamento: 5 últimos dias, semana vigente, 2 últimos meses, ano vigente.
+const RECENT_LIMIT: Record<CashFlowPeriod, number> = { day: 5, week: 1, month: 2, year: 1 };
+
+const BRL =(v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
 export function CashFlowChartCard({
@@ -62,9 +71,32 @@ export function CashFlowChartCard({
   const buckets = calcCashFlow(
     mapped as unknown as Parameters<typeof calcCashFlow>[0],
     period,
-    undefined,
-    range,
+    RECENT_LIMIT[period],
   );
+  const [detail, setDetail] = useState<{ series: number; index: number } | null>(null);
+  const detailRows = useMemo(() => {
+    if (!detail) return [];
+    const key = buckets[detail.index]?.date;
+    if (!key) return [];
+    return mapped.filter((r) => {
+      if (r.status === "cancelado" || bucketKey(r.date, period) !== key) return false;
+      const income = r.type === "receita" || r.type === "income";
+      const paid = r.status === "pago";
+      const open = r.status === "pendente" || r.status === "vencido";
+      switch (detail.series) {
+        case 0: return income && paid;
+        case 1: return income && open;
+        case 2: return !income && paid;
+        case 3: return !income && open;
+        default: return paid || open;
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail, rows, period]);
+  const detailTitle = detail
+    ? `${SERIES_TITLE[detail.series] ?? "Lançamentos"} - ${bucketTitle(buckets[detail.index]?.date ?? "", period)}`
+    : "";
+
   const flowRows = buckets.map((d) => ({
     label: d.label,
     entradas: d.entradas,
@@ -142,7 +174,17 @@ export function CashFlowChartCard({
               summary="Fluxo de caixa: entradas, saídas, previstos e saldo por período."
               series={series as NonNullable<ApexOptions["series"]>}
               options={{
-                chart: { type: "line", stacked: true },
+                chart: {
+                  type: "line",
+                  stacked: true,
+                  events: {
+                    click: (_e, _ctx, cfg) => {
+                      if (!cfg || cfg.dataPointIndex == null || cfg.dataPointIndex < 0) return;
+                      setDetail({ series: cfg.seriesIndex, index: cfg.dataPointIndex });
+                    },
+                  },
+                },
+                states: { active: { filter: { type: "none" } } },
                 colors: FLOW_COLORS,
                 stroke: { width: [0, 0, 0, 0, 2, 2], curve: "straight", dashArray: [0, 0, 0, 0, 0, 5] },
                 markers: {
@@ -198,8 +240,52 @@ export function CashFlowChartCard({
           Saldo previsto
         </span>
       </div>
+
+      <CashFlowDetailsDialog
+        open={!!detail}
+        onOpenChange={(o) => !o && setDetail(null)}
+        title={detailTitle}
+        rows={detailRows}
+        hideValues={hideValues}
+      />
     </div>
   );
+}
+
+const SERIES_TITLE: Record<number, string> = {
+  0: "Entradas",
+  1: "Entradas previstas",
+  2: "Saídas",
+  3: "Saídas previstas",
+};
+
+const MONTHS = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+];
+
+/** Mesma chave de agrupamento usada por calcCashFlow. */
+function bucketKey(raw: string, period: CashFlowPeriod) {
+  const day = String(raw || "").slice(0, 10);
+  if (period === "day") return day;
+  if (period === "week") {
+    const dt = new Date(day + "T12:00:00");
+    dt.setDate(dt.getDate() - dt.getDay());
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+  }
+  if (period === "month") return day.slice(0, 7);
+  return day.slice(0, 4);
+}
+
+function bucketTitle(key: string, period: CashFlowPeriod) {
+  const [y, m, d] = key.split("-").map(Number);
+  if (period === "year") return String(y);
+  if (period === "month") return `${MONTHS[m - 1]} de ${y}`;
+  if (period === "day") return `${String(d).padStart(2, "0")} de ${MONTHS[m - 1].toLowerCase()} de ${y}`;
+  const start = new Date(y, m - 1, d);
+  const end = new Date(y, m - 1, d + 6);
+  const f = (x: Date) => `${String(x.getDate()).padStart(2, "0")}/${String(x.getMonth() + 1).padStart(2, "0")}`;
+  return `Semana de ${f(start)} a ${f(end)}`;
 }
 
 function niceAxis(max: number, min: number) {
