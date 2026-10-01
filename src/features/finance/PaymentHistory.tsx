@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useBlocker } from "@tanstack/react-router";
 import {
   Sheet,
@@ -55,6 +55,12 @@ export default function PaymentHistory({
   );
   const fallbackAccounts = data.accounts.filter((a) => a.active);
   const selectableAccounts = accounts.length > 0 ? accounts : fallbackAccounts;
+  // Já traz selecionada a conta cadastrada em Configurações → Contas financeiras
+  useEffect(() => {
+    if (!selectableAccounts.some((a) => a.id === account) && selectableAccounts[0]) {
+      setAccount(selectableAccounts[0].id);
+    }
+  }, [selectableAccounts, account]);
   const receive = async (event: React.FormEvent) => {
     event.preventDefault();
     if (busy) return;
