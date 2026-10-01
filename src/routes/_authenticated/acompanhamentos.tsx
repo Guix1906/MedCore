@@ -1069,23 +1069,11 @@ function TreatmentManageModal({
       try {
         if (financeChanged && isLivre && financePreview.balance > 0) {
           // Atualiza título de saldo livre
-          const { data: createdTxs } = await supabase
-            .from("transactions")
-            .select("id, description, installment_id, installments:installment_id(number)")
-            .eq("treatment_id", treatment.id);
-
-          const balanceTx = createdTxs?.find(
-            (tx: any) => tx.installments?.number !== 0 && !tx.description?.includes("Entrada"),
-          );
-          if (balanceTx) {
-            await supabase
-              .from("transactions")
-              .update({
-                description: `Acompanhamento: ${form.title.trim()} - Saldo Livre (Sem vencimento definido)`,
-                category: "Saldo Livre",
-              })
-              .eq("id", balanceTx.id);
-          }
+          const { error: labelErr } = await (supabase.rpc as any)("label_free_balance_title", {
+            p_treatment_id: treatment.id,
+            p_title: form.title.trim(),
+          });
+          if (labelErr) console.warn("Rótulo Saldo Livre não aplicado:", labelErr);
         }
 
         // Liquidação imediata no Fluxo de Caixa para Entrada ou À Vista
@@ -2306,23 +2294,11 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
           toast.warning("Acompanhamento criado! Confira as condições na aba Financeiro.");
         } else if (isLivre && financePreview.balance > 0) {
           // Atualiza título de saldo livre
-          const { data: createdTxs } = await supabase
-            .from("transactions")
-            .select("id, description, installment_id, installments:installment_id(number)")
-            .eq("treatment_id", data.id);
-
-          const balanceTx = createdTxs?.find(
-            (tx: any) => tx.installments?.number !== 0 && !tx.description?.includes("Entrada"),
-          );
-          if (balanceTx) {
-            await supabase
-              .from("transactions")
-              .update({
-                description: `Acompanhamento: ${form.title} - Saldo Livre (Sem vencimento definido)`,
-                category: "Saldo Livre",
-              })
-              .eq("id", balanceTx.id);
-          }
+          const { error: labelErr } = await (supabase.rpc as any)("label_free_balance_title", {
+            p_treatment_id: data.id,
+            p_title: form.title,
+          });
+          if (labelErr) console.warn("Rótulo Saldo Livre não aplicado:", labelErr);
         }
 
         // Liquidação imediata no Fluxo de Caixa para Entrada ou À Vista

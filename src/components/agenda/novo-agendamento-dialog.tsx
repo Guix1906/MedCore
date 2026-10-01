@@ -2485,7 +2485,7 @@ function NewDoctorDialog({
     try {
       const { error } = await supabase.from("doctors").insert(payload);
       if (error) {
-        await supabase.from("doctors").insert({
+        const { error: retryError } = await supabase.from("doctors").insert({
           id: newId,
           name: name.trim(),
           email: cleanEmail,
@@ -2493,9 +2493,15 @@ function NewDoctorDialog({
           role: "medico",
           active: true,
         });
+        if (retryError) throw retryError;
       }
     } catch (err) {
       console.warn("Erro ao salvar médico:", err);
+      setSaving(false);
+      toast.error("Não foi possível cadastrar o profissional", {
+        description: (err as { message?: string })?.message,
+      });
+      return;
     }
 
     setSaving(false);

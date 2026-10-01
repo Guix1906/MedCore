@@ -144,28 +144,23 @@ export async function saveFinanceCategory(params: {
     created_at: new Date().toISOString(),
   };
 
-  // 1. Tenta salvar no Supabase
-  try {
-    if (params.id) {
-      await (supabase as any)
+  // 1. Salva no Supabase (o Supabase não lança exceção: o erro vem no retorno)
+  const { error } = params.id
+    ? await (supabase as any)
         .from("finance_categories")
         .update({
           name: item.name,
           type: item.type,
           color: item.color,
         })
-        .eq("id", params.id);
-    } else {
-      await (supabase as any).from("finance_categories").insert({
+        .eq("id", params.id)
+    : await (supabase as any).from("finance_categories").insert({
         id: item.id,
         name: item.name,
         type: item.type,
         color: item.color,
       });
-    }
-  } catch (err) {
-    console.warn("Falha ao sincronizar categoria com Supabase:", err);
-  }
+  if (error) throw new Error(error.message || "Não foi possível salvar a categoria.");
 
   // 2. Atualiza o cache local
   const current = getLocalCategories();
@@ -186,11 +181,8 @@ export async function saveFinanceCategory(params: {
  * Exclui uma categoria do Supabase e do cache local
  */
 export async function deleteFinanceCategory(id: string): Promise<void> {
-  try {
-    await (supabase as any).from("finance_categories").delete().eq("id", id);
-  } catch (err) {
-    console.warn("Erro ao deletar categoria no Supabase:", err);
-  }
+  const { error } = await (supabase as any).from("finance_categories").delete().eq("id", id);
+  if (error) throw new Error(error.message || "Não foi possível excluir a categoria.");
 
   const current = getLocalCategories();
   const updated = current.filter((c) => c.id !== id);

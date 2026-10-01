@@ -302,19 +302,11 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
             if (createdTxs) {
               // 1. Se for modalidade de Saldo Livre, identificar o título do saldo e marcá-lo como Saldo Livre
               if (isLivre && balance > 0) {
-                const balanceTx = createdTxs.find(
-                  (tx: any) =>
-                    tx.installments?.number !== 0 && !tx.description?.includes("Entrada"),
-                );
-                if (balanceTx) {
-                  await supabase
-                    .from("transactions")
-                    .update({
-                      description: `Acompanhamento: ${title.trim()} - Saldo Livre (Sem vencimento definido)`,
-                      category: "Saldo Livre",
-                    })
-                    .eq("id", balanceTx.id);
-                }
+                const { error: labelErr } = await (supabase.rpc as any)("label_free_balance_title", {
+                  p_treatment_id: data.id,
+                  p_title: title.trim(),
+                });
+                if (labelErr) console.warn("Rótulo Saldo Livre não aplicado:", labelErr);
               }
 
               // 2. Se a entrada foi marcada como "Recebido agora", registrar a baixa oficial

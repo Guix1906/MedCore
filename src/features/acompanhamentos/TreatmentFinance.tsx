@@ -149,23 +149,11 @@ export function PlanPayments({ plan }: { plan: FinancialPlan }) {
 
       // Se for modalidade de Saldo Livre, atualizar o título do saldo gerado
       if (isLivre && preview.balance > 0) {
-        const { data: createdTxs } = await supabase
-          .from("transactions")
-          .select("id, description, installment_id, installments:installment_id(number)")
-          .eq("treatment_id", plan.id);
-
-        const balanceTx = createdTxs?.find(
-          (tx: any) => tx.installments?.number !== 0 && !tx.description?.includes("Entrada"),
-        );
-        if (balanceTx) {
-          await supabase
-            .from("transactions")
-            .update({
-              description: `Acompanhamento: ${plan.title} - Saldo Livre (Sem vencimento definido)`,
-              category: "Saldo Livre",
-            })
-            .eq("id", balanceTx.id);
-        }
+        const { error: labelErr } = await (supabase.rpc as any)("label_free_balance_title", {
+          p_treatment_id: plan.id,
+          p_title: plan.title,
+        });
+        if (labelErr) console.warn("Rótulo Saldo Livre não aplicado:", labelErr);
       }
 
       // Se entrada foi marcada para baixa à vista agora
