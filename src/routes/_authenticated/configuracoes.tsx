@@ -25,11 +25,13 @@ import {
   Save,
   Search,
   ShieldCheck,
+  Stethoscope,
   Tags,
   Trash2,
 } from "lucide-react";
 import { useClinicCities } from "@/hooks/use-clinic-cities";
 import { useActiveCompany } from "@/hooks/use-active-company";
+import ProfessionalsSettings from "@/components/settings/ProfessionalsSettings";
 import { confirmDialog } from "@/components/app/confirm-dialog";
 import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
@@ -52,10 +54,11 @@ export const Route = createFileRoute("/_authenticated/configuracoes")({
   component: ConfiguracoesPage,
 });
 
-type Tab = "clinica" | "servicos" | "categorias" | "cidades" | "contas";
+type Tab = "clinica" | "profissionais" | "servicos" | "categorias" | "cidades" | "contas";
 
 const TAB_PERMISSIONS: Record<Tab, PermissionKey[]> = {
   clinica: ["settings.manage"],
+  profissionais: ["settings.manage"],
   servicos: ["settings.manage"],
   categorias: ["settings.manage", "finance.accounts"],
   contas: ["finance.accounts"],
@@ -77,6 +80,13 @@ const SECTIONS: {
     description: "Nome, contato, endereço e horário de funcionamento.",
     icon: Building2,
     tint: "bg-primary",
+  },
+  {
+    key: "profissionais",
+    label: "Profissionais",
+    description: "Médicos e profissionais responsáveis: cadastrar, editar, desativar e excluir.",
+    icon: Stethoscope,
+    tint: "bg-info",
   },
   {
     key: "servicos",
@@ -249,6 +259,7 @@ function ConfiguracoesPage() {
               </div>
             )}
             {tab === "clinica" && <ClinicSettings />}
+            {tab === "profissionais" && <ProfessionalsSettings />}
             {tab === "servicos" && <ServiceTypes />}
             {tab === "categorias" && <CategoriesManager />}
             {tab === "contas" && <FinancialAccountSettings onLockChange={setFinanceLocked} />}
