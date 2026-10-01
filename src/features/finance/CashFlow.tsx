@@ -559,7 +559,10 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
           (scope === "all" || !t.company_id || t.company_id === scope),
       )
       .forEach((t) => {
-        const dStr = String(t.due_date || t.date || "").slice(0, 10);
+        // Vencido e ainda em aberto: conta como previsto hoje (mesma regra do gráfico)
+        const todayStr = format(new Date(), "yyyy-MM-dd");
+        const dueStr = String(t.due_date || t.date || "").slice(0, 10);
+        const dStr = dueStr && dueStr < todayStr ? todayStr : dueStr;
         if (!dStr) return;
         if (start && dStr < start) return;
         if (end && dStr > end) return;

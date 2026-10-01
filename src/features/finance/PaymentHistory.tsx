@@ -224,7 +224,7 @@ export default function PaymentHistory({
                   </p>
                 )}
                 <button
-                  disabled={busy || accounts.length === 0}
+                  disabled={busy || selectableAccounts.length === 0}
                   className="rounded-lg bg-primary px-4 py-2 text-white disabled:opacity-50"
                 >
                   {busy
@@ -233,7 +233,7 @@ export default function PaymentHistory({
                       ? "Repetir mesma solicitação"
                       : "Confirmar pagamento"}
                 </button>
-                {accounts.length === 0 && (
+                {selectableAccounts.length === 0 && (
                   <p role="alert">
                     Cadastre uma conta ativa desta clínica em Configurações → Contas financeiras.
                   </p>

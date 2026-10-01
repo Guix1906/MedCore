@@ -1,7 +1,7 @@
 import type { ApexOptions } from "apexcharts";
 import { CircleHelp } from "lucide-react";
 import { Chart } from "@/components/ds/Chart";
-import { calcCashFlow } from "@/lib/finance";
+import { calcCashFlow, projectOverdueToToday } from "@/lib/finance";
 
 /**
  * Gráfico "Fluxo de caixa" usado no Dashboard e no Financeiro → Fluxo de caixa.
@@ -56,10 +56,9 @@ export function CashFlowChartCard({
   hideValues?: boolean;
   className?: string;
 }) {
-  const mapped = rows.map((t) => ({
-    ...t,
-    status: t.status === "concluido" ? "pago" : t.status,
-  }));
+  const mapped = projectOverdueToToday(
+    rows.map((t) => ({ ...t, status: t.status === "concluido" ? "pago" : t.status })),
+  );
   const buckets = calcCashFlow(
     mapped as unknown as Parameters<typeof calcCashFlow>[0],
     period,

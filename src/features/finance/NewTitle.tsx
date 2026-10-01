@@ -179,7 +179,13 @@ export default function NewTitle({
 
       // Se o usuário marcou como já pago, registra a baixa no mesmo fluxo do Financeiro
       if (isPaidNow && !isFutureDate) {
-        const accountId = selectedAccount || finance.accounts[0]?.id;
+        // Conta precisa ser da mesma clínica do lançamento (ou "legado", sem clínica)
+        const validAccounts = finance.accounts.filter(
+          (a) => a.active && (!company || !a.company_id || a.company_id === company),
+        );
+        const accountId = validAccounts.some((a) => a.id === selectedAccount)
+          ? selectedAccount
+          : validAccounts[0]?.id;
         const { error: payError } = accountId
           ? await supabase.rpc("record_financial_payment", {
               p_id: crypto.randomUUID(),
@@ -191,7 +197,11 @@ export default function NewTitle({
               p_account_id: accountId,
               p_payer_name: resolvedPayer,
             })
-          : { error: new Error("nenhuma conta financeira selecionada") };
+          : {
+              error: new Error(
+                "nenhuma conta financeira ativa nesta clínica. Cadastre em Financeiro → Contas",
+              ),
+            };
         if (payError) {
           await refreshFinance(qc);
           toast.warning("Lançamento criado, mas a baixa não foi registrada", {

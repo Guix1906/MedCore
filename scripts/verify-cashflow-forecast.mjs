@@ -2,7 +2,7 @@
 // Executado com: npx tsx scripts/verify-cashflow-forecast.mjs
 import assert from "node:assert/strict";
 import { reportingRows } from "../src/features/finance/finance-math.ts";
-import { calcCashFlow } from "../src/lib/finance.ts";
+import { calcCashFlow, projectOverdueToToday } from "../src/lib/finance.ts";
 
 const today = new Date();
 const iso = (d) =>
@@ -57,5 +57,18 @@ snapshot.payments.push({ id: "p3", transaction_id: "consulta", amount: 400, paid
 const after = calcCashFlow(reportingRows(snapshot), "day", undefined, [start, end]);
 assert.equal(after.reduce((s, d) => s + d.entradas, 0), 600);
 assert.equal(after.reduce((s, d) => s + d.entradasPrev, 0), 0);
+
+// Conta vencida e em aberto (caso real: consulta de R$ 600 vencida há 3 dias, nada pago)
+// continua como entrada prevista, projetada para hoje.
+const past = new Date(today);
+past.setDate(today.getDate() - 3);
+const overdue = {
+  ...snapshot,
+  titles: [title({ id: "vencida", type: "receita", amount: 600, due_date: iso(past), date: iso(past) })],
+  payments: [],
+};
+const overdueRows = calcCashFlow(projectOverdueToToday(reportingRows(overdue)), "day", undefined, [today, end]);
+assert.equal(overdueRows.reduce((s, d) => s + d.entradasPrev, 0), 600, "vencida aparece como prevista");
+assert.equal(overdueRows.find((d) => d.date === iso(today)).entradasPrev, 600, "projetada para hoje");
 
 console.log("ok: fluxo de caixa com previstos");

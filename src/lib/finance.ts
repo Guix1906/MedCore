@@ -89,6 +89,23 @@ const fmtLabel = (
   return key;
 };
 
+/**
+ * Previsto vencido e ainda em aberto continua sendo dinheiro a receber/pagar: no gráfico de
+ * fluxo de caixa ele aparece no dia de hoje (senão sumiria do período atual).
+ * O livro-razão (reportingRows) mantém a data real de vencimento.
+ */
+export function projectOverdueToToday<T extends { status: string; date: string }>(
+  rows: T[],
+  today = new Date(),
+): T[] {
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  return rows.map((r) => {
+    const open = r.status === "pendente" || r.status === "vencido";
+    const day = String(r.date || "").slice(0, 10);
+    return open && day && day < todayStr ? { ...r, date: todayStr } : r;
+  });
+}
+
 export function calcCashFlow(
   rows: Transaction[],
   period: "day" | "week" | "month" | "year",
