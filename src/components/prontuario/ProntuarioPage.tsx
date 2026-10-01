@@ -16,7 +16,7 @@ import {
 import { DUR, EASE_OUT, fadeUp, staggerContainer } from "@/lib/motion";
 import { patientsService } from "@/services/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertDialog,
@@ -170,14 +170,14 @@ export default function ProntuarioPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  // Lê parâmetros da URL caso o atendimento tenha sido iniciado a partir da agenda ou paciente
-  const searchParams = new URLSearchParams(
-    typeof window !== "undefined" ? window.location.search : "",
-  );
-  const paramPatientId = searchParams.get("patientId") || searchParams.get("id");
+  // Lê os parâmetros pelo roteador (e não por window.location): assim a tela sempre
+  // atualiza quando um paciente é escolhido na busca da Central.
+  const routeSearch = useSearch({ strict: false }) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" && v ? v : null);
+  const paramPatientId = str(routeSearch.patientId) || str(routeSearch.id);
   const paramPatientName =
-    searchParams.get("patientName") || searchParams.get("name") || searchParams.get("patient");
-  const paramTab = searchParams.get("tab") as TabKey | null;
+    str(routeSearch.patientName) || str(routeSearch.name) || str(routeSearch.patient);
+  const paramTab = str(routeSearch.tab) as TabKey | null;
 
   const [tab, setTab] = useState<TabKey>(
     paramTab &&
@@ -1637,7 +1637,25 @@ function HistoryCard({
 
   return (
     <article
-      className={`rounded-xl border border-border bg-card transition-colors hover:border-primary/30 ${compact ? "p-3" : "p-4"}`}
+      role="button"
+      tabIndex={0}
+      aria-expanded={open}
+      title={open ? "Clique para recolher" : "Clique para ver o registro completo"}
+      onClick={(e) => {
+        // Cliques nos botões internos (copiar, imprimir, trazer) não abrem/fecham o cartão
+        if ((e.target as HTMLElement).closest("button")) return;
+        setOpen((v) => !v);
+      }}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          setOpen((v) => !v);
+        }
+      }}
+      className={`cursor-pointer rounded-xl border bg-card transition-colors hover:border-primary/40 hover:bg-primary/[0.02] focus-visible:border-primary ${
+        open ? "border-primary/40" : "border-border"
+      } ${compact ? "p-3" : "p-4"}`}
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold ${badge.cls}`}>
@@ -1694,7 +1712,7 @@ function HistoryCard({
       )}
 
       <div className="mt-2.5 flex flex-wrap items-center gap-1">
-        {(body.length > 160 || rec.diagnosis || rec.conduct) && (
+        {(body.length > 0 || rec.diagnosis || rec.conduct) && (
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}

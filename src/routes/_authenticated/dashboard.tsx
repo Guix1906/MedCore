@@ -124,7 +124,7 @@ function eachDay(start: Date, end: Date) {
 
 function DashboardPage() {
   const qc = useQueryClient();
-  const [period, setPeriod] = useState<"day" | "week" | "month" | "year">("day");
+  const [period, setPeriod] = useState<"day" | "week" | "month" | "year">("week");
   const [range, setRange] = useState<[Date, Date]>(initialRange());
   const [showBalance, setShowBalance] = useState(true);
   const [reportTab, setReportTab] = useState<"prof" | "type" | "insurance" | "cat">("prof");

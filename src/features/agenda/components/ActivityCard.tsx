@@ -676,12 +676,11 @@ export function ActivityCard({
     const endH = a.end
       ? Math.max(startH + 0.5, a.end.getHours() + a.end.getMinutes() / 60)
       : startH + 0.75;
+    // O card ocupa exatamente do horário de início ao de fim (1px de respiro em cada borda).
     if (typeof style.top === "number") {
-      const topOffset = style.top % 72 > 0 ? 3 : 0;
-      computedStyle.top = startH * 72 + topOffset;
+      computedStyle.top = startH * 72 + 1;
     }
-    const heightOffset = typeof style.height === "number" && style.height % 72 !== 0 ? 6 : 2;
-    computedStyle.height = Math.max(24, (endH - startH) * 72 - heightOffset);
+    computedStyle.height = Math.max(24, (endH - startH) * 72 - 2);
   }
 
   const startLabel = displayStart.toLocaleTimeString("pt-BR", {
@@ -862,7 +861,7 @@ export function ActivityCard({
                   }}
                 >
                   <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {h >= 86 ? timeRange : startLabel}
+                    {h >= 40 ? timeRange : startLabel}
                   </span>
                   {badge}
                 </div>
