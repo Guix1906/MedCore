@@ -1000,7 +1000,10 @@ function TreatmentManageModal({
     // falhar (ex.: plano com recebimentos), o plano não pode ficar dizendo "7x" com 1 parcela.
     const rpcType = isLivre ? "parcelado" : countNum === 1 && downNum === 0 ? "a_vista" : "parcelado";
     const rpcCount = isLivre || (countNum === 1 && downNum === 0) ? 1 : countNum;
+    // Plano com valor mas sem nenhum título ativo (ex.: geração anterior falhou) precisa gerar.
+    const hasActiveTitles = treatmentTitles.some((t: any) => t.status !== "cancelado");
     const financeChanged =
+      !hasActiveTitles ||
       Number(treatment.total_value || 0) !== totalNum ||
       Number(treatment.discount || 0) !== discountNum ||
       Number(treatment.down_payment || 0) !== downNum ||
@@ -2291,7 +2294,9 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
 
         if (confErr) {
           console.error("Erro ao configurar parcelas via RPC:", confErr);
-          toast.warning("Acompanhamento criado! Confira as condições na aba Financeiro.");
+          toast.warning("Acompanhamento criado, mas as parcelas não foram geradas no financeiro", {
+            description: `${confErr.message || "Erro desconhecido"}. Abra o acompanhamento e salve as condições de pagamento novamente.`,
+          });
         } else if (isLivre && financePreview.balance > 0) {
           // Atualiza título de saldo livre
           const { error: labelErr } = await (supabase.rpc as any)("label_free_balance_title", {

@@ -486,6 +486,8 @@ function MemberEditor({
                   type={showPassword ? "text" : "password"}
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
+                  autoComplete="new-password"
+                  name="member-new-password"
                   placeholder="Nova senha (mínimo 6 dígitos)"
                   minLength={6}
                   disabled={changingPassword}

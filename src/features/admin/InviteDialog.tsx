@@ -301,6 +301,8 @@ function InviteForm({
               type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
+              name="invite-new-password"
               placeholder="Mínimo de 6 dígitos"
               minLength={6}
               required
@@ -326,6 +328,8 @@ function InviteForm({
               type={showPassword ? "text" : "password"}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
+              autoComplete="new-password"
+              name="invite-new-password-confirm"
               placeholder="Digite a mesma senha novamente"
               minLength={6}
               required
