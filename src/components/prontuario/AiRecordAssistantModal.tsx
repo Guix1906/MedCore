@@ -11,7 +11,6 @@ import {
   X,
   FileText,
   Copy,
-  Volume2,
   Edit3,
   Trash2,
   AlertCircle,
@@ -24,13 +23,33 @@ import {
   CheckSquare,
   Square as SquareBox,
   Layers,
+  ArrowLeft,
+  ArrowRight,
+  MessageSquareText,
+  Lightbulb,
+  ChevronDown,
+  CalendarClock,
+  FlaskConical,
+  HeartPulse,
+  Coffee,
+  Brain,
+  History,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import {
+  CLINICAL_GROUPS,
+  CLINICAL_SECTIONS,
+  SPEAKER_LABELS,
+  SPEAKER_ORDER,
+  formatConsultationRecord,
   generateConsultationRecord,
-  StructuredConsultationResult,
-  ClinicalSectionData,
+  organizeTranscript,
+  turnsToText,
+  type ClinicalFieldKey,
+  type Speaker,
+  type StructuredConsultationResult,
+  type TranscriptTurn,
 } from "@/lib/gemini";
 
 export interface AiSectionContext {
@@ -44,47 +63,83 @@ interface AiRecordAssistantModalProps {
   isOpen: boolean;
   onClose: () => void;
   section?: AiSectionContext | null;
+  /** Usado só para remover o nome do paciente antes do envio à IA. */
+  patientName?: string;
+  /** Texto já registrado no prontuário aberto: a IA só complementa e nada é apagado. */
+  existingRecord?: string;
   onInsert: (content: string | StructuredConsultationResult, sectionKey?: string) => void;
 }
 
 type InputMode = "voice" | "text";
 type RecordingState = "idle" | "recording" | "paused" | "finished";
+type Step = "capture" | "transcript" | "record";
 
-const SECTION_ICONS: Record<string, React.ReactNode> = {
-  anamnese_geral: <ClipboardCheck size={16} className="text-primary" />,
-  queixa: <ClipboardCheck size={16} className="text-primary" />,
-  historico_familiar: <UserCheck size={16} className="text-info" />,
-  tratamentos: <Activity size={16} className="text-teal-600 dark:text-teal-400" />,
-  alergias: <ShieldAlert size={16} className="text-destructive" />,
-  historico_pessoal: <Stethoscope size={16} className="text-primary" />,
-  medicacoes: <Pill size={16} className="text-success" />,
-  conduta: <FileText size={16} className="text-primary" />,
+const STEPS: { id: Step; label: string }[] = [
+  { id: "capture", label: "Captura" },
+  { id: "transcript", label: "Transcrição" },
+  { id: "record", label: "Prontuário" },
+];
+
+const FIELD_ICONS: Record<ClinicalFieldKey, React.ReactNode> = {
+  queixaPrincipal: <ClipboardCheck size={15} className="text-primary" />,
+  historiaDoencaAtual: <History size={15} className="text-primary" />,
+  historicoPessoal: <Stethoscope size={15} className="text-primary" />,
+  historicoFamiliar: <UserCheck size={15} className="text-info" />,
+  medicacoesEmUso: <Pill size={15} className="text-success" />,
+  alergias: <ShieldAlert size={15} className="text-destructive" />,
+  tratamentosAnteriores: <Activity size={15} className="text-teal-600 dark:text-teal-400" />,
+  habitosDeVida: <Coffee size={15} className="text-warning" />,
+  exameFisico: <HeartPulse size={15} className="text-destructive" />,
+  hipotesesDiagnosticas: <Brain size={15} className="text-primary" />,
+  examesSolicitados: <FlaskConical size={15} className="text-info" />,
+  condutaPlano: <FileText size={15} className="text-primary" />,
+  retorno: <CalendarClock size={15} className="text-success" />,
 };
+
+const SPEAKER_STYLES: Record<Speaker, string> = {
+  medico: "bg-primary-soft text-primary border-primary/25",
+  paciente: "bg-success/10 text-success border-success/25",
+  acompanhante: "bg-info/10 text-info border-info/25",
+  indefinido: "bg-muted text-muted-foreground border-border",
+};
+
+const textareaBase =
+  "w-full rounded-lg border p-2.5 text-sm leading-relaxed outline-none transition-all resize-y [field-sizing:content] min-h-[2.75rem] focus:border-primary focus:ring-2 focus:ring-primary/10";
 
 export function AiRecordAssistantModal({
   isOpen,
   onClose,
   section,
+  patientName,
+  existingRecord,
   onInsert,
 }: AiRecordAssistantModalProps) {
+  const isComplement = Boolean(existingRecord?.trim());
+  const [step, setStep] = useState<Step>("capture");
   const [mode, setMode] = useState<InputMode>("voice");
   const [recordingState, setRecordingState] = useState<RecordingState>("idle");
   const [transcript, setTranscript] = useState("");
   const [manualText, setManualText] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [structuredResult, setStructuredResult] = useState<StructuredConsultationResult | null>(
-    null,
-  );
-  const [editedSections, setEditedSections] = useState<Record<string, string>>({});
-  const [selectedSections, setSelectedSections] = useState<Record<string, boolean>>({});
   const [recordingSeconds, setRecordingSeconds] = useState(0);
-  const [copiedSectionId, setCopiedSectionId] = useState<string | null>(null);
-  const [audioLevels, setAudioLevels] = useState<number[]>([
-    15, 20, 25, 18, 22, 30, 24, 18, 20, 15, 22, 18,
-  ]);
+  const [audioLevels, setAudioLevels] = useState<number[]>(Array(12).fill(15));
+
+  // Etapa 2 — transcrição organizada
+  const [turns, setTurns] = useState<TranscriptTurn[] | null>(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [showRaw, setShowRaw] = useState(false);
+
+  // Etapa 3 — prontuário estruturado
+  const [result, setResult] = useState<StructuredConsultationResult | null>(null);
+  const [edited, setEdited] = useState<Record<string, string>>({});
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [conditions, setConditions] = useState<string[]>([]);
+  const [isStructuring, setIsStructuring] = useState(false);
+  const [showEmptyFields, setShowEmptyFields] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const recognitionRef = useRef<any>(null);
   const finalTranscriptRef = useRef<string>("");
+  const liveTranscriptRef = useRef<string>("");
   const isRecordingRef = useRef<boolean>(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -93,6 +148,11 @@ export function AiRecordAssistantModal({
   const analyserRef = useRef<AnalyserNode | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number | null>(null);
+
+  const updateTranscript = (value: string) => {
+    liveTranscriptRef.current = value;
+    setTranscript(value);
+  };
 
   const setupRecognition = useCallback(() => {
     if (typeof window === "undefined") return null;
@@ -129,11 +189,9 @@ export function AiRecordAssistantModal({
         ).trim();
       }
 
-      const fullLive = (
-        (finalTranscriptRef.current ? finalTranscriptRef.current + " " : "") + interim
-      ).trim();
-
-      setTranscript(fullLive);
+      updateTranscript(
+        ((finalTranscriptRef.current ? finalTranscriptRef.current + " " : "") + interim).trim(),
+      );
     };
 
     recognition.onerror = (event: any) => {
@@ -171,23 +229,19 @@ export function AiRecordAssistantModal({
       analyser.smoothingTimeConstant = 0.65;
       analyserRef.current = analyser;
 
-      const source = ctx.createMediaStreamSource(stream);
-      source.connect(analyser);
+      ctx.createMediaStreamSource(stream).connect(analyser);
 
-      const bufferLength = analyser.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const sampleIndices = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24];
 
       const updateBars = () => {
         if (!analyserRef.current || !isRecordingRef.current) return;
-
         analyserRef.current.getByteFrequencyData(dataArray);
-        const sampleIndices = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24];
-        const newLevels = sampleIndices.map((idx) => {
-          const raw = dataArray[idx] || 0;
-          return Math.max(14, Math.min(100, Math.round((raw / 255) * 100 * 1.5)));
-        });
-
-        setAudioLevels(newLevels);
+        setAudioLevels(
+          sampleIndices.map((idx) =>
+            Math.max(14, Math.min(100, Math.round(((dataArray[idx] || 0) / 255) * 150))),
+          ),
+        );
         animFrameRef.current = requestAnimationFrame(updateBars);
       };
 
@@ -212,21 +266,26 @@ export function AiRecordAssistantModal({
       } catch {}
       audioContextRef.current = null;
     }
-    setAudioLevels([15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15]);
+    setAudioLevels(Array(12).fill(15));
   };
 
   useEffect(() => {
     if (isOpen) {
-      setTranscript("");
+      setStep("capture");
+      setMode("voice");
+      updateTranscript("");
       setManualText("");
-      setStructuredResult(null);
-      setEditedSections({});
-      setSelectedSections({});
+      setTurns(null);
+      setShowRaw(false);
+      setResult(null);
+      setEdited({});
+      setSelected({});
+      setConditions([]);
+      setShowEmptyFields(false);
       setRecordingState("idle");
       isRecordingRef.current = false;
       finalTranscriptRef.current = "";
       setRecordingSeconds(0);
-      setMode("voice");
     } else {
       stopRecording();
     }
@@ -252,7 +311,7 @@ export function AiRecordAssistantModal({
     }
 
     try {
-      finalTranscriptRef.current = transcript.trim();
+      finalTranscriptRef.current = liveTranscriptRef.current.trim();
       isRecordingRef.current = true;
       setRecordingState("recording");
 
@@ -273,136 +332,155 @@ export function AiRecordAssistantModal({
   const pauseRecording = () => {
     isRecordingRef.current = false;
     setRecordingState("paused");
-
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch {}
-    }
-
+    try {
+      recognitionRef.current?.stop();
+    } catch {}
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-
     stopAudioVisualizer();
-  };
-
-  const resumeRecording = () => {
-    startRecording();
   };
 
   const stopRecording = () => {
     isRecordingRef.current = false;
-    setRecordingState("finished");
-
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch {}
-    }
-
+    setRecordingState((prev) => (prev === "idle" ? "idle" : "finished"));
+    try {
+      recognitionRef.current?.stop();
+    } catch {}
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-
     stopAudioVisualizer();
   };
 
-  const handleGenerate = async () => {
-    const rawInput = (mode === "voice" ? transcript : manualText).trim();
-    if (!rawInput) {
-      toast.error("Fale durante a consulta ou digite anotações antes de organizar.");
+  /** Finalizar pelo botão: para a gravação e já organiza a transcrição. */
+  const finishConsultation = () => {
+    stopRecording();
+    // O navegador ainda pode entregar o último trecho reconhecido logo após o stop().
+    setTimeout(() => {
+      const raw = liveTranscriptRef.current.trim();
+      if (raw) void runTranscription(raw);
+    }, 700);
+  };
+
+  const rawInput = () => (mode === "voice" ? liveTranscriptRef.current : manualText).trim();
+
+  const runTranscription = async (raw = rawInput()) => {
+    if (!raw) {
+      toast.error("Fale durante a consulta ou digite anotações antes de transcrever.");
       return;
     }
-
-    if (recordingState === "recording") {
-      stopRecording();
-    }
-
-    setIsGenerating(true);
-
+    if (isRecordingRef.current) stopRecording();
+    setIsTranscribing(true);
     try {
-      const result = await generateConsultationRecord({
-        rawTranscript: rawInput,
-      });
-
-      setStructuredResult(result);
-
-      const initialEdited: Record<string, string> = {};
-      const initialSelected: Record<string, boolean> = {};
-
-      result.sections.forEach((sec) => {
-        initialEdited[sec.id] = sec.content;
-        initialSelected[sec.id] =
-          Boolean(sec.content) && sec.content !== "Não informado na consulta.";
-      });
-
-      setEditedSections(initialEdited);
-      setSelectedSections(initialSelected);
-
-      toast.success("Informações organizadas com sucesso!", {
-        description: "Os campos do prontuário foram mapeados para a sua revisão.",
-      });
+      const organized = await organizeTranscript({ rawTranscript: raw, patientName });
+      if (organized.length === 0) throw new Error("A IA não retornou nenhuma fala.");
+      setTurns(organized);
+      setShowRaw(false);
+      setStep("transcript");
     } catch (err) {
-      console.error("Erro ao estruturar consulta com IA:", err);
-      toast.error("Não foi possível organizar com a IA", {
+      toast.error("Não foi possível organizar a transcrição", {
         description:
-          (err instanceof Error && err.message) ||
-          "Tente novamente. Suas anotações foram mantidas e podem ser registradas manualmente.",
+          (err instanceof Error && err.message) || "Tente novamente. Seu texto foi mantido.",
       });
     } finally {
-      setIsGenerating(false);
+      setIsTranscribing(false);
     }
   };
 
-  const handleCopySection = async (sectionId: string, text: string) => {
-    if (!text) return;
+  const runStructuring = async (source: string) => {
+    if (!source.trim()) {
+      toast.error("Não há conteúdo para organizar.");
+      return;
+    }
+    if (isRecordingRef.current) stopRecording();
+    setIsStructuring(true);
+    try {
+      const res = await generateConsultationRecord({
+        rawTranscript: source,
+        patientName,
+        existingRecord,
+      });
+      const nextEdited: Record<string, string> = {};
+      const nextSelected: Record<string, boolean> = {};
+      for (const sec of CLINICAL_SECTIONS) {
+        nextEdited[sec.key] = res[sec.key];
+        nextSelected[sec.key] = Boolean(res[sec.key]);
+      }
+      setResult(res);
+      setEdited(nextEdited);
+      setSelected(nextSelected);
+      setConditions(res.condicoesDetectadas);
+      setShowEmptyFields(false);
+      setStep("record");
+    } catch (err) {
+      toast.error("Não foi possível organizar as ideias", {
+        description:
+          (err instanceof Error && err.message) ||
+          "Tente novamente. Suas anotações foram mantidas.",
+      });
+    } finally {
+      setIsStructuring(false);
+    }
+  };
+
+  const organizeIdeas = () => {
+    if (turns && turns.length > 0) return runStructuring(turnsToText(turns));
+    return runStructuring(rawInput());
+  };
+
+  const updateTurn = (index: number, patch: Partial<TranscriptTurn>) => {
+    setTurns((prev) => prev && prev.map((t, i) => (i === index ? { ...t, ...patch } : t)));
+  };
+
+  const cycleSpeaker = (index: number) => {
+    setTurns(
+      (prev) =>
+        prev &&
+        prev.map((t, i) =>
+          i === index
+            ? { ...t, speaker: SPEAKER_ORDER[(SPEAKER_ORDER.indexOf(t.speaker) + 1) % SPEAKER_ORDER.length] }
+            : t,
+        ),
+    );
+  };
+
+  const removeTurn = (index: number) => {
+    setTurns((prev) => prev && prev.filter((_, i) => i !== index));
+  };
+
+  const copyText = async (id: string, text: string) => {
+    if (!text.trim()) return;
     try {
       await navigator.clipboard.writeText(text);
-      setCopiedSectionId(sectionId);
-      toast.success("Seção copiada!");
-      setTimeout(() => setCopiedSectionId(null), 2000);
+      setCopiedId(id);
+      toast.success("Copiado!");
+      setTimeout(() => setCopiedId(null), 2000);
     } catch {
       toast.error("Não foi possível copiar.");
     }
   };
 
-  const handleSectionTextChange = (sectionId: string, val: string) => {
-    setEditedSections((prev) => ({ ...prev, [sectionId]: val }));
-  };
-
-  const toggleSectionSelection = (sectionId: string) => {
-    setSelectedSections((prev) => ({ ...prev, [sectionId]: !prev[sectionId] }));
+  const buildFinalResult = (): StructuredConsultationResult | null => {
+    if (!result) return null;
+    const final: StructuredConsultationResult = { ...result, condicoesDetectadas: conditions };
+    for (const sec of CLINICAL_SECTIONS) {
+      final[sec.key] = selected[sec.key] ? (edited[sec.key] ?? "").trim() : "";
+    }
+    return final;
   };
 
   const handleConfirmInsert = () => {
-    if (!structuredResult) {
+    const final = buildFinalResult();
+    if (!final) {
       toast.error("Nenhum conteúdo clínico estruturado para inserir.");
       return;
     }
-
-    const finalStructured: StructuredConsultationResult = {
-      ...structuredResult,
-      queixaPrincipal: selectedSections["queixa"] ? editedSections["queixa"] || "" : "",
-      historicoFamiliar: selectedSections["historico_familiar"]
-        ? editedSections["historico_familiar"] || ""
-        : "",
-      tratamentosAnteriores: selectedSections["tratamentos"]
-        ? editedSections["tratamentos"] || ""
-        : "",
-      alergias: selectedSections["alergias"] ? editedSections["alergias"] || "" : "",
-      historicoPessoal: selectedSections["historico_pessoal"]
-        ? editedSections["historico_pessoal"] || ""
-        : "",
-      medicacoesEmUso: selectedSections["medicacoes"] ? editedSections["medicacoes"] || "" : "",
-      condutaPlano: selectedSections["conduta"] ? editedSections["conduta"] || "" : "",
-    };
-
-    onInsert(finalStructured, section?.key);
-    toast.success("Prontuário preenchido com sucesso!", {
-      description: "Os campos do prontuário foram atualizados conforme a consulta.",
+    onInsert(final, section?.key);
+    toast.success("Prontuário preenchido!", {
+      description: "Revise o texto inserido antes de salvar e assinar.",
     });
     onClose();
   };
@@ -410,6 +488,17 @@ export function AiRecordAssistantModal({
   if (!isOpen) return null;
 
   const isRecording = recordingState === "recording";
+  const isBusy = isTranscribing || isStructuring;
+  const hasInput = Boolean((mode === "voice" ? transcript : manualText).trim());
+  const selectedCount = CLINICAL_SECTIONS.filter(
+    (s) => selected[s.key] && (edited[s.key] ?? "").trim(),
+  ).length;
+  const filledSections = CLINICAL_SECTIONS.filter((s) => (edited[s.key] ?? "").trim() || selected[s.key]);
+  const emptySections = CLINICAL_SECTIONS.filter((s) => !filledSections.includes(s));
+  const stepIndex = STEPS.findIndex((s) => s.id === step);
+  const canGoTo = (target: Step) =>
+    !isBusy &&
+    (target === "capture" || (target === "transcript" && !!turns) || (target === "record" && !!result));
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -418,472 +507,688 @@ export function AiRecordAssistantModal({
         onInteractOutside={(event) => event.preventDefault()}
       >
         {/* Cabeçalho */}
-        <div className="relative px-4 sm:px-6 py-4 border-b border-border-soft flex items-center justify-between bg-card">
-          <div className="flex items-center gap-3.5">
-            <div
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,#ff7a59,#d946ef_50%,#6366f1)] text-white shadow-sm"
-              aria-hidden="true"
-            >
-              <Sparkles size={20} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <DialogTitle className="tracking-tight">Assistente de Prontuário IA</DialogTitle>
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-primary-soft text-primary border border-primary/20">
-                  <Layers size={11} />
-                  Revisão profissional necessária
-                </span>
+        <div className="border-b border-border-soft bg-card px-4 py-4 sm:px-6">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3.5">
+              <div
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,#ff7a59,#d946ef_50%,#6366f1)] text-white shadow-sm"
+                aria-hidden="true"
+              >
+                <Sparkles size={20} />
               </div>
-              <DialogDescription className="mt-0.5">
-                Fale ou digite os dados clínicos e a IA organizará a consulta em formato de
-                prontuário.
-              </DialogDescription>
+              <div>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <DialogTitle className="tracking-tight">Assistente de Prontuário IA</DialogTitle>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary-soft px-2.5 py-0.5 text-xs font-semibold text-primary">
+                    <Layers size={11} />
+                    Revisão profissional necessária
+                  </span>
+                </div>
+                <DialogDescription className="mt-0.5">
+                  Grave ou digite a consulta, revise a transcrição e deixe a IA organizar o
+                  prontuário.
+                </DialogDescription>
+              </div>
             </div>
+            <button
+              onClick={onClose}
+              className="cursor-pointer rounded-xl p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground/80"
+              aria-label="Fechar"
+            >
+              <X size={18} />
+            </button>
           </div>
 
-          <button
-            onClick={onClose}
-            className="rounded-xl p-2 text-muted-foreground hover:bg-muted hover:text-foreground/80 transition-colors cursor-pointer"
-            aria-label="Fechar"
-          >
-            <X size={18} />
-          </button>
+          {/* Etapas */}
+          <ol className="mt-4 flex items-center gap-2" aria-label="Etapas">
+            {STEPS.map((s, i) => {
+              const done = i < stepIndex;
+              const active = s.id === step;
+              return (
+                <li key={s.id} className="flex flex-1 items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={!canGoTo(s.id)}
+                    onClick={() => setStep(s.id)}
+                    aria-current={active ? "step" : undefined}
+                    className={`flex min-w-0 items-center gap-2 rounded-full py-1 pl-1 pr-3 text-sm font-semibold transition-colors disabled:cursor-default ${
+                      active
+                        ? "bg-primary-soft text-primary"
+                        : done
+                          ? "cursor-pointer text-foreground hover:bg-muted"
+                          : "text-muted-foreground"
+                    }`}
+                  >
+                    <span
+                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs ${
+                        active
+                          ? "bg-primary text-primary-foreground"
+                          : done
+                            ? "bg-success text-white"
+                            : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {done ? <Check size={13} /> : i + 1}
+                    </span>
+                    <span className="truncate">{s.label}</span>
+                  </button>
+                  {i < STEPS.length - 1 && <span className="h-px flex-1 bg-border" />}
+                </li>
+              );
+            })}
+          </ol>
         </div>
 
-        {/* Modal Body */}
-        <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
-          {/* Seletor de Modo */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-soft pb-3.5">
-            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-muted border border-border/60">
-              <button
-                type="button"
-                onClick={() => setMode("voice")}
-                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
-                  mode === "voice"
-                    ? "bg-card text-primary shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <Mic size={15} />
-                Gravar Áudio (Consulta)
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (isRecording) stopRecording();
-                  setMode("text");
-                }}
-                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
-                  mode === "text"
-                    ? "bg-card text-primary shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <Edit3 size={15} />
-                Digitar / Colar
-              </button>
-            </div>
-
-            {isRecording && (
-              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-destructive/10 border border-destructive/25 text-destructive text-sm font-semibold animate-pulse">
-                <span className="h-2 w-2 rounded-full bg-destructive" />
-                Gravando consulta ({formatSeconds(recordingSeconds)})
-              </div>
-            )}
-          </div>
-
-          {/* MODO 1: GRAVAÇÃO DA CONSULTA */}
-          {mode === "voice" && (
-            <div className="space-y-4">
-              <div
-                className={`relative flex flex-col items-center justify-center p-6 rounded-2xl border transition-all ${
-                  isRecording
-                    ? "bg-destructive/4 border-destructive/25 shadow-sm"
-                    : recordingState === "paused"
-                      ? "bg-warning/4 border-warning/25"
-                      : "bg-muted/42 border-border/90"
-                }`}
-              >
-                {/* Botão Central de Microfone */}
-                <div className="relative mb-3.5">
-                  {isRecording && (
-                    <>
-                      <span className="absolute -inset-3 rounded-full bg-destructive/25 animate-ping" />
-                      <span className="absolute -inset-6 rounded-full bg-destructive/6 animate-pulse" />
-                    </>
-                  )}
-
-                  {recordingState === "idle" ? (
-                    <button
-                      type="button"
-                      onClick={startRecording}
-                      className="relative z-10 flex h-18 w-18 items-center justify-center rounded-full text-white transition-all shadow-md hover:brightness-110 active:scale-95 cursor-pointer"
-                      style={{
-                        background:
-                          "linear-gradient(135deg, #FF7A59 0%, #D946EF 50%, #6366F1 100%)",
-                      }}
-                      title="Começar a registrar consulta"
-                    >
-                      <Mic size={28} />
-                    </button>
-                  ) : isRecording ? (
-                    <div className="relative z-10 flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={pauseRecording}
-                        className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-2 text-foreground/80 hover:bg-input transition-all shadow-sm active:scale-95 cursor-pointer"
-                        title="Pausar gravação"
-                      >
-                        <Pause size={18} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={stopRecording}
-                        className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive text-white hover:bg-destructive/90 transition-all shadow-md active:scale-95 cursor-pointer"
-                        title="Finalizar consulta"
-                      >
-                        <Square size={22} className="fill-white" />
-                      </button>
-                    </div>
-                  ) : recordingState === "paused" ? (
-                    <div className="relative z-10 flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={resumeRecording}
-                        className="flex h-16 w-16 items-center justify-center rounded-full bg-success text-white hover:bg-success/90 transition-all shadow-md active:scale-95 cursor-pointer"
-                        title="Retomar consulta"
-                      >
-                        <Play size={24} className="fill-white ml-0.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={stopRecording}
-                        className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive text-white hover:bg-destructive/90 transition-all shadow-sm active:scale-95 cursor-pointer"
-                        title="Finalizar consulta"
-                      >
-                        <Square size={16} className="fill-white" />
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={startRecording}
-                      className="relative z-10 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-white hover:bg-primary-hover transition-all shadow-md active:scale-95 cursor-pointer"
-                      title="Gravar novamente"
-                    >
-                      <Mic size={22} />
-                    </button>
-                  )}
+        {/* Corpo */}
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 sm:p-6">
+          {/* ETAPA 1 — CAPTURA */}
+          {step === "capture" && (
+            <>
+              {isComplement && (
+                <div className="flex items-start gap-2.5 rounded-xl border border-info/25 bg-info/8 px-3.5 py-2.5 text-sm text-foreground">
+                  <History size={16} className="mt-0.5 shrink-0 text-info" />
+                  <span>
+                    <strong>Complementando o prontuário aberto.</strong> O que já está escrito é
+                    mantido; a IA lê o registro atual e acrescenta só as informações novas.
+                  </span>
                 </div>
-
-                <div className="text-center space-y-1">
-                  <div className="text-[15px] font-semibold text-foreground">
-                    {recordingState === "idle" && "Começar a registrar consulta"}
-                    {isRecording && "Gravando consulta médica..."}
-                    {recordingState === "paused" &&
-                      `Consulta pausada (${formatSeconds(recordingSeconds)})`}
-                    {recordingState === "finished" &&
-                      `Consulta finalizada (${formatSeconds(recordingSeconds)})`}
-                  </div>
-                  <p className="text-sm text-muted-foreground max-w-md">
-                    {recordingState === "idle" &&
-                      "A conversa será transcrita e organizada nos campos do prontuário após o término."}
-                    {isRecording &&
-                      "Transcrição em andamento. Converse naturalmente com o paciente."}
-                    {recordingState === "paused" &&
-                      "Gravação em pausa. Clique para retomar ou finalizar."}
-                    {recordingState === "finished" &&
-                      "Áudio concluído. Clique abaixo para organizar nos campos do prontuário com a IA."}
-                  </p>
+              )}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 rounded-xl border border-border/60 bg-muted p-1">
+                  <button
+                    type="button"
+                    onClick={() => setMode("voice")}
+                    className={`flex cursor-pointer items-center gap-2 rounded-lg px-4 py-1.5 text-sm font-semibold transition-all ${
+                      mode === "voice"
+                        ? "bg-card text-primary shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Mic size={15} />
+                    Gravar consulta
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isRecording) pauseRecording();
+                      setMode("text");
+                    }}
+                    className={`flex cursor-pointer items-center gap-2 rounded-lg px-4 py-1.5 text-sm font-semibold transition-all ${
+                      mode === "text"
+                        ? "bg-card text-primary shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Edit3 size={15} />
+                    Digitar / colar
+                  </button>
                 </div>
 
                 {isRecording && (
-                  <div className="flex items-center gap-1 mt-3.5 h-7">
-                    {audioLevels.map((lvl, i) => (
-                      <span
-                        key={i}
-                        className="w-1.5 rounded-full bg-destructive transition-all duration-75"
-                        style={{ height: `${lvl}%` }}
-                      />
-                    ))}
-                  </div>
-                )}
-
-                {isRecording && (
-                  <div className="flex items-center gap-3 mt-4 pt-3 border-t border-destructive/15 w-full justify-center">
-                    <button
-                      type="button"
-                      onClick={pauseRecording}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-card border border-border text-sm font-semibold text-foreground/80 hover:bg-muted/60 transition-colors cursor-pointer"
-                    >
-                      <Pause size={13} />
-                      Pausar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={stopRecording}
-                      className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-destructive text-white text-sm font-semibold hover:bg-destructive/90 transition-colors shadow-sm cursor-pointer"
-                    >
-                      <Square size={13} className="fill-white" />
-                      Finalizar consulta
-                    </button>
+                  <div className="flex items-center gap-2 rounded-full border border-destructive/25 bg-destructive/10 px-3 py-1 text-sm font-semibold text-destructive">
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-destructive" />
+                    Gravando {formatSeconds(recordingSeconds)}
                   </div>
                 )}
               </div>
 
-              {/* TRANSCRIÇÃO */}
-              {(transcript || isRecording) && (
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-primary-hover flex items-center gap-1.5">
-                      <Volume2 size={13} className="text-primary" />
-                      {isRecording ? "Transcrição em tempo real" : "Transcrição da consulta"}
-                    </span>
-                    {transcript && (
+              {mode === "voice" && (
+                <div className="space-y-4">
+                  <div
+                    className={`flex flex-col items-center justify-center rounded-2xl border p-6 transition-all ${
+                      isRecording
+                        ? "border-destructive/25 bg-destructive/4"
+                        : recordingState === "paused"
+                          ? "border-warning/25 bg-warning/4"
+                          : "border-border/90 bg-muted/42"
+                    }`}
+                  >
+                    <div className="relative mb-3.5">
+                      {isRecording && (
+                        <span className="absolute -inset-3 animate-ping rounded-full bg-destructive/20" />
+                      )}
+                      {isRecording ? (
+                        <button
+                          type="button"
+                          onClick={pauseRecording}
+                          className="relative z-10 flex h-16 w-16 cursor-pointer items-center justify-center rounded-full bg-destructive text-white shadow-md transition-all hover:bg-destructive/90 active:scale-95"
+                          title="Pausar"
+                        >
+                          <Pause size={24} />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={startRecording}
+                          className="relative z-10 flex h-16 w-16 cursor-pointer items-center justify-center rounded-full text-white shadow-md transition-all hover:brightness-110 active:scale-95"
+                          style={{
+                            background:
+                              "linear-gradient(135deg, #FF7A59 0%, #D946EF 50%, #6366F1 100%)",
+                          }}
+                          title={recordingState === "idle" ? "Começar a gravar" : "Continuar gravando"}
+                        >
+                          {recordingState === "paused" ? (
+                            <Play size={24} className="ml-0.5 fill-white" />
+                          ) : (
+                            <Mic size={26} />
+                          )}
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="space-y-1 text-center">
+                      <div className="text-[15px] font-semibold text-foreground">
+                        {recordingState === "idle" && "Começar a gravar a consulta"}
+                        {isRecording && "Ouvindo a consulta..."}
+                        {recordingState === "paused" && `Pausado (${formatSeconds(recordingSeconds)})`}
+                        {recordingState === "finished" && `Gravação concluída (${formatSeconds(recordingSeconds)})`}
+                      </div>
+                      <p className="max-w-md text-sm text-muted-foreground">
+                        {recordingState === "idle" &&
+                          "Converse normalmente com o paciente. Ao finalizar, a IA organiza a transcrição separando as falas."}
+                        {isRecording && "Toque para pausar ou finalize quando terminar."}
+                        {recordingState === "paused" && "Toque para continuar ou finalize a consulta."}
+                        {recordingState === "finished" &&
+                          "Você pode gravar mais um trecho ou seguir para a transcrição."}
+                      </p>
+                    </div>
+
+                    {isRecording && (
+                      <div className="mt-3.5 flex h-7 items-center gap-1" aria-hidden="true">
+                        {audioLevels.map((lvl, i) => (
+                          <span
+                            key={i}
+                            className="w-1.5 rounded-full bg-destructive transition-all duration-75"
+                            style={{ height: `${lvl}%` }}
+                          />
+                        ))}
+                      </div>
+                    )}
+
+                    {(isRecording || recordingState === "paused") && (
                       <button
                         type="button"
-                        onClick={() => {
-                          setTranscript("");
-                          finalTranscriptRef.current = "";
+                        onClick={finishConsultation}
+                        className="mt-4 inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background shadow-sm transition-opacity hover:opacity-90"
+                      >
+                        <Square size={13} className="fill-current" />
+                        Finalizar e transcrever
+                      </button>
+                    )}
+                  </div>
+
+                  {(transcript || isRecording) && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                          {isRecording ? "Texto captado (bruto)" : "Texto captado — pode editar"}
+                        </span>
+                        {transcript && !isRecording && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              updateTranscript("");
+                              finalTranscriptRef.current = "";
+                              setRecordingSeconds(0);
+                              setRecordingState("idle");
+                            }}
+                            className="flex cursor-pointer items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-destructive"
+                          >
+                            <Trash2 size={11} /> Descartar
+                          </button>
+                        )}
+                      </div>
+                      <textarea
+                        value={transcript}
+                        readOnly={isRecording}
+                        onChange={(e) => {
+                          updateTranscript(e.target.value);
+                          finalTranscriptRef.current = e.target.value;
                         }}
-                        className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1 transition-colors cursor-pointer"
+                        placeholder="As falas aparecem aqui em tempo real."
+                        className={`${textareaBase} max-h-48 border-border bg-card text-muted-foreground`}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {mode === "text" && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="ai-manual-text" className="text-sm font-semibold text-foreground">
+                      Anotações ou relato da consulta
+                    </label>
+                    {manualText && (
+                      <button
+                        type="button"
+                        onClick={() => setManualText("")}
+                        className="flex cursor-pointer items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-destructive"
                       >
-                        <Trash2 size={11} /> Limpar transcrição
+                        <Trash2 size={12} /> Limpar
                       </button>
                     )}
                   </div>
                   <textarea
-                    rows={3}
-                    value={transcript}
-                    onChange={(e) => {
-                      setTranscript(e.target.value);
-                      finalTranscriptRef.current = e.target.value;
-                    }}
-                    placeholder={
-                      isRecording
-                        ? "Ouvindo diálogo... As falas aparecerão aqui em tempo real."
-                        : "A transcrição da consulta aparecerá aqui. Você pode editar livremente."
-                    }
-                    className="w-full rounded-xl border border-border p-3.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none transition-all resize-y leading-relaxed bg-card shadow-sm font-normal"
+                    id="ai-manual-text"
+                    rows={7}
+                    value={manualText}
+                    onChange={(e) => setManualText(e.target.value)}
+                    placeholder="Ex.: Paciente relata dor lombar há 2 semanas, pior ao esforço. Mãe com osteoporose. Usa losartana 50 mg pela manhã. Alergia a dipirona. PA 13/8. Solicito RX de coluna lombar, retorno em 15 dias..."
+                    className={`${textareaBase} min-h-40 border-border bg-card text-foreground`}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Anotações já escritas podem ir direto para "Organizar ideias".
+                  </p>
                 </div>
               )}
-            </div>
+            </>
           )}
 
-          {/* MODO 2: DIGITAÇÃO / TEXTO MANUAL */}
-          {mode === "text" && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-semibold text-foreground">
-                  Anotações ou relato clínico da consulta:
-                </label>
-                {manualText && (
+          {/* ETAPA 2 — TRANSCRIÇÃO ORGANIZADA */}
+          {step === "transcript" && turns && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <MessageSquareText size={16} className="text-primary" />
+                    Transcrição organizada
+                  </h3>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Pontuação e termos corrigidos, sem resumo. Toque no nome para trocar quem falou.
+                  </p>
+                </div>
+                <div className="flex items-center gap-1">
                   <button
                     type="button"
-                    onClick={() => setManualText("")}
-                    className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1 transition-colors cursor-pointer"
+                    onClick={() => setShowRaw((v) => !v)}
+                    className="cursor-pointer rounded-lg px-2.5 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                   >
-                    <Trash2 size={12} /> Limpar
+                    {showRaw ? "Ocultar texto bruto" : "Ver texto bruto"}
                   </button>
-                )}
+                  <button
+                    type="button"
+                    onClick={() => copyText("transcript", turnsToText(turns))}
+                    className="flex cursor-pointer items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    {copiedId === "transcript" ? <Check size={12} className="text-success" /> : <Copy size={12} />}
+                    Copiar
+                  </button>
+                </div>
               </div>
-              <textarea
-                rows={5}
-                value={manualText}
-                onChange={(e) => setManualText(e.target.value)}
-                placeholder="Ex.: Paciente relata dor lombar há 2 semanas com piora ao esforço. Mãe com histórico de osteoporose. Faz uso de Losartana 50mg pela manhã. Alergia a dipirona..."
-                className="w-full rounded-xl border border-border p-3.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none transition-all resize-y leading-relaxed shadow-sm"
-              />
+
+              {showRaw && (
+                <div className="whitespace-pre-wrap rounded-xl border border-dashed border-border bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">
+                  {rawInput() || "—"}
+                </div>
+              )}
+
+              <ul className="space-y-2.5">
+                {turns.map((turn, i) => (
+                  <li key={i} className="group flex gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => cycleSpeaker(i)}
+                      title="Trocar falante"
+                      className={`mt-1 h-fit w-28 shrink-0 cursor-pointer truncate rounded-full border px-2 py-0.5 text-center text-xs font-semibold transition-opacity hover:opacity-80 ${SPEAKER_STYLES[turn.speaker]}`}
+                    >
+                      {SPEAKER_LABELS[turn.speaker]}
+                    </button>
+                    <textarea
+                      value={turn.text}
+                      onChange={(e) => updateTurn(i, { text: e.target.value })}
+                      aria-label={`Fala de ${SPEAKER_LABELS[turn.speaker]}`}
+                      className={`${textareaBase} border-transparent bg-transparent text-foreground hover:border-border`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeTurn(i)}
+                      title="Remover fala"
+                      className="mt-1.5 h-fit cursor-pointer rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus:opacity-100 group-hover:opacity-100"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+
+              <button
+                type="button"
+                onClick={() => setTurns((prev) => [...(prev ?? []), { speaker: "medico", text: "" }])}
+                className="cursor-pointer text-xs font-semibold text-primary hover:underline"
+              >
+                + Adicionar fala
+              </button>
             </div>
           )}
 
-          {/* BOTÃO PRINCIPAL: ORGANIZAR CONSULTA COM IA */}
-          <div className="flex justify-end pt-1">
-            <button
-              type="button"
-              disabled={isGenerating || (!transcript.trim() && !manualText.trim())}
-              onClick={handleGenerate}
-              className="relative inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-full bg-primary px-6 text-sm font-semibold text-primary-foreground shadow-xs transition-colors hover:bg-primary-hover active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40"
-            >
-              {isGenerating ? (
-                <>
-                  <RefreshCw size={16} className="animate-spin" />
-                  Mapeando campos do prontuário com IA...
-                </>
-              ) : (
-                <>
-                  <Sparkles size={17} />
-                  Organizar consulta com IA
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* SEÇÃO: RESULTADO CLÍNICO MAPEADO NOS CAMPOS DO PRONTUÁRIO */}
-          <AnimatePresence>
-            {structuredResult && (
+          {/* ETAPA 3 — PRONTUÁRIO ESTRUTURADO */}
+          {step === "record" && result && (
+            <AnimatePresence>
               <motion.div
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 10 }}
-                className="space-y-4 pt-4 border-t border-border"
+                className="space-y-5"
               >
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div>
-                    <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center gap-2">
-                      <ClipboardCheck size={16} className="text-primary" />
-                      Prontuário Estruturado pela IA
-                    </h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Revise as informações mapeadas para cada campo do prontuário antes de inserir.
+                {result.resumo && (
+                  <div className="rounded-xl border border-primary/20 bg-primary-soft/60 px-4 py-3">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-primary">
+                      Resumo da consulta
+                    </div>
+                    <p className="mt-1 text-sm leading-relaxed text-foreground">{result.resumo}</p>
+                  </div>
+                )}
+
+                {result.pendencias.length > 0 && (
+                  <div className="rounded-xl border border-warning/30 bg-warning/6 px-4 py-3">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-warning">
+                      <Lightbulb size={13} />
+                      Pontos a confirmar
+                    </div>
+                    <ul className="mt-1.5 space-y-1 text-sm text-foreground">
+                      {result.pendencias.map((p, i) => (
+                        <li key={i} className="flex gap-2">
+                          <span className="text-warning">•</span>
+                          {p}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="mt-1.5 text-xs text-muted-foreground">
+                      Lembretes para você — não são inseridos no prontuário.
                     </p>
                   </div>
+                )}
 
-                  {structuredResult.condicoesDetectadas.length > 0 && (
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary-soft border border-primary/25 text-primary-hover text-xs font-semibold">
-                      <span>Condições identificadas:</span>
-                      <span className="underline">
-                        {structuredResult.condicoesDetectadas.join(", ")}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Grid / Stack de Cards Clínicos Mapeados */}
-                <div className="space-y-3">
-                  {structuredResult.sections.map((sec) => {
-                    const isSelected = !!selectedSections[sec.id];
-                    const content = editedSections[sec.id] ?? sec.content;
-                    const isUnclear = sec.isUnclear || content.includes("(Revisar");
-                    const isNotInformed =
-                      content === "Não informado na consulta." || !content.trim();
-
-                    return (
-                      <div
-                        key={sec.id}
-                        className={`rounded-xl border transition-all ${
-                          isSelected
-                            ? "bg-card border-primary/23 shadow-sm"
-                            : "bg-muted/36 border-border/70 opacity-75"
-                        }`}
+                {conditions.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs font-semibold text-muted-foreground">
+                      Condições identificadas:
+                    </span>
+                    {conditions.map((c) => (
+                      <span
+                        key={c}
+                        className="inline-flex items-center gap-1 rounded-full border border-primary/25 bg-primary-soft px-2.5 py-0.5 text-xs font-semibold text-primary"
                       >
-                        {/* Header do Card com Indicação do Campo do Prontuário */}
-                        <div className="flex items-center justify-between px-4 py-2.5 bg-muted/42 border-b border-border-soft rounded-t-xl flex-wrap gap-2">
-                          <div className="flex items-center gap-2.5">
-                            <button
-                              type="button"
-                              onClick={() => toggleSectionSelection(sec.id)}
-                              className="text-primary hover:text-primary-hover transition-colors cursor-pointer"
-                              title={isSelected ? "Desmarcar esta seção" : "Incluir esta seção"}
-                            >
-                              {isSelected ? (
-                                <CheckSquare size={16} className="text-primary" />
-                              ) : (
-                                <SquareBox size={16} className="text-muted-foreground" />
-                              )}
-                            </button>
+                        {c}
+                        <button
+                          type="button"
+                          onClick={() => setConditions((prev) => prev.filter((x) => x !== c))}
+                          aria-label={`Remover ${c}`}
+                          className="cursor-pointer hover:text-destructive"
+                        >
+                          <X size={11} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
 
-                            <div className="flex items-center gap-1.5">
-                              {SECTION_ICONS[sec.id] || <FileText size={15} />}
-                              <span className="text-sm font-semibold text-foreground">
-                                {sec.title}
-                              </span>
-                            </div>
-
-                            <span className="text-xs font-medium text-muted-foreground bg-card px-2 py-0.5 rounded border border-border">
-                              {sec.fieldTarget}
-                            </span>
-
-                            {isUnclear && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-warning/10 text-warning border border-warning/25">
-                                <AlertCircle size={11} />
-                                Revisar informação
-                              </span>
-                            )}
-
-                            {isNotInformed && (
-                              <span className="text-xs text-muted-foreground italic font-normal">
-                                (Não informado na consulta)
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleCopySection(sec.id, content)}
-                              className="text-muted-foreground hover:text-foreground/80 p-1 rounded-md transition-colors cursor-pointer"
-                              title="Copiar seção"
-                            >
-                              {copiedSectionId === sec.id ? (
-                                <Check size={13} className="text-success" />
-                              ) : (
-                                <Copy size={13} />
-                              )}
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Corpo Editável do Campo */}
-                        <div className="p-3">
-                          <textarea
-                            rows={isNotInformed ? 1 : 2}
-                            value={content}
-                            onChange={(e) => handleSectionTextChange(sec.id, e.target.value)}
-                            placeholder="Não informado na consulta."
-                            className={`w-full rounded-lg p-2.5 text-sm leading-relaxed transition-all resize-y outline-none ${
-                              isNotInformed
-                                ? "text-muted-foreground bg-muted/30 border border-dashed border-border"
-                                : "text-foreground bg-card border border-border/80 focus:border-primary focus:ring-1 focus:ring-primary/20 font-medium"
+                {CLINICAL_GROUPS.map((group) => {
+                  const groupSections = filledSections.filter((s) => s.group === group.id);
+                  if (groupSections.length === 0) return null;
+                  return (
+                    <section key={group.id} className="space-y-2.5">
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        {group.title}
+                      </h3>
+                      {groupSections.map((sec) => {
+                        const isSelected = !!selected[sec.key];
+                        const content = edited[sec.key] ?? "";
+                        const needsReview = content.includes("(Revisar");
+                        return (
+                          <div
+                            key={sec.key}
+                            className={`rounded-xl border transition-all ${
+                              isSelected
+                                ? "border-primary/25 bg-card shadow-xs"
+                                : "border-border/70 bg-muted/36 opacity-70"
                             }`}
-                          />
-                        </div>
+                          >
+                            <div className="flex items-center justify-between gap-2 px-3.5 pt-2.5">
+                              <button
+                                type="button"
+                                onClick={() => setSelected((p) => ({ ...p, [sec.key]: !p[sec.key] }))}
+                                className="flex min-w-0 cursor-pointer items-center gap-2 text-left"
+                                title={isSelected ? "Não inserir este campo" : "Inserir este campo"}
+                              >
+                                {isSelected ? (
+                                  <CheckSquare size={16} className="shrink-0 text-primary" />
+                                ) : (
+                                  <SquareBox size={16} className="shrink-0 text-muted-foreground" />
+                                )}
+                                {FIELD_ICONS[sec.key]}
+                                <span className="truncate text-sm font-semibold text-foreground">
+                                  {sec.title}
+                                </span>
+                              </button>
+                              <div className="flex shrink-0 items-center gap-1.5">
+                                {needsReview && (
+                                  <span className="inline-flex items-center gap-1 rounded-md border border-warning/25 bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
+                                    <AlertCircle size={11} />
+                                    Revisar
+                                  </span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => copyText(sec.key, content)}
+                                  className="cursor-pointer rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground/80"
+                                  title="Copiar campo"
+                                >
+                                  {copiedId === sec.key ? (
+                                    <Check size={13} className="text-success" />
+                                  ) : (
+                                    <Copy size={13} />
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                            <div className="p-2.5 pt-1.5">
+                              <textarea
+                                value={content}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  setEdited((p) => ({ ...p, [sec.key]: value }));
+                                  if (value.trim()) setSelected((p) => ({ ...p, [sec.key]: true }));
+                                }}
+                                placeholder={sec.description}
+                                aria-label={sec.title}
+                                className={`${textareaBase} border-border/80 bg-card text-foreground`}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </section>
+                  );
+                })}
+
+                {emptySections.length > 0 && (
+                  <div className="rounded-xl border border-dashed border-border">
+                    <button
+                      type="button"
+                      onClick={() => setShowEmptyFields((v) => !v)}
+                      className="flex w-full cursor-pointer items-center justify-between px-3.5 py-2.5 text-left text-sm text-muted-foreground hover:text-foreground"
+                    >
+                      <span>
+                        Não mencionado na consulta ({emptySections.length}):{" "}
+                        <span className="text-xs">{emptySections.map((s) => s.title).join(", ")}</span>
+                      </span>
+                      <ChevronDown
+                        size={15}
+                        className={`shrink-0 transition-transform ${showEmptyFields ? "rotate-180" : ""}`}
+                      />
+                    </button>
+                    {showEmptyFields && (
+                      <div className="space-y-2.5 border-t border-dashed border-border p-3">
+                        {emptySections.map((sec) => (
+                          <div key={sec.key}>
+                            <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                              {FIELD_ICONS[sec.key]}
+                              {sec.title}
+                            </label>
+                            <textarea
+                              value={edited[sec.key] ?? ""}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setEdited((p) => ({ ...p, [sec.key]: value }));
+                                setSelected((p) => ({ ...p, [sec.key]: Boolean(value.trim()) }));
+                              }}
+                              placeholder={`${sec.description} — preencha se quiser incluir`}
+                              className={`${textareaBase} border-border/80 bg-card text-foreground`}
+                            />
+                          </div>
+                        ))}
                       </div>
-                    );
-                  })}
-                </div>
+                    )}
+                  </div>
+                )}
               </motion.div>
-            )}
-          </AnimatePresence>
+            </AnimatePresence>
+          )}
         </div>
 
-        {/* Modal Footer */}
-        <div className="px-6 py-3.5 border-t border-border-soft bg-muted/60 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-sm font-medium text-muted-foreground hover:text-foreground px-3 py-2 rounded-lg transition-colors cursor-pointer"
-          >
-            Cancelar
-          </button>
-
-          <div className="flex items-center gap-2.5">
-            {structuredResult && (
-              <button
-                type="button"
-                onClick={handleGenerate}
-                disabled={isGenerating}
-                className="inline-flex items-center gap-1.5 h-10 px-4 rounded-full border border-input bg-card text-sm font-semibold text-foreground/80 hover:bg-muted transition-colors cursor-pointer"
-              >
-                <RefreshCw size={14} className={isGenerating ? "animate-spin" : ""} />
-                Regenerar
-              </button>
-            )}
-
+        {/* Rodapé */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border-soft bg-muted/60 px-4 py-3 sm:px-6">
+          {step === "capture" ? (
             <button
               type="button"
-              disabled={!structuredResult}
-              onClick={handleConfirmInsert}
-              className="inline-flex items-center gap-2 h-10 px-5 rounded-full bg-primary text-sm font-semibold text-white shadow-sm hover:bg-primary-hover transition-all active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+              onClick={onClose}
+              className="cursor-pointer rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
             >
-              <Check size={16} />
-              Inserir no prontuário
+              Cancelar
             </button>
+          ) : (
+            <button
+              type="button"
+              disabled={isBusy}
+              onClick={() => setStep(step === "record" && turns ? "transcript" : "capture")}
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
+            >
+              <ArrowLeft size={14} />
+              {step === "record" && turns ? "Transcrição" : "Voltar à captura"}
+            </button>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            {step === "capture" && (
+              <>
+                {mode === "text" && (
+                  <SecondaryButton disabled={isBusy || !hasInput} onClick={organizeIdeas} loading={isStructuring}>
+                    <Sparkles size={14} />
+                    Organizar ideias direto
+                  </SecondaryButton>
+                )}
+                <PrimaryButton disabled={isBusy || !hasInput} onClick={() => runTranscription()}>
+                  {isTranscribing ? (
+                    <>
+                      <RefreshCw size={15} className="animate-spin" />
+                      Organizando transcrição...
+                    </>
+                  ) : (
+                    <>
+                      <MessageSquareText size={15} />
+                      Transcrever organizado
+                      <ArrowRight size={14} />
+                    </>
+                  )}
+                </PrimaryButton>
+              </>
+            )}
+
+            {step === "transcript" && (
+              <>
+                <SecondaryButton disabled={isBusy} onClick={() => runTranscription()} loading={isTranscribing}>
+                  <RefreshCw size={14} />
+                  Refazer
+                </SecondaryButton>
+                <PrimaryButton disabled={isBusy || !turns?.some((t) => t.text.trim())} onClick={organizeIdeas}>
+                  {isStructuring ? (
+                    <>
+                      <RefreshCw size={15} className="animate-spin" />
+                      Organizando ideias...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={15} />
+                      Organizar ideias
+                      <ArrowRight size={14} />
+                    </>
+                  )}
+                </PrimaryButton>
+              </>
+            )}
+
+            {step === "record" && (
+              <>
+                <SecondaryButton
+                  disabled={isBusy || selectedCount === 0}
+                  onClick={() => {
+                    const final = buildFinalResult();
+                    if (final) void copyText("all", formatConsultationRecord(final));
+                  }}
+                >
+                  {copiedId === "all" ? <Check size={14} className="text-success" /> : <Copy size={14} />}
+                  Copiar tudo
+                </SecondaryButton>
+                <SecondaryButton disabled={isBusy} onClick={organizeIdeas} loading={isStructuring}>
+                  <RefreshCw size={14} />
+                  Reorganizar
+                </SecondaryButton>
+                <PrimaryButton disabled={isBusy || selectedCount === 0} onClick={handleConfirmInsert}>
+                  <Check size={16} />
+                  {isComplement ? "Acrescentar ao prontuário" : "Inserir no prontuário"} ({selectedCount})
+                </PrimaryButton>
+              </>
+            )}
           </div>
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PrimaryButton({
+  children,
+  disabled,
+  onClick,
+}: {
+  children: React.ReactNode;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-xs transition-colors hover:bg-primary-hover active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40"
+    >
+      {children}
+    </button>
+  );
+}
+
+function SecondaryButton({
+  children,
+  disabled,
+  loading,
+  onClick,
+}: {
+  children: React.ReactNode;
+  disabled?: boolean;
+  loading?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-full border border-input bg-card px-4 text-sm font-semibold text-foreground/80 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+    >
+      {loading ? <RefreshCw size={14} className="animate-spin" /> : null}
+      {children}
+    </button>
   );
 }
 

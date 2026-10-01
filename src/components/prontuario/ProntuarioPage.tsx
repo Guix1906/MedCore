@@ -8,7 +8,11 @@ import {
   type ClinicalHistoryItem,
 } from "@/hooks/usePatientClinicalHistory";
 import { supabase } from "@/integrations/supabase/client";
-import type { StructuredConsultationResult } from "@/lib/gemini";
+import {
+  appendToRecord,
+  formatConsultationRecord,
+  type StructuredConsultationResult,
+} from "@/lib/gemini";
 import { DUR, EASE_OUT, fadeUp, staggerContainer } from "@/lib/motion";
 import { patientsService } from "@/services/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -262,35 +266,9 @@ export default function ProntuarioPage() {
   };
 
   const handleAiInsert = (content: string | StructuredConsultationResult, sectionKey?: string) => {
-    if (typeof content === "string") {
-      queixaRef.current?.setText(content);
-    } else {
-      const parts: string[] = [];
-      if (content.queixaPrincipal) {
-        parts.push(`Queixa Principal:\n${content.queixaPrincipal}`);
-      }
-      if (content.historicoFamiliar) {
-        parts.push(`Histórico Familiar:\n${content.historicoFamiliar}`);
-      }
-      if (content.tratamentosAnteriores) {
-        parts.push(`Tratamentos Anteriores:\n${content.tratamentosAnteriores}`);
-      }
-      if (content.alergias) {
-        parts.push(`Alergias:\n${content.alergias}`);
-      }
-      if (content.medicacoesEmUso) {
-        parts.push(`Medicações em uso:\n${content.medicacoesEmUso}`);
-      }
-      if (content.historicoPessoal) {
-        parts.push(`Histórico Pessoal:\n${content.historicoPessoal}`);
-      }
-      if (content.condutaPlano) {
-        parts.push(`Conduta e Orientações:\n${content.condutaPlano}`);
-      }
-
-      const fullText = parts.length > 0 ? parts.join("\n\n") : content.queixaPrincipal || "";
-      queixaRef.current?.setText(fullText);
-    }
+    const text = typeof content === "string" ? content : formatConsultationRecord(content);
+    const existing = queixaRef.current?.getText() ?? "";
+    queixaRef.current?.setText(appendToRecord(existing, text));
     markDirty();
   };
 
@@ -1184,6 +1162,8 @@ export default function ProntuarioPage() {
           isOpen={aiModalOpen}
           onClose={() => setAiModalOpen(false)}
           section={aiSection}
+          patientName={patient.name}
+          existingRecord={aiModalOpen ? queixaRef.current?.getText() : undefined}
           onInsert={handleAiInsert}
         />
 

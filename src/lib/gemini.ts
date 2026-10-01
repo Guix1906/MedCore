@@ -1,18 +1,14 @@
 /**
- * Serviço de Inteligência Artificial Google Gemini para Prontuário Médico
- * Mapeado exatamente com os campos de anotação e seções da tela de Prontuário:
- * - Queixa Principal
- * - Histórico Familiar
- * - Tratamentos Anteriores
- * - Alergias
- * - Histórico Médico Pessoal (Condições + Especifique)
- * - Medicações em Uso Atualmente
- * - Conduta e Plano da Consulta
+ * Copiloto de IA (Google Gemini) para o Prontuário Médico — camada do cliente.
  *
- * REGRA ABSOLUTA: Fidelidade factual estrita, nunca inventa informações que não foram ditas.
+ * Fluxo em duas etapas:
+ *  1. organizeTranscript: transcrição bruta → falas limpas, com médico/paciente identificados.
+ *  2. generateConsultationRecord: transcrição → campos do prontuário + pendências.
+ *
+ * REGRA ABSOLUTA: fidelidade factual estrita, nunca inventa informações que não foram ditas.
  */
 
-import { structureConsultation } from "@/services/ai.service";
+import { structureConsultation, transcribeConsultation } from "@/services/ai.service";
 
 export const PRONTUARIO_CONDITIONS_LIST = [
   "Hipertensão",
@@ -24,268 +20,178 @@ export const PRONTUARIO_CONDITIONS_LIST = [
   "Outras condições crônicas",
 ];
 
-export interface ClinicalSectionData {
-  id: string;
-  title: string;
-  fieldTarget: string; // Nome do campo correspondente no Prontuário
-  description: string;
-  content: string;
-  isUnclear?: boolean;
-  selected?: boolean;
+/* ------------------------------------------------------------------ */
+/* Etapa 1 — Transcrição organizada                                     */
+/* ------------------------------------------------------------------ */
+
+export type Speaker = "medico" | "paciente" | "acompanhante" | "indefinido";
+
+export interface TranscriptTurn {
+  speaker: Speaker;
+  text: string;
 }
 
-export interface StructuredConsultationResult {
-  queixaPrincipal: string;
-  historicoFamiliar: string;
-  tratamentosAnteriores: string;
-  alergias: string;
-  historicoPessoal: string;
-  condicoesDetectadas: string[];
-  medicacoesEmUso: string;
-  condutaPlano: string;
-  sections: ClinicalSectionData[];
-}
+export const SPEAKER_LABELS: Record<Speaker, string> = {
+  medico: "Médico",
+  paciente: "Paciente",
+  acompanhante: "Acompanhante",
+  indefinido: "Não identificado",
+};
 
-export interface GenerateConsultationOptions {
+export const SPEAKER_ORDER: Speaker[] = ["medico", "paciente", "acompanhante", "indefinido"];
+
+export async function organizeTranscript({
+  rawTranscript,
+  patientName,
+}: {
   rawTranscript: string;
   patientName?: string;
+}): Promise<TranscriptTurn[]> {
+  const cleaned = rawTranscript.trim();
+  if (!cleaned) return [];
+  const data = await transcribeConsultation({ data: { rawTranscript: cleaned, patientName } });
+  return data.falas
+    .map((f) => ({
+      speaker: (SPEAKER_ORDER as string[]).includes(f.falante) ? (f.falante as Speaker) : "indefinido",
+      text: f.texto.trim(),
+    }))
+    .filter((t) => t.text.length > 0);
 }
 
-/**
- * Organiza a transcrição da consulta nos campos do prontuário pelo copiloto server-side.
- * Falhas são propagadas: o profissional é avisado e nenhum texto clínico é gerado sem a IA.
- */
+/** Converte as falas em texto corrido "Médico: ...", usado como entrada da etapa 2. */
+export function turnsToText(turns: TranscriptTurn[]): string {
+  return turns
+    .filter((t) => t.text.trim())
+    .map((t) => `${SPEAKER_LABELS[t.speaker]}: ${t.text.trim()}`)
+    .join("\n");
+}
+
+/* ------------------------------------------------------------------ */
+/* Etapa 2 — Organização das ideias nos campos do prontuário           */
+/* ------------------------------------------------------------------ */
+
+export type ClinicalFieldKey =
+  | "queixaPrincipal"
+  | "historiaDoencaAtual"
+  | "historicoPessoal"
+  | "historicoFamiliar"
+  | "medicacoesEmUso"
+  | "alergias"
+  | "tratamentosAnteriores"
+  | "habitosDeVida"
+  | "exameFisico"
+  | "hipotesesDiagnosticas"
+  | "examesSolicitados"
+  | "condutaPlano"
+  | "retorno";
+
+export type ClinicalGroup = "anamnese" | "antecedentes" | "exame" | "plano";
+
+export interface ClinicalSectionDef {
+  key: ClinicalFieldKey;
+  title: string;
+  /** Rótulo usado no texto inserido no prontuário. */
+  recordLabel: string;
+  group: ClinicalGroup;
+  description: string;
+}
+
+export const CLINICAL_GROUPS: { id: ClinicalGroup; title: string }[] = [
+  { id: "anamnese", title: "Anamnese" },
+  { id: "antecedentes", title: "Antecedentes" },
+  { id: "exame", title: "Exame e avaliação" },
+  { id: "plano", title: "Plano" },
+];
+
+export const CLINICAL_SECTIONS: ClinicalSectionDef[] = [
+  { key: "queixaPrincipal", title: "Queixa principal", recordLabel: "QUEIXA PRINCIPAL", group: "anamnese", description: "Motivo da consulta e duração" },
+  { key: "historiaDoencaAtual", title: "História da doença atual", recordLabel: "HISTÓRIA DA DOENÇA ATUAL", group: "anamnese", description: "Início, evolução, fatores de melhora/piora e sintomas associados" },
+  { key: "historicoPessoal", title: "Histórico médico pessoal", recordLabel: "HISTÓRICO PESSOAL", group: "antecedentes", description: "Doenças prévias e condições crônicas" },
+  { key: "historicoFamiliar", title: "Histórico familiar", recordLabel: "HISTÓRICO FAMILIAR", group: "antecedentes", description: "Doenças em familiares e parentesco" },
+  { key: "medicacoesEmUso", title: "Medicações em uso", recordLabel: "MEDICAÇÕES EM USO", group: "antecedentes", description: "Nome, dose e posologia" },
+  { key: "alergias", title: "Alergias", recordLabel: "ALERGIAS", group: "antecedentes", description: "Medicamentosas, alimentares ou ambientais" },
+  { key: "tratamentosAnteriores", title: "Tratamentos anteriores", recordLabel: "TRATAMENTOS ANTERIORES", group: "antecedentes", description: "Cirurgias, internações e procedimentos" },
+  { key: "habitosDeVida", title: "Hábitos de vida", recordLabel: "HÁBITOS DE VIDA", group: "antecedentes", description: "Tabagismo, etilismo, atividade física, sono" },
+  { key: "exameFisico", title: "Exame físico", recordLabel: "EXAME FÍSICO", group: "exame", description: "Sinais vitais e achados do exame" },
+  { key: "hipotesesDiagnosticas", title: "Hipóteses diagnósticas", recordLabel: "HIPÓTESES DIAGNÓSTICAS", group: "exame", description: "Somente o que o médico verbalizou" },
+  { key: "examesSolicitados", title: "Exames solicitados", recordLabel: "EXAMES SOLICITADOS", group: "plano", description: "Exames laboratoriais e de imagem" },
+  { key: "condutaPlano", title: "Conduta e orientações", recordLabel: "CONDUTA / ORIENTAÇÕES", group: "plano", description: "Prescrições e orientações ao paciente" },
+  { key: "retorno", title: "Retorno", recordLabel: "RETORNO", group: "plano", description: "Prazo e condição de retorno" },
+];
+
+export type StructuredConsultationResult = Record<ClinicalFieldKey, string> & {
+  resumo: string;
+  condicoesDetectadas: string[];
+  pendencias: string[];
+};
+
 export async function generateConsultationRecord({
   rawTranscript,
   patientName,
-}: GenerateConsultationOptions): Promise<StructuredConsultationResult> {
+  existingRecord,
+}: {
+  rawTranscript: string;
+  patientName?: string;
+  /** Texto já registrado; quando presente, a IA devolve só o que é novo. */
+  existingRecord?: string;
+}): Promise<StructuredConsultationResult> {
   const cleanedInput = rawTranscript.trim();
-  if (!cleanedInput) return buildEmptyConsultationResult();
+  if (!cleanedInput) return emptyConsultationResult();
 
-  const data = await structureConsultation({ data: { rawTranscript: cleanedInput, patientName } });
-  const parsed = parseConsultationObj(data);
-  if (!parsed) throw new Error("A IA devolveu uma resposta em formato inesperado.");
-  return parsed;
+  const data = await structureConsultation({
+    data: {
+      rawTranscript: cleanedInput,
+      patientName,
+      existingRecord: existingRecord?.trim().slice(0, 20_000) || undefined,
+    },
+  });
+  const result = emptyConsultationResult();
+  for (const sec of CLINICAL_SECTIONS) {
+    result[sec.key] = sanitizeClinicalField(data[sec.key]);
+  }
+  result.resumo = sanitizeClinicalField(data.resumo);
+  result.condicoesDetectadas = (data.condicoesDetectadas ?? []).filter((c) =>
+    PRONTUARIO_CONDITIONS_LIST.includes(c),
+  );
+  result.pendencias = (data.pendencias ?? []).map((p) => p.trim()).filter(Boolean);
+  return result;
 }
 
-function parseConsultationObj(rawInput: any): StructuredConsultationResult | null {
-  try {
-    let obj = rawInput;
-    if (typeof rawInput === "string") {
-      let cleanJson = rawInput.trim();
-      if (cleanJson.startsWith("```json")) {
-        cleanJson = cleanJson
-          .replace(/^```json/, "")
-          .replace(/```$/, "")
-          .trim();
-      } else if (cleanJson.startsWith("```")) {
-        cleanJson = cleanJson.replace(/^```/, "").replace(/```$/, "").trim();
-      }
-      obj = JSON.parse(cleanJson);
+export function emptyConsultationResult(): StructuredConsultationResult {
+  const result = { resumo: "", condicoesDetectadas: [], pendencias: [] } as unknown as StructuredConsultationResult;
+  for (const sec of CLINICAL_SECTIONS) result[sec.key] = "";
+  return result;
+}
+
+/** Texto do prontuário a partir do resultado (só campos preenchidos, na ordem clínica). */
+export function formatConsultationRecord(result: StructuredConsultationResult): string {
+  const parts: string[] = [];
+  for (const sec of CLINICAL_SECTIONS) {
+    const value = result[sec.key]?.trim();
+    if (value) parts.push(`${sec.recordLabel}:\n${value}`);
+    if (sec.key === "historicoPessoal" && result.condicoesDetectadas.length > 0) {
+      parts.push(`CONDIÇÕES IDENTIFICADAS:\n${result.condicoesDetectadas.join(", ")}`);
     }
-
-    if (!obj || typeof obj !== "object") return null;
-
-    const queixaPrincipal = sanitizeClinicalField(obj.queixaPrincipal);
-    const historicoFamiliar = sanitizeClinicalField(obj.historicoFamiliar);
-    const tratamentosAnteriores = sanitizeClinicalField(obj.tratamentosAnteriores);
-    const alergias = sanitizeClinicalField(obj.alergias);
-    const historicoPessoal = sanitizeClinicalField(obj.historicoPessoal);
-    const medicacoesEmUso = sanitizeClinicalField(obj.medicacoesEmUso);
-    const condutaPlano = sanitizeClinicalField(obj.condutaPlano);
-
-    const condicoesDetectadas: string[] = Array.isArray(obj.condicoesDetectadas)
-      ? obj.condicoesDetectadas.filter((c: string) => PRONTUARIO_CONDITIONS_LIST.includes(c))
-      : [];
-
-    const sections: ClinicalSectionData[] = [
-      {
-        id: "queixa",
-        title: "Queixa Principal",
-        fieldTarget: "Campo: Queixa Principal",
-        description: "Motivo relatado, início e evolução dos sintomas",
-        content: queixaPrincipal,
-        isUnclear: queixaPrincipal.includes("(Revisar"),
-        selected: Boolean(queixaPrincipal && queixaPrincipal !== "Não informado na consulta."),
-      },
-      {
-        id: "historico_familiar",
-        title: "Histórico Familiar",
-        fieldTarget: "Campo: Histórico Familiar",
-        description: "Antecedentes e doenças em familiares de 1º e 2º graus",
-        content: historicoFamiliar,
-        isUnclear: historicoFamiliar.includes("(Revisar"),
-        selected: Boolean(historicoFamiliar && historicoFamiliar !== "Não informado na consulta."),
-      },
-      {
-        id: "tratamentos",
-        title: "Tratamentos Anteriores",
-        fieldTarget: "Campo: Tratamentos Anteriores",
-        description: "Tratamentos, cirurgias e procedimentos prévios",
-        content: tratamentosAnteriores,
-        isUnclear: tratamentosAnteriores.includes("(Revisar"),
-        selected: Boolean(
-          tratamentosAnteriores && tratamentosAnteriores !== "Não informado na consulta.",
-        ),
-      },
-      {
-        id: "alergias",
-        title: "Alergias",
-        fieldTarget: "Campo: Alergias",
-        description: "Alergias medicamentosas, alimentares ou ambientais",
-        content: alergias,
-        isUnclear: alergias.includes("(Revisar"),
-        selected: Boolean(alergias && alergias !== "Não informado na consulta."),
-      },
-      {
-        id: "historico_pessoal",
-        title: "Histórico Médico Pessoal",
-        fieldTarget: "Campo: Condições / Outras condições",
-        description: "Patologias prévias e condições crônicas do paciente",
-        content: historicoPessoal,
-        isUnclear: historicoPessoal.includes("(Revisar"),
-        selected: Boolean(historicoPessoal && historicoPessoal !== "Não informado na consulta."),
-      },
-      {
-        id: "medicacoes",
-        title: "Medicações em Uso",
-        fieldTarget: "Campo: Medicações em uso atualmente",
-        description: "Fármacos, doses e posologias que o paciente já utiliza",
-        content: medicacoesEmUso,
-        isUnclear: medicacoesEmUso.includes("(Revisar"),
-        selected: Boolean(medicacoesEmUso && medicacoesEmUso !== "Não informado na consulta."),
-      },
-      {
-        id: "conduta",
-        title: "Conduta e Orientações",
-        fieldTarget: "Campo: Orientações / Conduta Clínica",
-        description: "Prescrições, receitas, exames e orientações passadas pelo médico",
-        content: condutaPlano,
-        isUnclear: condutaPlano.includes("(Revisar"),
-        selected: Boolean(condutaPlano && condutaPlano !== "Não informado na consulta."),
-      },
-    ];
-
-    return {
-      queixaPrincipal,
-      historicoFamiliar,
-      tratamentosAnteriores,
-      alergias,
-      historicoPessoal,
-      condicoesDetectadas,
-      medicacoesEmUso,
-      condutaPlano,
-      sections,
-    };
-  } catch (e) {
-    console.warn("Erro ao fazer parse do JSON clínico:", e);
-    return null;
   }
+  return parts.join("\n\n");
+}
+
+/** Acrescenta o texto gerado ao registro existente, sem apagar nada do que já estava escrito. */
+export function appendToRecord(existing: string, addition: string): string {
+  const prev = existing.trimEnd();
+  const next = addition.trim();
+  if (!next) return existing;
+  if (!prev.trim()) return next;
+  const stamp = new Date().toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  return `${prev}\n\n— Complemento (${stamp}) —\n${next}`;
 }
 
 function sanitizeClinicalField(val: unknown): string {
   if (typeof val !== "string") return "";
   const trimmed = val.trim();
-  if (!trimmed || trimmed.toLowerCase() === "null" || trimmed.toLowerCase() === "undefined") {
-    return "Não informado na consulta.";
+  const lower = trimmed.toLowerCase();
+  if (!trimmed || lower === "null" || lower === "undefined" || lower === "não informado na consulta.") {
+    return "";
   }
   return trimmed;
-}
-
-function buildEmptyConsultationResult(): StructuredConsultationResult {
-  const sections: ClinicalSectionData[] = [
-    {
-      id: "queixa",
-      title: "Queixa Principal",
-      fieldTarget: "Campo: Queixa Principal",
-      description: "Motivo relatado da consulta",
-      content: "",
-      selected: false,
-    },
-    {
-      id: "historico_familiar",
-      title: "Histórico Familiar",
-      fieldTarget: "Campo: Histórico Familiar",
-      description: "Antecedentes familiares",
-      content: "",
-      selected: false,
-    },
-    {
-      id: "tratamentos",
-      title: "Tratamentos Anteriores",
-      fieldTarget: "Campo: Tratamentos Anteriores",
-      description: "Procedimentos e tratamentos prévios",
-      content: "",
-      selected: false,
-    },
-    {
-      id: "alergias",
-      title: "Alergias",
-      fieldTarget: "Campo: Alergias",
-      description: "Reações e alergias relatadas",
-      content: "",
-      selected: false,
-    },
-    {
-      id: "historico_pessoal",
-      title: "Histórico Médico Pessoal",
-      fieldTarget: "Campo: Condições / Outras condições",
-      description: "Condições prévias do paciente",
-      content: "",
-      selected: false,
-    },
-    {
-      id: "medicacoes",
-      title: "Medicações em Uso",
-      fieldTarget: "Campo: Medicações em uso atualmente",
-      description: "Fármacos e dosagens atuais",
-      content: "",
-      selected: false,
-    },
-    {
-      id: "conduta",
-      title: "Conduta e Orientações",
-      fieldTarget: "Campo: Orientações / Conduta Clínica",
-      description: "Prescrições e orientações médicas",
-      content: "",
-      selected: false,
-    },
-  ];
-
-  return {
-    queixaPrincipal: "",
-    historicoFamiliar: "",
-    tratamentosAnteriores: "",
-    alergias: "",
-    historicoPessoal: "",
-    condicoesDetectadas: [],
-    medicacoesEmUso: "",
-    condutaPlano: "",
-    sections,
-  };
-}
-
-export async function generateMedicalRecordContent({
-  sectionTitle,
-  rawInput,
-  patientName,
-}: {
-  sectionTitle: string;
-  rawInput: string;
-  patientName?: string;
-}): Promise<string> {
-  const result = await generateConsultationRecord({ rawTranscript: rawInput, patientName });
-  const titleLower = sectionTitle.toLowerCase();
-
-  if (titleLower.includes("queixa")) return result.queixaPrincipal;
-  if (titleLower.includes("familiar") || titleLower.includes("antecedente"))
-    return result.historicoFamiliar;
-  if (titleLower.includes("tratamento")) return result.tratamentosAnteriores;
-  if (titleLower.includes("alergia")) return result.alergias;
-  if (titleLower.includes("pessoal") || titleLower.includes("condições"))
-    return result.historicoPessoal;
-  if (titleLower.includes("medicaç") || titleLower.includes("medicamento"))
-    return result.medicacoesEmUso;
-  if (titleLower.includes("conduta") || titleLower.includes("orientaç")) return result.condutaPlano;
-  return result.queixaPrincipal || rawInput;
 }

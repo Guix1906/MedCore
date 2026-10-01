@@ -29,7 +29,11 @@ import {
   type ClinicalHistoryItem,
 } from "@/hooks/usePatientClinicalHistory";
 import { supabase } from "@/integrations/supabase/client";
-import type { StructuredConsultationResult } from "@/lib/gemini";
+import {
+  appendToRecord,
+  formatConsultationRecord,
+  type StructuredConsultationResult,
+} from "@/lib/gemini";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -121,6 +125,8 @@ export function PatientFullProfileView({
   // Estado do Assistente IA
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [aiSection, setAiSection] = useState<AiSectionContext | null>(null);
+  /** "new": editor de novo atendimento; "edit": prontuário existente aberto no modal de edição. */
+  const [aiTarget, setAiTarget] = useState<"new" | "edit">("new");
 
   // Estado para Edição de Prontuário
   const [editingItem, setEditingItem] = useState<ClinicalHistoryItem | null>(null);
@@ -337,48 +343,29 @@ export function PatientFullProfileView({
     }
   };
 
-  const openAiForSection = (sec: { key: string; title: string; placeholder?: string }) => {
+  const openAiForSection = (
+    sec: { key: string; title: string; placeholder?: string },
+    target: "new" | "edit" = "new",
+  ) => {
+    setAiTarget(target);
     setAiSection(sec);
     setAiModalOpen(true);
   };
 
   const handleAiInsert = (content: string | StructuredConsultationResult) => {
-    if (typeof content === "string") {
-      setAnamnese(content);
+    const text = typeof content === "string" ? content : formatConsultationRecord(content);
+    if (aiTarget === "edit") {
+      setEditComplaint((prev) => appendToRecord(prev, text));
+      toast.info("Texto acrescentado. Revise e clique em Salvar Alterações.");
     } else {
-      const isValid = (t?: string) =>
-        Boolean(t && t.trim().length > 0 && t !== "Não informado na consulta.");
-
-      const parts: string[] = [];
-      if (isValid(content.queixaPrincipal)) {
-        parts.push(`QUEIXA PRINCIPAL / MOTIVO:\n${content.queixaPrincipal}`);
-      }
-      if (isValid(content.historicoFamiliar)) {
-        parts.push(`HISTÓRICO FAMILIAR:\n${content.historicoFamiliar}`);
-      }
-      if (isValid(content.historicoPessoal)) {
-        parts.push(`HISTÓRICO MÉDICO PESSOAL:\n${content.historicoPessoal}`);
-      }
-      if (content.condicoesDetectadas && content.condicoesDetectadas.length > 0) {
-        parts.push(`CONDIÇÕES IDENTIFICADAS:\n${content.condicoesDetectadas.join(", ")}`);
-      }
-      if (isValid(content.medicacoesEmUso)) {
-        parts.push(`MEDICAÇÕES EM USO:\n${content.medicacoesEmUso}`);
-      }
-      if (isValid(content.alergias)) {
-        parts.push(`ALERGIAS:\n${content.alergias}`);
-      }
-      if (isValid(content.tratamentosAnteriores)) {
-        parts.push(`TRATAMENTOS ANTERIORES:\n${content.tratamentosAnteriores}`);
-      }
-      if (isValid(content.condutaPlano)) {
-        parts.push(`CONDUTA / PLANO TERAPÊUTICO:\n${content.condutaPlano}`);
-      }
-
-      const formatted = parts.join("\n\n");
-      setAnamnese((prev) => (prev ? `${prev}\n\n${formatted}` : formatted));
+      setAnamnese((prev) => appendToRecord(prev, text));
     }
   };
+
+  const aiExistingRecord =
+    aiTarget === "edit"
+      ? [editComplaint, editConduct && `Conduta: ${editConduct}`].filter(Boolean).join("\n\n")
+      : anamnese;
 
   const activeTabLabel = TABS.find((t) => t.id === activeTab)?.label || "Informações";
 
@@ -949,6 +936,8 @@ export function PatientFullProfileView({
         isOpen={aiModalOpen}
         onClose={() => setAiModalOpen(false)}
         section={aiSection}
+        patientName={data.name}
+        existingRecord={aiExistingRecord}
         onInsert={handleAiInsert}
       />
 
@@ -979,12 +968,27 @@ export function PatientFullProfileView({
 
           <div className="space-y-3.5">
             <div className="space-y-1.5">
-              <label
-                htmlFor="edit-record-complaint"
-                className="text-sm font-semibold text-foreground/80"
-              >
-                Anamnese, Queixa & Evolução Clínica
-              </label>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label
+                  htmlFor="edit-record-complaint"
+                  className="text-sm font-semibold text-foreground/80"
+                >
+                  Anamnese, Queixa & Evolução Clínica
+                </label>
+                <button
+                  type="button"
+                  onClick={() =>
+                    openAiForSection(
+                      { key: "anamnese_geral", title: "Complementar prontuário" },
+                      "edit",
+                    )
+                  }
+                  className="flex cursor-pointer items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
+                >
+                  <Sparkles size={12} />
+                  <span>Preencher com IA</span>
+                </button>
+              </div>
               <textarea
                 id="edit-record-complaint"
                 rows={8}
