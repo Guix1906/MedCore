@@ -512,86 +512,70 @@ export default function ProntuarioPage() {
   return (
     <DirtyCtx.Provider value={markDirty}>
       <div className="min-h-[calc(100dvh-64px)] bg-surface text-foreground">
-        <div className="page-container space-y-5 pb-40 lg:pb-28">
-          {/* Cabeçalho fixo do paciente: identificação + alertas clínicos sempre visíveis */}
-          <header className="sticky top-0 z-20 -mx-1 rounded-2xl border border-border bg-card/95 px-4 py-3.5 shadow-xs backdrop-blur supports-[backdrop-filter]:bg-card/85 sm:px-5">
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-              <button
-                type="button"
-                onClick={() =>
-                  navigate({
-                    to: "/prontuario",
-                    search: { patientId: undefined, patientName: undefined },
-                  })
-                }
-                className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                aria-label="Voltar à central de prontuários"
-                title="Voltar à central de prontuários"
-              >
-                <ArrowLeft size={18} />
-              </button>
+        <div className="page-container pb-40 lg:pb-28">
+         <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
+          {/* Coluna lateral do paciente: identificação, alertas clínicos e seções */}
+          <aside className="w-full min-w-0 shrink-0 space-y-4 rounded-2xl border border-border bg-card p-4 lg:sticky lg:top-4 lg:w-[260px]">
+            <button
+              type="button"
+              onClick={() =>
+                navigate({
+                  to: "/prontuario",
+                  search: { patientId: undefined, patientName: undefined },
+                })
+              }
+              className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-primary"
+            >
+              <ArrowLeft size={14} /> Central de atendimentos
+            </button>
 
-              <div className="flex min-w-0 flex-1 items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/15 text-sm font-semibold text-primary">
-                  {patient.initials}
-                </div>
-                <div className="min-w-0">
-                  <h1 className="truncate text-lg font-semibold leading-tight tracking-tight text-foreground">
-                    {patient.name}
-                  </h1>
-                  <div className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
-                    {patientFacts.map((fact, i) => (
-                      <span key={fact} className="flex items-center gap-2">
-                        {i > 0 && <span aria-hidden="true">·</span>}
-                        {fact}
-                      </span>
-                    ))}
-                    <button
-                      onClick={copyPatient}
-                      className="cursor-pointer rounded p-0.5 text-muted-foreground hover:text-foreground"
-                      aria-label="Copiar dados do paciente"
-                      title="Copiar dados do paciente"
-                    >
-                      <Copy size={13} />
-                    </button>
-                  </div>
-                </div>
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/15 text-base font-semibold text-primary">
+                {patient.initials}
               </div>
-
-              {tab !== "anamnese" && (
-                <button
-                  type="button"
-                  onClick={() => setTab("anamnese")}
-                  className="inline-flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-xs transition-colors hover:bg-primary-hover"
-                >
-                  <Stethoscope size={16} />
-                  {attendanceStarted ? "Voltar ao atendimento" : "Iniciar atendimento"}
-                </button>
-              )}
+              <div className="min-w-0 flex-1">
+                <h1 className="text-base font-semibold leading-snug tracking-tight text-foreground [overflow-wrap:anywhere]">
+                  {patient.name}
+                </h1>
+                {patientFacts.length > 0 && (
+                  <p className="text-sm text-muted-foreground">{patientFacts.join(" · ")}</p>
+                )}
+              </div>
+              <button
+                onClick={copyPatient}
+                className="shrink-0 cursor-pointer self-start rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Copiar dados do paciente"
+                title="Copiar dados do paciente"
+              >
+                <Copy size={14} />
+              </button>
             </div>
 
             {(clinicalAlerts.allergies || clinicalAlerts.medications) && (
-              <div className="mt-3 flex flex-wrap gap-2 border-t border-border-soft pt-3 text-xs">
+              <div className="space-y-2 text-xs">
                 {clinicalAlerts.allergies && (
-                  <span className="inline-flex max-w-full items-start gap-1.5 rounded-lg border border-destructive/25 bg-destructive/8 px-2.5 py-1 text-foreground">
+                  <div className="flex items-start gap-1.5 rounded-lg border border-destructive/25 bg-destructive/8 px-2.5 py-1.5 text-foreground">
                     <AlertTriangle size={13} className="mt-px shrink-0 text-destructive" />
-                    <span className="line-clamp-2">
+                    <span className="line-clamp-3">
                       <strong className="text-destructive">Alergias:</strong> {clinicalAlerts.allergies}
                     </span>
-                  </span>
+                  </div>
                 )}
                 {clinicalAlerts.medications && (
-                  <span className="inline-flex max-w-full items-start gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1 text-foreground">
+                  <div className="flex items-start gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-foreground">
                     <ClipboardList size={13} className="mt-px shrink-0 text-primary" />
-                    <span className="line-clamp-2">
+                    <span className="line-clamp-3">
                       <strong>Em uso:</strong> {clinicalAlerts.medications}
                     </span>
-                  </span>
+                  </div>
                 )}
               </div>
             )}
 
-            <nav className="mt-3 flex gap-1 overflow-x-auto" aria-label="Seções do prontuário">
+            <nav
+              className="-mx-1 flex gap-1 overflow-x-auto border-t border-border-soft pt-3 lg:flex-col"
+              aria-label="Seções do prontuário"
+            >
               {TABS.map((t) => {
                 const active = t.key === tab;
                 return (
@@ -600,14 +584,14 @@ export default function ProntuarioPage() {
                     type="button"
                     aria-current={active ? "page" : undefined}
                     onClick={() => setTab(t.key)}
-                    className={`relative flex shrink-0 cursor-pointer items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors ${
+                    className={`relative flex shrink-0 cursor-pointer items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold transition-colors lg:w-full ${
                       active ? "text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
                     }`}
                   >
                     {active && (
                       <motion.span
                         layoutId="prontuario-tab-active"
-                        className="absolute inset-0 rounded-full bg-primary"
+                        className="absolute inset-0 rounded-lg bg-primary"
                         transition={{ type: "spring", stiffness: 400, damping: 35 }}
                       />
                     )}
@@ -628,10 +612,14 @@ export default function ProntuarioPage() {
                 );
               })}
             </nav>
-          </header>
+          </aside>
+
+          <main className="min-w-0 flex-1 space-y-5">
 
           {/* ATENDIMENTO — fica sempre montado para não perder o texto ao trocar de aba */}
-          <div hidden={tab !== "anamnese"} className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div
+            className={`${tab === "anamnese" ? "grid" : "hidden"} gap-5 xl:grid-cols-[minmax(0,1fr)_300px]`}
+          >
             <section className="min-w-0 space-y-3">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
@@ -676,7 +664,7 @@ export default function ProntuarioPage() {
               />
             </section>
 
-            <aside className="space-y-3 lg:sticky lg:top-44 lg:self-start" aria-label="Histórico recente">
+            <aside className="min-w-0 space-y-3 xl:sticky xl:top-4 xl:self-start" aria-label="Histórico recente">
               <div className="flex items-center justify-between">
                 <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
                   <History size={15} className="text-primary" />
@@ -831,6 +819,8 @@ export default function ProntuarioPage() {
               patientId={dbPatient?.id || paramPatientId || undefined}
             />
           )}
+          </main>
+         </div>
         </div>
 
         {/* Modal do Assistente de Prontuário IA */}
