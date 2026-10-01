@@ -705,6 +705,12 @@ export default function ProntuarioPage() {
                           rec={rec}
                           onPull={() => pullIntoAttendance(rec)}
                           onPrint={() => setRecordToPrint(rec)}
+                          related={clinicalHistory.filter(
+                            (r) =>
+                              r.kind === "prontuario" &&
+                              String(r.date).slice(0, 10) === String(rec.date).slice(0, 10),
+                          )}
+                          onStartAttendance={() => setTab("anamnese")}
                         />
                       ))}
                     </li>
@@ -1606,16 +1612,25 @@ function HistoryCard({
   compact = false,
   onPull,
   onPrint,
+  related = [],
+  onStartAttendance,
 }: {
   rec: ClinicalHistoryItem;
   compact?: boolean;
   onPull: () => void;
   onPrint: () => void;
+  /** Prontuários do paciente no mesmo dia (para cards de consulta) */
+  related?: ClinicalHistoryItem[];
+  onStartAttendance?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const badge = KIND_BADGE[rec.kind] ?? KIND_BADGE.prontuario;
   const Icon = badge.icon;
-  const body = rec.complaint || rec.clinicalHistory || rec.evolution || "";
+  const isConsulta = rec.kind === "consulta";
+  const ownBody = rec.complaint || rec.clinicalHistory || rec.evolution || "";
+  // Consulta da agenda não tem texto próprio: mostra o prontuário registrado no mesmo dia
+  const dayRecord = isConsulta && !ownBody ? related[0] : undefined;
+  const body = ownBody || dayRecord?.complaint || dayRecord?.clinicalHistory || "";
   const signed = Boolean(rec.raw?.signed_at);
 
   const copy = async () => {
@@ -1653,6 +1668,8 @@ function HistoryCard({
           setOpen((v) => !v);
         }
       }}
+      // Sem o contorno global de foco (duplicava a borda); o foco é indicado pela borda roxa
+      style={{ outline: "none" }}
       className={`cursor-pointer rounded-xl border bg-card transition-colors hover:border-primary/40 hover:bg-primary/[0.02] focus-visible:border-primary ${
         open ? "border-primary/40" : "border-border"
       } ${compact ? "p-3" : "p-4"}`}
@@ -1677,14 +1694,35 @@ function HistoryCard({
         ) : null}
       </div>
 
+      {dayRecord && (
+        <p className="mt-2 text-xs font-medium text-primary">
+          Prontuário registrado neste dia{dayRecord.time ? ` às ${dayRecord.time}` : ""}
+          {related.length > 1 ? ` (+${related.length - 1} no mesmo dia)` : ""}
+        </p>
+      )}
       {body ? (
         <p
-          className={`mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground/85 ${
+          className={`mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-foreground/85 ${
             open ? "" : compact ? "line-clamp-3" : "line-clamp-4"
           }`}
         >
           {body}
         </p>
+      ) : isConsulta ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <p className="text-xs text-muted-foreground">
+            Nenhum prontuário registrado para esta consulta.
+          </p>
+          {onStartAttendance && (
+            <button
+              type="button"
+              onClick={onStartAttendance}
+              className="h-7 cursor-pointer rounded-md bg-primary px-2.5 text-xs font-semibold text-primary-foreground hover:bg-primary-hover"
+            >
+              Registrar atendimento
+            </button>
+          )}
+        </div>
       ) : (
         <p className="mt-2 text-xs italic text-muted-foreground">Sem anotações.</p>
       )}
