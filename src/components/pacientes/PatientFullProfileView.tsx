@@ -943,6 +943,15 @@ export function PatientFullProfileView({
         section={aiSection}
         patientName={data.name}
         existingRecord={aiExistingRecord}
+        previousRecord={
+          clinicalHistory.find(
+            (i) =>
+              i.kind === "prontuario" &&
+              Boolean(i.complaint) &&
+              !(aiTarget === "edit" && i.id === editingItem?.id),
+          )?.complaint
+        }
+        patientPhone={data.phone}
         onInsert={handleAiInsert}
       />
 

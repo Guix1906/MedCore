@@ -1164,6 +1164,10 @@ export default function ProntuarioPage() {
           section={aiSection}
           patientName={patient.name}
           existingRecord={aiModalOpen ? queixaRef.current?.getText() : undefined}
+          previousRecord={
+            clinicalHistory.find((i) => i.kind === "prontuario" && Boolean(i.complaint))?.complaint
+          }
+          patientPhone={dbPatient?.phone}
           onInsert={handleAiInsert}
         />
 

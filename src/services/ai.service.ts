@@ -21,7 +21,29 @@ const InputSchema = z.object({
   patientName: z.string().trim().max(200).optional(),
   /** Texto já registrado no prontuário aberto; a IA só complementa, sem repetir. */
   existingRecord: z.string().trim().max(20_000).optional(),
+  /** Último atendimento registrado, para comparar a evolução. */
+  previousRecord: z.string().trim().max(8_000).optional(),
+  specialty: z.string().trim().max(40).optional(),
 });
+
+/** Foco extra por especialidade (o que a IA deve procurar na transcrição e cobrar nas pendências). */
+const SPECIALTY_GUIDANCE: Record<string, string> = {
+  clinica_geral: "",
+  pediatria:
+    "Consulta de PEDIATRIA: registre peso, altura, perímetro cefálico, desenvolvimento neuropsicomotor, vacinação, alimentação/aleitamento e quem acompanha a criança. Doses de medicamentos costumam ser por kg: se o peso não foi dito, inclua nas pendências.",
+  dermatologia:
+    "Consulta de DERMATOLOGIA: no exame físico descreva lesões (tipo, localização, tamanho, cor, distribuição), fototipo, exposição solar e uso de cosméticos/procedimentos estéticos.",
+  ortopedia:
+    "Consulta de ORTOPEDIA: registre mecanismo de trauma, lateralidade (direito/esquerdo), amplitude de movimento, força, testes especiais citados, escala de dor e limitação funcional.",
+  ginecologia:
+    "Consulta de GINECOLOGIA/OBSTETRÍCIA: registre DUM, ciclo menstrual, G/P/A, método contraceptivo, último preventivo e, se gestante, idade gestacional.",
+  cardiologia:
+    "Consulta de CARDIOLOGIA: registre PA, FC, dor torácica (característica), dispneia (classe funcional), edema, fatores de risco cardiovascular e exames cardiológicos prévios.",
+  psiquiatria:
+    "Consulta de PSIQUIATRIA/SAÚDE MENTAL: registre humor, sono, apetite, ideação suicida (somente se perguntada), uso de substâncias, adesão a psicofármacos e exame do estado mental descrito.",
+  estetica:
+    "Consulta de ESTÉTICA: registre área tratada, queixa estética, procedimentos prévios (toxina, preenchedores, lasers) e datas, produto/lote se citado, fototipo e expectativas do paciente.",
+};
 
 const TranscriptOutputSchema = z.object({
   falas: z.array(
@@ -51,6 +73,22 @@ const OutputSchema = z.object({
   condutaPlano: z.string().nullish(),
   retorno: z.string().nullish(),
   pendencias: z.array(z.string()).nullish(),
+  prescricoes: z
+    .array(
+      z.object({
+        medicamento: z.string(),
+        dose: z.string().nullish(),
+        posologia: z.string().nullish(),
+        duracao: z.string().nullish(),
+        via: z.string().nullish(),
+      }),
+    )
+    .nullish(),
+  exames: z.array(z.string()).nullish(),
+  cid10: z.array(z.object({ codigo: z.string(), descricao: z.string() })).nullish(),
+  orientacoesPaciente: z.string().nullish(),
+  alertasAlergia: z.array(z.string()).nullish(),
+  mudancasDesdeUltima: z.string().nullish(),
 });
 
 export type ConsultationAiOutput = z.infer<typeof OutputSchema>;
@@ -88,6 +126,14 @@ Campos (string ou null):
 - condutaPlano: prescrições (medicamento, dose, posologia, duração) e orientações dadas ao paciente.
 - retorno: quando e em que condição o paciente deve voltar.
 - pendencias: array de frases curtas com informações importantes que FALTARAM ou ficaram ambíguas para um prontuário completo (ex.: "Dose da losartana não informada.", "Alergias não foram questionadas.", "Sinais vitais não registrados."). Máximo de 6 itens. Não dê diagnósticos nem condutas aqui.
+
+Campos para documentos (arrays vazios quando não houver):
+- prescricoes: array com cada medicamento que o MÉDICO prescreveu nesta consulta: {"medicamento","dose","posologia","duracao","via"}. Só o que foi dito; o que faltar fica null. Não inclua medicações de uso contínuo que o paciente já usava, a menos que o médico as tenha prescrito/renovado.
+- exames: array com cada exame solicitado, um por item (ex.: "Hemograma completo").
+- cid10: array {"codigo","descricao"} com o código CID-10 mais provável para CADA hipótese ou diagnóstico que o médico falou. Nunca crie CID para algo que o médico não mencionou. Use códigos válidos (ex.: {"codigo":"G43.9","descricao":"Enxaqueca, não especificada"}). Não seja mais específico que o médico: se ele não citou o agente/tipo, use o código "não especificado" (ex.: "amigdalite bacteriana" → J03.9, não J03.0).
+- orientacoesPaciente: texto curto em linguagem simples, dirigido ao paciente ("Você deve..."), com as orientações, como tomar os remédios prescritos e quando retornar — somente o que o médico orientou. Sem jargão. null se não houve orientação.
+- alertasAlergia: OBRIGATÓRIO checar: compare cada item de prescricoes com as alergias citadas, incluindo nomes comerciais (Novalgina = dipirona, Amoxil = amoxicilina, Voltaren = diclofenaco). Array de alertas quando algum medicamento PRESCRITO tem relação com uma alergia citada (mesmo princípio ativo, sinônimo ou mesma classe; ex.: alergia a dipirona e prescrição de metamizol; alergia a penicilina e prescrição de amoxicilina). Vazio se não houver conflito.
+- mudancasDesdeUltima: se houver "Atendimento anterior", 1 a 4 linhas com o que mudou desde ele (sintomas novos/resolvidos, medicações iniciadas/suspensas, resultados). null se não houver atendimento anterior.
 
 Regras:
 - Use somente o que foi dito na transcrição. Quando algo não foi mencionado, use null. Nunca invente dados, doses ou resultados.
@@ -222,10 +268,15 @@ export const structureConsultation = createServerFn({ method: "POST" })
     const existing = data.existingRecord
       ? `\n\nEste atendimento JÁ TEM o registro abaixo no prontuário. Preencha os campos SOMENTE com informações novas ou complementares da transcrição; não repita o que já está registrado (use null nesse caso). As pendências devem considerar o registro existente somado à transcrição.\nRegistro existente:\n"""\n${minimizePhi(data.existingRecord, data.patientName)}\n"""`
       : "";
+    const guidance = SPECIALTY_GUIDANCE[data.specialty ?? ""] ?? "";
+    const specialty = guidance ? `\n\n${guidance}` : "";
+    const previous = data.previousRecord
+      ? `\n\nAtendimento anterior deste paciente (somente para comparar a evolução; NÃO copie dados dele para os campos desta consulta):\n"""\n${minimizePhi(data.previousRecord, data.patientName)}\n"""`
+      : "";
     return callGeminiJson(
       "structureConsultation",
-      `${STRUCTURE_INSTRUCTION}${existing}\n\nTranscrição:\n"""\n${transcript}\n"""`,
+      `${STRUCTURE_INSTRUCTION}${specialty}${existing}${previous}\n\nTranscrição:\n"""\n${transcript}\n"""`,
       OutputSchema,
-      4096,
+      6144,
     );
   });

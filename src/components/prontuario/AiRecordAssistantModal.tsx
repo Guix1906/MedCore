@@ -34,18 +34,29 @@ import {
   Coffee,
   Brain,
   History,
+  Minimize2,
+  Printer,
+  Send,
+  TrendingUp,
+  Siren,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { printClinicalDocument } from "@/lib/clinical-documents";
+import { whatsappNumber } from "@/features/agenda/components/WhatsAppReminderButton";
 import {
   CLINICAL_GROUPS,
   CLINICAL_SECTIONS,
+  SPECIALTIES,
   SPEAKER_LABELS,
   SPEAKER_ORDER,
   formatConsultationRecord,
+  formatExamRequest,
+  formatPrescription,
   generateConsultationRecord,
   organizeTranscript,
   turnsToText,
+  type Cid10Item,
   type ClinicalFieldKey,
   type Speaker,
   type StructuredConsultationResult,
@@ -67,12 +78,23 @@ interface AiRecordAssistantModalProps {
   patientName?: string;
   /** Texto já registrado no prontuário aberto: a IA só complementa e nada é apagado. */
   existingRecord?: string;
+  /** Último atendimento do paciente: a IA aponta o que mudou desde ele. */
+  previousRecord?: string;
+  /** Telefone do paciente, para enviar as orientações por WhatsApp. */
+  patientPhone?: string | null;
   onInsert: (content: string | StructuredConsultationResult, sectionKey?: string) => void;
 }
 
 type InputMode = "voice" | "text";
 type RecordingState = "idle" | "recording" | "paused" | "finished";
 type Step = "capture" | "transcript" | "record";
+type DocKind = "receita" | "exames" | "orientacoes";
+
+const DOC_TABS: { id: DocKind; label: string; printTitle: string }[] = [
+  { id: "receita", label: "Receita", printTitle: "Receituário" },
+  { id: "exames", label: "Pedido de exames", printTitle: "Solicitação de exames" },
+  { id: "orientacoes", label: "Orientações ao paciente", printTitle: "Orientações ao paciente" },
+];
 
 const STEPS: { id: Step; label: string }[] = [
   { id: "capture", label: "Captura" },
@@ -112,9 +134,29 @@ export function AiRecordAssistantModal({
   section,
   patientName,
   existingRecord,
+  previousRecord,
+  patientPhone,
   onInsert,
 }: AiRecordAssistantModalProps) {
   const isComplement = Boolean(existingRecord?.trim());
+  const [minimized, setMinimized] = useState(false);
+  const [specialty, setSpecialty] = useState<string>(() => {
+    try {
+      return localStorage.getItem("medcore.ai.specialty") || "clinica_geral";
+    } catch {
+      return "clinica_geral";
+    }
+  });
+  const [cid10, setCid10] = useState<Cid10Item[]>([]);
+  const [docs, setDocs] = useState<Record<DocKind, string>>({ receita: "", exames: "", orientacoes: "" });
+  const [docTab, setDocTab] = useState<DocKind>("receita");
+
+  const changeSpecialty = (value: string) => {
+    setSpecialty(value);
+    try {
+      localStorage.setItem("medcore.ai.specialty", value);
+    } catch {}
+  };
   const [step, setStep] = useState<Step>("capture");
   const [mode, setMode] = useState<InputMode>("voice");
   const [recordingState, setRecordingState] = useState<RecordingState>("idle");
@@ -281,6 +323,10 @@ export function AiRecordAssistantModal({
       setEdited({});
       setSelected({});
       setConditions([]);
+      setCid10([]);
+      setDocs({ receita: "", exames: "", orientacoes: "" });
+      setDocTab("receita");
+      setMinimized(false);
       setShowEmptyFields(false);
       setRecordingState("idle");
       isRecordingRef.current = false;
@@ -402,6 +448,8 @@ export function AiRecordAssistantModal({
         rawTranscript: source,
         patientName,
         existingRecord,
+        previousRecord,
+        specialty,
       });
       const nextEdited: Record<string, string> = {};
       const nextSelected: Record<string, boolean> = {};
@@ -413,6 +461,13 @@ export function AiRecordAssistantModal({
       setEdited(nextEdited);
       setSelected(nextSelected);
       setConditions(res.condicoesDetectadas);
+      setCid10(res.cid10);
+      setDocs({
+        receita: res.prescricoes.length ? formatPrescription(res.prescricoes) : "",
+        exames: res.exames.length ? formatExamRequest(res.exames, res.cid10) : "",
+        orientacoes: res.orientacoesPaciente,
+      });
+      setDocTab(res.prescricoes.length ? "receita" : res.exames.length ? "exames" : "orientacoes");
       setShowEmptyFields(false);
       setStep("record");
     } catch (err) {
@@ -465,7 +520,7 @@ export function AiRecordAssistantModal({
 
   const buildFinalResult = (): StructuredConsultationResult | null => {
     if (!result) return null;
-    const final: StructuredConsultationResult = { ...result, condicoesDetectadas: conditions };
+    const final: StructuredConsultationResult = { ...result, condicoesDetectadas: conditions, cid10 };
     for (const sec of CLINICAL_SECTIONS) {
       final[sec.key] = selected[sec.key] ? (edited[sec.key] ?? "").trim() : "";
     }
@@ -500,6 +555,60 @@ export function AiRecordAssistantModal({
     !isBusy &&
     (target === "capture" || (target === "transcript" && !!turns) || (target === "record" && !!result));
 
+  const docText = docs[docTab];
+  const phoneNumber = whatsappNumber(patientPhone);
+
+  const printDoc = () => {
+    if (!docText.trim()) return;
+    const tab = DOC_TABS.find((d) => d.id === docTab)!;
+    if (!printClinicalDocument({ title: tab.printTitle, patientName, body: docText })) {
+      toast.error("O navegador bloqueou a janela de impressão. Libere pop-ups para este site.");
+    }
+  };
+
+  // Gravação em segundo plano: o assistente vira um botão flutuante e o médico segue navegando.
+  if (minimized) {
+    return (
+      <div
+        role="region"
+        aria-label="Assistente de prontuário minimizado"
+        className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-full border border-border bg-card py-1.5 pl-3 pr-1.5 shadow-lg"
+      >
+        {isRecording ? (
+          <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-destructive" aria-hidden="true" />
+        ) : (
+          <Sparkles size={15} className="text-primary" aria-hidden="true" />
+        )}
+        <span className="text-sm font-semibold text-foreground">
+          {isRecording
+            ? `Gravando ${formatSeconds(recordingSeconds)}`
+            : recordingState === "paused"
+              ? `Pausado ${formatSeconds(recordingSeconds)}`
+              : isBusy
+                ? "IA trabalhando..."
+                : "Assistente IA"}
+        </span>
+        {(isRecording || recordingState === "paused") && (
+          <button
+            type="button"
+            onClick={isRecording ? pauseRecording : startRecording}
+            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-muted text-foreground hover:bg-input"
+            aria-label={isRecording ? "Pausar" : "Continuar gravando"}
+          >
+            {isRecording ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => setMinimized(false)}
+          className="h-8 cursor-pointer rounded-full bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary-hover"
+        >
+          Abrir
+        </button>
+      </div>
+    );
+  }
+
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
@@ -530,13 +639,23 @@ export function AiRecordAssistantModal({
                 </DialogDescription>
               </div>
             </div>
-            <button
-              onClick={onClose}
-              className="cursor-pointer rounded-xl p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground/80"
-              aria-label="Fechar"
-            >
-              <X size={18} />
-            </button>
+            <div className="flex shrink-0 items-center">
+              <button
+                onClick={() => setMinimized(true)}
+                className="cursor-pointer rounded-xl p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground/80"
+                aria-label="Minimizar"
+                title="Minimizar e continuar gravando enquanto usa o sistema"
+              >
+                <Minimize2 size={17} />
+              </button>
+              <button
+                onClick={onClose}
+                className="cursor-pointer rounded-xl p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground/80"
+                aria-label="Fechar"
+              >
+                <X size={18} />
+              </button>
+            </div>
           </div>
 
           {/* Etapas */}
@@ -593,6 +712,29 @@ export function AiRecordAssistantModal({
                   </span>
                 </div>
               )}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                <label className="flex items-center gap-2">
+                  <span className="font-semibold text-foreground">Especialidade</span>
+                  <select
+                    value={specialty}
+                    onChange={(e) => changeSpecialty(e.target.value)}
+                    className="h-8 cursor-pointer rounded-lg border border-input bg-card px-2 text-sm text-foreground outline-none focus:border-primary"
+                  >
+                    {SPECIALTIES.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {previousRecord?.trim() && (
+                  <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <TrendingUp size={13} className="text-primary" />
+                    A IA vai comparar com o último atendimento
+                  </span>
+                )}
+              </div>
+
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 rounded-xl border border-border/60 bg-muted p-1">
                   <button
@@ -870,12 +1012,38 @@ export function AiRecordAssistantModal({
                 animate={{ opacity: 1, y: 0 }}
                 className="space-y-5"
               >
+                {result.alertasAlergia.length > 0 && (
+                  <div role="alert" className="rounded-xl border border-destructive/40 bg-destructive/8 px-4 py-3">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-destructive">
+                      <Siren size={14} />
+                      Alerta de alergia
+                    </div>
+                    <ul className="mt-1.5 space-y-1 text-sm font-medium text-foreground">
+                      {result.alertasAlergia.map((a, i) => (
+                        <li key={i}>{a}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
                 {result.resumo && (
                   <div className="rounded-xl border border-primary/20 bg-primary-soft/60 px-4 py-3">
                     <div className="text-xs font-semibold uppercase tracking-wider text-primary">
                       Resumo da consulta
                     </div>
                     <p className="mt-1 text-sm leading-relaxed text-foreground">{result.resumo}</p>
+                  </div>
+                )}
+
+                {result.mudancasDesdeUltima && (
+                  <div className="rounded-xl border border-border bg-card px-4 py-3">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      <TrendingUp size={13} className="text-primary" />
+                      Desde o último atendimento
+                    </div>
+                    <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                      {result.mudancasDesdeUltima}
+                    </p>
                   </div>
                 )}
 
@@ -920,6 +1088,30 @@ export function AiRecordAssistantModal({
                         </button>
                       </span>
                     ))}
+                  </div>
+                )}
+
+                {cid10.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs font-semibold text-muted-foreground">CID-10 sugerido:</span>
+                    {cid10.map((c) => (
+                      <span
+                        key={c.codigo}
+                        title={c.descricao}
+                        className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2.5 py-0.5 text-xs text-foreground"
+                      >
+                        <strong>{c.codigo}</strong> {c.descricao}
+                        <button
+                          type="button"
+                          onClick={() => setCid10((prev) => prev.filter((x) => x.codigo !== c.codigo))}
+                          aria-label={`Remover ${c.codigo}`}
+                          className="cursor-pointer text-muted-foreground hover:text-destructive"
+                        >
+                          <X size={11} />
+                        </button>
+                      </span>
+                    ))}
+                    <span className="text-xs text-muted-foreground">— confira antes de usar.</span>
                   </div>
                 )}
 
@@ -1001,6 +1193,90 @@ export function AiRecordAssistantModal({
                     </section>
                   );
                 })}
+
+                <section className="space-y-2.5">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Documentos
+                  </h3>
+                  <div className="rounded-xl border border-border bg-card">
+                    <div role="tablist" className="flex flex-wrap gap-1 border-b border-border-soft p-1.5">
+                      {DOC_TABS.map((tab) => (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          role="tab"
+                          aria-selected={docTab === tab.id}
+                          onClick={() => setDocTab(tab.id)}
+                          className={`cursor-pointer rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                            docTab === tab.id
+                              ? "bg-primary-soft text-primary"
+                              : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                          }`}
+                        >
+                          {tab.label}
+                          {docs[tab.id].trim() ? "" : " (vazio)"}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="space-y-2 p-2.5">
+                      <textarea
+                        value={docText}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setDocs((d) => ({ ...d, [docTab]: value }));
+                        }}
+                        aria-label={DOC_TABS.find((d) => d.id === docTab)?.label}
+                        placeholder={
+                          docTab === "receita"
+                            ? "Nenhuma prescrição foi dita na consulta. Digite aqui se quiser emitir."
+                            : docTab === "exames"
+                              ? "Nenhum exame foi solicitado na consulta. Digite aqui se quiser emitir."
+                              : "Nenhuma orientação foi dita na consulta. Digite aqui se quiser enviar."
+                        }
+                        className={`${textareaBase} min-h-28 border-border/80 bg-card font-mono text-[13px] text-foreground`}
+                      />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <SecondaryButton disabled={!docText.trim()} onClick={printDoc}>
+                          <Printer size={14} />
+                          Imprimir
+                        </SecondaryButton>
+                        <SecondaryButton disabled={!docText.trim()} onClick={() => copyText(`doc-${docTab}`, docText)}>
+                          {copiedId === `doc-${docTab}` ? <Check size={14} className="text-success" /> : <Copy size={14} />}
+                          Copiar
+                        </SecondaryButton>
+                        {docTab === "orientacoes" && (
+                          <a
+                            href={
+                              phoneNumber && docText.trim()
+                                ? `https://wa.me/${phoneNumber}?text=${encodeURIComponent(docText)}`
+                                : undefined
+                            }
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-disabled={!phoneNumber || !docText.trim()}
+                            onClick={(e) => {
+                              if (!phoneNumber) {
+                                e.preventDefault();
+                                toast.error("Paciente sem celular cadastrado.");
+                              }
+                            }}
+                            className={`inline-flex h-10 items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-4 text-sm font-semibold text-success transition-colors hover:bg-success/15 ${
+                              !phoneNumber || !docText.trim() ? "pointer-events-auto cursor-not-allowed opacity-40" : "cursor-pointer"
+                            }`}
+                          >
+                            <Send size={14} />
+                            Enviar por WhatsApp
+                          </a>
+                        )}
+                        {docTab === "receita" && docText.trim() && (
+                          <span className="text-xs text-muted-foreground">
+                            Receita simples. Controlados exigem receituário próprio.
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </section>
 
                 {emptySections.length > 0 && (
                   <div className="rounded-xl border border-dashed border-border">

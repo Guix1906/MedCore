@@ -119,21 +119,56 @@ export const CLINICAL_SECTIONS: ClinicalSectionDef[] = [
   { key: "retorno", title: "Retorno", recordLabel: "RETORNO", group: "plano", description: "Prazo e condição de retorno" },
 ];
 
+export const SPECIALTIES = [
+  { id: "clinica_geral", label: "Clínica geral" },
+  { id: "pediatria", label: "Pediatria" },
+  { id: "dermatologia", label: "Dermatologia" },
+  { id: "ortopedia", label: "Ortopedia" },
+  { id: "ginecologia", label: "Ginecologia / Obstetrícia" },
+  { id: "cardiologia", label: "Cardiologia" },
+  { id: "psiquiatria", label: "Psiquiatria" },
+  { id: "estetica", label: "Estética" },
+] as const;
+
+export interface PrescriptionItem {
+  medicamento: string;
+  dose: string;
+  posologia: string;
+  duracao: string;
+  via: string;
+}
+
+export interface Cid10Item {
+  codigo: string;
+  descricao: string;
+}
+
 export type StructuredConsultationResult = Record<ClinicalFieldKey, string> & {
   resumo: string;
   condicoesDetectadas: string[];
   pendencias: string[];
+  prescricoes: PrescriptionItem[];
+  exames: string[];
+  cid10: Cid10Item[];
+  orientacoesPaciente: string;
+  alertasAlergia: string[];
+  mudancasDesdeUltima: string;
 };
 
 export async function generateConsultationRecord({
   rawTranscript,
   patientName,
   existingRecord,
+  previousRecord,
+  specialty,
 }: {
   rawTranscript: string;
   patientName?: string;
   /** Texto já registrado; quando presente, a IA devolve só o que é novo. */
   existingRecord?: string;
+  /** Último atendimento, para a IA apontar o que mudou. */
+  previousRecord?: string;
+  specialty?: string;
 }): Promise<StructuredConsultationResult> {
   const cleanedInput = rawTranscript.trim();
   if (!cleanedInput) return emptyConsultationResult();
@@ -143,6 +178,8 @@ export async function generateConsultationRecord({
       rawTranscript: cleanedInput,
       patientName,
       existingRecord: existingRecord?.trim().slice(0, 20_000) || undefined,
+      previousRecord: previousRecord?.trim().slice(0, 8_000) || undefined,
+      specialty,
     },
   });
   const result = emptyConsultationResult();
@@ -153,12 +190,117 @@ export async function generateConsultationRecord({
   result.condicoesDetectadas = (data.condicoesDetectadas ?? []).filter((c) =>
     PRONTUARIO_CONDITIONS_LIST.includes(c),
   );
-  result.pendencias = (data.pendencias ?? []).map((p) => p.trim()).filter(Boolean);
+  result.pendencias = cleanList(data.pendencias);
+  result.prescricoes = (data.prescricoes ?? [])
+    .map((p) => ({
+      medicamento: sanitizeClinicalField(p.medicamento),
+      dose: sanitizeClinicalField(p.dose),
+      posologia: sanitizeClinicalField(p.posologia),
+      duracao: sanitizeClinicalField(p.duracao),
+      via: sanitizeClinicalField(p.via),
+    }))
+    .filter((p) => p.medicamento);
+  result.exames = cleanList(data.exames);
+  result.cid10 = (data.cid10 ?? [])
+    .map((c) => ({ codigo: c.codigo.trim().toUpperCase(), descricao: c.descricao.trim() }))
+    .filter((c) => /^[A-Z]\d{2}(\.\d{1,2})?$/.test(c.codigo));
+  result.orientacoesPaciente = sanitizeClinicalField(data.orientacoesPaciente);
+  result.mudancasDesdeUltima = sanitizeClinicalField(data.mudancasDesdeUltima);
+  result.alertasAlergia = mergeAllergyAlerts(
+    cleanList(data.alertasAlergia),
+    checkAllergyConflicts(result.alergias, result.prescricoes),
+  );
   return result;
 }
 
+function cleanList(list: (string | null | undefined)[] | null | undefined): string[] {
+  return (list ?? []).map((p) => (p ?? "").trim()).filter(Boolean);
+}
+
+/* ------------------------------------------------------------------ */
+/* Alerta de alergia (checagem local, independe da IA)                 */
+/* ------------------------------------------------------------------ */
+
+/** Grupos de princípios ativos/classes que costumam causar reação cruzada. */
+const ALLERGY_GROUPS: { label: string; terms: string[] }[] = [
+  { label: "dipirona/metamizol", terms: ["dipirona", "metamizol", "novalgina"] },
+  { label: "penicilinas", terms: ["penicilina", "amoxicilina", "ampicilina", "benzetacil", "oxacilina", "clavulanato"] },
+  { label: "cefalosporinas", terms: ["cefalexina", "ceftriaxona", "cefazolina", "cefuroxima", "cefadroxil"] },
+  { label: "sulfas", terms: ["sulfa", "sulfametoxazol", "bactrim", "sulfadiazina"] },
+  { label: "AINEs", terms: ["aine", "anti-inflamatório", "antiinflamatorio", "ibuprofeno", "diclofenaco", "nimesulida", "cetoprofeno", "naproxeno", "aas", "ácido acetilsalicílico", "aspirina", "piroxicam", "meloxicam"] },
+  { label: "paracetamol", terms: ["paracetamol", "acetaminofeno", "tylenol"] },
+  { label: "opioides", terms: ["codeína", "codeina", "tramadol", "morfina"] },
+  { label: "quinolonas", terms: ["ciprofloxacino", "levofloxacino", "norfloxacino", "quinolona"] },
+  { label: "macrolídeos", terms: ["azitromicina", "claritromicina", "eritromicina"] },
+  { label: "iodo/contraste", terms: ["iodo", "contraste iodado"] },
+  { label: "látex", terms: ["látex", "latex"] },
+];
+
+const normalize = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+export function checkAllergyConflicts(allergies: string, prescriptions: PrescriptionItem[]): string[] {
+  const allergyText = normalize(allergies);
+  if (!allergyText || /\bnega\b/.test(allergyText)) return [];
+  const alerts: string[] = [];
+  for (const p of prescriptions) {
+    const med = normalize(p.medicamento);
+    for (const group of ALLERGY_GROUPS) {
+      const terms = group.terms.map(normalize);
+      if (terms.some((t) => allergyText.includes(t)) && terms.some((t) => med.includes(t))) {
+        alerts.push(`${p.medicamento} pertence ao grupo ${group.label}, citado nas alergias do paciente.`);
+      }
+    }
+  }
+  return alerts;
+}
+
+function mergeAllergyAlerts(fromAi: string[], local: string[]): string[] {
+  const seen = new Set<string>();
+  return [...local, ...fromAi].filter((a) => {
+    const key = normalize(a).slice(0, 40);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Documentos: receita, pedido de exames e orientações                  */
+/* ------------------------------------------------------------------ */
+
+export function formatPrescription(items: PrescriptionItem[]): string {
+  return items
+    .map((p, i) => {
+      const head = [p.medicamento, p.dose].filter(Boolean).join(" ");
+      const via = p.via ? `Uso ${p.via.toLowerCase()}` : "";
+      const how = [p.posologia, p.duracao && `por ${p.duracao.replace(/^por\s+/i, "")}`]
+        .filter(Boolean)
+        .join(", ");
+      return `${i + 1}. ${head}${via ? ` — ${via}` : ""}\n   ${how || "Posologia: ______________________"}`;
+    })
+    .join("\n\n");
+}
+
+export function formatExamRequest(exams: string[], cid10: Cid10Item[]): string {
+  const list = exams.map((e) => `- ${e}`).join("\n");
+  const indication = cid10.length
+    ? `\n\nIndicação clínica: ${cid10.map((c) => `${c.descricao} (CID-10 ${c.codigo})`).join("; ")}`
+    : "";
+  return `Solicito:\n${list}${indication}`;
+}
+
 export function emptyConsultationResult(): StructuredConsultationResult {
-  const result = { resumo: "", condicoesDetectadas: [], pendencias: [] } as unknown as StructuredConsultationResult;
+  const result = {
+    resumo: "",
+    condicoesDetectadas: [],
+    pendencias: [],
+    prescricoes: [],
+    exames: [],
+    cid10: [],
+    orientacoesPaciente: "",
+    alertasAlergia: [],
+    mudancasDesdeUltima: "",
+  } as unknown as StructuredConsultationResult;
   for (const sec of CLINICAL_SECTIONS) result[sec.key] = "";
   return result;
 }
@@ -171,6 +313,9 @@ export function formatConsultationRecord(result: StructuredConsultationResult): 
     if (value) parts.push(`${sec.recordLabel}:\n${value}`);
     if (sec.key === "historicoPessoal" && result.condicoesDetectadas.length > 0) {
       parts.push(`CONDIÇÕES IDENTIFICADAS:\n${result.condicoesDetectadas.join(", ")}`);
+    }
+    if (sec.key === "hipotesesDiagnosticas" && result.cid10.length > 0) {
+      parts.push(`CID-10:\n${result.cid10.map((c) => `${c.codigo} — ${c.descricao}`).join("\n")}`);
     }
   }
   return parts.join("\n\n");
