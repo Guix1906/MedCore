@@ -1126,173 +1126,144 @@ export function ContasReceberTab({
             ))}
           </div>
         ) : (
-          <div className="divide-y divide-border-soft">
-            {filteredTitles.map((t) => {
-              const { rem, isPaid, valorDisplay, paidAmt } = getTitleStatus(t);
-              const isVencido =
-                !isPaid &&
-                !isFreeBalance(t) &&
-                !!t.due_date &&
-                startOfDay(parseISO(t.due_date)) < startOfDay(new Date());
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-xs font-medium text-muted-foreground">
+                  <th className="py-2 pr-3 font-medium">Vencimento</th>
+                  <th className="py-2 pr-3 font-medium">Descrição</th>
+                  <th className="py-2 pr-3 font-medium">Paciente</th>
+                  <th className="py-2 pr-3 font-medium">Situação</th>
+                  <th className="py-2 pr-3 text-right font-medium">Valor</th>
+                  <th className="py-2 text-right font-medium">
+                    <span className="sr-only">Ações</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-soft">
+                {filteredTitles.map((t) => {
+                  const { rem, isPaid, paidAmt } = getTitleStatus(t);
+                  const free = isFreeBalance(t);
+                  const isVencido =
+                    !isPaid && !free && !!t.due_date && startOfDay(parseISO(t.due_date)) < startOfDay(new Date());
+                  const person = t.patient_name || t.payer_name || "";
+                  // Descrição sem o nome do paciente repetido ("FULANO - Agendamento" -> "Agendamento")
+                  const description =
+                    (person
+                      ? (t.description || "").replace(
+                          new RegExp(`^${person.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*[-–·:]\\s*`, "i"),
+                          "",
+                        )
+                      : t.description) || "Atendimento";
+                  const details = [free ? "Saldo livre" : t.category, parcelaLabel(t)].filter(Boolean).join(" · ");
+                  const status = isPaid
+                    ? { label: "Recebido", dot: "bg-success", text: "text-success" }
+                    : isVencido
+                      ? { label: "Vencido", dot: "bg-destructive", text: "text-destructive" }
+                      : paidAmt > 0
+                        ? { label: "Parcial", dot: "bg-warning", text: "text-warning" }
+                        : { label: "A receber", dot: "bg-info", text: "text-info" };
 
-              const clientName = (t.patient_name || t.payer_name || "Cliente").toUpperCase();
-              const associadoName = (
-                t.payer_name ||
-                associadosList[0] ||
-                "GUILHERME SANTOS TEIXEIRA"
-              ).toUpperCase();
-              const formattedDue = t.due_date ? formatClinicalDate(t.due_date) : "Sem data";
-              const tagCategory = t.category || "Honorários Iniciais / sinal";
-
-              return (
-                <div
-                  key={t.id}
-                  className="py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-muted/30 rounded-lg px-2 transition-colors"
-                >
-                  {/* Informações à Esquerda */}
-                  <div className="space-y-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-sm text-foreground truncate">
-                        {t.description || "Atendimento Clínico"}
-                      </span>
-
-                      {/* Tag 1: Categoria / Sub-categoria */}
-                      <span
-                        className={cn(
-                          "inline-flex items-center text-xs font-semibold px-2.5 py-0.5 rounded-full border",
-                          isFreeBalance(t)
-                            ? "bg-primary/10 text-primary border-primary/25 font-bold"
-                            : "bg-info/10 text-info border-info/25",
+                  return (
+                    <tr key={t.id} className="align-middle transition-colors hover:bg-muted/40">
+                      <td className="whitespace-nowrap py-3 pr-3 tabular-nums text-foreground">
+                        {free ? <span className="text-muted-foreground">Sem vencimento</span> : t.due_date ? formatClinicalDate(t.due_date) : "—"}
+                      </td>
+                      <td className="max-w-[280px] py-3 pr-3">
+                        <p className="truncate font-medium text-foreground">{description}</p>
+                        {(details || t.treatment_id) && (
+                          <p className="truncate text-xs text-muted-foreground">
+                            {details}
+                            {t.treatment_id && (
+                              <>
+                                {details ? " · " : ""}
+                                <Link
+                                  to="/acompanhamentos/$id"
+                                  params={{ id: t.treatment_id }}
+                                  search={{ tab: "financeiro" }}
+                                  className="text-primary hover:underline"
+                                >
+                                  ver plano
+                                </Link>
+                              </>
+                            )}
+                          </p>
                         )}
-                      >
-                        {isFreeBalance(t) ? "Saldo Livre" : tagCategory}
-                      </span>
-
-                      {parcelaLabel(t) && (
-                        <span className="inline-flex items-center text-xs font-semibold px-2.5 py-0.5 rounded-full border bg-muted text-foreground/80 border-border">
-                          {parcelaLabel(t)}
+                      </td>
+                      <td className="max-w-[200px] truncate py-3 pr-3 text-foreground/80">{person || "—"}</td>
+                      <td className="whitespace-nowrap py-3 pr-3">
+                        <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${status.text}`}>
+                          <span className={`size-1.5 rounded-full ${status.dot}`} aria-hidden="true" />
+                          {status.label}
                         </span>
-                      )}
-
-                      {/* Tag Sinal se houver */}
-                      {paidAmt > 0 && rem > 0 && (
-                        <span className="inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/25">
-                          Sinal pago: {currency(paidAmt)}
-                        </span>
-                      )}
-
-                      {/* Tag 2: Status */}
-                      <StatusBadge
-                        tone={isPaid ? "success" : isVencido ? "danger" : "warning"}
-                        icon={isPaid ? CheckCircle2 : isVencido ? AlertCircle : Clock3}
-                      >
-                        {isPaid
-                          ? "Recebido"
-                          : isFreeBalance(t)
-                            ? paidAmt > 0
-                              ? "Parcial (Saldo Livre)"
-                              : "Aberto (Saldo Livre)"
-                            : isVencido
-                              ? "Vencido"
-                              : "Pendente"}
-                      </StatusBadge>
-                    </div>
-
-                    <p className="text-xs text-muted-foreground truncate">
-                      Vencimento:{" "}
-                      {isFreeBalance(t) ? (
-                        <span className="text-primary font-medium">Sem vencimento fixo</span>
-                      ) : (
-                        formattedDue
-                      )}{" "}
-                      · Cliente: {clientName} ·{" "}
-                      {paidAmt > 0 && rem > 0 && (
-                        <span className="text-amber-600 dark:text-amber-400 font-semibold mr-1.5">
-                          Saldo a cobrar: {currency(rem)} ·
-                        </span>
-                      )}
-                      <span className="text-info font-medium">Associado: {associadoName}</span>
-                      {t.treatment_id && (
-                        <Link
-                          to="/acompanhamentos/$id"
-                          params={{ id: t.treatment_id }}
-                          search={{ tab: "financeiro" }}
-                          className="inline-flex items-center gap-1 ml-2 text-primary hover:underline font-semibold"
-                        >
-                          <Wallet className="h-3 w-3" />
-                          Plano Clínico
-                        </Link>
-                      )}
-                    </p>
-                  </div>
-
-                  {/* Ações e Valor à Direita */}
-                  <div className="flex items-center gap-3 shrink-0 self-end md:self-auto">
-                    <strong className="font-semibold text-sm text-success tabular-nums">
-                      {currency(valorDisplay)}
-                    </strong>
-
-                    {isPaid ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 text-xs font-semibold px-3 flex items-center gap-1.5 shadow-2xs cursor-pointer"
-                        onClick={() => onReceive(t)}
-                        title="Visualizar histórico e comprovante"
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                        Recebido
-                      </Button>
-                    ) : (
-                      <>
-                        {/* Botão Cobrar */}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 border-destructive/25 bg-card text-destructive hover:bg-destructive/10 text-xs font-semibold px-3 flex items-center gap-1.5 shadow-2xs cursor-pointer"
-                          onClick={() => handleOpenCobrar(t)}
-                        >
-                          <MessageCircle className="h-3.5 w-3.5" />
-                          Cobrar
-                        </Button>
-
-                        {/* Botão Receber */}
-                        <Button
-                          size="sm"
-                          className="h-8 bg-success hover:bg-success/90 text-white text-xs font-semibold px-4 shadow-2xs cursor-pointer"
-                          onClick={() => onReceive(t)}
-                        >
-                          Receber
-                        </Button>
-                      </>
-                    )}
-
-                    {/* Botão Editar */}
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8 text-muted-foreground hover:text-foreground/80 hover:bg-muted cursor-pointer"
-                      title="Editar título"
-                      onClick={() => onEdit(t)}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-
-                    {/* Botão Excluir */}
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8 text-destructive/80 hover:text-destructive hover:bg-destructive/10 cursor-pointer"
-                      title="Excluir título"
-                      aria-label="Excluir título"
-                      onClick={() => onDelete(t.id)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
+                        {paidAmt > 0 && rem > 0 && (
+                          <p className="text-xs text-muted-foreground tabular-nums">
+                            {currency(paidAmt)} pago
+                          </p>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap py-3 pr-3 text-right tabular-nums">
+                        <p className="font-semibold text-foreground">{currency(t.amount)}</p>
+                        {!isPaid && paidAmt > 0 && (
+                          <p className="text-xs text-warning">falta {currency(rem)}</p>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap py-3 text-right">
+                        <div className="inline-flex items-center justify-end gap-0.5">
+                          {isPaid ? (
+                            <button
+                              type="button"
+                              onClick={() => onReceive(t)}
+                              className="h-8 cursor-pointer rounded-md px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                              title="Ver pagamentos e comprovante"
+                            >
+                              Ver
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => onReceive(t)}
+                                className="mr-1 h-8 cursor-pointer rounded-md bg-success px-3 text-xs font-semibold text-white hover:bg-success/90"
+                              >
+                                Receber
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenCobrar(t)}
+                                className="grid size-8 cursor-pointer place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                                title="Cobrar pelo WhatsApp"
+                                aria-label="Cobrar pelo WhatsApp"
+                              >
+                                <MessageCircle className="h-4 w-4" />
+                              </button>
+                            </>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => onEdit(t)}
+                            className="grid size-8 cursor-pointer place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                            title="Editar"
+                            aria-label="Editar"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onDelete(t.id)}
+                            className="grid size-8 cursor-pointer place-items-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                            title="Excluir"
+                            aria-label="Excluir"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
