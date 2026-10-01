@@ -209,7 +209,9 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
   };
 
   // Sub-abas (Lançamentos / Excluídos)
-  const [activeSubTab, setActiveSubTab] = useState<"lancamentos" | "excluidos">("lancamentos");
+  const [activeSubTab, setActiveSubTab] = useState<"lancamentos" | "previstos" | "excluidos">(
+    "lancamentos",
+  );
 
   // Barra de Filtros
   const [search, setSearch] = useState("");
@@ -378,10 +380,41 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
     return [...fromReversed, ...fromCancelledTitles];
   }, [allRealizedEntries, finance.titles]);
 
+  // 2b. Previstos: saldo que falta de cada título em aberto (a receber / a pagar), no vencimento
+  const forecastEntries = useMemo(() => {
+    return (finance.titles || [])
+      .filter((t) => t && t.status !== "cancelado" && remaining(t) > 0)
+      .map(
+        (t): CashEntry => ({
+          id: `prev:${t.id}`,
+          transaction_id: t.id,
+          date: String(t.due_date || t.date || "").slice(0, 10),
+          description: t.description || (t.type === "despesa" ? "Conta a pagar" : "Conta a receber"),
+          category: t.category || (t.type === "despesa" ? "Despesas Gerais" : "Receitas"),
+          client_name: t.patient_name || t.payer_name || "Avulso",
+          payment_method: "—",
+          payment_account: "—",
+          company_id: t.company_id || null,
+          type: t.type,
+          is_expense: t.type === "despesa",
+          amount: remaining(t),
+          paid_amount: Number(t.paid_amount || 0),
+          status: "pendente",
+          badgeLabel: getTitleEventKey(t) ? "AGENDAMENTO" : t.treatment_id ? "PLANO" : "MANUAL",
+          title: t,
+        }),
+      );
+  }, [finance.titles]);
+
   // 3. Filtragem dos Lançamentos para exibição na tabela
   const filteredEntries = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const source = activeSubTab === "excluidos" ? excludedEntries : allRealizedEntries;
+    const source =
+      activeSubTab === "excluidos"
+        ? excludedEntries
+        : activeSubTab === "previstos"
+          ? forecastEntries
+          : allRealizedEntries;
 
     return source.filter((e) => {
       // Clínica / Scope
@@ -440,6 +473,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
   }, [
     allRealizedEntries,
     excludedEntries,
+    forecastEntries,
     activeSubTab,
     scope,
     selectedAccount,
@@ -454,9 +488,11 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
   ]);
 
   // 4. Cálculos dos 3 Cards de Métricas e dados do Gráfico
-  const { totalEntradas, totalDespesas, saldoFinal, chartData } = useMemo(() => {
+  const { totalEntradas, totalDespesas, saldoFinal, chartData, totalEntradasPrev, totalSaidasPrev } = useMemo(() => {
     let entradas = 0;
     let saidas = 0;
+    let entradasPrev = 0;
+    let saidasPrev = 0;
 
     const base = allRealizedEntries.filter((e) => {
       if (scope !== "all" && e.company_id && e.company_id !== scope) return false;
@@ -471,17 +507,6 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       return true;
     });
 
-    // SE NÃO HÁ MOVIMENTAÇÕES REALIZADAS NO PERÍODO OU TODAS FORAM EXCLUÍDAS DO FLUXO DE CAIXA:
-    // O fluxo de caixa está zerado/excluído, portanto NÃO DEVE MOSTRAR PREVISTO no gráfico!
-    if (base.length === 0) {
-      return {
-        totalEntradas: 0,
-        totalDespesas: 0,
-        saldoFinal: 0,
-        chartData: [],
-      };
-    }
-
     base.forEach((e) => {
       const amt = Number(e.paid_amount || 0);
       if (!e.is_expense) {
@@ -494,7 +519,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
     // Agrupamento diário para o ComposedChart (inclui Entradas reais e Previsão a Receber)
     const dayMap = new Map<
       string,
-      { entradas: number; saidas: number; aReceber: number; iso: string }
+      { entradas: number; saidas: number; aReceber: number; aPagar: number; iso: string }
     >();
     const sorted = [...base].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
 
@@ -511,7 +536,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
         label = dStr;
       }
 
-      const cur = dayMap.get(label) || { entradas: 0, saidas: 0, aReceber: 0, iso: dStr };
+      const cur = dayMap.get(label) || { entradas: 0, saidas: 0, aReceber: 0, aPagar: 0, iso: dStr };
       const paid = Number(e.paid_amount) || 0;
       if (!e.is_expense) {
         cur.entradas += paid;
@@ -521,10 +546,17 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       dayMap.set(label, cur);
     });
 
-    // Títulos a receber (ex.: restante de procedimentos agendados) na data de vencimento
+    // Previstos: o que falta receber/pagar de cada título (ex.: restante da consulta após o sinal,
+    // contas a pagar/receber com data futura), na data de vencimento
     const titles = Array.isArray(finance?.titles) ? finance.titles : [];
     titles
-      .filter((t) => t && t.type === "receita" && t.status !== "cancelado" && remaining(t) > 0)
+      .filter(
+        (t) =>
+          t &&
+          t.status !== "cancelado" &&
+          remaining(t) > 0 &&
+          (scope === "all" || !t.company_id || t.company_id === scope),
+      )
       .forEach((t) => {
         const dStr = String(t.due_date || t.date || "").slice(0, 10);
         if (!dStr) return;
@@ -541,8 +573,15 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
           label = dStr;
         }
 
-        const cur = dayMap.get(label) || { entradas: 0, saidas: 0, aReceber: 0, iso: dStr };
-        cur.aReceber += remaining(t);
+        const cur = dayMap.get(label) || { entradas: 0, saidas: 0, aReceber: 0, aPagar: 0, iso: dStr };
+        const rest = remaining(t);
+        if (t.type === "despesa") {
+          cur.aPagar += rest;
+          saidasPrev += rest;
+        } else {
+          cur.aReceber += rest;
+          entradasPrev += rest;
+        }
         dayMap.set(label, cur);
       });
 
@@ -558,6 +597,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
           entradas: vals.entradas,
           saidas: vals.saidas,
           aReceber: vals.aReceber,
+          aPagar: vals.aPagar,
           saldo: running,
         };
       });
@@ -567,6 +607,8 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       totalDespesas: saidas,
       saldoFinal: entradas - saidas,
       chartData: chartPoints,
+      totalEntradasPrev: entradasPrev,
+      totalSaidasPrev: saidasPrev,
     };
   }, [allRealizedEntries, finance.titles, scope, selectedAccount, start, end]);
 
@@ -897,7 +939,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       {/* ========================================================================= */}
       {/* 3 CARDS DE MÉTRICAS (ENTRADAS, DESPESAS, RESULTADO DO PERÍODO)             */}
       {/* ========================================================================= */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {/* CARD 1: ENTRADAS */}
         <div className="rounded-xl border border-border bg-card p-4 shadow-2xs flex items-center justify-between">
           <div className="space-y-1">
@@ -929,6 +971,52 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
             <ArrowDownLeft className="h-4 w-4" strokeWidth={2.5} />
           </div>
         </div>
+
+        {/* ENTRADAS PREVISTAS: saldo a receber (ex.: restante da consulta após o sinal) */}
+        <button
+          type="button"
+          onClick={() => {
+            setActiveSubTab("previstos");
+            setTypeFilter("receitas");
+          }}
+          className="flex cursor-pointer items-center justify-between rounded-xl border border-border bg-card p-4 text-left shadow-2xs transition-colors hover:border-success/40"
+        >
+          <div className="space-y-1">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              ENTRADAS PREVISTAS
+            </span>
+            <p className="text-2xl font-semibold tracking-tight text-foreground">
+              <CountUp value={totalEntradasPrev} format={(v) => currency(v)} />
+            </p>
+            <p className="text-xs text-muted-foreground">A receber no período</p>
+          </div>
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-success/10 text-success/70">
+            <ArrowUpRight className="h-4 w-4" strokeWidth={2.5} />
+          </div>
+        </button>
+
+        {/* SAÍDAS PREVISTAS: contas a pagar com vencimento no período */}
+        <button
+          type="button"
+          onClick={() => {
+            setActiveSubTab("previstos");
+            setTypeFilter("despesas");
+          }}
+          className="flex cursor-pointer items-center justify-between rounded-xl border border-border bg-card p-4 text-left shadow-2xs transition-colors hover:border-destructive/40"
+        >
+          <div className="space-y-1">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              SAÍDAS PREVISTAS
+            </span>
+            <p className="text-2xl font-semibold tracking-tight text-foreground">
+              <CountUp value={totalSaidasPrev} format={(v) => currency(v)} />
+            </p>
+            <p className="text-xs text-muted-foreground">A pagar no período</p>
+          </div>
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive/60">
+            <ArrowDownLeft className="h-4 w-4" strokeWidth={2.5} />
+          </div>
+        </button>
 
         {/* CARD 3: RESULTADO DO PERÍODO */}
         <div className="rounded-xl border border-border bg-card p-4 shadow-2xs flex items-center justify-between">
@@ -1031,6 +1119,23 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
             onClick={() => setActiveSubTab("lancamentos")}
           >
             <Tag className="h-3.5 w-3.5" /> Lançamentos
+          </button>
+          <button
+            type="button"
+            className={cn(
+              "pb-2.5 pt-1 border-b-2 flex items-center gap-1.5 cursor-pointer transition-colors",
+              activeSubTab === "previstos"
+                ? "border-info text-info"
+                : "border-transparent text-muted-foreground hover:text-foreground/80",
+            )}
+            onClick={() => setActiveSubTab("previstos")}
+          >
+            <CalendarIcon className="h-3.5 w-3.5" /> Previstos
+            {forecastEntries.length > 0 && (
+              <span className="rounded-full bg-info/12 px-1.5 text-[11px] text-info">
+                {forecastEntries.length}
+              </span>
+            )}
           </button>
           <button
             type="button"
@@ -1259,9 +1364,26 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                           <span className="font-semibold text-foreground block text-xs">
                             {displayDate}
                           </span>
-                          <span className="text-xs text-success font-medium block">
-                            {isCurrentDay ? "Hoje" : "Realizado"}
-                          </span>
+                          {e.status === "pendente" ? (
+                            <span
+                              className={cn(
+                                "block text-xs font-medium",
+                                e.date && e.date < format(new Date(), "yyyy-MM-dd")
+                                  ? "text-destructive"
+                                  : "text-info",
+                              )}
+                            >
+                              {e.date && e.date < format(new Date(), "yyyy-MM-dd")
+                                ? "Vencido"
+                                : isCurrentDay
+                                  ? "Vence hoje"
+                                  : "Previsto"}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-success font-medium block">
+                              {isCurrentDay ? "Hoje" : "Realizado"}
+                            </span>
+                          )}
                         </TableCell>
 
                         {/* DESCRIÇÃO */}
@@ -1324,9 +1446,13 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                           >
                             {e.status === "cancelado"
                               ? "CANCELADO"
-                              : isDespesa
-                                ? "PAGO"
-                                : "RECEBIDO"}
+                              : e.status === "pendente"
+                                ? isDespesa
+                                  ? "A PAGAR"
+                                  : "A RECEBER"
+                                : isDespesa
+                                  ? "PAGO"
+                                  : "RECEBIDO"}
                           </span>
                         </TableCell>
 
@@ -1344,7 +1470,21 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                         {/* AÇÕES */}
                         <TableCell className="align-middle py-3 text-right">
                           <div className="flex items-center justify-end gap-1">
-                            {activeSubTab === "lancamentos" ? (
+                            {activeSubTab === "previstos" ? (
+                              <Button
+                                size="sm"
+                                className={cn(
+                                  "h-7 cursor-pointer rounded-md px-2.5 text-xs font-semibold text-white",
+                                  isDespesa
+                                    ? "bg-destructive hover:bg-destructive/90"
+                                    : "bg-success hover:bg-success/90",
+                                )}
+                                title={isDespesa ? "Registrar o pagamento" : "Registrar o recebimento"}
+                                onClick={() => handleOpenEditOrHistory(e)}
+                              >
+                                {isDespesa ? "Pagar" : "Receber"}
+                              </Button>
+                            ) : activeSubTab === "lancamentos" ? (
                               <>
                                 <Button
                                   size="icon"

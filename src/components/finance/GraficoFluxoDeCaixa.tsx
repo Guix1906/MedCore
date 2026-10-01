@@ -52,6 +52,7 @@ export interface DayChartPoint {
   entradas: number; // Total recebido no dia
   saidas: number; // Total pago no dia
   aReceber?: number; // Total previsto a receber
+  aPagar?: number; // Total previsto a pagar
   saldo: number; // Saldo acumulado até o dia
 }
 
@@ -146,7 +147,7 @@ export function GraficoFluxoDeCaixa({
 
     const dayMap = new Map<
       string,
-      { label: string; entradas: number; saidas: number; aReceber: number; iso: string }
+      { label: string; entradas: number; saidas: number; aReceber: number; aPagar: number; iso: string }
     >();
 
     ordenados.forEach((e) => {
@@ -168,6 +169,7 @@ export function GraficoFluxoDeCaixa({
         entradas: 0,
         saidas: 0,
         aReceber: 0,
+        aPagar: 0,
         iso: dStr,
       };
       const valor = Number(e.paid_amount ?? e.amount ?? 0);
@@ -195,6 +197,7 @@ export function GraficoFluxoDeCaixa({
         entradas: vals.entradas,
         saidas: vals.saidas,
         aReceber: vals.aReceber,
+        aPagar: vals.aPagar,
         saldo: runningSaldo,
       };
     });
@@ -212,7 +215,7 @@ export function GraficoFluxoDeCaixa({
       // Agrupamento por Semana
       const weekMap = new Map<
         string,
-        { label: string; entradas: number; saidas: number; aReceber: number; iso: string }
+        { label: string; entradas: number; saidas: number; aReceber: number; aPagar: number; iso: string }
       >();
 
       baseDailyData.forEach((d) => {
@@ -227,11 +230,13 @@ export function GraficoFluxoDeCaixa({
           entradas: 0,
           saidas: 0,
           aReceber: 0,
+          aPagar: 0,
           iso: key,
         };
         cur.entradas += d.entradas;
         cur.saidas += d.saidas;
         cur.aReceber += d.aReceber || 0;
+        cur.aPagar += d.aPagar || 0;
         weekMap.set(key, cur);
       });
 
@@ -246,6 +251,7 @@ export function GraficoFluxoDeCaixa({
             entradas: item.entradas,
             saidas: item.saidas,
             aReceber: item.aReceber,
+            aPagar: item.aPagar,
             saldo: running,
           };
         });
@@ -253,7 +259,7 @@ export function GraficoFluxoDeCaixa({
       // Agrupamento por Mês
       const monthMap = new Map<
         string,
-        { label: string; entradas: number; saidas: number; aReceber: number; iso: string }
+        { label: string; entradas: number; saidas: number; aReceber: number; aPagar: number; iso: string }
       >();
 
       baseDailyData.forEach((d) => {
@@ -267,11 +273,13 @@ export function GraficoFluxoDeCaixa({
           entradas: 0,
           saidas: 0,
           aReceber: 0,
+          aPagar: 0,
           iso: key,
         };
         cur.entradas += d.entradas;
         cur.saidas += d.saidas;
         cur.aReceber += d.aReceber || 0;
+        cur.aPagar += d.aPagar || 0;
         monthMap.set(key, cur);
       });
 
@@ -286,6 +294,7 @@ export function GraficoFluxoDeCaixa({
             entradas: item.entradas,
             saidas: item.saidas,
             aReceber: item.aReceber,
+            aPagar: item.aPagar,
             saldo: running,
           };
         });
@@ -293,7 +302,7 @@ export function GraficoFluxoDeCaixa({
       // Agrupamento por Ano
       const yearMap = new Map<
         string,
-        { label: string; entradas: number; saidas: number; aReceber: number; iso: string }
+        { label: string; entradas: number; saidas: number; aReceber: number; aPagar: number; iso: string }
       >();
 
       baseDailyData.forEach((d) => {
@@ -306,11 +315,13 @@ export function GraficoFluxoDeCaixa({
           entradas: 0,
           saidas: 0,
           aReceber: 0,
+          aPagar: 0,
           iso: key,
         };
         cur.entradas += d.entradas;
         cur.saidas += d.saidas;
         cur.aReceber += d.aReceber || 0;
+        cur.aPagar += d.aPagar || 0;
         yearMap.set(key, cur);
       });
 
@@ -325,6 +336,7 @@ export function GraficoFluxoDeCaixa({
             entradas: item.entradas,
             saidas: item.saidas,
             aReceber: item.aReceber,
+            aPagar: item.aPagar,
             saldo: running,
           };
         });
@@ -528,90 +540,70 @@ export function GraficoFluxoDeCaixa({
           <Chart
             type="line"
             height={280}
-            summary="Entradas e saídas no período, com o resultado acumulado consolidado."
+            summary="Entradas e saídas realizadas e previstas, com o saldo de cada período."
             series={[
               { name: "Entradas", type: "column", data: chartData.map((d) => d.entradas) },
-              ...(hasAReceber
-                ? [
-                    {
-                      name: "A Receber (Previsto)",
-                      type: "column" as const,
-                      data: chartData.map((d) => d.aReceber || 0),
-                    },
-                  ]
-                : []),
-              { name: "Saídas", type: "column", data: chartData.map((d) => d.saidas) },
-              { name: "Resultado acumulado", type: "line", data: chartData.map((d) => d.saldo) },
+              { name: "Entradas previstas", type: "column", data: chartData.map((d) => d.aReceber || 0) },
+              { name: "Saídas", type: "column", data: chartData.map((d) => -Math.abs(d.saidas)) },
+              { name: "Saídas previstas", type: "column", data: chartData.map((d) => -Math.abs(d.aPagar || 0)) },
+              { name: "Saldo", type: "line", data: chartData.map((d) => d.entradas - d.saidas) },
+              {
+                name: "Saldo previsto",
+                type: "line",
+                data: chartData.map((d) => d.entradas + (d.aReceber || 0) - d.saidas - (d.aPagar || 0)),
+              },
             ]}
             options={{
-              colors: hasAReceber
-                ? [
-                    CHART_COLORS.success,
-                    CHART_COLORS.primarySoft,
-                    CHART_COLORS.danger,
-                    CHART_COLORS.secondary,
-                  ]
-                : [CHART_COLORS.success, CHART_COLORS.danger, CHART_COLORS.secondary],
-              stroke: {
-                width: hasAReceber ? [0, 0, 0, 2.5] : [0, 0, 2.5],
-                curve: "smooth",
-              },
+              chart: { stacked: true },
+              colors: FLOW_COLORS,
+              stroke: { width: [0, 0, 0, 0, 2, 2], curve: "straight", dashArray: [0, 0, 0, 0, 0, 5] },
               markers: {
-                size: hasAReceber ? [0, 0, 0, 3] : [0, 0, 3],
+                size: [0, 0, 0, 0, 5, 5],
+                colors: [FLOW_COLORS[4], FLOW_COLORS[5]],
                 strokeWidth: 0,
-                hover: { size: 5 },
+                hover: { size: 7 },
               },
-              plotOptions: {
-                bar: { columnWidth: "40%", borderRadius: 3, borderRadiusApplication: "end" },
-              },
+              plotOptions: { bar: { columnWidth: "50%", borderRadius: 0 } },
               xaxis: { categories: chartData.map((d) => d.date) },
-              yaxis: {
-                labels: { formatter: compactValue },
-              },
-              annotations: {
-                yaxis: [
-                  {
-                    y: maxVolume,
-                    borderColor: CHART_COLORS.neutral,
-                    strokeDashArray: 3,
-                    opacity: 0.6,
-                  },
-                ],
-              },
+              yaxis: { labels: { formatter: compactValue } },
+              annotations: { yaxis: [{ y: 0, borderColor: "var(--border)", strokeDashArray: 0 }] },
               legend: { show: false },
               tooltip: {
                 shared: true,
                 intersect: false,
-                y: { formatter: (value) => fmtBRL(Number(value) || 0) },
+                y: { formatter: (value) => fmtBRL(Math.abs(Number(value) || 0)) },
               },
             }}
           />
         )}
       </div>
 
-      {/* Legenda Centralizada no Rodapé do Gráfico */}
-      <div className="flex items-center justify-center gap-6 pt-3 border-t border-border/40 text-xs font-medium flex-wrap">
-        <div className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-success shrink-0" />
-          <span className="text-muted-foreground">Entradas</span>
-        </div>
-        {hasAReceber && (
-          <div className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-primary shrink-0" />
-            <span className="text-muted-foreground">A Receber</span>
-          </div>
-        )}
-        <div className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-destructive shrink-0" />
-          <span className="text-muted-foreground">Saídas</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="h-1 w-4 rounded-full bg-info shrink-0" />
-          <span className="text-muted-foreground">Saldo</span>
-        </div>
+      {/* Legenda */}
+      <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 border-t border-border/40 pt-3 text-xs text-muted-foreground">
+        {[
+          ["Entradas", FLOW_COLORS[0]],
+          ["Entradas previstas", FLOW_COLORS[1]],
+          ["Saídas", FLOW_COLORS[2]],
+          ["Saídas previstas", FLOW_COLORS[3]],
+        ].map(([label, color]) => (
+          <span key={label} className="inline-flex items-center gap-1.5">
+            <span className="inline-block size-2.5 rounded-[2px]" style={{ background: color }} />
+            {label}
+          </span>
+        ))}
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-block h-[2px] w-5" style={{ background: FLOW_COLORS[4] }} />
+          Saldo
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-block w-5 border-t-2 border-dashed" style={{ borderColor: FLOW_COLORS[5] }} />
+          Saldo previsto
+        </span>
       </div>
     </div>
   );
 }
 
 export default GraficoFluxoDeCaixa;
+
+const FLOW_COLORS = ["#22d061", "#aef0c4", "#ff3358", "#ffa3b3", "#3b82f6", "#9cc3fb"];

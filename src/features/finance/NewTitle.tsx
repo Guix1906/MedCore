@@ -102,6 +102,21 @@ export default function NewTitle({
   const [busy, setBusy] = useState(false);
   const [createCatOpen, setCreateCatOpen] = useState(false);
 
+  // Classificação automática pela data: futura = prevista (a receber/a pagar);
+  // hoje ou passada = realizada, se marcada como paga.
+  const isFutureDate = Boolean(dueDate) && dueDate > localDate();
+  React.useEffect(() => {
+    if (isFutureDate) setIsPaidNow(false);
+    else if (defaultPaidNow) setIsPaidNow(true);
+  }, [isFutureDate, defaultPaidNow]);
+  const classification = isPaidNow && !isFutureDate
+    ? isExpense
+      ? { label: "Saída", hint: "sai do caixa na data informada", cls: "border-destructive/30 bg-destructive/8 text-destructive" }
+      : { label: "Entrada", hint: "entra no caixa na data informada", cls: "border-success/30 bg-success/10 text-success" }
+    : isExpense
+      ? { label: "Saída prevista", hint: "fica em contas a pagar até ser paga", cls: "border-destructive/20 bg-destructive/5 text-destructive/80" }
+      : { label: "Entrada prevista", hint: "fica em contas a receber até ser recebida", cls: "border-success/20 bg-success/5 text-success/80" };
+
   // Busca categorias cadastradas (banco de dados + cache local)
   const categoriesQuery = useQuery({
     queryKey: ["financial-title-categories"],
@@ -163,14 +178,15 @@ export default function NewTitle({
       if (titleError) throw titleError;
 
       // Se o usuário marcou como já pago, registra a baixa no mesmo fluxo do Financeiro
-      if (isPaidNow) {
+      if (isPaidNow && !isFutureDate) {
         const accountId = selectedAccount || finance.accounts[0]?.id;
         const { error: payError } = accountId
           ? await supabase.rpc("record_financial_payment", {
               p_id: crypto.randomUUID(),
               p_transaction_id: titleId,
               p_amount: numAmount,
-              p_paid_on: todayStr,
+              // Pagamento na data informada (lançamento retroativo cai no dia certo do caixa)
+              p_paid_on: dueDate <= todayStr ? dueDate : todayStr,
               p_method: paymentMethod.toLowerCase(),
               p_account_id: accountId,
               p_payer_name: resolvedPayer,
@@ -187,13 +203,7 @@ export default function NewTitle({
       }
       await refreshFinance(qc);
       toast.success(
-        isExpense
-          ? isPaidNow
-            ? "Despesa cadastrada e saída lançada no caixa com sucesso!"
-            : "Conta a pagar cadastrada com sucesso!"
-          : isPaidNow
-            ? "Receita cadastrada e entrada lançada no caixa com sucesso!"
-            : "Conta a receber cadastrada com sucesso!"
+        `${classification.label} lançada com sucesso.`
       );
       onClose();
     } catch (err: any) {
@@ -364,7 +374,19 @@ export default function NewTitle({
             />
           </div>
 
+          {/* Como o lançamento vai entrar no fluxo de caixa (classificação automática) */}
+          <div className={`flex items-center justify-between gap-2 rounded-xl border px-3.5 py-2.5 ${classification.cls}`}>
+            <span className="text-sm font-semibold">Vai entrar como: {classification.label}</span>
+            <span className="text-right text-[11px] opacity-80">{classification.hint}</span>
+          </div>
+
           {/* 5. BOX DE QUITAÇÃO IMEDIATA (BAIXA RÁPIDA NO CAIXA / FLUXO DE CAIXA) */}
+          {isFutureDate ? (
+            <p className="rounded-2xl border border-border/80 bg-muted/30 p-4 text-xs text-muted-foreground">
+              Data futura: o valor fica como <strong>previsto</strong>. Quando for pago, use
+              <strong> Receber/Pagar</strong> na aba <strong>Previstos</strong> do Fluxo de caixa.
+            </p>
+          ) : (
           <div
             className={`rounded-2xl border p-4 space-y-3 transition-colors ${
               isPaidNow
@@ -453,6 +475,7 @@ export default function NewTitle({
               </div>
             )}
           </div>
+          )}
 
           {/* BOTÕES DE AÇÃO */}
           <DialogFooter className="pt-3 gap-2 sm:gap-0">
