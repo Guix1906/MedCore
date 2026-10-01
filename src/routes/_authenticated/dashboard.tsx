@@ -103,9 +103,8 @@ function shiftRange(
   return [s, e];
 }
 function initialRange(): [Date, Date] {
-  const now = new Date();
-  const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const base = currentMonthStr === "2026-09" ? now : new Date(2026, 8, 15);
+  // Mês atual (antes estava fixo em setembro/2026 e escondia os dados dos outros meses)
+  const base = new Date();
   const start = new Date(base.getFullYear(), base.getMonth(), 1);
   start.setHours(0, 0, 0, 0);
   const end = new Date(base.getFullYear(), base.getMonth() + 1, 0);
@@ -335,40 +334,6 @@ function DashboardPage() {
   const doctors = doctorsQ.data ?? [];
   const loading =
     apptsQ.isLoading || patientsQ.isLoading || financeQ.isLoading || doctorsQ.isLoading;
-
-  // Garante que o dashboard mostre os lançamentos e agendamentos vigentes do sistema
-  useEffect(() => {
-    const hasDataInPeriod =
-      tx.some((t) => (t.date || "").slice(0, 7) === toISO(range[0]).slice(0, 7)) ||
-      appts.some((a) => (a.date || "").slice(0, 7) === toISO(range[0]).slice(0, 7));
-
-    if (!hasDataInPeriod && (tx.length > 0 || appts.length > 0)) {
-      const now = new Date();
-      const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-      const hasCurrentMonthEntries =
-        tx.some((t) => (t.date || "").startsWith(currentMonthStr)) ||
-        appts.some((a) => (a.date || "").startsWith(currentMonthStr));
-
-      if (!hasCurrentMonthEntries) {
-        const hasSep2026 =
-          tx.some((t) => (t.date || "").startsWith("2026-09")) ||
-          appts.some((a) => (a.date || "").startsWith("2026-09"));
-        if (hasSep2026) {
-          const s = new Date(2026, 8, 1);
-          s.setHours(0, 0, 0, 0);
-          const e = new Date(2026, 8 + 1, 0);
-          e.setHours(23, 59, 59, 999);
-          setRange((prev) => {
-            const prevStr = toISO(prev[0]).slice(0, 7);
-            if (prevStr !== "2026-09") {
-              return [s, e];
-            }
-            return prev;
-          });
-        }
-      }
-    }
-  }, [tx, appts, range]);
 
   const [rangeStart, rangeEnd] = range;
 
