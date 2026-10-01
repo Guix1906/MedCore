@@ -1434,7 +1434,7 @@ const RichEditor = forwardRef<
 
   return (
     <div
-      className="w-full overflow-hidden rounded-[8px] border border-border bg-card"
+      className="w-full overflow-hidden rounded-[8px] border border-border bg-card transition-[border-color,box-shadow] focus-within:border-primary/50 focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--primary)_10%,transparent)]"
       style={{ minHeight: 285 }}
     >
       <div className="flex min-h-12 flex-wrap items-center gap-[6px] overflow-x-auto whitespace-nowrap border-b border-border bg-muted/40 px-3 py-2">
@@ -1514,7 +1514,9 @@ const RichEditor = forwardRef<
           }}
           onBlur={saveSelection}
           className="prose-clinical px-5 py-[18px] text-foreground outline-none ring-0 focus:outline-none focus-visible:outline-none focus:ring-0 [&_ol]:list-decimal [&_ol]:pl-6 [&_ul]:list-disc [&_ul]:pl-6"
-          style={{ minHeight: Math.max(minHeight, 220) }}
+          // A regra global [contenteditable]:focus-visible desenha um contorno sobre o texto;
+          // o foco é indicado pela borda da caixa do editor (focus-within).
+          style={{ minHeight: Math.max(minHeight, 220), outline: "none" }}
         />
       </div>
     </div>
