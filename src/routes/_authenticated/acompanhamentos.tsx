@@ -996,6 +996,44 @@ function TreatmentManageModal({
     const endDateObj = new Date(startDateObj.getTime() + protocolDaysNum * 86400000);
     const endDateStr = endDateObj.toISOString().slice(0, 10);
 
+    // As parcelas só são regeneradas quando as condições financeiras mudam. Se a regeneração
+    // falhar (ex.: plano com recebimentos), o plano não pode ficar dizendo "7x" com 1 parcela.
+    const rpcType = isLivre ? "parcelado" : countNum === 1 && downNum === 0 ? "a_vista" : "parcelado";
+    const rpcCount = isLivre || (countNum === 1 && downNum === 0) ? 1 : countNum;
+    const financeChanged =
+      Number(treatment.total_value || 0) !== totalNum ||
+      Number(treatment.discount || 0) !== discountNum ||
+      Number(treatment.down_payment || 0) !== downNum ||
+      Number(treatment.installments_count || 1) !== rpcCount ||
+      (treatment.payment_type || "") !== rpcType ||
+      (treatment.payment_method || "pix") !== (financeForm.method || "pix") ||
+      (downNum > 0 && (treatment.down_payment_due_date || "") !== financeForm.downDue) ||
+      (!isLivre && financePreview.balance > 0 && (treatment.first_due_date || "") !== financeForm.firstDue);
+
+    if (totalNum > 0 && financeChanged) {
+      const { error: confErr } = await supabase.rpc("configure_treatment_payment", {
+        p_treatment_id: treatment.id,
+        p_total: totalNum,
+        p_discount: discountNum,
+        p_down: downNum,
+        p_type: rpcType,
+        p_down_method: downNum > 0 ? financeForm.downMethod : null,
+        p_method: financeForm.method || "pix",
+        p_count: rpcCount,
+        p_down_due: downNum > 0 ? financeForm.downDue : null,
+        p_first_due: financeForm.firstDue || null,
+      });
+      if (confErr) {
+        setSaving(false);
+        toast.error("Não foi possível alterar as parcelas do plano", {
+          description: /recebimentos/i.test(confErr.message || "")
+            ? "Este plano já tem recebimentos. Para mudar o parcelamento, use \"Repactuar\" na aba Financeiro do acompanhamento."
+            : confErr.message,
+        });
+        return;
+      }
+    }
+
     const payload = {
       title: form.title.trim(),
       objective: form.objective.trim() || null,
@@ -1029,23 +1067,7 @@ function TreatmentManageModal({
     // Configurar parcelas e entrada automaticamente no financeiro
     if (totalNum > 0) {
       try {
-        const { error: confErr } = await supabase.rpc("configure_treatment_payment", {
-          p_treatment_id: treatment.id,
-          p_total: totalNum,
-          p_discount: discountNum,
-          p_down: downNum,
-          p_type: isLivre ? "parcelado" : countNum === 1 && downNum === 0 ? "a_vista" : "parcelado",
-          p_down_method: downNum > 0 ? financeForm.downMethod : null,
-          p_method: financeForm.method || "pix",
-          p_count: isLivre || (countNum === 1 && downNum === 0) ? 1 : countNum,
-          p_down_due: downNum > 0 ? financeForm.downDue : null,
-          p_first_due: financeForm.firstDue || null,
-        });
-
-        if (confErr) {
-          console.error("Erro ao configurar parcelas via RPC:", confErr);
-          toast.warning("Dados salvos! " + (confErr.message || "Aviso ao recalcular parcelas."));
-        } else if (isLivre && financePreview.balance > 0) {
+        if (financeChanged && isLivre && financePreview.balance > 0) {
           // Atualiza título de saldo livre
           const { data: createdTxs } = await supabase
             .from("transactions")

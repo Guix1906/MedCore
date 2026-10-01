@@ -407,7 +407,14 @@ function DashboardPage() {
 
   // Faturamento comparado (bars by day, current period)
   const revenueDaily = useMemo(() => {
-    const days = eachDay(rangeStart, rangeEnd);
+    // Últimos 5 dias terminando hoje (ex.: 27 Set → 1 Out)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const days = Array.from({ length: 5 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(today.getDate() - (4 - i));
+      return d;
+    });
     return days.map((d) => {
       const iso = toISO(d);
       const total = tx
@@ -419,11 +426,11 @@ function DashboardPage() {
         )
         .reduce((s, r) => s + Number(r.amount), 0);
       return {
-        name: d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", ""),
+        name: `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`,
         value: total,
       };
     });
-  }, [tx, rangeStart, rangeEnd]);
+  }, [tx]);
 
   const cashflow = useMemo(() => {
     const mapped = tx.map((t) => ({
@@ -992,7 +999,7 @@ function DashboardPage() {
               footer={`${genderData.total} pacientes no período`}
             />
             <div className="rounded-2xl bg-card p-4 shadow-xs">
-              <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+              <h3 className="flex items-center gap-1.5 text-lg font-semibold text-foreground">
                 Faturamento comparado{" "}
                 <Help text={showBalance ? `${BRL(revenueTotal)} recebidos no período` : "Valores ocultos"} />
               </h3>
@@ -1014,6 +1021,8 @@ function DashboardPage() {
 // ---------- layout do modelo de referência ----------
 const FLOW_COLORS = ["#22d061", "#aef0c4", "#ff3358", "#ffa3b3", "#3b82f6", "#9cc3fb"];
 const DONUT_COLORS = ["#ffd96a", "#8b6dff", "#22d061", "#ff3358", "#3b82f6", "#a1a1aa"];
+
+const MONTHS_SHORT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
 function niceAxis(max: number, min: number) {
   const span = Math.max(max - min, 1);
@@ -1389,14 +1398,20 @@ function ApexRevenueDaily({ data }: { data: { name: string; value: number }[] })
     },
     colors: [CHART_COLORS.primary],
     plotOptions: {
-      bar: { borderRadius: 6, columnWidth: "55%", borderRadiusApplication: "end" },
+      bar: { borderRadius: 8, columnWidth: "45%", borderRadiusApplication: "around" },
     },
     dataLabels: { enabled: false },
-    grid: { strokeDashArray: 0, xaxis: { lines: { show: false } } },
-    xaxis: { categories },
+    grid: { strokeDashArray: 0, xaxis: { lines: { show: false } }, yaxis: { lines: { show: true } } },
+    xaxis: { categories, axisBorder: { show: false }, axisTicks: { show: false } },
     yaxis: {
+      min: 0,
+      max: (m: number) => {
+        const step = Math.max(2000, Math.ceil(m / 4 / 2000) * 2000);
+        return step * 4;
+      },
+      tickAmount: 4,
       labels: {
-        formatter: (v) => `R$ ${Math.round(Number(v) / 1000)}k`,
+        formatter: (v) => (Number(v) === 0 ? "R$ 0" : `R$ ${Math.round(Number(v) / 1000)}k`),
       },
     },
     tooltip: {
