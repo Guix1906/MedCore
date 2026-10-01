@@ -324,7 +324,13 @@ export function PatientFullProfileView({
             : deletingItem.kind === "consulta"
               ? "appointments"
               : null;
-        if (table) {
+        if (table === "medical_records") {
+          // Função do banco: remove também os adendos do prontuário
+          const { error } = await (supabase.rpc as any)("delete_medical_record", {
+            p_id: deletingItem.id,
+          });
+          if (error) throw error;
+        } else if (table) {
           const { error } = await supabase.from(table).delete().eq("id", deletingItem.id);
           if (error) throw error;
         }
@@ -837,8 +843,7 @@ export function PatientFullProfileView({
                               </button>
                             )}
 
-                            {/* Excluir: prontuário não é excluído (guarda de 20 anos); só consultas */}
-                            {item.kind !== "prontuario" && (
+                            {item.kind !== "evolucao" && (
                               <button
                                 type="button"
                                 onClick={() => handleOpenDelete(item)}
@@ -1064,6 +1069,12 @@ export function PatientFullProfileView({
                 <strong className="text-foreground">{deletingItem?.formattedDate}</strong> de{" "}
                 <strong className="text-foreground">{data.name}</strong>? Esta ação removerá o
                 registro do histórico do paciente.
+                {deletingItem?.kind === "prontuario" && (
+                  <span className="mt-2 block text-warning">
+                    {deletingItem.raw?.signed_at ? "Este prontuário está assinado. " : ""}A lei
+                    exige guardar prontuários por 20 anos; a exclusão é responsabilidade da clínica.
+                  </span>
+                )}
               </AlertDialogDescription>
             </AlertDialogHeader>
           </div>

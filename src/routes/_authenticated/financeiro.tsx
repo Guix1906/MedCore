@@ -19,7 +19,8 @@ import BankReconciliation from "@/features/finance/BankReconciliation";
 import CategoriesManager from "@/features/finance/CategoriesManager";
 import NewTitle from "@/features/finance/NewTitle";
 import PaymentHistory from "@/features/finance/PaymentHistory";
-import OperationForm, { OperationLock, Reason, formText } from "@/features/finance/OperationForm";
+import { OperationLock } from "@/features/finance/OperationForm";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -57,6 +58,7 @@ function FinanceiroPage() {
   const creating =
     creatingType ?? (search.novo ? (search.tab === "pagar" ? "despesa" : "receita") : null);
   const [cancelId, setCancelId] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const [active, setActive] = useState<string | null>(null);
   const [operationsLocked, setOperationsLocked] = useState(false);
   const locked = !!active || operationsLocked;
@@ -172,34 +174,42 @@ function FinanceiroPage() {
               <Dialog
                 open={!!cancelId}
                 onOpenChange={(open) => {
-                  if (!open && !locked) setCancelId("");
+                  if (!open && !locked && !deleting) setCancelId("");
                 }}
               >
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>Cancelar conta</DialogTitle>
+                    <DialogTitle>Excluir lançamento?</DialogTitle>
                     <DialogDescription>
-                      O registro será preservado no histórico. Esta ação não devolve dinheiro.
+                      Se já houver recebimentos, eles serão estornados para o caixa continuar
+                      correto. Esta ação não devolve dinheiro ao paciente.
                     </DialogDescription>
                   </DialogHeader>
-                  {cancelId && (
-                    <OperationForm
-                      title="Confirmar cancelamento"
-                      execute={async (form) => {
-                        const result = await supabase.rpc("cancel_financial_title", {
+                  <div className="flex justify-end gap-2">
+                    <Button variant="ghost" disabled={deleting} onClick={() => setCancelId("")}>
+                      Voltar
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      disabled={deleting}
+                      onClick={async () => {
+                        setDeleting(true);
+                        const { error } = await (supabase.rpc as any)("delete_financial_title", {
                           p_id: cancelId,
-                          p_reason: formText(form, "reason"),
                         });
-                        if (!result.error) {
-                          setCancelId("");
-                          void refreshFinance(queryClient);
+                        setDeleting(false);
+                        if (error) {
+                          toast.error("Não foi possível excluir", { description: errorMessage(error) });
+                          return;
                         }
-                        return result;
+                        toast.success("Lançamento excluído.");
+                        setCancelId("");
+                        void refreshFinance(queryClient);
                       }}
                     >
-                      <Reason />
-                    </OperationForm>
-                  )}
+                      {deleting ? "Excluindo..." : "Sim, excluir"}
+                    </Button>
+                  </div>
                 </DialogContent>
               </Dialog>
             </>
