@@ -29,6 +29,8 @@ import {
   MapPin,
 } from "lucide-react";
 import { useActiveCompany } from "@/hooks/use-active-company";
+import { useQuery } from "@tanstack/react-query";
+import { getFinancialSnapshot, getTitleEventKey } from "@/features/finance/finance-api";
 import { useCompanyMembers } from "@/hooks/use-company-members";
 
 function formatLongDate(d: Date) {
@@ -260,6 +262,14 @@ export function ActivityCard({
 }) {
   const [hoverOpen, setHoverOpen] = useState(false);
   const [isEdgeArea, setIsEdgeArea] = useState(false);
+  // Mesma consulta (e cache) do Financeiro: o selo do card acompanha os recebimentos
+  const { data: financeSnapshot } = useQuery({
+    queryKey: ["financial-snapshot"],
+    queryFn: getFinancialSnapshot,
+    enabled: a.source === "event",
+    staleTime: 30_000,
+    retry: false,
+  });
   const contentRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const justResizedRef = useRef(false);
@@ -626,11 +636,28 @@ export function ActivityCard({
   const accent = meta?.color || "#6d3ff5";
   const lightBg = softenColor(accent);
 
+  // Situação real da cobrança no financeiro (o meta guarda só o que foi combinado ao agendar)
+  const eventRawId = a.source === "event" ? (a.id.includes(":") ? a.id.split(":")[1] : a.id) : null;
+  const linkedTitle = eventRawId
+    ? financeSnapshot?.titles.find(
+        (t) => t.status !== "cancelado" && getTitleEventKey(t) === eventRawId,
+      )
+    : undefined;
+
   const hasSinal = meta?.downPayment && meta.downPayment > 0;
   const hasRemaining = meta?.remainingValue && meta.remainingValue > 0;
   let payBadge: { label: string; tone: string } | null = null;
   if (meta?.planCoverage === "incluso") {
     payBadge = { label: "No Plano", tone: "var(--info)" };
+  } else if (linkedTitle) {
+    const total = Number(linkedTitle.amount) || 0;
+    const paid = Number(linkedTitle.paid_amount) || 0;
+    payBadge =
+      paid >= total && total > 0
+        ? { label: "Pago Total", tone: "var(--success)" }
+        : paid > 0
+          ? { label: "Sinal Pago", tone: "var(--warning)" }
+          : { label: "Pendente", tone: "var(--destructive)" };
   } else if (hasSinal && hasRemaining) {
     payBadge = { label: "Sinal Pago", tone: "var(--warning)" };
   } else if (hasSinal && !hasRemaining) {
