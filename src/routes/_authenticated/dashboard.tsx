@@ -198,12 +198,13 @@ function DashboardPage() {
       const rawList: any[] = [...(eventRows ?? [])];
 
       // Consultas registradas apenas na tabela appointments (mesmo id do evento quando criadas pela agenda)
+      // Complementar: se falhar, os agendamentos da agenda (events) continuam aparecendo
       const { data: apptRows, error: apptError } = await supabase
         .from("appointments")
         .select("id, date, start_time, end_time, patient_id, doctor_id, type, status, notes, created_at")
         .order("date", { ascending: true })
         .limit(200);
-      if (apptError) throw apptError;
+      if (apptError) console.warn("Dashboard: consultas (appointments) indisponíveis:", apptError.message);
       const existingIds = new Set(rawList.map((e) => e.id));
       (apptRows ?? []).forEach((a: any) => {
         if (existingIds.has(a.id)) return;
@@ -266,10 +267,11 @@ function DashboardPage() {
         };
       }) as Appt[];
     },
-    staleTime: 30_000,
+    staleTime: 15_000,
     gcTime: 30 * 60_000,
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
+    // Ao abrir o dashboard, busca os agendamentos de novo (novos agendamentos aparecem na hora)
+    refetchOnMount: "always",
   });
 
   const patientsQ = useQuery({

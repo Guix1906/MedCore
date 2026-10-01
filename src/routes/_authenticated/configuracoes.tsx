@@ -29,6 +29,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useClinicCities } from "@/hooks/use-clinic-cities";
+import { useActiveCompany } from "@/hooks/use-active-company";
 import { confirmDialog } from "@/components/app/confirm-dialog";
 import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
@@ -294,6 +295,7 @@ const settingsInput =
 
 function ClinicSettings() {
   const queryClient = useQueryClient();
+  const { companyId } = useActiveCompany();
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -356,28 +358,22 @@ function ClinicSettings() {
       primary_color: f.primary_color || null,
     };
 
-    try {
-      await companyService.updateClinicSettings(payload as any);
-      queryClient.invalidateQueries({ queryKey: ["clinic-settings"] });
-    } catch {
-      const { error, data } = f.id
-        ? await (supabase as DbRow)
-            .from("clinic_settings")
-            .update(payload)
-            .eq("id", f.id)
-            .select()
-            .maybeSingle()
-        : await (supabase as DbRow).from("clinic_settings").insert(payload).select().maybeSingle();
-      if (error) {
-        toast.error("Erro: " + error.message);
-        setSaving(false);
-        return;
-      }
-      if (data) setF((p) => ({ ...p, id: data.id }));
+    // Grava os dados e o nome da clínica exibido em todo o sistema (menu, financeiro, comprovantes)
+    const { data, error } = await (supabase.rpc as any)("save_clinic_profile", {
+      p_company_id: companyId,
+      p_settings: payload,
+    });
+    if (error) {
+      toast.error("Não foi possível salvar", { description: error.message });
+      setSaving(false);
+      return;
     }
+    if (data?.id) setF((p) => ({ ...p, id: data.id }));
+    // Atualiza o nome em todas as telas abertas
+    void queryClient.invalidateQueries();
 
     setSaving(false);
-    toast.success("Configurações salvas");
+    toast.success("Dados da clínica salvos");
     setMsg("Salvo com sucesso");
     setTimeout(() => setMsg(""), 2000);
   };

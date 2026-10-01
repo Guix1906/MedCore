@@ -64,9 +64,33 @@ export async function getFinancialReportingRows() {
   return reportingRows(data);
 }
 
+/**
+ * Cobranças ligadas a agendamentos (origin_key "event:<id>"), lidas direto da tabela:
+ * o selo dos cards da agenda não depende da versão do get_financial_snapshot no banco.
+ * Uma única consulta compartilhada por todos os cards.
+ */
+export async function getAgendaEventTitles(): Promise<
+  Record<string, { amount: number; paid_amount: number; status: string }>
+> {
+  const { data, error } = await (supabase as any)
+    .from("transactions")
+    .select("origin_key, amount, paid_amount, status")
+    .like("origin_key", "event:%")
+    .neq("status", "cancelado");
+  if (error) throw error;
+  const map: Record<string, { amount: number; paid_amount: number; status: string }> = {};
+  for (const row of (data ?? []) as any[]) {
+    const id = extractEventId(row.origin_key);
+    if (id) map[id] = { amount: toNumber(row.amount), paid_amount: toNumber(row.paid_amount), status: String(row.status) };
+  }
+  return map;
+}
+
 export function refreshFinance(qc: QueryClient): Promise<void> {
   const keys = [
     "financial-snapshot",
+    "agenda-event-titles",
+    "event-financial-title",
     "cash-flow-snapshot",
     "financial-operations",
     "transactions",
