@@ -29,12 +29,14 @@ export const PAYMENT_METHODS = {
 export const currency = (value: number) =>
   value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-/** Aceita formatos digitados no Brasil: "600", "600,5", "1.200,00", "R$ 1.200,00", "1200.50". */
+/**
+ * Aceita formatos digitados no Brasil: "600", "600,5", "1.200,00", "R$ 1.200,00", "1200.50".
+ * "1.234" sem vírgula continua recusado: é ambíguo (mil e duzentos ou 1,234?).
+ */
 function normalizeMoneyInput(value: string): string {
   let s = value.trim().replace(/^R\$\s*/i, "").replace(/\s/g, "");
-  if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
-  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, "");
-  return s;
+  if (/^\d{1,3}(\.\d{3})+,\d{1,2}$/.test(s)) s = s.replace(/\./g, "");
+  return s.replace(",", ".");
 }
 
 /** Versão que não lança erro: devolve null quando o texto ainda não é um valor válido. */
