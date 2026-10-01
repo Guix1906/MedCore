@@ -519,6 +519,18 @@ function DashboardPage() {
       .sort((a, b) => a.when!.getTime() - b.when!.getTime());
   }, [appts]);
 
+  // Sem nada para hoje/amanhã: mostra os próximos agendamentos futuros da agenda
+  const upcoming = useMemo(() => {
+    const now = new Date();
+    return appts
+      .filter((a) => {
+        const st = (a.status || "").toLowerCase();
+        return a.when && !isNaN(a.when.getTime()) && a.when > now && st !== "cancelado" && st !== "cancelled";
+      })
+      .sort((a, b) => a.when!.getTime() - b.when!.getTime())
+      .slice(0, 5);
+  }, [appts]);
+
   // Aniversariantes (mês atual)
   const birthdaysThisMonth = useMemo(() => {
     const m = new Date().getMonth();
@@ -763,13 +775,25 @@ function DashboardPage() {
           <div className="flex flex-col gap-3">
             <SectionTitle title="Agendamentos das próximas 24h" />
             <div className="min-h-[150px] flex-1 rounded-2xl bg-card p-4 shadow-xs">
-              {next24h.length === 0 ? (
+              {apptsQ.error ? (
+                <p role="alert" className="py-6 text-center text-sm text-destructive">
+                  Não foi possível carregar os agendamentos: {errorMessage(apptsQ.error)}
+                </p>
+              ) : apptsQ.isLoading ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">Carregando agendamentos…</p>
+              ) : next24h.length === 0 && upcoming.length === 0 ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
-                  Nenhum agendamento nas próximas 24 horas.
+                  Nenhum agendamento futuro na agenda.
                 </p>
               ) : (
+                <>
+                {next24h.length === 0 && (
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    Nada marcado para hoje e amanhã. Próximos agendamentos:
+                  </p>
+                )}
                 <ul className="space-y-2">
-                  {next24h.slice(0, 6).map((a) => {
+                  {(next24h.length > 0 ? next24h : upcoming).slice(0, 6).map((a) => {
                     const pat = patients.find((p) => p.id === a.patient_id);
                     const name = (a as any).patient_name || pat?.name || a.title || "Agendamento";
                     const typeLabel = (a.type || "Atendimento").replace(/^\w/, (c) => c.toUpperCase());
@@ -794,6 +818,7 @@ function DashboardPage() {
                     );
                   })}
                 </ul>
+                </>
               )}
             </div>
           </div>
