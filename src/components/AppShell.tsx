@@ -106,7 +106,7 @@ const WHATSAPP_URL =
 // renderização no cliente continua igual à do servidor.
 let macPlatform: boolean | null = null;
 
-export default function AppShell({ children, title }: { children: ReactNode; title?: string }) {
+export default function AppShell({ children }: { children: ReactNode; title?: string }) {
   useSessionTimeout();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const navigate = useNavigate();
@@ -351,11 +351,6 @@ export default function AppShell({ children, title }: { children: ReactNode; tit
           >
             <BrandLogo />
           </Link>
-          {title && (
-            <span className="ml-1 hidden min-w-0 truncate border-l border-hairline pl-4 text-sm font-semibold text-foreground md:block">
-              {title}
-            </span>
-          )}
         </div>
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           <button
