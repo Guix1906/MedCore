@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import ClinicalPhotos from "./ClinicalPhotos";
 import TreatmentAlerts from "./TreatmentAlerts";
@@ -133,6 +134,32 @@ export default function ClinicalFollowup({
       setBusy(false);
     }
   };
+
+  const deleteEvolution = async (evId: string) => {
+    if (!window.confirm("Deseja realmente excluir esta evolução?")) return;
+    try {
+      let deleted = false;
+      try {
+        const { error: rpcErr } = await (supabase.rpc as any)("delete_treatment_evolution", { p_id: evId });
+        if (!rpcErr) deleted = true;
+      } catch {}
+
+      if (!deleted) {
+        const { error } = await (supabase as any).from("treatment_evolutions").delete().eq("id", evId);
+        if (error) throw error;
+      }
+
+      toast.success("Evolução excluída com sucesso.");
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["treatment-evolutions", treatmentId] }),
+        qc.invalidateQueries({ queryKey: ["patient-clinical-history"] }),
+        qc.invalidateQueries({ queryKey: ["treatment-alerts"] }),
+      ]);
+    } catch (err: any) {
+      toast.error("Erro ao excluir evolução: " + (err?.message || "Tente novamente"));
+    }
+  };
+
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border bg-card p-4 text-sm space-y-1">
@@ -228,11 +255,21 @@ export default function ClinicalFollowup({
         )}
         {history.data?.evolutions.map((e) => (
           <article key={e.id} className="border-t pt-3 text-sm space-y-1">
-            <p className="font-semibold">
-              {formatClinicalDate(e.occurred_on)}
-              {e.is_return && " - Retorno realizado"}
-              {e.weight_kg !== null && ` - ${e.weight_kg} kg`}
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="font-semibold">
+                {formatClinicalDate(e.occurred_on)}
+                {e.is_return && " - Retorno realizado"}
+                {e.weight_kg !== null && ` - ${e.weight_kg} kg`}
+              </p>
+              <button
+                type="button"
+                onClick={() => void deleteEvolution(e.id)}
+                className="text-muted-foreground hover:text-destructive p-1 rounded hover:bg-destructive/10 transition-colors cursor-pointer"
+                title="Excluir evolução"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
             <p className="whitespace-pre-wrap">{e.notes}</p>
             {e.parameters && <p>Parâmetros: {e.parameters}</p>}
             {e.next_step && <p>Próxima conduta: {e.next_step}</p>}

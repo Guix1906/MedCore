@@ -34,6 +34,7 @@ import {
   formatConsultationRecord,
   type StructuredConsultationResult,
 } from "@/lib/gemini";
+import { prontuarioService } from "@/services/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -318,32 +319,59 @@ export function PatientFullProfileView({
     setIsDeleting(true);
     try {
       if (data.id && !isExample) {
-        const table =
-          deletingItem.kind === "prontuario"
-            ? "medical_records"
-            : deletingItem.kind === "consulta"
-              ? "appointments"
-              : null;
-        if (table === "medical_records") {
-          // Função do banco: remove também os adendos do prontuário
-          const { error } = await (supabase.rpc as any)("delete_medical_record", {
-            p_id: deletingItem.id,
-          });
+        if (deletingItem.kind === "prontuario") {
+          let recDeleted = false;
+          try {
+            const { error } = await (supabase.rpc as any)("delete_medical_record", {
+              p_id: deletingItem.id,
+            });
+            if (!error) recDeleted = true;
+          } catch {}
+
+          if (!recDeleted) {
+            await supabase.from("prescriptions").delete().eq("medical_record_id", deletingItem.id);
+            const { error } = await supabase.from("medical_records").delete().eq("id", deletingItem.id);
+            if (error) throw error;
+          }
+          await prontuarioService.deleteRecord(deletingItem.id).catch(() => {});
+        } else if (deletingItem.kind === "consulta") {
+          try {
+            await (supabase.rpc as any)("delete_agenda_event", { p_event_id: deletingItem.id });
+          } catch {}
+          const { error } = await supabase.from("appointments").delete().eq("id", deletingItem.id);
           if (error) throw error;
-        } else if (table) {
-          const { error } = await supabase.from(table).delete().eq("id", deletingItem.id);
-          if (error) throw error;
+        } else if (deletingItem.kind === "evolucao") {
+          let evDeleted = false;
+          try {
+            const { error } = await (supabase.rpc as any)("delete_treatment_evolution", {
+              p_id: deletingItem.id,
+            });
+            if (!error) evDeleted = true;
+          } catch {}
+
+          if (!evDeleted) {
+            const { error } = await (supabase as any).from("treatment_evolutions").delete().eq("id", deletingItem.id);
+            if (error) throw error;
+          }
         }
       }
 
-      toast.success("Prontuário excluído com sucesso!");
+      toast.success(
+        deletingItem.kind === "evolucao"
+          ? "Evolução excluída com sucesso!"
+          : deletingItem.kind === "consulta"
+            ? "Consulta excluída com sucesso!"
+            : "Prontuário excluído com sucesso!",
+      );
       setDeleteModalOpen(false);
       setDeletingItem(null);
       refreshHistory();
       queryClient.invalidateQueries({ queryKey: ["patient-clinical-history"] });
       queryClient.invalidateQueries({ queryKey: ["patient-medical-records"] });
+      queryClient.invalidateQueries({ queryKey: ["treatment-evolutions"] });
+      queryClient.invalidateQueries({ queryKey: ["treatments-list"] });
     } catch (err: any) {
-      toast.error("Erro ao excluir prontuário: " + (err?.message || "Tente novamente"));
+      toast.error("Erro ao excluir registro: " + (err?.message || "Tente novamente"));
     } finally {
       setIsDeleting(false);
     }
@@ -843,17 +871,15 @@ export function PatientFullProfileView({
                               </button>
                             )}
 
-                            {item.kind !== "evolucao" && (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenDelete(item)}
-                                className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-destructive bg-muted hover:bg-destructive/10 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-                                title="Excluir este registro"
-                              >
-                                <Trash2 size={12} />
-                                <span>Excluir</span>
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDelete(item)}
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-destructive bg-muted hover:bg-destructive/10 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                              title="Excluir este registro"
+                            >
+                              <Trash2 size={12} />
+                              <span>Excluir</span>
+                            </button>
                           </div>
                         </div>
 

@@ -14,7 +14,7 @@ import {
   type StructuredConsultationResult,
 } from "@/lib/gemini";
 import { DUR, EASE_OUT, fadeUp, staggerContainer } from "@/lib/motion";
-import { patientsService } from "@/services/api";
+import { patientsService, prontuarioService } from "@/services/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
@@ -366,18 +366,30 @@ export default function ProntuarioPage() {
       title: `Excluir ${kindLabel} de ${rec.formattedDate}?`,
       description:
         rec.kind === "prontuario"
-          ? "O prontuário e seus adendos serão excluídos. A lei exige guardar prontuários por 20 anos; a exclusão é responsabilidade da clínica."
+          ? "O prontuário e seus adendos/prescrições serão excluídos. A lei exige guardar prontuários por 20 anos; a exclusão é responsabilidade da clínica."
           : rec.kind === "consulta"
             ? "A consulta sai da agenda. Se tiver cobrança, recebimentos são estornados e a cobrança cancelada."
-            : "A evolução será excluída do plano de acompanhamento.",
+            : "A evolução e prescrições associadas serão excluídas do histórico.",
       confirmText: "Excluir",
       destructive: true,
     });
     if (!ok) return;
     try {
       if (rec.kind === "prontuario") {
-        const { error } = await (supabase.rpc as any)("delete_medical_record", { p_id: rec.id });
-        if (error) throw error;
+        let recDeleted = false;
+        try {
+          const { error } = await (supabase.rpc as any)("delete_medical_record", { p_id: rec.id });
+          if (!error) recDeleted = true;
+        } catch {}
+
+        if (!recDeleted) {
+          // Remove prescrições vinculadas e o prontuário diretamente
+          await supabase.from("prescriptions").delete().eq("medical_record_id", rec.id);
+          const { error: directErr } = await supabase.from("medical_records").delete().eq("id", rec.id);
+          if (directErr) throw directErr;
+        }
+        // Remove também de registro via backend local/PHP se existir
+        await prontuarioService.deleteRecord(rec.id).catch(() => {});
       } else if (rec.kind === "consulta") {
         // Agendamento da agenda (mesmo id) + registro da consulta
         const { error: evErr } = await (supabase.rpc as any)("delete_agenda_event", { p_event_id: rec.id });
@@ -385,13 +397,25 @@ export default function ProntuarioPage() {
         const { error } = await supabase.from("appointments").delete().eq("id", rec.id);
         if (error) throw error;
       } else {
-        const { error } = await (supabase as any).from("treatment_evolutions").delete().eq("id", rec.id);
-        if (error) throw error;
+        // Evolução clínica
+        let evDeleted = false;
+        try {
+          const { error: rpcErr } = await (supabase.rpc as any)("delete_treatment_evolution", { p_id: rec.id });
+          if (!rpcErr) evDeleted = true;
+        } catch {}
+
+        if (!evDeleted) {
+          const { error } = await (supabase as any).from("treatment_evolutions").delete().eq("id", rec.id);
+          if (error) throw error;
+        }
       }
+
       toast.success(`${kindLabel.charAt(0).toUpperCase()}${kindLabel.slice(1)} excluído(a).`);
       void Promise.allSettled([
         queryClient.invalidateQueries({ queryKey: ["patient-clinical-history"] }),
         queryClient.invalidateQueries({ queryKey: ["patient-medical-records"] }),
+        queryClient.invalidateQueries({ queryKey: ["treatment-evolutions"] }),
+        queryClient.invalidateQueries({ queryKey: ["treatments-list"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
         queryClient.invalidateQueries({ queryKey: ["agenda-events"] }),
       ]);
