@@ -33,6 +33,10 @@ export const Route = createFileRoute("/_authenticated/relatorios")({
       { name: "description", content: "Relatórios analíticos da clínica." },
     ],
   }),
+  // ?aba=clinico etc. abre direto a categoria (atalhos do menu lateral)
+  validateSearch: (search: Record<string, unknown>): { aba?: Category } => ({
+    aba: CATEGORIES.some((c) => c.id === search.aba) ? (search.aba as Category) : undefined,
+  }),
   component: RelatoriosPage,
 });
 
@@ -57,7 +61,11 @@ const brl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", curren
 const monthKey = (d: string) => d.slice(0, 7);
 
 function RelatoriosPage() {
-  const [cat, setCat] = useState<Category>("financeiro");
+  const { aba } = Route.useSearch();
+  const [cat, setCat] = useState<Category>(aba ?? "financeiro");
+  useEffect(() => {
+    if (aba) setCat(aba);
+  }, [aba]);
   const [periodId, setPeriodId] = useState("30d");
 
   const period = PERIODS.find((p) => p.id === periodId)!;

@@ -51,6 +51,13 @@ export const Route = createFileRoute("/_authenticated/configuracoes")({
       { name: "description", content: "Configurações gerais da clínica, serviços e categorias." },
     ],
   }),
+  // ?aba=profissionais etc. abre direto a seção (atalhos do menu lateral)
+  validateSearch: (search: Record<string, unknown>): { aba?: Tab } => ({
+    aba:
+      typeof search.aba === "string" && search.aba in TAB_PERMISSIONS
+        ? (search.aba as Tab)
+        : undefined,
+  }),
   component: ConfiguracoesPage,
 });
 
@@ -121,15 +128,20 @@ const SECTIONS: {
 
 function ConfiguracoesPage() {
   const { canAny } = usePermissions();
-  const [selectedTab, setTab] = useState<Tab>("clinica");
+  const { aba } = Route.useSearch();
+  const [selectedTab, setTab] = useState<Tab>(aba ?? "clinica");
   const [financeLocked, setFinanceLocked] = useState(false);
   const [search, setSearch] = useState("");
   useEffect(() => {
+    if (aba) {
+      setTab(aba);
+      return;
+    }
     try {
       const saved = window.localStorage.getItem(SETTINGS_TAB_KEY);
       if (saved && saved in TAB_PERMISSIONS) setTab(saved as Tab);
     } catch {}
-  }, []);
+  }, [aba]);
   const selectTab = (next: Tab) => {
     setTab(next);
     try {

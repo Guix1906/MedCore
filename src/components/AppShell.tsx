@@ -27,7 +27,7 @@ import {
   NoAccessScreen,
   PendingInvitationsBanner,
 } from "@/features/admin/AccessScreens";
-import { firstAllowedRoute, routeRuleFor } from "@/features/admin/permissions";
+import { firstAllowedRoute, routeRuleFor, type PermissionKey } from "@/features/admin/permissions";
 import { signOut, useAuth } from "@/hooks/use-auth";
 import { isLegacyOpen, usePermissions } from "@/hooks/use-permissions";
 import { useSessionTimeout } from "@/hooks/use-session-timeout";
@@ -99,6 +99,51 @@ const navSections: { label: string; items: NavItem[] }[] = [
     ],
   },
 ];
+
+// Atalhos do painel lateral (menu recolhido): o primeiro é a própria tela, os demais
+// abrem direto uma aba ou ação dela. `perm` esconde o atalho de quem não tem a permissão.
+type SubItem = { label: string; to: string; search?: Record<string, unknown>; perm?: PermissionKey };
+const SUBMENUS: Record<string, SubItem[]> = {
+  "/agenda": [
+    { label: "Agenda", to: "/agenda" },
+    { label: "Novo agendamento", to: "/agenda", search: { novo: "true" }, perm: "agenda.manage" },
+    { label: "Indicadores da agenda", to: "/visao-geral" },
+  ],
+  "/pacientes": [
+    { label: "Pacientes", to: "/pacientes" },
+    { label: "Novo paciente", to: "/pacientes", search: { novo: true }, perm: "patients.manage" },
+  ],
+  "/financeiro": [
+    { label: "Financeiro", to: "/financeiro" },
+    { label: "Fluxo de Caixa", to: "/financeiro", search: { tab: "fluxo" } },
+    { label: "Contas a Receber", to: "/financeiro", search: { tab: "receber" } },
+    { label: "Contas a Pagar", to: "/financeiro", search: { tab: "pagar" } },
+    { label: "Conciliação OFX", to: "/financeiro", search: { tab: "conciliacao" } },
+    { label: "Categorias", to: "/financeiro", search: { tab: "categorias" } },
+  ],
+  "/relatorios": [
+    { label: "Relatórios", to: "/relatorios" },
+    { label: "Financeiro", to: "/relatorios", search: { aba: "financeiro" } },
+    { label: "Clínico", to: "/relatorios", search: { aba: "clinico" } },
+    { label: "Operacional", to: "/relatorios", search: { aba: "operacional" } },
+    { label: "Estoque", to: "/relatorios", search: { aba: "estoque" } },
+  ],
+  "/configuracoes": [
+    { label: "Configurações", to: "/configuracoes" },
+    { label: "Dados da clínica", to: "/configuracoes", search: { aba: "clinica" }, perm: "settings.manage" },
+    { label: "Profissionais", to: "/configuracoes", search: { aba: "profissionais" }, perm: "settings.manage" },
+    { label: "Serviços e preços", to: "/configuracoes", search: { aba: "servicos" }, perm: "settings.manage" },
+    { label: "Categorias financeiras", to: "/configuracoes", search: { aba: "categorias" } },
+    { label: "Contas financeiras", to: "/configuracoes", search: { aba: "contas" }, perm: "finance.accounts" },
+    { label: "Cidades de atendimento", to: "/configuracoes", search: { aba: "cidades" }, perm: "settings.manage" },
+  ],
+  "/admin": [
+    { label: "Administração", to: "/admin" },
+    { label: "Usuários", to: "/admin", search: { aba: "usuarios" } },
+    { label: "Perfis e permissões", to: "/admin", search: { aba: "perfis" } },
+    { label: "Auditoria", to: "/admin", search: { aba: "auditoria" }, perm: "audit.view" },
+  ],
+};
 
 const WHATSAPP_URL =
   "https://wa.me/5599984898934?text=" + encodeURIComponent("Olá! Entrando em contato via MedCore.");
@@ -340,24 +385,16 @@ export default function AppShell({ children }: { children: ReactNode; title?: st
     );
   }
 
-  // Item do menu cujo submenu está aberto (um de cada vez), com os mesmos nomes do menu.
-  // Itens aninhados logo abaixo dele (ex.: Agenda → Indicadores da agenda) entram como subitens.
-  const flyoutItems = navSections.flatMap((section) => section.items);
-  const flyoutIndex = flyoutItems.findIndex((item) => item.to === activeFlyoutId);
-  const flyoutItem = flyoutIndex >= 0 ? flyoutItems[flyoutIndex] : undefined;
-  const flyoutNested: NavItem[] = [];
-  if (flyoutItem && !flyoutItem.nested) {
-    for (const item of flyoutItems.slice(flyoutIndex + 1)) {
-      if (!item.nested) break;
-      flyoutNested.push(item);
-    }
-  }
+  // Item do menu cujo submenu está aberto (um de cada vez): a própria tela e seus atalhos
+  const flyoutItem = navSections
+    .flatMap((section) => section.items)
+    .find((item) => item.to === activeFlyoutId);
   const currentActiveItem = flyoutItem && {
     id: flyoutItem.to,
     label: flyoutItem.label,
-    children: [flyoutItem, ...flyoutNested]
-      .filter((item) => allowedPath(item.to))
-      .map((item) => ({ id: item.to, to: item.to, label: item.label })),
+    children: (SUBMENUS[flyoutItem.to] ?? [{ label: flyoutItem.label, to: flyoutItem.to }])
+      .filter((sub) => allowedPath(sub.to) && (!sub.perm || access.mode !== "active" || can(sub.perm)))
+      .map((sub, index) => ({ ...sub, id: `${sub.to}-${index}` })),
   };
 
   const shellStyle: CSSProperties & { "--app-sidebar-width": string } = {
@@ -630,10 +667,6 @@ export default function AppShell({ children }: { children: ReactNode; title?: st
               transition={{ duration: 0.1, ease: "easeOut" }}
               className="flex flex-col gap-4"
             >
-              {/* Título da Categoria */}
-              <div className="border-b border-border/40 px-3 pb-3 text-[17px] font-bold text-foreground">
-                {currentActiveItem.label}
-              </div>
               {/* Lista de Subitens */}
               <div className="flex flex-col gap-1.5">
                 {currentActiveItem.children.map((subItem, index) => {
@@ -642,6 +675,7 @@ export default function AppShell({ children }: { children: ReactNode; title?: st
                     <Link
                       key={subItem.id}
                       to={subItem.to}
+                      search={subItem.search as never}
                       preload="intent"
                       onClick={() => {
                         cancelClose();
