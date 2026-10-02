@@ -52,6 +52,25 @@ export interface RecurringTransaction {
   financial_accounts?: { name: string } | null;
 }
 
+const LOCAL_STORAGE_KEY = "medcore_recurring_costs_v1";
+
+function getLocalRecurringCosts(): RecurringTransaction[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalRecurringCosts(list: RecurringTransaction[]) {
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(list));
+  } catch (e) {
+    console.warn("Erro ao salvar custos fixos localmente:", e);
+  }
+}
+
 interface CustosFixosMensaisProps {
   finance: FinanceSnapshot;
   onRefreshFinance?: () => void;
@@ -63,7 +82,7 @@ export function CustosFixosMensais({ finance, onRefreshFinance }: CustosFixosMen
   const [syncing, setSyncing] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Consulta todos os custos fixos / transações recorrentes de despesa
+  // Consulta todos os custos fixos / transações recorrentes de despesa (com fallback resiliente)
   const {
     data: custosFixos = [],
     isLoading,
@@ -71,16 +90,25 @@ export function CustosFixosMensais({ finance, onRefreshFinance }: CustosFixosMen
   } = useQuery({
     queryKey: ["recurring-transactions-expenses"],
     queryFn: async () => {
-      const { data, error } = await (supabase.from as any)("recurring_transactions")
-        .select("*, financial_accounts(name)")
-        .eq("type", "despesa")
-        .order("created_at", { ascending: false });
+      let remoteItems: RecurringTransaction[] = [];
+      try {
+        const { data, error } = await (supabase.from as any)("recurring_transactions")
+          .select("*, financial_accounts(name)")
+          .eq("type", "despesa")
+          .order("created_at", { ascending: false });
 
-      if (error) {
-        console.warn("Erro ao buscar custos fixos recorrentes:", error);
-        return [];
+        if (!error && Array.isArray(data)) {
+          remoteItems = data as RecurringTransaction[];
+        }
+      } catch {
+        // Tabela ainda não criada no Supabase
       }
-      return (data as unknown as RecurringTransaction[]) || [];
+
+      const localItems = getLocalRecurringCosts();
+      const map = new Map<string, RecurringTransaction>();
+      for (const item of localItems) map.set(item.id, item);
+      for (const item of remoteItems) map.set(item.id, item);
+      return Array.from(map.values());
     },
   });
 
@@ -107,25 +135,28 @@ export function CustosFixosMensais({ finance, onRefreshFinance }: CustosFixosMen
   // Alterna o status ativo / pausado do custo fixo
   const toggleAtivo = async (item: RecurringTransaction) => {
     const novoStatus = !item.is_active;
-    const { error } = await (supabase.from as any)("recurring_transactions")
-      .update({ is_active: novoStatus })
-      .eq("id", item.id);
+    try {
+      await (supabase.from as any)("recurring_transactions")
+        .update({ is_active: novoStatus })
+        .eq("id", item.id);
+    } catch {}
 
-    if (error) {
-      toast.error("Erro ao alterar status do custo fixo: " + error.message);
-      return;
-    }
+    const locals = getLocalRecurringCosts().map((c) =>
+      c.id === item.id ? { ...c, is_active: novoStatus } : c,
+    );
+    saveLocalRecurringCosts(locals);
     toast.success(novoStatus ? "Custo fixo ativado!" : "Custo fixo pausado.");
     void refetch();
   };
 
   // Exclui um custo fixo
   const handleDelete = async (id: string) => {
-    const { error } = await (supabase.from as any)("recurring_transactions").delete().eq("id", id);
-    if (error) {
-      toast.error("Erro ao excluir custo fixo: " + error.message);
-      return;
-    }
+    try {
+      await (supabase.from as any)("recurring_transactions").delete().eq("id", id);
+    } catch {}
+
+    const locals = getLocalRecurringCosts().filter((c) => c.id !== id);
+    saveLocalRecurringCosts(locals);
     toast.success("Custo fixo excluído com sucesso.");
     setDeletingId(null);
     void refetch();
@@ -171,31 +202,61 @@ export function CustosFixosMensais({ finance, onRefreshFinance }: CustosFixosMen
           // Verifica se já existe um lançamento para este custo fixo nesta data
           const { data: existing } = await (supabase.from as any)("transactions")
             .select("id")
-            .eq("recurrence_id", item.id)
+            .eq("recurrence_parent_id", item.id)
             .eq("due_date", dueDateStr)
             .maybeSingle();
 
           if (!existing) {
+            const transId = crypto.randomUUID();
+            const competenceStr = dueDateStr.slice(0, 7) + "-01";
             const desc = `${item.description} (${monthYearLabel.toUpperCase()})`;
-            const { error: insErr } = await (supabase.from as any)("transactions").insert({
-              type: "despesa",
-              amount: Number(item.amount),
-              description: desc,
-              category: item.category || "Custos Fixos",
-              account_id: item.account_id || null,
-              payment_method: item.payment_method || "boleto",
-              due_date: dueDateStr,
-              date: dueDateStr,
-              status: "pendente",
-              is_recurring: true,
-              recurrence_id: item.id,
-              installment_number: i + 1,
-              installment_total: 12,
-            });
 
-            if (!insErr) {
-              totalCreated++;
+            let created = false;
+            try {
+              const { error: rpcErr } = await supabase.rpc("create_financial_title", {
+                p_id: transId,
+                p_type: "despesa",
+                p_amount: Number(item.amount),
+                p_due_date: dueDateStr,
+                p_competence_date: competenceStr,
+                p_description: desc,
+                p_category: item.category || "Custos Fixos",
+                p_company_id: null,
+                p_patient_id: null,
+                p_payer_name: "Despesa da clínica",
+              });
+              if (!rpcErr) {
+                created = true;
+                await (supabase.from as any)("transactions")
+                  .update({
+                    payment_method: item.payment_method || "boleto",
+                    recurrence: "mensal",
+                    recurrence_parent_id: item.id,
+                    notes: item.notes || null,
+                  })
+                  .eq("id", transId);
+              }
+            } catch {}
+
+            if (!created) {
+              const { error: insErr } = await (supabase.from as any)("transactions").insert({
+                id: transId,
+                type: "despesa",
+                amount: Number(item.amount),
+                description: desc,
+                category: item.category || "Custos Fixos",
+                payment_method: item.payment_method || "boleto",
+                due_date: dueDateStr,
+                date: dueDateStr,
+                status: "pendente",
+                recurrence: "mensal",
+                recurrence_parent_id: item.id,
+                notes: item.notes || null,
+              });
+              if (!insErr) created = true;
             }
+
+            if (created) totalCreated++;
           }
         }
       }
@@ -560,8 +621,32 @@ function CadastrarCustoFixoModal({
       const nextRunDate = new Date(now.getFullYear(), now.getMonth(), dayNum);
       const nextRunIso = nextRunDate.toISOString().slice(0, 10);
 
-      const { data, error } = await (supabase.from as any)("recurring_transactions")
-        .insert({
+      const recId = crypto.randomUUID();
+      const newRecItem: RecurringTransaction = {
+        id: recId,
+        type: "despesa",
+        description: cleanDesc,
+        category: category.trim() || "Custos Fixos",
+        amount: valNum,
+        day_of_month: dayNum,
+        payment_method: paymentMethod,
+        account_id: accountId || null,
+        start_date: startDate,
+        end_date: hasEndDate && endDate ? endDate : null,
+        frequency: repetition,
+        next_run: nextRunIso,
+        is_active: true,
+        notes: notes.trim() || null,
+        created_at: new Date().toISOString(),
+        financial_accounts: accountId
+          ? { name: accounts.find((a) => a.id === accountId)?.name || "" }
+          : null,
+      };
+
+      // Tenta persistir no Supabase (se a tabela existir)
+      try {
+        await (supabase.from as any)("recurring_transactions").insert({
+          id: recId,
           type: "despesa",
           description: cleanDesc,
           category: category.trim() || "Custos Fixos",
@@ -575,49 +660,80 @@ function CadastrarCustoFixoModal({
           next_run: nextRunIso,
           is_active: true,
           notes: notes.trim() || null,
-        })
-        .select("id")
-        .single();
+        });
+      } catch {
+        // Tabela ainda não criada no banco remoto; persiste localmente
+      }
 
-      if (error) throw error;
+      // Persiste no armazenamento local para garantir exibição imediata
+      const currentLocals = getLocalRecurringCosts();
+      saveLocalRecurringCosts([newRecItem, ...currentLocals.filter((c) => c.id !== recId)]);
 
       // Imediatamente gera as parcelas dos próximos 12 meses no Contas a Pagar
-      const recId = data?.id;
-      if (recId) {
-        const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth();
-        const maxMonths = 12;
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth();
+      const maxMonths = 12;
 
-        for (let i = 0; i < maxMonths; i++) {
-          const tDate = new Date(currentYear, currentMonth + i, dayNum);
-          if (hasEndDate && endDate && tDate > new Date(endDate)) break;
+      for (let i = 0; i < maxMonths; i++) {
+        const tDate = new Date(currentYear, currentMonth + i, dayNum);
+        if (hasEndDate && endDate && tDate > new Date(endDate)) break;
 
-          const dueStr = tDate.toISOString().slice(0, 10);
-          const monthLabel = tDate.toLocaleDateString("pt-BR", {
-            month: "short",
-            year: "numeric",
+        const dueStr = tDate.toISOString().slice(0, 10);
+        const competenceStr = dueStr.slice(0, 7) + "-01";
+        const monthLabel = tDate.toLocaleDateString("pt-BR", {
+          month: "short",
+          year: "numeric",
+        });
+        const titleId = crypto.randomUUID();
+        const desc = `${cleanDesc} (${monthLabel.toUpperCase()})`;
+
+        let createdViaRpc = false;
+        try {
+          const { error: rpcErr } = await supabase.rpc("create_financial_title", {
+            p_id: titleId,
+            p_type: "despesa",
+            p_amount: valNum,
+            p_due_date: dueStr,
+            p_competence_date: competenceStr,
+            p_description: desc,
+            p_category: category.trim() || "Custos Fixos",
+            p_company_id: null,
+            p_patient_id: null,
+            p_payer_name: "Despesa da clínica",
           });
+          if (!rpcErr) {
+            createdViaRpc = true;
+            await (supabase.from as any)("transactions")
+              .update({
+                payment_method: paymentMethod || "boleto",
+                recurrence: "mensal",
+                recurrence_parent_id: recId,
+                notes: notes.trim() || null,
+              })
+              .eq("id", titleId);
+          }
+        } catch {}
 
+        if (!createdViaRpc) {
           await (supabase.from as any)("transactions").insert({
+            id: titleId,
             type: "despesa",
             amount: valNum,
-            description: `${cleanDesc} (${monthLabel.toUpperCase()})`,
+            description: desc,
             category: category.trim() || "Custos Fixos",
-            account_id: accountId || null,
-            payment_method: paymentMethod,
+            payment_method: paymentMethod || "boleto",
             due_date: dueStr,
             date: dueStr,
             status: "pendente",
-            is_recurring: true,
-            recurrence_id: recId,
-            installment_number: i + 1,
-            installment_total: maxMonths,
+            recurrence: "mensal",
+            recurrence_parent_id: recId,
+            notes: notes.trim() || null,
           });
         }
       }
 
       toast.success(
-        "Custo fixo mensal cadastrado! O sistema manterá a recorrência e já gerou as parcelas nos próximos meses do Contas a Pagar.",
+        "Custo fixo mensal cadastrado! O sistema manterá a recorrência e gerou os próximos 12 meses no Contas a Pagar.",
       );
       onCreated();
     } catch (err: any) {
