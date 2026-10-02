@@ -20,8 +20,37 @@ type MemberOpt = {
   full_name?: string | null;
   avatar_url?: string | null;
   role?: string | null;
+  /** Outros ids da mesma pessoa (médico x usuário) unificados nesta opção */
+  aliases?: string[];
 };
 type IdOpt = { id: string };
+
+const personKey = (name?: string | null) =>
+  (name ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/^(dr|dra)\.?\s+/i, "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+
+/** A mesma pessoa pode vir como médico (doctors.id) e como usuário (auth id): mostra uma vez só. */
+function dedupeMembers(list: MemberOpt[]): MemberOpt[] {
+  const byName = new Map<string, MemberOpt>();
+  const out: MemberOpt[] = [];
+  for (const m of list) {
+    const key = personKey(m.full_name);
+    const kept = key ? byName.get(key) : undefined;
+    if (kept) {
+      kept.aliases = [...(kept.aliases ?? []), m.id];
+      continue;
+    }
+    const copy = { ...m };
+    if (key) byName.set(key, copy);
+    out.push(copy);
+  }
+  return out;
+}
 
 /**
  * Resolve o responsável escolhido (id de médico ou de usuário) nos dois vínculos usados
@@ -892,9 +921,20 @@ export function NovoAgendamentoDialog({
         }
       } catch {}
 
-      return list;
+      return dedupeMembers(list);
     },
   });
+
+  // Seleção feita com o id "apelido" (ex.: usuário logado) passa a apontar para a opção unificada
+  useEffect(() => {
+    const canonical = (id: string) =>
+      members.find((m) => m.id !== id && m.aliases?.includes(id))?.id ?? id;
+    setAssignedTo((cur) => (cur ? canonical(cur) : cur));
+    setSelectedProfs((prev) => {
+      const next = Array.from(new Set(prev.map(canonical)));
+      return next.length === prev.length && next.every((id, i) => id === prev[i]) ? prev : next;
+    });
+  }, [members, assignedTo, selectedProfs]);
 
   const { data: cases = [] } = useQuery({
     queryKey: qk.casesMini(companyId),
