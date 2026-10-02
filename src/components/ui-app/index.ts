@@ -29,3 +29,4 @@ export {
   SkeletonUpload,
 } from "./Skeletons";
 export { BrandLoader } from "./BrandLoader";
+export { MedLoader, useMedLoading } from "./MedLoader";

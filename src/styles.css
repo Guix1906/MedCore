@@ -915,6 +915,101 @@ a:focus:not(:focus-visible) {
   }
 }
 
+/* ===== Loading ECG (overlay central, controlado por MedLoading) ===== */
+:root {
+  /* Paleta do sistema (extraída do logo) */
+  --ml-c1: #084898;
+  --ml-c2: #0870a0;
+  --ml-c3: #00a8a8;
+  --ml-stroke: 28;
+  --ml-track-opacity: 0.22;
+  --ml-size: clamp(180px, 22vw, 300px);
+  --ml-backdrop: color-mix(in srgb, var(--background) 78%, transparent);
+  --ml-duration: 3s;
+}
+.med-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: grid;
+  place-items: center;
+  background: var(--ml-backdrop);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.2s ease,
+    visibility 0s linear 0.2s;
+}
+.med-loader.is-active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition:
+    opacity 0.2s ease,
+    visibility 0s;
+}
+.med-loader svg {
+  width: var(--ml-size);
+  height: auto;
+  overflow: visible;
+  display: block;
+}
+.med-loader path {
+  fill: none;
+  stroke: url(#ml-grad);
+  stroke-width: var(--ml-stroke);
+  stroke-linejoin: round;
+  stroke-linecap: butt;
+}
+.med-loader .ml-track {
+  opacity: var(--ml-track-opacity);
+}
+.med-loader .ml-run {
+  stroke-dasharray: 0 200;
+  stroke-dashoffset: 0;
+  animation: ml-run var(--ml-duration) linear infinite;
+}
+/* Cabeça sai em t=0 (ease-in-out, 2,0s), cauda em t=0,65s, pausa de ~0,35s no fim. */
+@keyframes ml-run {
+  0% { stroke-dasharray: 0 200; stroke-dashoffset: 0; }
+  3.33% { stroke-dasharray: 0.62 200; stroke-dashoffset: 0; }
+  6.67% { stroke-dasharray: 2.45 200; stroke-dashoffset: 0; }
+  10% { stroke-dasharray: 5.45 200; stroke-dashoffset: 0; }
+  13.33% { stroke-dasharray: 9.55 200; stroke-dashoffset: 0; }
+  16.67% { stroke-dasharray: 14.64 200; stroke-dashoffset: 0; }
+  20% { stroke-dasharray: 20.61 200; stroke-dashoffset: 0; }
+  23.33% { stroke-dasharray: 27.15 200; stroke-dashoffset: -0.15; }
+  26.67% { stroke-dasharray: 33.17 200; stroke-dashoffset: -1.38; }
+  30% { stroke-dasharray: 38.37 200; stroke-dashoffset: -3.81; }
+  33.33% { stroke-dasharray: 42.63 200; stroke-dashoffset: -7.37; }
+  36.67% { stroke-dasharray: 45.84 200; stroke-dashoffset: -11.98; }
+  40% { stroke-dasharray: 47.92 200; stroke-dashoffset: -17.53; }
+  43.33% { stroke-dasharray: 48.82 200; stroke-dashoffset: -23.88; }
+  46.67% { stroke-dasharray: 48.52 200; stroke-dashoffset: -30.87; }
+  50% { stroke-dasharray: 47.03 200; stroke-dashoffset: -38.33; }
+  53.33% { stroke-dasharray: 44.37 200; stroke-dashoffset: -46.08; }
+  56.67% { stroke-dasharray: 40.63 200; stroke-dashoffset: -53.92; }
+  60% { stroke-dasharray: 35.88 200; stroke-dashoffset: -61.67; }
+  63.33% { stroke-dasharray: 30.25 200; stroke-dashoffset: -69.13; }
+  66.67% { stroke-dasharray: 23.88 200; stroke-dashoffset: -76.12; }
+  70% { stroke-dasharray: 17.53 200; stroke-dashoffset: -82.47; }
+  73.33% { stroke-dasharray: 11.98 200; stroke-dashoffset: -88.02; }
+  76.67% { stroke-dasharray: 7.37 200; stroke-dashoffset: -92.63; }
+  80% { stroke-dasharray: 3.81 200; stroke-dashoffset: -96.19; }
+  83.33% { stroke-dasharray: 1.38 200; stroke-dashoffset: -98.62; }
+  86.67% { stroke-dasharray: 0.15 200; stroke-dashoffset: -99.85; }
+  90%,
+  100% { stroke-dasharray: 0 200; stroke-dashoffset: -100; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .med-loader .ml-run {
+    animation-duration: 6s;
+  }
+}
+
 /* Botões, links e abas em formato de pílula/círculo passam a ter canto leve.
    Continuam redondos: switches, rádios e o que tiver data-keep-round (ex.: avatar). */
 :is(button, a, [role="button"], [role="tab"]).rounded-full:not([role="switch"]):not(

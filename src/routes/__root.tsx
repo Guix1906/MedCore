@@ -4,12 +4,14 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
   ScriptOnce,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/sonner";
+import { MedLoader, useMedLoading } from "@/components/ui-app/MedLoader";
 import { supabase } from "@/integrations/supabase/client";
 import SmoothScroll from "@/components/motion/SmoothScroll";
 import { useTheme } from "@/hooks/use-theme";
@@ -181,6 +183,19 @@ function RootComponent() {
   const router = useRouter();
   useTheme();
 
+  // Loading ECG nas trocas de tela; só aparece se a navegação passar de 250 ms
+  const routePending = useRouterState({ select: (s) => s.status === "pending" });
+  const [slowRoute, setSlowRoute] = useState(false);
+  useEffect(() => {
+    if (!routePending) {
+      setSlowRoute(false);
+      return;
+    }
+    const timer = setTimeout(() => setSlowRoute(true), 250);
+    return () => clearTimeout(timer);
+  }, [routePending]);
+  useMedLoading(slowRoute);
+
   useEffect(() => {
     // Remove dados de pacientes/financeiro gravados no navegador por versões anteriores.
     purgeLocalClinicalData();
@@ -224,6 +239,7 @@ function RootComponent() {
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
       <Toaster position="top-right" richColors closeButton />
+      <MedLoader />
     </QueryClientProvider>
   );
 }

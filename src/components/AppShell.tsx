@@ -1,6 +1,6 @@
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ConfirmDialogHost } from "@/components/app/confirm-dialog";
-import { BrandLoader } from "@/components/ui-app/BrandLoader";
+import { useMedLoading } from "@/components/ui-app/MedLoader";
 import { BrandLogo } from "@/components/ui-app/BrandLogo";
 import { Button } from "@/components/ui/button";
 import {
@@ -244,6 +244,9 @@ export default function AppShell({ children }: { children: ReactNode; title?: st
   const fallbackPath = access.mode === "active" ? firstAllowedRoute(can) : null;
   const redirectToFallback =
     access.mode === "active" && !routeAllowed && pathname === "/dashboard" && !!fallbackPath;
+  const accessLoading = redirectToFallback || (access.mode === "loading" && !!currentRule);
+  // Loading ECG enquanto o ambiente (sessão e permissões) carrega
+  useMedLoading(loading || !isAuthenticated || accessLoading);
   const canNewPatient = can("patients.manage");
   const canNewAppointment = can("agenda.manage");
   const canNewEntry = can("finance.receive") || can("finance.pay");
@@ -379,9 +382,7 @@ export default function AppShell({ children }: { children: ReactNode; title?: st
 
   if (loading || !isAuthenticated) {
     return (
-      <div className="app-canvas flex min-h-dvh items-center justify-center">
-        <BrandLoader label="Carregando seu ambiente…" />
-      </div>
+      <div className="app-canvas min-h-dvh" aria-busy="true" />
     );
   }
 
@@ -700,10 +701,8 @@ export default function AppShell({ children }: { children: ReactNode; title?: st
       </AnimatePresence>
       <main id="main-content" tabIndex={-1} className="app-main min-h-[calc(100dvh-64px)]">
         <ErrorBoundary>
-          {redirectToFallback || (access.mode === "loading" && !!currentRule) ? (
-            <div className="flex min-h-[50vh] items-center justify-center">
-              <BrandLoader label="Carregando…" />
-            </div>
+          {accessLoading ? (
+            <div className="min-h-[50vh]" aria-busy="true" />
           ) : access.mode === "blocked" ? (
             <BlockedAccessScreen access={access} onSignOut={handleSignOut} />
           ) : !routeAllowed ? (
