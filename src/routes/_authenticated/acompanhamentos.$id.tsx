@@ -43,6 +43,10 @@ import {
   Sliders,
   ChevronRight,
   ExternalLink,
+  Syringe,
+  FlaskConical,
+  Layers,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
@@ -61,6 +65,7 @@ export const Route = createFileRoute("/_authenticated/acompanhamentos/$id")({
   validateSearch: (search: Record<string, unknown>) => ({
     tab: (typeof search.tab === "string" ? search.tab : undefined) as
       | "resumo"
+      | "injetaveis"
       | "medicacoes"
       | "evolucao"
       | "financeiro"
@@ -104,14 +109,14 @@ function TreatmentDetailPage() {
   const navigate = useNavigate();
   const [treatment, setTreatment] = useState<Treatment | null>(null);
   const [meds, setMeds] = useState<Medication[]>([]);
-  const [tab, setTab] = useState<"resumo" | "medicacoes" | "evolucao" | "financeiro">(
-    search.tab || "resumo",
+  const [tab, setTab] = useState<"resumo" | "injetaveis" | "medicacoes" | "evolucao" | "financeiro">(
+    search.tab === "medicacoes" ? "injetaveis" : search.tab || "resumo",
   );
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (search.tab && ["resumo", "medicacoes", "evolucao", "financeiro"].includes(search.tab)) {
-      setTab(search.tab);
+    if (search.tab && ["resumo", "injetaveis", "medicacoes", "evolucao", "financeiro"].includes(search.tab)) {
+      setTab(search.tab === "medicacoes" ? "injetaveis" : search.tab);
     }
   }, [search.tab]);
 
@@ -137,6 +142,20 @@ function TreatmentDetailPage() {
     if (!financeSnapshot.data?.titles) return [];
     return financeSnapshot.data.titles.filter((t) => t.treatment_id === id);
   }, [financeSnapshot.data?.titles, id]);
+
+  const treatmentPayments = useMemo(() => {
+    if (!financeSnapshot.data?.payments || planTitles.length === 0) return [];
+    const titleMap = new Map(planTitles.map((t) => [t.id, t]));
+    return financeSnapshot.data.payments
+      .filter((p) => titleMap.has(p.transaction_id) && !p.reversed_at)
+      .map((p) => ({
+        ...p,
+        title: titleMap.get(p.transaction_id)!,
+        accountName:
+          financeSnapshot.data?.accounts?.find((a) => a.id === p.account_id)?.name || "Conta Clínica",
+      }))
+      .sort((a, b) => (b.paid_on || "").localeCompare(a.paid_on || ""));
+  }, [financeSnapshot.data?.payments, financeSnapshot.data?.accounts, planTitles]);
 
   const planFinancials = useMemo(() => {
     const total = treatment ? Number(treatment.total_value || 0) : 0;
@@ -263,10 +282,25 @@ function TreatmentDetailPage() {
     if (activeList.length === 0) {
       msg += `📌 Nenhuma medicação ativa no momento.\n`;
     } else {
+      const weekly = activeList.filter((m) => m.period === "semanal");
       const morning = activeList.filter((m) => m.period === "manha");
       const afternoon = activeList.filter((m) => m.period === "tarde");
       const night = activeList.filter((m) => m.period === "noite");
-      const daily = activeList.filter((m) => !["manha", "tarde", "noite"].includes(m.period));
+      const daily = activeList.filter(
+        (m) => !["manha", "tarde", "noite", "semanal"].includes(m.period),
+      );
+
+      if (weekly.length > 0) {
+        msg += `💉 *INJETÁVEIS / PROTOCOLO SEMANAL:*\n`;
+        weekly.forEach((m) => {
+          const dateStr = m.start_date
+            ? ` (${new Date(m.start_date + "T12:00:00").toLocaleDateString("pt-BR")})`
+            : "";
+          msg += `• *${m.name}* - ${m.dose || ""}${m.unit || ""} (${m.frequency || "Semanal"})${dateStr}\n`;
+          if (m.notes) msg += `  _${m.notes}_\n`;
+        });
+        msg += `\n`;
+      }
 
       if (morning.length > 0) {
         msg += `🌅 *MANHÃ:*\n`;
@@ -310,6 +344,12 @@ function TreatmentDetailPage() {
     const encoded = encodeURIComponent(msg);
     window.open(`https://wa.me/55${phone}?text=${encoded}`, "_blank");
   };
+
+  const isEmagrecimento = Boolean(
+    treatment.title?.toLowerCase().includes("emagre") ||
+    treatment.objective?.toLowerCase().includes("emagre") ||
+    treatment.title?.toLowerCase().includes("injet")
+  );
 
   return (
     <AppShell title="Detalhes do acompanhamento">
@@ -426,14 +466,18 @@ function TreatmentDetailPage() {
         <div className="flex max-w-full items-center gap-2 overflow-x-auto border-b border-border">
           {(
             [
-              { id: "resumo", label: "Resumo", icon: Activity },
-              { id: "medicacoes", label: "Medicações", icon: Pill },
-              { id: "evolucao", label: "Evolução & Fotos", icon: Camera },
-              { id: "financeiro", label: "Financeiro do Plano", icon: Wallet },
+              { id: "resumo" as const, label: "Resumo", icon: Activity },
+              {
+                id: "injetaveis" as const,
+                label: isEmagrecimento ? "Injetáveis" : "Injetáveis & Cronograma",
+                icon: Syringe,
+              },
+              { id: "evolucao" as const, label: "Evolução & Fotos", icon: Camera },
+              { id: "financeiro" as const, label: "Financeiro do Plano", icon: Wallet },
             ] as const
           ).map((t) => {
             const Icon = t.icon;
-            const active = tab === t.id;
+            const active = tab === t.id || (t.id === "injetaveis" && tab === "medicacoes");
             return (
               <button
                 key={t.id}
@@ -482,20 +526,19 @@ function TreatmentDetailPage() {
                   nextReturn: treatment.next_return_date,
                 }}
                 financials={planFinancials}
+                payments={treatmentPayments}
                 onOpenFinance={() => setTab("financeiro")}
               />
             )}
-            {tab === "medicacoes" && (
-              <>
-                <MedicacoesTab
-                  treatmentId={id}
-                  patientPhone={treatment.patients?.phone}
-                  meds={meds}
-                  reload={load}
-                  onSendWhatsApp={sendWhatsAppSchedule}
-                />
-                <MedicationUsePanel treatmentId={id} />
-              </>
+            {(tab === "injetaveis" || tab === "medicacoes") && (
+              <InjetaveisEMedicacoesTab
+                treatmentId={id}
+                patientPhone={treatment.patients?.phone}
+                meds={meds}
+                reload={load}
+                onSendWhatsApp={sendWhatsAppSchedule}
+                isEmagrecimento={isEmagrecimento}
+              />
             )}
             {tab === "evolucao" && (
               <ClinicalFollowup
@@ -574,6 +617,7 @@ function ResumoTab({
   treatment,
   kpis,
   financials,
+  payments,
   onOpenFinance,
 }: {
   treatment: DbRow;
@@ -593,6 +637,7 @@ function ResumoTab({
     nextDueDate: string | null;
     hasPlan: boolean;
   };
+  payments: Array<DbRow & { title: DbRow; accountName?: string }>;
   onOpenFinance: () => void;
 }) {
   const cards = [
@@ -693,6 +738,96 @@ function ResumoTab({
             </span>
           </div>
         </div>
+
+        {/* Detalhamento dos Valores Já Pagos pelo Paciente */}
+        <div className="pt-3 border-t border-border-soft space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+              <CheckCircle2 size={14} className="text-emerald-500" />
+              <span>Valores Já Pagos pelo Paciente ({payments.length})</span>
+            </div>
+            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+              Total Recebido: {currency(financials.paid)}
+            </span>
+          </div>
+
+          {payments.length === 0 ? (
+            <div className="text-xs text-muted-foreground p-3 rounded-xl bg-muted/40 border border-border-soft flex items-center justify-between">
+              <span>Nenhum pagamento registrado ainda para este acompanhamento.</span>
+              {financials.open > 0 && (
+                <button
+                  type="button"
+                  onClick={onOpenFinance}
+                  className="text-primary hover:underline font-semibold cursor-pointer"
+                >
+                  Registrar primeiro pagamento &rarr;
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+              {payments.map((p) => {
+                const methodStr = (p.method || "").toLowerCase();
+                const methodLabel =
+                  methodStr === "pix"
+                    ? "PIX"
+                    : methodStr === "cartao_credito"
+                      ? "Cartão de Crédito"
+                      : methodStr === "cartao_debito"
+                        ? "Cartão de Débito"
+                        : methodStr === "boleto"
+                          ? "Boleto"
+                          : methodStr === "dinheiro"
+                            ? "Dinheiro"
+                            : p.method || "Outro";
+
+                const desc =
+                  p.title?.installment_number === 0 ||
+                  p.title?.description?.toLowerCase().includes("entrada")
+                    ? "Entrada do Plano"
+                    : p.title?.installment_number
+                      ? `Parcela ${p.title.installment_number}`
+                      : p.title?.description || "Pagamento";
+
+                return (
+                  <div
+                    key={p.id}
+                    className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-card border border-border/80 text-xs shadow-2xs hover:border-emerald-500/30 transition"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-7 w-7 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-xs">
+                        ✓
+                      </div>
+                      <div>
+                        <div className="font-semibold text-foreground">{desc}</div>
+                        <div className="text-2xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                          <span>Data: {formatClinicalDate(p.paid_on)}</span>
+                          <span>•</span>
+                          <span className="font-medium text-foreground/80">{methodLabel}</span>
+                          {p.accountName && (
+                            <>
+                              <span>•</span>
+                              <span>{p.accountName}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                        {currency(Number(p.amount) || 0)}
+                      </div>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold inline-block mt-0.5">
+                        Liquidado
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       <p className="text-sm font-semibold">
@@ -782,41 +917,105 @@ function ResumoTab({
   );
 }
 
-// ============== ABA 2: MEDICAÇÕES & CRONOGRAMA ==============
-const PERIOD_ICON: Record<string, IconType> = { manha: Sun, tarde: Sunset, noite: Moon };
+// ============== ABA 2: INJETÁVEIS & CRONOGRAMA ==============
+const PERIOD_ICON: Record<string, IconType> = {
+  manha: Sun,
+  tarde: Sunset,
+  noite: Moon,
+  diario: Clock,
+  semanal: Syringe,
+  mensal: CalIcon,
+};
 const PERIOD_LABEL: Record<string, string> = {
   manha: "Manhã",
   tarde: "Tarde",
   noite: "Noite",
   diario: "Diário",
-  semanal: "Semanal",
+  semanal: "Semanal / Injetável",
   mensal: "Mensal",
 };
 
-function MedicacoesTab({
+function cleanDose(raw?: string | null) {
+  if (!raw) return "";
+  return raw
+    .replace("[NÃO TOMOU]", "")
+    .replace("[SUSPENSA]", "")
+    .replace("[ADIADA]", "")
+    .trim();
+}
+
+function InjetaveisEMedicacoesTab({
   treatmentId,
   patientPhone,
   meds,
   reload,
   onSendWhatsApp,
+  isEmagrecimento,
 }: {
   treatmentId: string;
   patientPhone?: string | null;
   meds: DbRow[];
   reload: () => void;
   onSendWhatsApp: () => void;
+  isEmagrecimento: boolean;
 }) {
   const [filter, setFilter] = useState<string>("todos");
   const [openNew, setOpenNew] = useState(false);
+  const [showApplyPanel, setShowApplyPanel] = useState(false);
+
+  const usesQuery = useQuery({
+    queryKey: ["treatment-medication-uses", treatmentId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("treatment_medication_uses")
+        .select("*")
+        .eq("treatment_id", treatmentId)
+        .order("used_at", { ascending: false });
+      if (error) throw error;
+      return (data as DbRow[]) || [];
+    },
+  });
+
+  const allUses = usesQuery.data || [];
+  const appliedUses = allUses.filter(
+    (u) =>
+      !u.dose?.includes("[NÃO TOMOU]") &&
+      !u.dose?.includes("[SUSPENSA]") &&
+      !u.dose?.includes("[ADIADA]"),
+  );
+  const lastApplied = appliedUses[0];
 
   const filtered = useMemo(() => {
     if (filter === "todos") return meds;
     if (filter === "suspensos") return meds.filter((m) => m.status === "suspenso");
+    if (filter === "injetaveis") {
+      return meds.filter(
+        (m) =>
+          m.period === "semanal" ||
+          m.route?.toLowerCase().includes("subcut") ||
+          m.route?.toLowerCase().includes("intra") ||
+          m.name.toLowerCase().includes("tirzepatida") ||
+          m.name.toLowerCase().includes("semaglutida") ||
+          m.name.toLowerCase().includes("mounjaro") ||
+          m.name.toLowerCase().includes("ozempic"),
+      );
+    }
+    if (filter === "manipulados") {
+      return meds.filter(
+        (m) =>
+          m.unit === "dose" ||
+          m.name.toLowerCase().includes("fórmula") ||
+          m.name.toLowerCase().includes("manipulado") ||
+          (m.notes && m.notes.length > 30),
+      );
+    }
     return meds.filter((m) => m.period === filter);
   }, [meds, filter]);
 
   const filters = [
     { id: "todos", label: "Todas" },
+    { id: "injetaveis", label: "Injetáveis / Semanal" },
+    { id: "manipulados", label: "Manipulados" },
     { id: "manha", label: "Manhã" },
     { id: "tarde", label: "Tarde" },
     { id: "noite", label: "Noite" },
@@ -859,16 +1058,274 @@ function MedicacoesTab({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-6">
+      {/* ============================================================ */}
+      {/* 1. SEÇÃO DE INJETÁVEIS ADMINISTRADOS AO PACIENTE */}
+      {/* ============================================================ */}
+      <section className="bg-card rounded-2xl border border-border/90 p-5 md:p-6 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border-soft">
+          <div className="flex items-center gap-2.5">
+            <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <Syringe size={20} />
+            </div>
+            <div>
+              <h2 className="text-base md:text-lg font-bold text-foreground flex items-center gap-2">
+                <span>
+                  {isEmagrecimento
+                    ? "Injetáveis Administrados (Protocolo de Emagrecimento)"
+                    : "Injetáveis Administrados ao Paciente"}
+                </span>
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold">
+                  {appliedUses.length} dose(s) aplicada(s)
+                </span>
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Controle de doses tomadas, via subcutânea/IM, baixas no estoque da clínica e interrupções.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setShowApplyPanel(!showApplyPanel)}
+              className={`h-9 px-3.5 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition cursor-pointer ${
+                showApplyPanel
+                  ? "bg-muted text-foreground hover:bg-muted/80"
+                  : "bg-primary text-white hover:bg-primary-hover shadow-2xs"
+              }`}
+            >
+              <Syringe size={14} />
+              <span>{showApplyPanel ? "Ocultar Registro" : "Registrar Aplicação"}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setOpenNew(true)}
+              className="h-9 px-3.5 rounded-xl bg-primary/10 hover:bg-primary/15 text-primary text-xs font-semibold inline-flex items-center gap-1.5 transition cursor-pointer"
+            >
+              <Plus size={14} />
+              <span>Novo Injetável / Manipulado</span>
+            </button>
+          </div>
+        </div>
+
+        {/* KPIs de Injetáveis */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="p-3.5 bg-emerald-500/6 rounded-xl border border-emerald-500/15">
+            <span className="text-2xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">
+              Doses Tomadas / Aplicadas
+            </span>
+            <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1.5">
+              <CheckCircle2 size={18} />
+              <span>{appliedUses.length} doses</span>
+            </div>
+            <span className="text-2xs text-muted-foreground mt-0.5 block">
+              Histórico confirmado do paciente
+            </span>
+          </div>
+
+          <div className="p-3.5 bg-primary/6 rounded-xl border border-primary/15">
+            <span className="text-2xs font-semibold text-primary uppercase tracking-wider block">
+              Último Injetável Aplicado
+            </span>
+            <div className="text-sm font-bold text-foreground mt-1 truncate">
+              {lastApplied
+                ? `${lastApplied.medication_name} (${cleanDose(lastApplied.dose)})`
+                : "Nenhuma aplicação ainda"}
+            </div>
+            <span className="text-2xs text-muted-foreground mt-0.5 block">
+              {lastApplied
+                ? `Em ${new Date(lastApplied.used_at).toLocaleDateString("pt-BR")} às ${new Date(lastApplied.used_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`
+                : "Aguardando 1ª aplicação"}
+            </span>
+          </div>
+
+          <div className="p-3.5 bg-amber-500/6 rounded-xl border border-amber-500/15">
+            <span className="text-2xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider block">
+              Itens no Cronograma
+            </span>
+            <div className="text-xl font-bold text-foreground mt-1 flex items-center gap-1.5">
+              <Layers size={18} className="text-amber-500" />
+              <span>{meds.filter((m) => m.status === "ativo").length} prescrições</span>
+            </div>
+            <span className="text-2xs text-muted-foreground mt-0.5 block">
+              {meds.filter((m) => m.period === "semanal").length} escalonamento(s) semanais
+            </span>
+          </div>
+        </div>
+
+        {/* Painel expansível de registro de aplicação */}
+        {showApplyPanel && (
+          <div className="pt-2">
+            <MedicationUsePanel treatmentId={treatmentId} />
+          </div>
+        )}
+
+        {/* Histórico detalhado dos injetáveis tomados */}
+        <div className="space-y-3 pt-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <Syringe size={13} className="text-primary" />
+              <span>Histórico de Injetáveis do Paciente</span>
+            </h3>
+            <span className="text-xs text-muted-foreground">
+              {allUses.length} registro(s) encontrado(s)
+            </span>
+          </div>
+
+          {allUses.length === 0 ? (
+            <div className="p-8 text-center bg-muted/30 rounded-xl border border-dashed border-border text-muted-foreground space-y-2">
+              <Syringe size={32} className="mx-auto text-muted-foreground/60" />
+              <p className="text-sm font-semibold text-foreground">
+                Nenhum injetável registrado para este paciente até o momento.
+              </p>
+              <p className="text-xs max-w-md mx-auto">
+                Registre cada aplicação (como Tirzepatida, Semaglutida ou Lipolíticos) com dose em mg,
+                data e confirmação de estoque da clínica.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowApplyPanel(true)}
+                className="mt-2 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary-hover transition cursor-pointer"
+              >
+                <Plus size={13} />
+                <span>Registrar Primeira Aplicação</span>
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+              {allUses.map((u) => {
+                const rawDose = u.dose || "";
+                const isNaoTomou = rawDose.includes("[NÃO TOMOU]");
+                const isSuspensa = rawDose.includes("[SUSPENSA]");
+                const isAdiada = rawDose.includes("[ADIADA]");
+                const doseClean = cleanDose(rawDose);
+
+                return (
+                  <div
+                    key={u.id}
+                    className={`p-3 rounded-xl border text-xs transition ${
+                      isNaoTomou
+                        ? "bg-rose-500/5 border-rose-500/25"
+                        : isSuspensa
+                          ? "bg-purple-500/5 border-purple-500/25"
+                          : isAdiada
+                            ? "bg-amber-500/5 border-amber-500/25"
+                            : "bg-card border-border/80 shadow-2xs hover:border-emerald-500/30"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        {isNaoTomou ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-bold bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30">
+                            <XCircle size={11} /> Não Tomou
+                          </span>
+                        ) : isSuspensa ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-bold bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30">
+                            <AlertCircle size={11} /> Suspensa
+                          </span>
+                        ) : isAdiada ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                            <Clock size={11} /> Adiada
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                            <CheckCircle2 size={11} /> Aplicada
+                          </span>
+                        )}
+
+                        <span className="text-sm font-bold text-foreground">
+                          {u.medication_name}
+                        </span>
+
+                        {doseClean && (
+                          <span className="px-2 py-0.5 rounded-md bg-primary-soft text-primary font-semibold text-2xs">
+                            {doseClean}
+                          </span>
+                        )}
+
+                        {u.route && (
+                          <span className="text-muted-foreground font-medium">• {u.route}</span>
+                        )}
+                      </div>
+
+                      <span className="text-xs text-muted-foreground font-medium">
+                        {new Date(u.used_at).toLocaleDateString("pt-BR")} às{" "}
+                        {new Date(u.used_at).toLocaleTimeString("pt-BR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+
+                    <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-2xs text-muted-foreground">
+                      <span>
+                        {u.inventory_item_id
+                          ? `Consumo da clínica: ${u.quantity} un baixada(s) do estoque`
+                          : isNaoTomou || isSuspensa || isAdiada
+                            ? "Sem consumo de estoque (interrupção/pausa registrada)"
+                            : "Uso externo / frasco do próprio paciente"}
+                      </span>
+
+                      {u.notes && (
+                        <span className="text-foreground/80 italic font-medium">
+                          Obs: {u.notes}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* 2. SEÇÃO DE CRONOGRAMA & PRESCRIÇÕES */}
+      {/* ============================================================ */}
+      <section className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+              <Pill size={18} className="text-primary" />
+              <span>Cronograma Prescrito & Protocolos</span>
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Injetáveis semanais escalonados, fórmulas manipuladas e medicações orais do paciente.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onSendWhatsApp}
+              className="h-9 px-3.5 rounded-full bg-success/10 hover:bg-success/15 text-success text-xs font-semibold inline-flex items-center gap-1.5 transition cursor-pointer"
+            >
+              <Send size={13} />
+              <span>Disparar no WhatsApp</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setOpenNew(true)}
+              className="h-9 px-4 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-semibold inline-flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+            >
+              <Plus size={14} /> Nova Medicação / Injetável
+            </button>
+          </div>
+        </div>
+
+        {/* Filtros */}
         <div className="flex flex-wrap gap-1.5">
           {filters.map((f) => (
             <button
               key={f.id}
               onClick={() => setFilter(f.id)}
-              className={`h-8.5 px-3.5 rounded-xl text-sm font-semibold transition cursor-pointer ${
+              className={`h-8 px-3 rounded-xl text-xs font-semibold transition cursor-pointer ${
                 filter === f.id
-                  ? "bg-primary text-white shadow-xs"
+                  ? "bg-primary text-white shadow-2xs"
                   : "bg-card border border-border text-foreground/80 hover:bg-muted/60"
               }`}
             >
@@ -877,181 +1334,343 @@ function MedicacoesTab({
           ))}
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onSendWhatsApp}
-            className="h-10 px-3.5 rounded-full bg-success/10 hover:bg-success/15 text-success text-sm font-semibold inline-flex items-center gap-1.5 transition cursor-pointer"
-          >
-            <Send size={14} />
-            <span>Disparar no WhatsApp</span>
-          </button>
-
-          <button
-            onClick={() => setOpenNew(true)}
-            className="h-10 px-4 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-semibold inline-flex items-center gap-1.5 shadow-sm transition cursor-pointer"
-          >
-            <Plus size={15} /> Nova medicação
-          </button>
-        </div>
-      </div>
-
-      {filtered.length === 0 ? (
-        <div className="text-center py-20 bg-card rounded-xl border border-border/80 shadow-sm">
-          <Pill size={44} className="mx-auto text-muted-foreground/60" strokeWidth={1.5} />
-          <div className="mt-3 text-base font-semibold text-foreground">
-            Nenhuma medicação no filtro
+        {filtered.length === 0 ? (
+          <div className="text-center py-16 bg-card rounded-xl border border-border/80 shadow-xs space-y-2">
+            <Pill size={40} className="mx-auto text-muted-foreground/60" strokeWidth={1.5} />
+            <div className="text-sm font-semibold text-foreground">
+              Nenhuma prescrição no filtro selecionado
+            </div>
+            <div className="text-xs text-muted-foreground max-w-sm mx-auto">
+              Adicione injetáveis semanais com doses em mg ou cadastre fórmulas manipuladas personalizadas.
+            </div>
+            <button
+              type="button"
+              onClick={() => setOpenNew(true)}
+              className="mt-2 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary-hover transition cursor-pointer"
+            >
+              <Plus size={13} />
+              <span>Cadastrar Prescrição</span>
+            </button>
           </div>
-          <div className="text-sm text-muted-foreground mt-1">
-            Adicione medicações e organize por horários do dia.
-          </div>
-        </div>
-      ) : (
-        <div className="relative pl-5">
-          <div className="absolute left-1.5 top-0 bottom-0 w-px bg-surface-2" />
-          <div className="space-y-3">
-            {filtered.map((m, i) => {
-              const PIcon = PERIOD_ICON[m.period] ?? Clock;
-              const suspenso = m.status !== "ativo";
-              return (
-                <motion.div
-                  key={m.id}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.04 }}
-                  className="relative"
-                >
-                  <div className="absolute -left-[13px] top-5 h-3.5 w-3.5 rounded-full bg-card border-2 border-primary" />
-                  <div
-                    className={`bg-card rounded-2xl border border-border/90 p-4.5 shadow-sm transition ${
-                      suspenso ? "opacity-60 bg-muted/60" : ""
-                    }`}
+        ) : (
+          <div className="relative pl-5">
+            <div className="absolute left-1.5 top-0 bottom-0 w-px bg-border" />
+            <div className="space-y-3">
+              {filtered.map((m, i) => {
+                const PIcon = PERIOD_ICON[m.period] ?? Clock;
+                const suspenso = m.status !== "ativo";
+                const isSemanal = m.period === "semanal";
+                const isManipulado =
+                  m.unit === "dose" ||
+                  m.name?.toLowerCase().includes("fórmula") ||
+                  m.name?.toLowerCase().includes("manipulado");
+
+                return (
+                  <motion.div
+                    key={m.id}
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.03 }}
+                    className="relative"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-3 min-w-0">
-                        <div className="h-10 w-10 rounded-xl bg-primary-soft text-primary flex items-center justify-center shrink-0">
-                          <PIcon size={18} />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <div className="text-[15px] font-semibold text-foreground">
-                              {m.name}
-                            </div>
-                            {m.period && (
-                              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-primary-soft text-primary">
-                                {PERIOD_LABEL[m.period] ?? m.period}
-                              </span>
-                            )}
-                            {suspenso && (
-                              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-destructive/15 text-destructive">
-                                Suspenso
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="text-sm text-muted-foreground mt-1 flex flex-wrap gap-x-4 gap-y-0.5 font-medium">
-                            {m.dose && (
-                              <span>
-                                <b className="text-foreground">Dose:</b> {m.dose}
-                                {m.unit ? ` ${m.unit}` : ""}
-                              </span>
-                            )}
-                            {m.route && (
-                              <span>
-                                <b className="text-foreground">Via:</b> {m.route}
-                              </span>
-                            )}
-                            {m.frequency && (
-                              <span>
-                                <b className="text-foreground">Frequência:</b> {m.frequency}
-                              </span>
+                    <div className="absolute -left-[13px] top-5 h-3.5 w-3.5 rounded-full bg-card border-2 border-primary" />
+                    <div
+                      className={`bg-card rounded-2xl border border-border/90 p-4 shadow-2xs transition ${
+                        suspenso ? "opacity-60 bg-muted/60" : ""
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3 min-w-0">
+                          <div
+                            className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${
+                              isSemanal
+                                ? "bg-primary/10 text-primary"
+                                : isManipulado
+                                  ? "bg-purple-500/10 text-purple-600 dark:text-purple-400"
+                                  : "bg-primary-soft text-primary"
+                            }`}
+                          >
+                            {isSemanal ? (
+                              <Syringe size={18} />
+                            ) : isManipulado ? (
+                              <FlaskConical size={18} />
+                            ) : (
+                              <PIcon size={18} />
                             )}
                           </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-[15px] font-bold text-foreground">
+                                {m.name}
+                              </span>
 
-                          {m.notes && (
-                            <div className="text-sm text-foreground/80 mt-2 bg-muted/60 rounded-xl p-2.5 border border-border-soft">
-                              <span className="font-semibold text-foreground">Orientação:</span>{" "}
-                              {m.notes}
+                              {isSemanal && (
+                                <span className="text-2xs font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                                  💉 Injetável / Semanal
+                                </span>
+                              )}
+
+                              {isManipulado && (
+                                <span className="text-2xs font-bold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                                  🧪 Manipulado
+                                </span>
+                              )}
+
+                              {m.period && !isSemanal && (
+                                <span className="text-2xs font-semibold px-2 py-0.5 rounded-full bg-primary-soft text-primary">
+                                  {PERIOD_LABEL[m.period] ?? m.period}
+                                </span>
+                              )}
+
+                              {suspenso && (
+                                <span className="text-2xs font-bold px-2 py-0.5 rounded-full bg-destructive/15 text-destructive">
+                                  Suspenso
+                                </span>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      </div>
 
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => toggle(m)}
-                          className="h-8 w-8 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition cursor-pointer"
-                          title={suspenso ? "Reativar" : "Suspender"}
-                        >
-                          {suspenso ? <CheckCircle2 size={16} /> : <PauseCircle size={16} />}
-                        </button>
-                        <button
-                          onClick={() => remove(m)}
-                          className="h-8 w-8 rounded-lg hover:bg-destructive/10 flex items-center justify-center text-destructive transition cursor-pointer"
-                          title="Remover"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                            <div className="text-xs text-muted-foreground mt-1 flex flex-wrap gap-x-4 gap-y-0.5 font-medium">
+                              {m.dose && (
+                                <span>
+                                  <b className="text-foreground">Dose:</b> {m.dose}
+                                  {m.unit ? ` ${m.unit}` : ""}
+                                </span>
+                              )}
+                              {m.route && (
+                                <span>
+                                  <b className="text-foreground">Via:</b> {m.route}
+                                </span>
+                              )}
+                              {m.frequency && (
+                                <span>
+                                  <b className="text-foreground">Frequência:</b> {m.frequency}
+                                </span>
+                              )}
+                              {m.start_date && (
+                                <span>
+                                  <b className="text-foreground">Início:</b>{" "}
+                                  {new Date(m.start_date + "T12:00:00").toLocaleDateString("pt-BR")}
+                                </span>
+                              )}
+                            </div>
+
+                            {m.notes && (
+                              <div className="text-xs text-foreground/80 mt-2 bg-muted/50 rounded-xl p-2.5 border border-border-soft whitespace-pre-wrap font-sans">
+                                <span className="font-bold text-foreground">Instruções / Composição:</span>{" "}
+                                {m.notes}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => toggle(m)}
+                            className="h-8 w-8 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition cursor-pointer"
+                            title={suspenso ? "Reativar" : "Suspender"}
+                          >
+                            {suspenso ? <CheckCircle2 size={16} /> : <PauseCircle size={16} />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => remove(m)}
+                            className="h-8 w-8 rounded-lg hover:bg-destructive/10 flex items-center justify-center text-destructive transition cursor-pointer"
+                            title="Remover"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </motion.div>
-              );
-            })}
+                  </motion.div>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </section>
 
       {openNew && (
         <NewMedicationModal
           treatmentId={treatmentId}
+          isEmagrecimento={isEmagrecimento}
           onClose={() => setOpenNew(false)}
-          onSaved={reload}
+          onSaved={() => {
+            reload();
+            usesQuery.refetch();
+          }}
         />
       )}
     </div>
   );
 }
 
+// ============== MODAL COM ABAS: MANIPULADOS, PROTOCOLO SEMANAL (TIRZEPATIDA) E PADRÃO ==============
 function NewMedicationModal({
   treatmentId,
+  isEmagrecimento,
   onClose,
   onSaved,
 }: {
   treatmentId: string;
+  isEmagrecimento?: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [f, setF] = useState({
+  const [modalTab, setModalTab] = useState<"manipulados" | "escalonada" | "padrao">(
+    isEmagrecimento ? "escalonada" : "manipulados",
+  );
+  const [saving, setSaving] = useState(false);
+
+  // 1. Estado da Aba Manipulados
+  const [manipulado, setManipulado] = useState({
+    name: "",
+    composition: "",
+    route: "Oral",
+    period: "manha",
+    frequency: "1x ao dia",
+    startDate: new Date().toISOString().slice(0, 10),
+  });
+
+  // 2. Estado da Aba Protocolo Semanal (Tirzepatida / Injetáveis com doses em mg variáveis por semana)
+  interface WeekStep {
+    week: number;
+    date: string;
+    mg: string;
+  }
+  const addDays = (baseIso: string, days: number) => {
+    const d = new Date(baseIso + "T12:00:00");
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const [escalonada, setEscalonada] = useState({
+    medName: "Tirzepatida (Mounjaro)",
+    route: "Subcutânea",
+    notes: "Aplicar via subcutânea no abdômen ou coxa, revezando os locais de aplicação.",
+  });
+  const [weeks, setWeeks] = useState<WeekStep[]>([
+    { week: 1, date: todayIso, mg: "2.5" },
+    { week: 2, date: addDays(todayIso, 7), mg: "2.5" },
+    { week: 3, date: addDays(todayIso, 14), mg: "5.0" },
+    { week: 4, date: addDays(todayIso, 21), mg: "5.0" },
+  ]);
+
+  const updateWeek = (weekNum: number, field: "date" | "mg", val: string) => {
+    setWeeks((prev) =>
+      prev.map((w) => (w.week === weekNum ? { ...w, [field]: val } : w)),
+    );
+  };
+
+  const addNextWeek = () => {
+    const last = weeks[weeks.length - 1];
+    const nextNum = (last?.week || 0) + 1;
+    const nextDate = last ? addDays(last.date, 7) : todayIso;
+    const nextMg = last ? last.mg : "2.5";
+    setWeeks((prev) => [...prev, { week: nextNum, date: nextDate, mg: nextMg }]);
+  };
+
+  const removeWeek = (weekNum: number) => {
+    if (weeks.length <= 1) return;
+    setWeeks((prev) =>
+      prev
+        .filter((w) => w.week !== weekNum)
+        .map((w, idx) => ({ ...w, week: idx + 1 })),
+    );
+  };
+
+  // 3. Estado da Aba Padrão
+  const [padrao, setPadrao] = useState({
     name: "",
     dose: "",
     unit: "mg",
     route: "Oral",
     frequency: "1x ao dia",
     period: "manha",
-    start_date: new Date().toISOString().slice(0, 10),
+    start_date: todayIso,
     end_date: "",
     notes: "",
   });
-  const [saving, setSaving] = useState(false);
 
-  const submit = async () => {
-    if (!f.name) return toast.error("Informe o nome da medicação");
+  // Submissão Manipulados
+  const submitManipulado = async () => {
+    if (!manipulado.name.trim()) {
+      return toast.error("Informe o nome da fórmula manipulada.");
+    }
+    if (!manipulado.composition.trim()) {
+      return toast.error("Insira o texto com a composição / fórmula manipulada.");
+    }
     setSaving(true);
     const { error } = await supabase.from("treatment_medications").insert({
       treatment_id: treatmentId,
-      name: f.name,
-      dose: f.dose || null,
-      unit: f.unit || null,
-      route: f.route || null,
-      frequency: f.frequency || null,
-      period: f.period || null,
-      start_date: f.start_date || null,
-      end_date: f.end_date || null,
-      notes: f.notes || null,
+      name: manipulado.name.trim(),
+      dose: "Conforme fórmula",
+      unit: "dose",
+      route: manipulado.route || "Oral",
+      frequency: manipulado.frequency || "1x ao dia",
+      period: manipulado.period || "manha",
+      start_date: manipulado.startDate || null,
+      notes: manipulado.composition.trim(),
       status: "ativo",
     });
     setSaving(false);
-    if (error) return toast.error("Erro ao salvar medicação");
+    if (error) return toast.error("Erro ao salvar manipulado: " + error.message);
+    toast.success("Manipulado adicionado ao cronograma!");
+    onSaved();
+    onClose();
+  };
+
+  // Submissão Protocolo Semanal (Tirzepatida)
+  const submitEscalonada = async () => {
+    if (!escalonada.medName.trim()) {
+      return toast.error("Informe o nome do injetável.");
+    }
+    if (weeks.length === 0) {
+      return toast.error("Adicione ao menos uma semana de protocolo.");
+    }
+    setSaving(true);
+    const rows = weeks.map((w) => ({
+      treatment_id: treatmentId,
+      name: `${escalonada.medName.trim()} (Sem. ${w.week})`,
+      dose: String(w.mg).trim(),
+      unit: "mg",
+      route: escalonada.route || "Subcutânea",
+      frequency: "1x por semana",
+      period: "semanal",
+      start_date: w.date || null,
+      notes: `Semana ${w.week} do protocolo de ${escalonada.medName.trim()} (${w.mg}mg). ${escalonada.notes.trim()}`,
+      status: "ativo",
+    }));
+
+    const { error } = await supabase.from("treatment_medications").insert(rows);
+    setSaving(false);
+    if (error) return toast.error("Erro ao salvar escalonamento: " + error.message);
+    toast.success(`${weeks.length} semanas de ${escalonada.medName} salvas no cronograma!`);
+    onSaved();
+    onClose();
+  };
+
+  // Submissão Padrão
+  const submitPadrao = async () => {
+    if (!padrao.name.trim()) return toast.error("Informe o nome da medicação");
+    setSaving(true);
+    const { error } = await supabase.from("treatment_medications").insert({
+      treatment_id: treatmentId,
+      name: padrao.name.trim(),
+      dose: padrao.dose || null,
+      unit: padrao.unit || null,
+      route: padrao.route || null,
+      frequency: padrao.frequency || null,
+      period: padrao.period || null,
+      start_date: padrao.start_date || null,
+      end_date: padrao.end_date || null,
+      notes: padrao.notes || null,
+      status: "ativo",
+    });
+    setSaving(false);
+    if (error) return toast.error("Erro ao salvar medicação: " + error.message);
     toast.success("Medicação adicionada ao cronograma!");
     onSaved();
     onClose();
@@ -1059,114 +1678,475 @@ function NewMedicationModal({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-lg gap-0 p-0">
-        <DialogHeader className="border-b border-border-soft px-6 py-4">
-          <DialogTitle className="text-base">Nova Medicação no Cronograma</DialogTitle>
-          <DialogDescription className="sr-only">
-            Dados da medicação que entra no cronograma do acompanhamento.
+      <DialogContent className="max-w-xl gap-0 p-0 overflow-hidden">
+        <DialogHeader className="border-b border-border-soft px-6 py-4 bg-card">
+          <DialogTitle className="text-base flex items-center gap-2">
+            <Plus size={18} className="text-primary" />
+            <span>Cadastrar Prescrição no Cronograma</span>
+          </DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground">
+            Escolha entre fórmula manipulada, protocolo semanal com escalonamento de mg ou medicação padrão.
           </DialogDescription>
+
+          {/* Abas do Modal */}
+          <div className="flex items-center gap-1.5 pt-3">
+            <button
+              type="button"
+              onClick={() => setModalTab("manipulados")}
+              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                modalTab === "manipulados"
+                  ? "bg-purple-600 text-white shadow-2xs"
+                  : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+            >
+              <FlaskConical size={14} />
+              <span>Manipulados</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setModalTab("escalonada")}
+              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                modalTab === "escalonada"
+                  ? "bg-primary text-white shadow-2xs"
+                  : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+            >
+              <Syringe size={14} />
+              <span>Semanal (Tirzepatida)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setModalTab("padrao")}
+              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                modalTab === "padrao"
+                  ? "bg-foreground text-background shadow-2xs"
+                  : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+            >
+              <Pill size={14} />
+              <span>Padrão</span>
+            </button>
+          </div>
         </DialogHeader>
-        <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="sm:col-span-2">
-            <Lbl>Nome da Medicação *</Lbl>
-            <input
-              className={inp}
-              placeholder="Ex.: Ozempic, Roacutan, Losartana..."
-              value={f.name}
-              onChange={(e) => setF({ ...f, name: e.target.value })}
-            />
+
+        {/* ============================================================ */}
+        {/* ABA 1: MANIPULADOS */}
+        {/* ============================================================ */}
+        {modalTab === "manipulados" && (
+          <div className="p-5 sm:p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+            <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-xs text-purple-700 dark:text-purple-300">
+              <span className="font-bold flex items-center gap-1.5 mb-0.5">
+                <FlaskConical size={13} />
+                Fórmulas & Compostos Manipulados
+              </span>
+              Digite manualmente a formulação completa, os ativos e as miligramas para salvar diretamente no cronograma do paciente.
+            </div>
+
+            <div>
+              <Lbl>Nome da Fórmula / Manipulado *</Lbl>
+              <input
+                className={inp}
+                placeholder="Ex.: Fórmula Moderadora de Apetite & Termogênica"
+                value={manipulado.name}
+                onChange={(e) => setManipulado({ ...manipulado, name: e.target.value })}
+              />
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {[
+                  "Fórmula Emagrecedora & Termogênica",
+                  "Composto Lipolítico & Diurético",
+                  "Pool de Aminoácidos & Coenzimas",
+                  "Modulador de Ansiedade Noturno",
+                ].map((sug) => (
+                  <button
+                    key={sug}
+                    type="button"
+                    onClick={() => setManipulado({ ...manipulado, name: sug })}
+                    className="text-2xs px-2 py-0.5 rounded-md bg-muted hover:bg-muted/80 text-foreground/80 font-medium cursor-pointer"
+                  >
+                    + {sug}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <Lbl>Composição & Fórmula Completa (Inserir manualmente) *</Lbl>
+              <textarea
+                rows={5}
+                className={inp}
+                placeholder="Insira manualmente os componentes da fórmula com dosagens em mg/mcg/g...&#10;Ex.:&#10;Morosil 500mg&#10;Picolinato de Cromo 250mcg&#10;Cafeína Anidra 100mg&#10;Excipiente qsp 1 cápsula.&#10;Posologia: Tomar 1 cápsula pela manhã em jejum."
+                value={manipulado.composition}
+                onChange={(e) => setManipulado({ ...manipulado, composition: e.target.value })}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <Lbl>Via de Administração</Lbl>
+                <select
+                  className={inp}
+                  value={manipulado.route}
+                  onChange={(e) => setManipulado({ ...manipulado, route: e.target.value })}
+                >
+                  {["Oral", "Sublingual", "Tópica", "Injetável", "Retal", "Inalatória"].map((r) => (
+                    <option key={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <Lbl>Turno / Período</Lbl>
+                <select
+                  className={inp}
+                  value={manipulado.period}
+                  onChange={(e) => setManipulado({ ...manipulado, period: e.target.value })}
+                >
+                  <option value="manha">🌅 Manhã</option>
+                  <option value="tarde">☀️ Tarde</option>
+                  <option value="noite">🌙 Noite</option>
+                  <option value="diario">📋 Diário / Contínuo</option>
+                </select>
+              </div>
+
+              <div>
+                <Lbl>Data de Início</Lbl>
+                <input
+                  type="date"
+                  className={inp}
+                  value={manipulado.startDate}
+                  onChange={(e) => setManipulado({ ...manipulado, startDate: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2 border-t border-border-soft">
+              <button
+                type="button"
+                onClick={onClose}
+                className="h-10 px-4 rounded-xl bg-muted text-xs font-semibold text-foreground/80 hover:bg-muted/80"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={submitManipulado}
+                className="h-10 px-5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-2xs disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <FlaskConical size={14} />
+                <span>{saving ? "Salvando..." : "Salvar Manipulado"}</span>
+              </button>
+            </div>
           </div>
-          <div>
-            <Lbl>Dose</Lbl>
-            <input
-              className={inp}
-              placeholder="Ex.: 50, 0.5, 1"
-              value={f.dose}
-              onChange={(e) => setF({ ...f, dose: e.target.value })}
-            />
-          </div>
-          <div>
-            <Lbl>Unidade</Lbl>
-            <select
-              className={inp}
-              value={f.unit}
-              onChange={(e) => setF({ ...f, unit: e.target.value })}
-            >
-              {["mg", "ml", "g", "mcg", "UI", "gotas", "cápsula(s)", "comprimido(s)", "ampola"].map(
-                (u) => (
-                  <option key={u}>{u}</option>
-                ),
-              )}
-            </select>
-          </div>
-          <div>
-            <Lbl>Via de Administração</Lbl>
-            <select
-              className={inp}
-              value={f.route}
-              onChange={(e) => setF({ ...f, route: e.target.value })}
-            >
-              {["Oral", "Sublingual", "Subcutânea", "Intramuscular", "Tópica", "Inalatória"].map(
-                (r) => (
-                  <option key={r}>{r}</option>
-                ),
-              )}
-            </select>
-          </div>
-          <div>
-            <Lbl>Frequência</Lbl>
-            <input
-              className={inp}
-              placeholder="Ex.: 1x ao dia, 8/8h"
-              value={f.frequency}
-              onChange={(e) => setF({ ...f, frequency: e.target.value })}
-            />
-          </div>
-          <div className="sm:col-span-2">
-            <Lbl>Turno / Período do Dia</Lbl>
-            <select
-              className={inp}
-              value={f.period}
-              onChange={(e) => setF({ ...f, period: e.target.value })}
-            >
-              {[
-                ["manha", "🌅 Manhã"],
-                ["tarde", "☀️ Tarde"],
-                ["noite", "🌙 Noite"],
-                ["diario", "📋 Diário / Contínuo"],
-              ].map(([v, l]) => (
-                <option key={v} value={v}>
-                  {l}
-                </option>
+        )}
+
+        {/* ============================================================ */}
+        {/* ABA 2: PROTOCOLO SEMANAL (TIRZEPATIDA / ESCALONAMENTO DE MG) */}
+        {/* ============================================================ */}
+        {modalTab === "escalonada" && (
+          <div className="p-5 sm:p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+            <div className="p-3 rounded-xl bg-primary/10 border border-primary/20 text-xs text-primary">
+              <span className="font-bold flex items-center gap-1.5 mb-0.5">
+                <Syringe size={13} />
+                Escalonamento Semanal de Injetáveis (Doses Variáveis por Semana)
+              </span>
+              Cadastre datas e miligramas (mg) semana a semana para Tirzepatida, Semaglutida ou outros injetáveis com titulação progressiva de dose.
+            </div>
+
+            <div>
+              <Lbl>Nome da Medicação / Injetável *</Lbl>
+              <input
+                className={inp}
+                placeholder="Ex.: Tirzepatida (Mounjaro), Semaglutida (Ozempic)..."
+                value={escalonada.medName}
+                onChange={(e) => setEscalonada({ ...escalonada, medName: e.target.value })}
+              />
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {[
+                  "Tirzepatida (Mounjaro)",
+                  "Semaglutida (Ozempic)",
+                  "Semaglutida (Wegovy)",
+                  "Liraglutida (Saxenda)",
+                ].map((sug) => (
+                  <button
+                    key={sug}
+                    type="button"
+                    onClick={() => setEscalonada({ ...escalonada, medName: sug })}
+                    className="text-2xs px-2 py-0.5 rounded-md bg-muted hover:bg-muted/80 text-foreground/80 font-medium cursor-pointer"
+                  >
+                    + {sug}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Presets rápidos */}
+            <div className="flex items-center justify-between text-2xs text-muted-foreground pt-1">
+              <span className="font-semibold uppercase tracking-wider">
+                Configuração das Semanas (Datas & Miligramas)
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWeeks([
+                      { week: 1, date: todayIso, mg: "2.5" },
+                      { week: 2, date: addDays(todayIso, 7), mg: "2.5" },
+                      { week: 3, date: addDays(todayIso, 14), mg: "5.0" },
+                      { week: 4, date: addDays(todayIso, 21), mg: "5.0" },
+                    ]);
+                  }}
+                  className="text-primary hover:underline font-semibold cursor-pointer"
+                >
+                  Preset 4 Sem. (2.5 &rarr; 5mg)
+                </button>
+                <span>•</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWeeks([
+                      { week: 1, date: todayIso, mg: "2.5" },
+                      { week: 2, date: addDays(todayIso, 7), mg: "2.5" },
+                      { week: 3, date: addDays(todayIso, 14), mg: "5.0" },
+                      { week: 4, date: addDays(todayIso, 21), mg: "5.0" },
+                      { week: 5, date: addDays(todayIso, 28), mg: "7.5" },
+                      { week: 6, date: addDays(todayIso, 35), mg: "7.5" },
+                      { week: 7, date: addDays(todayIso, 42), mg: "10.0" },
+                      { week: 8, date: addDays(todayIso, 49), mg: "10.0" },
+                    ]);
+                  }}
+                  className="text-primary hover:underline font-semibold cursor-pointer"
+                >
+                  Preset 8 Semanas
+                </button>
+              </div>
+            </div>
+
+            {/* Lista de Semanas */}
+            <div className="space-y-2.5 bg-muted/40 p-3.5 rounded-2xl border border-border-soft">
+              {weeks.map((w) => (
+                <div
+                  key={w.week}
+                  className="flex flex-wrap items-center justify-between gap-2.5 p-2.5 bg-card rounded-xl border border-border/80 shadow-2xs"
+                >
+                  <div className="flex items-center gap-2 min-w-[90px]">
+                    <span className="h-6 w-6 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
+                      {w.week}
+                    </span>
+                    <span className="text-xs font-bold text-foreground">Semana {w.week}</span>
+                  </div>
+
+                  {/* Campo de Data */}
+                  <div className="flex-1 min-w-[130px]">
+                    <input
+                      type="date"
+                      className="w-full text-xs rounded-lg border border-border px-2.5 py-1.5 focus:border-primary focus:outline-none"
+                      value={w.date}
+                      onChange={(e) => updateWeek(w.week, "date", e.target.value)}
+                    />
+                  </div>
+
+                  {/* Campo de Miligramas com quick chips */}
+                  <div className="flex items-center gap-1.5 min-w-[140px]">
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      className="w-20 text-xs font-bold text-center rounded-lg border border-border px-2 py-1.5 focus:border-primary focus:outline-none"
+                      value={w.mg}
+                      onChange={(e) => updateWeek(w.week, "mg", e.target.value)}
+                    />
+                    <span className="text-xs font-bold text-foreground">mg</span>
+
+                    <div className="hidden sm:flex items-center gap-1 ml-1">
+                      {["2.5", "5.0", "7.5", "10"].map((quickMg) => (
+                        <button
+                          key={quickMg}
+                          type="button"
+                          onClick={() => updateWeek(w.week, "mg", quickMg)}
+                          className={`text-[10px] px-1.5 py-0.5 rounded font-semibold transition cursor-pointer ${
+                            w.mg === quickMg
+                              ? "bg-primary text-white"
+                              : "bg-muted text-muted-foreground hover:bg-muted/80"
+                          }`}
+                        >
+                          {quickMg}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Botão de remover semana */}
+                  {weeks.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeWeek(w.week)}
+                      className="h-7 w-7 rounded-lg hover:bg-destructive/10 text-destructive flex items-center justify-center transition cursor-pointer"
+                      title="Remover esta semana"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </div>
               ))}
-            </select>
+
+              <button
+                type="button"
+                onClick={addNextWeek}
+                className="w-full py-2.5 rounded-xl border border-dashed border-primary/40 bg-primary/5 hover:bg-primary/10 text-primary text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Plus size={14} />
+                <span>+ Adicionar Próxima Semana (+7 dias)</span>
+              </button>
+            </div>
+
+            <div>
+              <Lbl>Orientações Gerais de Aplicação</Lbl>
+              <textarea
+                rows={2}
+                className={inp}
+                placeholder="Ex.: Aplicar via subcutânea no abdômen ou coxa, revezando os locais a cada semana."
+                value={escalonada.notes}
+                onChange={(e) => setEscalonada({ ...escalonada, notes: e.target.value })}
+              />
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2 border-t border-border-soft">
+              <button
+                type="button"
+                onClick={onClose}
+                className="h-10 px-4 rounded-xl bg-muted text-xs font-semibold text-foreground/80 hover:bg-muted/80"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={submitEscalonada}
+                className="h-10 px-5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold shadow-2xs disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <Syringe size={14} />
+                <span>
+                  {saving
+                    ? "Salvando..."
+                    : `Salvar Escalonamento (${weeks.length} Semanas)`}
+                </span>
+              </button>
+            </div>
           </div>
-          <div className="sm:col-span-2">
-            <Lbl>Instruções / Recomendações de Uso</Lbl>
-            <textarea
-              rows={2}
-              className={inp}
-              placeholder="Ex.: Tomar em jejum com água; não ingerir bebidas alcoólicas..."
-              value={f.notes}
-              onChange={(e) => setF({ ...f, notes: e.target.value })}
-            />
+        )}
+
+        {/* ============================================================ */}
+        {/* ABA 3: PADRÃO */}
+        {/* ============================================================ */}
+        {modalTab === "padrao" && (
+          <div className="p-5 sm:p-6 grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[70vh] overflow-y-auto">
+            <div className="sm:col-span-2">
+              <Lbl>Nome da Medicação *</Lbl>
+              <input
+                className={inp}
+                placeholder="Ex.: Roacutan, Losartana, Metformina..."
+                value={padrao.name}
+                onChange={(e) => setPadrao({ ...padrao, name: e.target.value })}
+              />
+            </div>
+            <div>
+              <Lbl>Dose</Lbl>
+              <input
+                className={inp}
+                placeholder="Ex.: 50, 0.5, 1"
+                value={padrao.dose}
+                onChange={(e) => setPadrao({ ...padrao, dose: e.target.value })}
+              />
+            </div>
+            <div>
+              <Lbl>Unidade</Lbl>
+              <select
+                className={inp}
+                value={padrao.unit}
+                onChange={(e) => setPadrao({ ...padrao, unit: e.target.value })}
+              >
+                {["mg", "ml", "g", "mcg", "UI", "gotas", "cápsula(s)", "comprimido(s)", "ampola"].map(
+                  (u) => (
+                    <option key={u}>{u}</option>
+                  ),
+                )}
+              </select>
+            </div>
+            <div>
+              <Lbl>Via de Administração</Lbl>
+              <select
+                className={inp}
+                value={padrao.route}
+                onChange={(e) => setPadrao({ ...padrao, route: e.target.value })}
+              >
+                {["Oral", "Sublingual", "Subcutânea", "Intramuscular", "Tópica", "Inalatória"].map(
+                  (r) => (
+                    <option key={r}>{r}</option>
+                  ),
+                )}
+              </select>
+            </div>
+            <div>
+              <Lbl>Frequência</Lbl>
+              <input
+                className={inp}
+                placeholder="Ex.: 1x ao dia, 8/8h"
+                value={padrao.frequency}
+                onChange={(e) => setPadrao({ ...padrao, frequency: e.target.value })}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Lbl>Turno / Período do Dia</Lbl>
+              <select
+                className={inp}
+                value={padrao.period}
+                onChange={(e) => setPadrao({ ...padrao, period: e.target.value })}
+              >
+                {[
+                  ["manha", "🌅 Manhã"],
+                  ["tarde", "☀️ Tarde"],
+                  ["noite", "🌙 Noite"],
+                  ["diario", "📋 Diário / Contínuo"],
+                ].map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="sm:col-span-2">
+              <Lbl>Instruções / Recomendações de Uso</Lbl>
+              <textarea
+                rows={2}
+                className={inp}
+                placeholder="Ex.: Tomar em jejum com água; não ingerir bebidas alcoólicas..."
+                value={padrao.notes}
+                onChange={(e) => setPadrao({ ...padrao, notes: e.target.value })}
+              />
+            </div>
+
+            <div className="sm:col-span-2 pt-2 flex justify-end gap-2 border-t border-border-soft">
+              <button
+                type="button"
+                onClick={onClose}
+                className="h-10 px-4 rounded-xl bg-muted text-xs font-semibold text-foreground/80 hover:bg-muted/80"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={submitPadrao}
+                className="h-10 px-5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold shadow-2xs disabled:opacity-50"
+              >
+                {saving ? "Salvando…" : "Adicionar ao Cronograma"}
+              </button>
+            </div>
           </div>
-        </div>
-        <div className="px-6 py-4 border-t border-border-soft flex justify-end gap-2 bg-card">
-          <button
-            onClick={onClose}
-            className="h-10 px-4 rounded-full bg-muted text-sm font-semibold text-foreground/80"
-          >
-            Cancelar
-          </button>
-          <button
-            disabled={saving}
-            onClick={submit}
-            className="h-10 px-5 rounded-full bg-primary hover:bg-primary-hover text-white text-sm font-semibold disabled:opacity-50"
-          >
-            {saving ? "Salvando…" : "Adicionar ao Cronograma"}
-          </button>
-        </div>
+        )}
       </DialogContent>
     </Dialog>
   );

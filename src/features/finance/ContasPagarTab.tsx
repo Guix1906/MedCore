@@ -13,6 +13,7 @@ import {
   Pencil,
   Trash2,
   Layers,
+  Calendar,
 } from "lucide-react";
 import { parseISO, startOfDay } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,8 @@ import type { FinanceSnapshot, FinancialTitle } from "./finance-schema";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/ui-app/StatusBadge";
 import { AlertCircle, Clock3 } from "lucide-react";
+import { CustosFixosMensais } from "./CustosFixosMensais";
+import { CalendarioVencimentos } from "./CalendarioVencimentos";
 
 export interface ContasPagarTabProps {
   finance: FinanceSnapshot;
@@ -45,6 +48,7 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
   onPay,
   onDelete,
 }: ContasPagarTabProps) {
+  const [mainSection, setMainSection] = useState<"contas" | "custos-fixos" | "calendario">("contas");
   const [subTab, setSubTab] = useState<"a-pagar" | "historico" | "todas">("a-pagar");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"todos" | "pendente" | "vencido">("todos");
@@ -234,13 +238,40 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
           <Button
             size="sm"
             onClick={() => onOpenNew("despesa")}
-            className="h-9 px-4 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary-hover text-white shadow-xs rounded-xl cursor-pointer"
+            className="h-9 px-3.5 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary-hover text-white shadow-xs rounded-xl cursor-pointer"
           >
-            <Plus className="h-3.5 w-3.5" strokeWidth={2.5} /> Nova Despesa
+            <Plus className="h-3.5 w-3.5" strokeWidth={2.5} /> Nova Conta
+          </Button>
+
+          <Button
+            size="sm"
+            variant={mainSection === "custos-fixos" ? "default" : "outline"}
+            onClick={() => setMainSection("custos-fixos")}
+            className="h-9 px-3.5 text-xs font-semibold gap-1.5 border-border shadow-2xs rounded-xl cursor-pointer"
+          >
+            <Calendar className="h-3.5 w-3.5" /> Custos Fixos Mensais
+          </Button>
+
+          <Button
+            size="sm"
+            variant={mainSection === "calendario" ? "default" : "outline"}
+            onClick={() => setMainSection("calendario")}
+            className="h-9 px-3.5 text-xs font-semibold gap-1.5 border-border shadow-2xs rounded-xl cursor-pointer"
+          >
+            <Clock className="h-3.5 w-3.5" /> Calendário de Vencimentos
+          </Button>
+
+          <Button
+            size="sm"
+            variant={mainSection === "contas" ? "default" : "outline"}
+            onClick={() => setMainSection("contas")}
+            className="h-9 px-3.5 text-xs font-semibold gap-1.5 border-border shadow-2xs rounded-xl cursor-pointer"
+          >
+            <Layers className="h-3.5 w-3.5" /> Contas Cadastradas
           </Button>
 
           <Button
@@ -257,6 +288,12 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
         </div>
       </div>
 
+      {mainSection === "custos-fixos" ? (
+        <CustosFixosMensais finance={finance} onRefreshFinance={onRefresh} />
+      ) : mainSection === "calendario" ? (
+        <CalendarioVencimentos finance={finance} onPay={onPay} onEdit={onEdit} />
+      ) : (
+        <>
       {/* ========================================================================= */}
       {/* 2. SUB-ABAS / PILLS (A Pagar, Histórico, Todas)                            */}
       {/* ========================================================================= */}
@@ -624,6 +661,8 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 });

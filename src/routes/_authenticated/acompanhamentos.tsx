@@ -44,7 +44,7 @@ import AppShell from "@/components/AppShell";
 import { confirmDialog } from "@/components/app/confirm-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { refreshFinance } from "@/features/finance/finance-api";
+import { refreshFinance, getFinancialSnapshot } from "@/features/finance/finance-api";
 import { patientsService, companyService } from "@/services/api";
 import { getStoredLocalPatients, mergeWithLocalPatients } from "@/lib/local-patients";
 import { PatientModal } from "@/components/pacientes/PatientModal";
@@ -173,8 +173,33 @@ function AcompanhamentosPage() {
     },
   });
 
+  const { data: treatmentPaymentsMap = {} } = useQuery({
+    queryKey: ["treatments-payments-summary"],
+    staleTime: 30_000,
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      try {
+        const snap = await getFinancialSnapshot();
+        const map: Record<string, { paid: number; total: number; titlesCount: number }> = {};
+        for (const t of snap.titles) {
+          if (!t.treatment_id) continue;
+          if (!map[t.treatment_id]) map[t.treatment_id] = { paid: 0, total: 0, titlesCount: 0 };
+          map[t.treatment_id].paid += Number(t.paid_amount || 0);
+          map[t.treatment_id].total += Number(t.amount || 0);
+          map[t.treatment_id].titlesCount += 1;
+        }
+        return map;
+      } catch (err) {
+        console.warn("Erro ao buscar snapshot financeiro para acompanhamentos:", err);
+        return {};
+      }
+    },
+  });
+
   const load = () => {
     queryClient.invalidateQueries({ queryKey: ["treatments-list"] });
+    queryClient.invalidateQueries({ queryKey: ["treatments-payments-summary"] });
     queryClient.invalidateQueries({ queryKey: ["treatment-alerts"] });
   };
 
@@ -496,35 +521,84 @@ function AcompanhamentosPage() {
                           </div>
                         </div>
 
-                        {/* Dados adicionais */}
-                        <div className="mt-4 grid grid-cols-2 gap-3 text-sm bg-muted/48 p-3 rounded-xl">
-                          <div>
-                            <div className="text-muted-foreground text-xs font-semibold uppercase">
-                              Início
-                            </div>
-                            <div className="text-foreground font-semibold mt-0.5 flex items-center gap-1">
-                              <CalIcon size={12} className="text-primary" />
-                              {new Date(t.start_date).toLocaleDateString("pt-BR")}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-muted-foreground text-xs font-semibold uppercase">
-                              {Number(t.total_value) > 0 ? "Contratado" : "Prazo"}
-                            </div>
-                            <div className="text-foreground font-semibold mt-0.5 flex items-center gap-1">
-                              {Number(t.total_value) > 0 ? (
-                                <>
-                                  <Wallet size={12} className="text-emerald-500" />
-                                  <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-                                    {brl(t.total_value)}
-                                  </span>
-                                </>
+                        {/* Dados adicionais e Financeiro do Paciente */}
+                        {(() => {
+                          const payInfo = treatmentPaymentsMap[t.id];
+                          const paidVal = payInfo ? payInfo.paid : 0;
+                          const totalVal = Number(t.total_value) || 0;
+                          const openVal = Math.max(0, totalVal - paidVal);
+                          const isFullyPaid = totalVal > 0 && paidVal >= totalVal;
+                          const isPartial = totalVal > 0 && paidVal > 0 && paidVal < totalVal;
+
+                          return (
+                            <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs bg-muted/48 p-3 rounded-xl">
+                              <div>
+                                <div className="text-muted-foreground text-2xs font-semibold uppercase">
+                                  Início
+                                </div>
+                                <div className="text-foreground font-semibold mt-0.5 flex items-center gap-1">
+                                  <CalIcon size={12} className="text-primary" />
+                                  {new Date(t.start_date).toLocaleDateString("pt-BR")}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-muted-foreground text-2xs font-semibold uppercase">
+                                  {totalVal > 0 ? "Contratado" : "Prazo"}
+                                </div>
+                                <div className="text-foreground font-bold mt-0.5 flex items-center gap-1">
+                                  {totalVal > 0 ? (
+                                    <>
+                                      <Wallet size={12} className="text-primary" />
+                                      <span>{brl(totalVal)}</span>
+                                    </>
+                                  ) : (
+                                    protocolDeadline(t.status, t.end_date)
+                                  )}
+                                </div>
+                              </div>
+                              {totalVal > 0 ? (
+                                <div>
+                                  <div className="text-muted-foreground text-2xs font-semibold uppercase flex items-center justify-between">
+                                    <span>Pago</span>
+                                    {isFullyPaid ? (
+                                      <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 font-bold">
+                                        Quitado
+                                      </span>
+                                    ) : isPartial ? (
+                                      <span className="text-[9px] px-1 py-0.2 rounded bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 font-bold">
+                                        Parcial
+                                      </span>
+                                    ) : (
+                                      <span className="text-[9px] px-1 py-0.2 rounded bg-muted text-muted-foreground font-semibold">
+                                        Pendente
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="font-bold mt-0.5 flex items-center gap-1">
+                                    <span
+                                      className={
+                                        paidVal > 0
+                                          ? "text-emerald-600 dark:text-emerald-400"
+                                          : "text-muted-foreground"
+                                      }
+                                    >
+                                      {brl(paidVal)}
+                                    </span>
+                                  </div>
+                                </div>
                               ) : (
-                                protocolDeadline(t.status, t.end_date)
+                                <div>
+                                  <div className="text-muted-foreground text-2xs font-semibold uppercase">
+                                    Retorno
+                                  </div>
+                                  <div className="text-foreground font-medium mt-0.5">
+                                    {t.return_days ? `${t.return_days} dias` : "A definir"}
+                                  </div>
+                                </div>
                               )}
                             </div>
-                          </div>
-                        </div>
+                          );
+                        })()}
 
                         {/* Footer do Card com Ações Rápidas */}
                         <div className="mt-4 pt-3 border-t border-border-soft flex items-center justify-between">
@@ -630,6 +704,44 @@ function AcompanhamentosPage() {
                               />
                             </div>
                           </div>
+
+                          {(() => {
+                            const payInfo = treatmentPaymentsMap[t.id];
+                            const paidVal = payInfo ? payInfo.paid : 0;
+                            const totalVal = Number(t.total_value) || (payInfo ? payInfo.total : 0);
+                            if (totalVal <= 0 && paidVal <= 0) return null;
+                            const isFullyPaid = totalVal > 0 && paidVal >= totalVal;
+                            const isPartial = totalVal > 0 && paidVal > 0 && paidVal < totalVal;
+
+                            return (
+                              <div className="mt-2.5 pt-2 border-t border-border-soft flex items-center justify-between text-xs">
+                                <span className="text-muted-foreground font-medium">Pago / Total</span>
+                                <div className="flex items-center gap-1 font-semibold">
+                                  <span
+                                    className={
+                                      paidVal > 0
+                                        ? "text-emerald-600 dark:text-emerald-400 font-bold"
+                                        : "text-muted-foreground"
+                                    }
+                                  >
+                                    {brl(paidVal)}
+                                  </span>
+                                  <span className="text-muted-foreground/60">/</span>
+                                  <span className="text-foreground">{brl(totalVal)}</span>
+                                  {isFullyPaid && (
+                                    <span className="ml-1 text-[9px] px-1 py-0.2 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 font-bold">
+                                      Quitado
+                                    </span>
+                                  )}
+                                  {isPartial && (
+                                    <span className="ml-1 text-[9px] px-1 py-0.2 rounded bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 font-bold">
+                                      Parcial
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })()}
 
                           <div className="mt-3 pt-2.5 border-t border-border-soft flex items-center justify-between text-xs">
                             <div className="flex items-center gap-2">

@@ -73,6 +73,8 @@ export function turnsToText(turns: TranscriptTurn[]): string {
 export type ClinicalFieldKey =
   | "queixaPrincipal"
   | "historiaDoencaAtual"
+  | "metaPaciente"
+  | "sintomasPaciente"
   | "historicoPessoal"
   | "historicoFamiliar"
   | "medicacoesEmUso"
@@ -106,6 +108,8 @@ export const CLINICAL_GROUPS: { id: ClinicalGroup; title: string }[] = [
 export const CLINICAL_SECTIONS: ClinicalSectionDef[] = [
   { key: "queixaPrincipal", title: "Queixa principal", recordLabel: "QUEIXA PRINCIPAL", group: "anamnese", description: "Motivo da consulta e duração" },
   { key: "historiaDoencaAtual", title: "História da doença atual", recordLabel: "HISTÓRIA DA DOENÇA ATUAL", group: "anamnese", description: "Início, evolução, fatores de melhora/piora e sintomas associados" },
+  { key: "metaPaciente", title: "Meta do paciente", recordLabel: "META DO PACIENTE", group: "anamnese", description: "Metas e objetivos clínicos relatados pelo paciente (peso, medidas, saúde)" },
+  { key: "sintomasPaciente", title: "Sintomas relatados", recordLabel: "SINTOMAS RELATADOS", group: "anamnese", description: "Sintomas detalhados relatados pelo paciente na consulta" },
   { key: "historicoPessoal", title: "Histórico médico pessoal", recordLabel: "HISTÓRICO PESSOAL", group: "antecedentes", description: "Doenças prévias e condições crônicas" },
   { key: "historicoFamiliar", title: "Histórico familiar", recordLabel: "HISTÓRICO FAMILIAR", group: "antecedentes", description: "Doenças em familiares e parentesco" },
   { key: "medicacoesEmUso", title: "Medicações em uso", recordLabel: "MEDICAÇÕES EM USO", group: "antecedentes", description: "Nome, dose e posologia" },

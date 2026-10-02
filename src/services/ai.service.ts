@@ -60,6 +60,8 @@ const OutputSchema = z.object({
   resumo: z.string().nullish(),
   queixaPrincipal: z.string().nullish(),
   historiaDoencaAtual: z.string().nullish(),
+  metaPaciente: z.string().nullish(),
+  sintomasPaciente: z.string().nullish(),
   historicoPessoal: z.string().nullish(),
   condicoesDetectadas: z.array(z.string()).nullish(),
   historicoFamiliar: z.string().nullish(),
@@ -113,6 +115,8 @@ Campos (string ou null):
 - resumo: 1 a 2 frases resumindo a consulta, sem afirmar diagnóstico que o médico não confirmou.
 - queixaPrincipal: motivo da consulta em poucas palavras, com duração (ex.: "Cefaleia há 3 dias.").
 - historiaDoencaAtual: início, característica, intensidade, fatores de melhora/piora, sintomas associados e evolução, em ordem cronológica.
+- metaPaciente: metas e objetivos clínicos ou pessoais que o paciente expressou verbalmente (ex.: meta de emagrecimento ou perda de peso em kg, redução de medidas, disposição física, controle de ansiedade/compulsão alimentar, melhora de taxas laboratoriais ou qualidade de vida).
+- sintomasPaciente: sintomas específicos detalhados relatados pelo paciente (ex.: náuseas, fraqueza, queimação, fadiga crônica, dor de cabeça, constipação, compulsão alimentar, plenitude pós-prandial ou alterações de sono).
 - historicoPessoal: doenças prévias e condições crônicas.
 - condicoesDetectadas: array só com itens desta lista que foram citados como condição do paciente: "Hipertensão", "Diabetes", "Doenças cardíacas", "Asma ou problemas respiratórios", "Problemas de tireoide", "Câncer", "Outras condições crônicas".
 - historicoFamiliar: doenças em familiares, indicando o parentesco.

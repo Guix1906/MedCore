@@ -105,6 +105,8 @@ const STEPS: { id: Step; label: string }[] = [
 const FIELD_ICONS: Record<ClinicalFieldKey, React.ReactNode> = {
   queixaPrincipal: <ClipboardCheck size={15} className="text-primary" />,
   historiaDoencaAtual: <History size={15} className="text-primary" />,
+  metaPaciente: <TrendingUp size={15} className="text-emerald-500" />,
+  sintomasPaciente: <Activity size={15} className="text-amber-500" />,
   historicoPessoal: <Stethoscope size={15} className="text-primary" />,
   historicoFamiliar: <UserCheck size={15} className="text-info" />,
   medicacoesEmUso: <Pill size={15} className="text-success" />,
