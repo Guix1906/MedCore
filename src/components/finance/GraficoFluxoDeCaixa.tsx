@@ -563,7 +563,7 @@ export function GraficoFluxoDeCaixa({
                 strokeWidth: 0,
                 hover: { size: 7 },
               },
-              plotOptions: { bar: { columnWidth: "50%", borderRadius: 0 } },
+              plotOptions: { bar: { columnWidth: "40%", borderRadius: 0 } },
               xaxis: { categories: chartData.map((d) => d.date) },
               yaxis: { labels: { formatter: compactValue } },
               annotations: { yaxis: [{ y: 0, borderColor: "var(--border)", strokeDashArray: 0 }] },

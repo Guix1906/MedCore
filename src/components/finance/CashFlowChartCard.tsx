@@ -193,7 +193,7 @@ export function CashFlowChartCard({
                   strokeWidth: 0,
                   hover: { size: 7 },
                 },
-                plotOptions: { bar: { columnWidth: "50%", borderRadius: 0 } },
+                plotOptions: { bar: { columnWidth: "40%", borderRadius: 0 } },
                 dataLabels: { enabled: false },
                 grid: { strokeDashArray: 0, padding: { left: 10, right: 10 } },
                 xaxis: { categories: flowRows.map((r) => r.label) },
