@@ -1004,9 +1004,12 @@ a:focus:not(:focus-visible) {
   90%,
   100% { stroke-dasharray: 0 200; stroke-dashoffset: -100; }
 }
+/* Com "reduzir movimento" ligado, a regra global (* { animation-duration: 0.001ms !important })
+   apagava o trecho que caminha. O loading é indicador de progresso: segue animando, mais devagar. */
 @media (prefers-reduced-motion: reduce) {
   .med-loader .ml-run {
-    animation-duration: 6s;
+    animation-duration: 6s !important;
+    animation-iteration-count: infinite !important;
   }
 }
 
