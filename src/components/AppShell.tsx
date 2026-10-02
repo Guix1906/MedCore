@@ -296,7 +296,7 @@ export default function AppShell({ children }: { children: ReactNode; title?: st
                         ? (event) => {
                             cancelClose();
                             originRef.current = event.currentTarget;
-                            setActiveFlyoutId(section.label);
+                            setActiveFlyoutId(to);
                           }
                         : undefined
                     }
@@ -340,12 +340,22 @@ export default function AppShell({ children }: { children: ReactNode; title?: st
     );
   }
 
-  // Grupo do menu cujo submenu está aberto, com os mesmos nomes do menu
-  const flyoutSection = navSections.find((section) => section.label === activeFlyoutId);
-  const currentActiveItem = flyoutSection && {
-    id: flyoutSection.label,
-    label: flyoutSection.label,
-    children: flyoutSection.items
+  // Item do menu cujo submenu está aberto (um de cada vez), com os mesmos nomes do menu.
+  // Itens aninhados logo abaixo dele (ex.: Agenda → Indicadores da agenda) entram como subitens.
+  const flyoutItems = navSections.flatMap((section) => section.items);
+  const flyoutIndex = flyoutItems.findIndex((item) => item.to === activeFlyoutId);
+  const flyoutItem = flyoutIndex >= 0 ? flyoutItems[flyoutIndex] : undefined;
+  const flyoutNested: NavItem[] = [];
+  if (flyoutItem && !flyoutItem.nested) {
+    for (const item of flyoutItems.slice(flyoutIndex + 1)) {
+      if (!item.nested) break;
+      flyoutNested.push(item);
+    }
+  }
+  const currentActiveItem = flyoutItem && {
+    id: flyoutItem.to,
+    label: flyoutItem.label,
+    children: [flyoutItem, ...flyoutNested]
       .filter((item) => allowedPath(item.to))
       .map((item) => ({ id: item.to, to: item.to, label: item.label })),
   };
@@ -559,7 +569,11 @@ export default function AppShell({ children }: { children: ReactNode; title?: st
         </div>
       </header>
       <aside
-        className="fixed bottom-2.5 left-2.5 top-[74px] z-(--z-sidebar) hidden flex-col overflow-hidden rounded-2xl border border-hairline bg-glass shadow-(--glass-shadow) glass-blur transition-[width] duration-200 ease-(--ease-apple) md:flex"
+        className={cn(
+          "fixed bottom-2.5 left-2.5 top-[74px] z-(--z-sidebar) hidden flex-col overflow-hidden rounded-2xl border border-hairline bg-glass shadow-(--glass-shadow) glass-blur transition-[width] duration-200 ease-(--ease-apple) md:flex",
+          // Com o submenu aberto, o lado direito fica reto para o painel encaixar
+          !pinned && currentActiveItem && "rounded-r-none",
+        )}
         style={{ width: "calc(var(--app-sidebar-width) - 16px)" }}
       >
         {navigation(pinned, !pinned)}
@@ -595,7 +609,8 @@ export default function AppShell({ children }: { children: ReactNode; title?: st
             exit={{ opacity: 0, x: -12, transition: { duration: 0.1, ease: "easeIn" } }}
             transition={{ duration: 0.14, ease: "easeOut" }}
             style={{ transformOrigin: "left center" }}
-            className="fixed bottom-2.5 left-[72px] top-[74px] z-(--z-sidebar) hidden w-64 flex-col overflow-y-auto rounded-2xl border border-border bg-card px-6 py-8 shadow-[16px_0_36px_-8px_rgba(0,0,0,0.08)] md:flex"
+            // Colado na barra lateral (que termina em 66px) e cobrindo a borda dela: sem linha entre os dois
+            className="fixed bottom-2.5 left-[65px] top-[74px] z-(--z-sidebar) hidden w-64 flex-col overflow-y-auto rounded-r-2xl border border-l-0 border-hairline bg-card px-6 py-8 shadow-[16px_0_36px_-8px_rgba(0,0,0,0.08)] md:flex"
             onFocus={cancelClose}
             onKeyDown={(event) => {
               if (event.key === "Escape") {
