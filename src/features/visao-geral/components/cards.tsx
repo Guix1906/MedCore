@@ -5,7 +5,7 @@ import { StatNumber } from "@/components/ds";
 import { cn } from "@/lib/utils";
 
 export const CARD_BASE =
-  "rounded-[14px] border border-border bg-card p-5 shadow-sm transition-all duration-[250ms] hover:-translate-y-[3px] hover:shadow-sm";
+  "rounded-lg border border-border bg-card p-5 shadow-sm transition-all duration-[250ms] hover:-translate-y-[3px] hover:shadow-sm";
 
 export function DashCard({
   className,

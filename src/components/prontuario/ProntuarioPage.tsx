@@ -1140,7 +1140,7 @@ function Section({
                 e.stopPropagation();
                 onAiFill();
               }}
-              className="group relative inline-flex items-center gap-1.5 h-9 px-3.5 rounded-[10px] text-sm font-semibold text-white shadow-sm hover:brightness-105 active:scale-[0.98] transition-all duration-200"
+              className="group relative inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md text-sm font-semibold text-white shadow-sm hover:brightness-105 active:scale-[0.98] transition-all duration-200"
               style={{
                 background: "var(--primary)",
               }}

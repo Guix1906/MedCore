@@ -10,7 +10,7 @@ export function HeaderFilters({
 }) {
   const [applied, setApplied] = useState(1);
   return (
-    <div className="rounded-[14px] border border-border bg-card p-4 shadow-sm">
+    <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
       <div className="mb-3 flex items-center gap-3">
         <h2 className="text-lg font-semibold leading-[1.35] tracking-[-0.01em] text-foreground">
           Filtros

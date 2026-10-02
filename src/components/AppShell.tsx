@@ -536,6 +536,7 @@ export default function AppShell({ children }: { children: ReactNode; title?: st
               <button
                 type="button"
                 aria-label={`Conta de ${displayName}`}
+                data-keep-round
                 className="ml-1 flex size-10 items-center justify-center rounded-full border border-primary/15 bg-primary-soft text-sm font-semibold text-primary"
               >
                 {initials}
