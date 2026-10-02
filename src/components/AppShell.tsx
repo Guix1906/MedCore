@@ -63,7 +63,8 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { toast } from "sonner";
 import GlobalSearch from "./GlobalSearch";
 import NotificationCenter from "./NotificationCenter";
@@ -122,6 +123,38 @@ export default function AppShell({ children }: { children: ReactNode; title?: st
   const [signingOut, setSigningOut] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [isMac, setIsMac] = useState(() => macPlatform ?? false);
+
+  // Painel de submenus do menu recolhido: id = nome do grupo aberto
+  const [activeFlyoutId, setActiveFlyoutId] = useState<string | null>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flyoutRef = useRef<HTMLDivElement>(null);
+  const originRef = useRef<HTMLAnchorElement | null>(null);
+
+  // Cancela o fechamento se o mouse entrar no submenu ou em outro ícone
+  const cancelClose = () => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  };
+
+  // Agenda o fechamento com delay (tempo para o mouse atravessar até o painel)
+  const scheduleClose = (delay = 100) => {
+    cancelClose();
+    closeTimerRef.current = setTimeout(() => {
+      setActiveFlyoutId(null);
+    }, delay);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (pinned) setActiveFlyoutId(null);
+  }, [pinned]);
 
   useEffect(() => {
     try {
@@ -186,6 +219,7 @@ export default function AppShell({ children }: { children: ReactNode; title?: st
   useEffect(() => {
     setMobileOpen(false);
     setNotificationsOpen(false);
+    setActiveFlyoutId(null);
   }, [pathname]);
 
   useEffect(() => {
@@ -224,7 +258,7 @@ export default function AppShell({ children }: { children: ReactNode; title?: st
     }
   };
 
-  const navigation = (expanded: boolean) => (
+  const navigation = (expanded: boolean, flyout = false) => (
     <nav
       aria-label="Navegação principal"
       className={cn("min-h-0 flex-1 space-y-4 overflow-y-auto py-4", expanded ? "px-3" : "px-2")}
@@ -251,8 +285,22 @@ export default function AppShell({ children }: { children: ReactNode; title?: st
                     preload="intent"
                     aria-label={label}
                     aria-current={active ? "page" : undefined}
-                    title={!expanded ? label : undefined}
-                    onClick={() => setMobileOpen(false)}
+                    title={!expanded && !flyout ? label : undefined}
+                    onClick={() => {
+                      setMobileOpen(false);
+                      setActiveFlyoutId(null);
+                    }}
+                    // Menu recolhido: abre o submenu do grupo deste ícone
+                    onMouseEnter={
+                      flyout
+                        ? (event) => {
+                            cancelClose();
+                            originRef.current = event.currentTarget;
+                            setActiveFlyoutId(section.label);
+                          }
+                        : undefined
+                    }
+                    onMouseLeave={flyout ? () => scheduleClose(100) : undefined}
                     className={cn(
                       "group flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150",
                       !expanded && "justify-center px-0",
@@ -291,6 +339,16 @@ export default function AppShell({ children }: { children: ReactNode; title?: st
       </div>
     );
   }
+
+  // Grupo do menu cujo submenu está aberto, com os mesmos nomes do menu
+  const flyoutSection = navSections.find((section) => section.label === activeFlyoutId);
+  const currentActiveItem = flyoutSection && {
+    id: flyoutSection.label,
+    label: flyoutSection.label,
+    children: flyoutSection.items
+      .filter((item) => allowedPath(item.to))
+      .map((item) => ({ id: item.to, to: item.to, label: item.label })),
+  };
 
   const shellStyle: CSSProperties & { "--app-sidebar-width": string } = {
     "--app-sidebar-width": pinned ? "240px" : "72px",
@@ -504,7 +562,7 @@ export default function AppShell({ children }: { children: ReactNode; title?: st
         className="fixed bottom-2.5 left-2.5 top-[74px] z-(--z-sidebar) hidden flex-col overflow-hidden rounded-2xl border border-hairline bg-glass shadow-(--glass-shadow) glass-blur transition-[width] duration-200 ease-(--ease-apple) md:flex"
         style={{ width: "calc(var(--app-sidebar-width) - 16px)" }}
       >
-        {navigation(pinned)}
+        {navigation(pinned, !pinned)}
         <div
           className={cn(
             "flex min-h-16 items-center gap-3 border-t border-hairline p-3",
@@ -524,6 +582,72 @@ export default function AppShell({ children }: { children: ReactNode; title?: st
           )}
         </div>
       </aside>
+      {/* Painel de submenus que desliza ao passar o mouse (menu recolhido) */}
+      <AnimatePresence>
+        {!pinned && activeFlyoutId && currentActiveItem && currentActiveItem.children.length > 0 && (
+          <motion.div
+            ref={flyoutRef}
+            key="sidebar-flyout-panel"
+            // Entra deslizando suavemente para a direita (de -16px para 0)
+            initial={{ opacity: 0, x: -16 }}
+            animate={{ opacity: 1, x: 0 }}
+            // Sai deslizando de volta para a esquerda ao fechar
+            exit={{ opacity: 0, x: -12, transition: { duration: 0.1, ease: "easeIn" } }}
+            transition={{ duration: 0.14, ease: "easeOut" }}
+            style={{ transformOrigin: "left center" }}
+            className="fixed bottom-2.5 left-[72px] top-[74px] z-(--z-sidebar) hidden w-64 flex-col overflow-y-auto rounded-2xl border border-border bg-card px-6 py-8 shadow-[16px_0_36px_-8px_rgba(0,0,0,0.08)] md:flex"
+            onFocus={cancelClose}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                originRef.current?.focus();
+                setActiveFlyoutId(null);
+              }
+            }}
+            // Mantém o submenu aberto enquanto o mouse estiver sobre ele
+            onMouseEnter={cancelClose}
+            onMouseLeave={() => scheduleClose(100)}
+          >
+            {/* Container interno com micro-animação para os itens */}
+            <motion.div
+              key={currentActiveItem.id}
+              initial={{ opacity: 0, x: -6 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.1, ease: "easeOut" }}
+              className="flex flex-col gap-4"
+            >
+              {/* Título da Categoria */}
+              <div className="border-b border-border/40 px-3 pb-3 text-[17px] font-bold text-foreground">
+                {currentActiveItem.label}
+              </div>
+              {/* Lista de Subitens */}
+              <div className="flex flex-col gap-1.5">
+                {currentActiveItem.children.map((subItem, index) => {
+                  const isFirst = index === 0;
+                  return (
+                    <Link
+                      key={subItem.id}
+                      to={subItem.to}
+                      preload="intent"
+                      onClick={() => {
+                        cancelClose();
+                        setActiveFlyoutId(null);
+                      }}
+                      className={cn(
+                        "flex w-full items-center rounded-lg px-3 py-2 text-left text-[15.5px] transition-all duration-150",
+                        isFirst
+                          ? "font-bold text-foreground hover:bg-primary/10 hover:text-primary"
+                          : "font-medium text-foreground hover:bg-primary/10 hover:text-primary",
+                      )}
+                    >
+                      {subItem.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <main id="main-content" tabIndex={-1} className="app-main min-h-[calc(100dvh-64px)]">
         <ErrorBoundary>
           {redirectToFallback || (access.mode === "loading" && !!currentRule) ? (
