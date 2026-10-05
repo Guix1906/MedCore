@@ -983,16 +983,16 @@ function PlanDueDates({ titles }: { titles: any[] }) {
                   : "border-border-soft bg-muted/30 hover:bg-muted/60"
               }`}
             >
-              <div className="w-12 shrink-0 rounded-lg bg-card border border-border py-1 text-center leading-none">
+              <div className="w-14 shrink-0 rounded-lg bg-card border border-border px-1 py-1.5 text-center leading-none">
                 {due ? (
                   <>
-                    <div className="text-base font-bold text-foreground tabular-nums">{day}</div>
-                    <div className="mt-0.5 text-2xs font-semibold uppercase text-muted-foreground">
+                    <div className="text-lg font-bold text-foreground tabular-nums">{day}</div>
+                    <div className="mt-1 whitespace-nowrap text-[10px] font-semibold uppercase text-muted-foreground">
                       {MONTHS_SHORT[Number(month) - 1]}/{year.slice(2)}
                     </div>
                   </>
                 ) : (
-                  <div className="py-1.5 text-2xs font-semibold uppercase text-muted-foreground">
+                  <div className="py-2 text-[10px] font-semibold uppercase text-muted-foreground">
                     Livre
                   </div>
                 )}
@@ -1008,7 +1008,7 @@ function PlanDueDates({ titles }: { titles: any[] }) {
               <div className="shrink-0 text-right">
                 <div className="text-sm font-bold text-foreground tabular-nums">{brl(amount)}</div>
                 <span
-                  className={`mt-0.5 inline-block px-1.5 py-0.5 rounded text-2xs font-semibold ${DUE_TONES[info.tone]}`}
+                  className={`mt-0.5 inline-block whitespace-nowrap px-1.5 py-0.5 rounded text-[11px] font-semibold ${DUE_TONES[info.tone]}`}
                 >
                   {info.label}
                 </span>
@@ -1019,7 +1019,7 @@ function PlanDueDates({ titles }: { titles: any[] }) {
       </div>
 
       {hidden > 0 && (
-        <p className="text-2xs text-muted-foreground">
+        <p className="text-[11px] text-muted-foreground">
           {hidden} lançamento(s) cancelado(s) ou substituído(s) em repactuação não aparecem na lista.
         </p>
       )}
