@@ -9,6 +9,7 @@ import { isFreeBalance } from "@/features/finance/finance-math";
 import {
   currency,
   formatClinicalDate,
+  localDate,
   protocolDeadline,
 } from "@/features/acompanhamentos/followup-utils";
 import type { DbRow, Json, IconType } from "@/lib/types";
@@ -538,6 +539,8 @@ function TreatmentDetailPage() {
                 reload={load}
                 onSendWhatsApp={sendWhatsAppSchedule}
                 isEmagrecimento={isEmagrecimento}
+                planStartDate={treatment.start_date}
+                planActive={treatment.status === "em_andamento"}
               />
             )}
             {tab === "evolucao" && (
@@ -951,6 +954,8 @@ function InjetaveisEMedicacoesTab({
   reload,
   onSendWhatsApp,
   isEmagrecimento,
+  planStartDate,
+  planActive,
 }: {
   treatmentId: string;
   patientPhone?: string | null;
@@ -958,6 +963,8 @@ function InjetaveisEMedicacoesTab({
   reload: () => void;
   onSendWhatsApp: () => void;
   isEmagrecimento: boolean;
+  planStartDate?: string | null;
+  planActive?: boolean;
 }) {
   const [filter, setFilter] = useState<string>("todos");
   const [openNew, setOpenNew] = useState(false);
@@ -1495,6 +1502,8 @@ function InjetaveisEMedicacoesTab({
         <NewMedicationModal
           treatmentId={treatmentId}
           isEmagrecimento={isEmagrecimento}
+          planStartDate={planStartDate}
+          planActive={planActive}
           onClose={() => setOpenNew(false)}
           onSaved={() => {
             reload();
@@ -1510,11 +1519,15 @@ function InjetaveisEMedicacoesTab({
 function NewMedicationModal({
   treatmentId,
   isEmagrecimento,
+  planStartDate,
+  planActive = true,
   onClose,
   onSaved,
 }: {
   treatmentId: string;
   isEmagrecimento?: boolean;
+  planStartDate?: string | null;
+  planActive?: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -1538,6 +1551,8 @@ function NewMedicationModal({
     week: number;
     date: string;
     mg: string;
+    // Semana já tomada pelo paciente (plano adiantado): registrada no histórico ao salvar
+    applied?: boolean;
   }
   const addDays = (baseIso: string, days: number) => {
     const d = new Date(baseIso + "T12:00:00");
@@ -1563,6 +1578,28 @@ function NewMedicationModal({
       prev.map((w) => (w.week === weekNum ? { ...w, [field]: val } : w)),
     );
   };
+
+  const toggleApplied = (weekNum: number) => {
+    setWeeks((prev) =>
+      prev.map((w) => (w.week === weekNum ? { ...w, applied: !w.applied } : w)),
+    );
+  };
+
+  // Mesmas regras de record_treatment_medication_use: plano ativo, data até hoje e não
+  // anterior ao início do plano. Devolve o motivo do bloqueio ou null.
+  const applyBlock = (w: WeekStep): string | null => {
+    if (!planActive) return "O plano precisa estar em andamento para registrar aplicações.";
+    if (!w.date) return "Informe a data da semana.";
+    if (w.date > localDate()) return "Semana futura: registre a aplicação quando ela acontecer.";
+    if (planStartDate && w.date < planStartDate.slice(0, 10)) {
+      return `Data anterior ao início do plano (${formatClinicalDate(planStartDate)}). Ajuste o início do plano para registrar.`;
+    }
+    return null;
+  };
+
+  // Hoje usa o horário atual (o banco recusa horário futuro); dias anteriores, meio-dia.
+  const usedAtFor = (date: string) =>
+    date === localDate() ? new Date().toISOString() : new Date(`${date}T12:00:00`).toISOString();
 
   const addNextWeek = () => {
     const last = weeks[weeks.length - 1];
@@ -1631,9 +1668,10 @@ function NewMedicationModal({
       return toast.error("Adicione ao menos uma semana de protocolo.");
     }
     setSaving(true);
+    const weekName = (w: WeekStep) => `${escalonada.medName.trim()} (Sem. ${w.week})`;
     const rows = weeks.map((w) => ({
       treatment_id: treatmentId,
-      name: `${escalonada.medName.trim()} (Sem. ${w.week})`,
+      name: weekName(w),
       dose: String(w.mg).trim(),
       unit: "mg",
       route: escalonada.route || "Subcutânea",
@@ -1644,10 +1682,48 @@ function NewMedicationModal({
       status: "ativo",
     }));
 
-    const { error } = await supabase.from("treatment_medications").insert(rows);
+    const { data: created, error } = await supabase
+      .from("treatment_medications")
+      .insert(rows)
+      .select("id, name");
+    if (error) {
+      setSaving(false);
+      return toast.error("Erro ao salvar escalonamento: " + error.message);
+    }
+
+    // Semanas que o paciente já tomou: entram no histórico de aplicações, sem baixa de estoque
+    const appliedWeeks = weeks.filter((w) => w.applied && !applyBlock(w));
+    const failed: number[] = [];
+    for (const w of appliedWeeks) {
+      const med = created?.find((m) => m.name === weekName(w));
+      if (!med) {
+        failed.push(w.week);
+        continue;
+      }
+      const { error: useError } = await supabase.rpc("record_treatment_medication_use", {
+        p_id: crypto.randomUUID(),
+        p_medication_id: med.id,
+        p_dose: `${String(w.mg).trim()} mg`,
+        p_used_at: usedAtFor(w.date),
+        p_route: escalonada.route || "Subcutânea",
+        p_notes: "Aplicação já realizada, registrada no cadastro do protocolo semanal.",
+        p_inventory_item_id: null,
+        p_quantity: null,
+      });
+      if (useError) failed.push(w.week);
+    }
     setSaving(false);
-    if (error) return toast.error("Erro ao salvar escalonamento: " + error.message);
-    toast.success(`${weeks.length} semanas de ${escalonada.medName} salvas no cronograma!`);
+
+    const registered = appliedWeeks.length - failed.length;
+    toast.success(
+      `${weeks.length} semanas de ${escalonada.medName} salvas no cronograma!` +
+        (registered > 0 ? ` ${registered} aplicação(ões) registrada(s) no histórico.` : ""),
+    );
+    if (failed.length > 0) {
+      toast.warning("Algumas aplicações não foram registradas", {
+        description: `Semana(s) ${failed.join(", ")}: use "Registrar Aplicação" na aba para lançar.`,
+      });
+    }
     onSaved();
     onClose();
   };
@@ -1853,6 +1929,7 @@ function NewMedicationModal({
                 Escalonamento Semanal de Injetáveis (Doses Variáveis por Semana)
               </span>
               Cadastre datas e miligramas (mg) semana a semana para Tirzepatida, Semaglutida ou outros injetáveis com titulação progressiva de dose.
+              {" "}Paciente com o plano adiantado? Use "Registrar aplicação" nas semanas que ele já tomou.
             </div>
 
             <div>
@@ -1989,6 +2066,42 @@ function NewMedicationModal({
                       <Trash2 size={13} />
                     </button>
                   )}
+
+                  {/* Aplicação já tomada (planos adiantados): vai para o histórico ao salvar */}
+                  {(() => {
+                    const block = applyBlock(w);
+                    const isFuture = !!w.date && w.date > localDate();
+                    const applied = !!w.applied && !block;
+                    return (
+                      <div className="basis-full flex flex-wrap items-center gap-2 border-t border-border-soft pt-2">
+                        <button
+                          type="button"
+                          disabled={!!block}
+                          title={block || undefined}
+                          onClick={() => toggleApplied(w.week)}
+                          className={`h-7 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
+                            applied
+                              ? "bg-success text-white hover:bg-success/90"
+                              : "border border-success/40 bg-success/5 text-success hover:bg-success/10"
+                          }`}
+                        >
+                          {applied ? <CheckCircle2 size={13} /> : <Syringe size={13} />}
+                          <span>{applied ? "Aplicação registrada" : "Registrar aplicação"}</span>
+                        </button>
+                        {applied && (
+                          <span className="text-[11px] text-success">
+                            Entra no histórico ao salvar, sem baixa de estoque. Clique de novo para desfazer.
+                          </span>
+                        )}
+                        {isFuture && (
+                          <span className="text-[11px] text-muted-foreground">Semana futura</span>
+                        )}
+                        {block && !isFuture && (
+                          <span className="text-[11px] text-warning">{block}</span>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               ))}
 
@@ -2031,7 +2144,11 @@ function NewMedicationModal({
                 <span>
                   {saving
                     ? "Salvando..."
-                    : `Salvar Escalonamento (${weeks.length} Semanas)`}
+                    : `Salvar Escalonamento (${weeks.length} Semanas${
+                        weeks.some((w) => w.applied && !applyBlock(w))
+                          ? ` · ${weeks.filter((w) => w.applied && !applyBlock(w)).length} aplicada(s)`
+                          : ""
+                      })`}
                 </span>
               </button>
             </div>
