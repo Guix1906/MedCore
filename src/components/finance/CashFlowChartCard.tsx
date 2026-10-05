@@ -1,7 +1,7 @@
 import type { ApexOptions } from "apexcharts";
 import { CircleHelp } from "lucide-react";
 import { Chart } from "@/components/ds/Chart";
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { calcCashFlow, projectOverdueToToday } from "@/lib/finance";
 import { CashFlowDetailsDialog } from "./CashFlowDetailsDialog";
 
@@ -54,6 +54,10 @@ export function CashFlowChartCard({
   onRetry,
   hideValues,
   className = "",
+  useRange = false,
+  hidePeriodTabs = false,
+  height = 300,
+  actions,
 }: {
   rows: CashFlowRow[];
   range: [Date, Date];
@@ -64,6 +68,13 @@ export function CashFlowChartCard({
   onRetry?: () => void;
   hideValues?: boolean;
   className?: string;
+  /** Agrupa dentro de `range` em vez dos últimos períodos (ex.: tela de Fluxo de Caixa). */
+  useRange?: boolean;
+  /** Esconde as abas Dia/Semana/Mês/Ano quando o agrupamento vem de fora. */
+  hidePeriodTabs?: boolean;
+  height?: number;
+  /** Botões extras no cabeçalho do card. */
+  actions?: React.ReactNode;
 }) {
   const mapped = projectOverdueToToday(
     rows.map((t) => ({ ...t, status: t.status === "concluido" ? "pago" : t.status })),
@@ -71,7 +82,8 @@ export function CashFlowChartCard({
   const buckets = calcCashFlow(
     mapped as unknown as Parameters<typeof calcCashFlow>[0],
     period,
-    RECENT_LIMIT[period],
+    useRange ? undefined : RECENT_LIMIT[period],
+    useRange ? range : undefined,
   );
   const [detail, setDetail] = useState<{ series: number; index: number } | null>(null);
   const detailRows = useMemo(() => {
@@ -133,6 +145,8 @@ export function CashFlowChartCard({
             <CircleHelp size={15} />
           </span>
         </h2>
+        <div className="flex items-center gap-5">
+        {!hidePeriodTabs && (
         <div className="flex items-center gap-5" role="tablist" aria-label="Agrupamento do fluxo de caixa">
           {PERIODS.map(([key, label]) => (
             <button
@@ -151,6 +165,9 @@ export function CashFlowChartCard({
             </button>
           ))}
         </div>
+        )}
+        {actions}
+        </div>
       </div>
 
       {error ? (
@@ -163,14 +180,14 @@ export function CashFlowChartCard({
           )}
         </div>
       ) : (
-        <div className="h-[300px]" key={period}>
+        <div style={{ height }} key={period}>
           {loading ? (
             <div className="mc-skeleton h-full w-full rounded-xl" />
           ) : (
             <Chart
               key={`${period}-${flowRows.map((r) => r.label).join()}`}
               type="line"
-              height={300}
+              height={height}
               summary="Fluxo de caixa: entradas, saídas, previstos e saldo por período."
               series={series as NonNullable<ApexOptions["series"]>}
               options={{

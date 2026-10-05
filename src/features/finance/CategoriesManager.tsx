@@ -242,11 +242,20 @@ export default function CategoriesManager() {
     data: categories = [],
     isLoading,
     refetch,
+    error: loadError,
   } = useQuery({
     queryKey: ["finance-categories-list"],
     queryFn: getFinanceCategories,
     staleTime: 30000,
   });
+
+  useEffect(() => {
+    if (loadError) {
+      toast.error("Não foi possível carregar as categorias.", {
+        description: (loadError as Error).message,
+      });
+    }
+  }, [loadError]);
 
   // Escuta atualizações locais para refletir na tela imediatamente
   useEffect(() => {
@@ -354,9 +363,6 @@ export default function CategoriesManager() {
             </p>
             <p className="text-2xl font-bold text-foreground mt-1">{categories.length}</p>
           </div>
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <Tags className="h-5 w-5" />
-          </div>
         </div>
 
         <div className="rounded-2xl border border-border bg-card p-4 shadow-xs flex items-center justify-between">
@@ -366,9 +372,6 @@ export default function CategoriesManager() {
             </p>
             <p className="text-2xl font-bold text-destructive mt-1">{expenseCount}</p>
           </div>
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
-            <ArrowUpRight className="h-5 w-5" />
-          </div>
         </div>
 
         <div className="rounded-2xl border border-border bg-card p-4 shadow-xs flex items-center justify-between">
@@ -377,9 +380,6 @@ export default function CategoriesManager() {
               Categorias de Receitas
             </p>
             <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">{incomeCount}</p>
-          </div>
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-            <ArrowDownLeft className="h-5 w-5" />
           </div>
         </div>
       </div>
@@ -472,9 +472,6 @@ export default function CategoriesManager() {
         </div>
       ) : filteredCategories.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card/50 p-12 text-center space-y-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
-            <FolderPlus className="h-6 w-6" />
-          </div>
           <div className="space-y-1">
             <p className="text-sm font-semibold text-foreground">Nenhuma categoria encontrada</p>
             <p className="text-xs text-muted-foreground max-w-sm">

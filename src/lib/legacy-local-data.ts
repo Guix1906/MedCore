@@ -10,6 +10,7 @@ const LEGACY_KEYS = [
   "medcore_local_titles",
   "medcore_local_payments",
   "medcore_local_patients",
+  "medcore_local_doctors",
   "medcore_deleted_titles",
   "medcore_deleted_cash_entries",
   "medcore_deleted_event_ids",

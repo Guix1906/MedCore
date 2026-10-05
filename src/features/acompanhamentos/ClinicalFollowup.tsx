@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { deleteViaRpc } from "@/lib/safe-delete";
 import ClinicalPhotos from "./ClinicalPhotos";
 import TreatmentAlerts from "./TreatmentAlerts";
 import { errorMessage, formatClinicalDate, localDate, protocolDeadline } from "./followup-utils";
@@ -138,16 +139,11 @@ export default function ClinicalFollowup({
   const deleteEvolution = async (evId: string) => {
     if (!window.confirm("Deseja realmente excluir esta evolução?")) return;
     try {
-      let deleted = false;
-      try {
-        const { error: rpcErr } = await (supabase.rpc as any)("delete_treatment_evolution", { p_id: evId });
-        if (!rpcErr) deleted = true;
-      } catch {}
-
-      if (!deleted) {
-        const { error } = await (supabase as any).from("treatment_evolutions").delete().eq("id", evId);
-        if (error) throw error;
-      }
+      await deleteViaRpc(
+        "delete_treatment_evolution",
+        { p_id: evId },
+        { table: "treatment_evolutions", id: evId },
+      );
 
       toast.success("Evolução excluída com sucesso.");
       await Promise.all([

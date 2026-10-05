@@ -139,6 +139,17 @@
   --dur-fast: 150ms;
   --dur-base: 200ms;
   --dur-slow: 280ms;
+
+  /* Aurora animada com ondas nas cores do background padrão (tons claros) */
+  --bg-blur: 70px;
+  --bg-scale: 2;
+  --color-bg: linear-gradient(155deg, #f8fdfc 0%, #f6f9fe 50%, #faf8fe 100%);
+  --aurora-1: #6ee7b7;
+  --aurora-2: #c4b5fd;
+  --aurora-3: #93c5fd;
+  --aurora-blend-mode: normal;
+  --aurora-opacity: 0.35;
+  --speed: 5.00s;
 }
 
 /* Modo escuro: mesmos nomes de token, valores inspirados no macOS escuro.
@@ -189,6 +200,14 @@
     0 24px 56px -20px rgb(0 0 0 / 70%);
   --overlay: rgb(0 0 0 / 50%);
   --overlay-light: rgb(0 0 0 / 30%);
+
+  /* Aurora animada com ondas nas cores do background padrão */
+  --color-bg: linear-gradient(155deg, #0b151b 0%, #0e1426 50%, #151126 100%);
+  --aurora-1: #2dd4bf;
+  --aurora-2: #a78bfa;
+  --aurora-3: #60a5fa;
+  --aurora-blend-mode: screen;
+  --aurora-opacity: 0.35;
 }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
@@ -317,10 +336,21 @@
   outline: 2px solid var(--ring);
   outline-offset: 3px;
 }
-input:focus-visible,
+/* Campos: no foco só a própria borda muda de cor. O contorno externo (e o ring) somados à borda
+   viravam borda dupla. Campos sem borda (checkbox, radio, range) mantêm o contorno. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus-visible,
 textarea:focus-visible,
 select:focus-visible,
+button[role="combobox"]:focus-visible,
 [contenteditable="true"]:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  /* ring-* do Tailwind é box-shadow: anula para não somar com a borda */
+  box-shadow: none !important;
+}
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible,
+input[type="range"]:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
@@ -369,40 +399,52 @@ a:focus:not(:focus-visible) {
     --auth-rose: rgb(244 114 182 / 18%);
     --auth-violet: rgb(139 109 255 / 40%);
     --auth-indigo: rgb(99 102 241 / 28%);
-    --auth-glass: rgb(255 255 255 / 62%);
-    --auth-plate: linear-gradient(150deg, rgb(255 255 255 / 78%), rgb(255 255 255 / 46%));
+    /* Paleta única tirada do logo (teal da clínica). */
+    --primary: #2c7f86;
+    --ring: #3f9ea3;
+    --auth-ink: #1d2b2c;
+    --auth-glass: #ffffff;
+    --auth-plate: linear-gradient(150deg, #24676c 0%, #2c7f86 55%, #3f9ea3 100%);
     --auth-tile: linear-gradient(160deg, rgb(255 255 255 / 94%), rgb(255 255 255 / 68%));
-    --auth-edge: rgb(255 255 255 / 55%);
+    --auth-edge: rgb(29 43 44 / 8%);
     --auth-edge-glow: linear-gradient(
       160deg,
-      rgb(255 255 255 / 95%),
+      rgb(255 255 255 / 60%),
       rgb(255 255 255 / 0%) 38% 62%,
-      rgb(255 255 255 / 55%)
+      rgb(255 255 255 / 20%)
     );
-    --auth-halo: rgb(45 212 191 / 20%);
+    --auth-halo: rgb(255 255 255 / 14%);
     --auth-card-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 80%), 0 2px 8px rgb(24 38 92 / 6%),
-      0 40px 80px -32px rgb(40 30 120 / 38%);
+      0 1px 2px rgb(29 43 44 / 5%), 0 30px 60px -30px rgb(31 95 99 / 28%);
     --auth-plate-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 85%), 0 2px 6px rgb(16 42 67 / 6%),
-      0 44px 90px -40px rgb(16 60 90 / 42%);
+      inset 0 1px 0 rgb(255 255 255 / 18%), 0 2px 6px rgb(16 42 44 / 10%),
+      0 44px 90px -40px rgb(31 95 99 / 55%);
     --auth-tile-shadow:
       inset 0 1px 0 rgb(255 255 255), 0 2px 4px rgb(16 42 67 / 6%),
       0 16px 32px -14px rgb(16 42 67 / 40%);
-    --auth-field: rgb(255 255 255 / 72%);
-    --auth-field-focus: rgb(255 255 255 / 94%);
-    --auth-field-line: rgb(29 29 31 / 12%);
-    --auth-field-line-hover: rgb(29 29 31 / 22%);
-    --auth-autofill: #fbfbfd;
-    --auth-soft: rgb(255 255 255 / 60%);
-    --auth-soft-hover: rgb(255 255 255 / 88%);
+    --auth-field: #fafaf8;
+    --auth-field-focus: #ffffff;
+    --auth-field-line: rgb(29 43 44 / 12%);
+    --auth-field-line-hover: rgb(29 43 44 / 22%);
+    --auth-autofill: #fafaf8;
+    --auth-soft: #ffffff;
+    --auth-soft-hover: #f4f6f5;
     /* Alertas opacos: o texto de erro/sucesso não depende da cor que passa pelo vidro. */
     --auth-alert-danger: color-mix(in srgb, var(--destructive) 6%, var(--card));
     --auth-alert-success: color-mix(in srgb, var(--success) 6%, var(--card));
-    --auth-cta: linear-gradient(135deg, #7a4cff 0%, #6d3ff5 45%, #4b5cf0 100%);
-    --auth-cta-shadow: inset 0 1px 0 rgb(255 255 255 / 22%), 0 12px 24px -12px rgb(88 60 230 / 70%);
+    --auth-cta: linear-gradient(135deg, #3f9ea3 0%, #2c7f86 100%);
+    --auth-cta-shadow: inset 0 1px 0 rgb(255 255 255 / 20%), 0 12px 24px -12px rgb(44 127 134 / 65%);
     --auth-cta-shadow-hover:
-      inset 0 1px 0 rgb(255 255 255 / 26%), 0 18px 32px -14px rgb(88 60 230 / 75%);
+      inset 0 1px 0 rgb(255 255 255 / 24%), 0 18px 32px -14px rgb(44 127 134 / 75%);
+    --bg-blur: 80px;
+    --bg-scale: 2;
+    --color-bg: linear-gradient(155deg, #f8f6f2 0%, #f5f4f0 100%);
+    --aurora-1: #9fd3d2;
+    --aurora-2: #cfe7e4;
+    --aurora-3: #e9e2d4;
+    --aurora-blend-mode: normal;
+    --aurora-opacity: 0.4;
+    --speed: 5.00s;
     overflow-x: clip;
   }
   .dark .auth-canvas {
@@ -411,8 +453,11 @@ a:focus:not(:focus-visible) {
     --auth-rose: rgb(236 72 153 / 12%);
     --auth-violet: rgb(139 109 255 / 34%);
     --auth-indigo: rgb(79 70 229 / 30%);
-    --auth-glass: rgb(26 26 32 / 60%);
-    --auth-plate: linear-gradient(150deg, rgb(255 255 255 / 10%), rgb(255 255 255 / 3%));
+    --primary: #5bb8bc;
+    --ring: #5bb8bc;
+    --auth-ink: #eef4f3;
+    --auth-glass: #161d1e;
+    --auth-plate: linear-gradient(150deg, #123b3e 0%, #1b5357 60%, #23696d 100%);
     --auth-tile: linear-gradient(160deg, rgb(62 62 72 / 90%), rgb(38 38 46 / 76%));
     --auth-edge: rgb(255 255 255 / 12%);
     --auth-edge-glow: linear-gradient(
@@ -438,72 +483,74 @@ a:focus:not(:focus-visible) {
     --auth-autofill: #2a2a31;
     --auth-soft: rgb(255 255 255 / 7%);
     --auth-soft-hover: rgb(255 255 255 / 12%);
-    --auth-cta: linear-gradient(135deg, #7552ff 0%, #6a4df5 50%, #5058f0 100%);
+    --auth-cta: linear-gradient(135deg, #3f9ea3 0%, #2c7f86 100%);
     --auth-cta-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 20%), 0 12px 26px -12px rgb(117 82 255 / 60%);
+      inset 0 1px 0 rgb(255 255 255 / 18%), 0 12px 26px -12px rgb(63 158 163 / 50%);
     --auth-cta-shadow-hover:
-      inset 0 1px 0 rgb(255 255 255 / 24%), 0 18px 34px -14px rgb(117 82 255 / 70%);
+      inset 0 1px 0 rgb(255 255 255 / 22%), 0 18px 34px -14px rgb(63 158 163 / 60%);
+    --color-bg: linear-gradient(155deg, #0d1314 0%, #101718 100%);
+    --aurora-1: #1f6f73;
+    --aurora-2: #164a4d;
+    --aurora-3: #2a3a3b;
+    --aurora-blend-mode: screen;
+    --aurora-opacity: 0.3;
   }
   .auth-canvas::before {
-    background: linear-gradient(155deg, #eefaf8 0%, #edf3fc 50%, #f3effc 100%);
+    background: linear-gradient(155deg, #f8f6f2 0%, #f5f4f0 100%);
   }
   .dark .auth-canvas::before {
-    background: linear-gradient(155deg, #061317 0%, #0a0f20 50%, #100b20 100%);
+    background: linear-gradient(155deg, #0d1314 0%, #101718 100%);
   }
-  .auth-aurora {
+  .auth-card h1 {
+    color: var(--auth-ink);
+  }
+  /* Logo em branco sobre o painel teal. */
+  .auth-plate-logo {
+    filter: brightness(0) invert(1);
+    opacity: 0.96;
+  }
+  /* Aurora em ondas fluidas nas cores padrão do background */
+  .aurora-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: var(--color-bg);
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .aurora-container.auth-aurora,
+  .auth-aurora.aurora-container,
+  .auth-canvas > .aurora-container {
     position: fixed;
     inset: 0;
     z-index: -1;
-    overflow: hidden;
     pointer-events: none;
+    width: 100vw;
+    height: 100vh;
   }
-  .auth-blob {
+  .aurora-wave {
     position: absolute;
-    width: var(--blob-size);
-    aspect-ratio: 1;
-    border-radius: 50%;
-    background: radial-gradient(closest-side, var(--blob-color), transparent);
-    animation: auth-drift var(--blob-time) ease-in-out infinite alternate;
+    top: -20%;
+    left: -25%;
+    width: 150%;
+    height: 140%;
+    opacity: var(--aurora-opacity, 0.35);
+    filter: blur(var(--bg-blur, 60px));
+    transform: skewY(-15deg);
+    mix-blend-mode: var(--aurora-blend-mode, color-dodge);
+    will-change: transform;
   }
-  .auth-blob--aqua {
-    --blob-color: var(--auth-aqua);
-    --blob-size: 64vmax;
-    --blob-time: 34s;
-    top: -24vmax;
-    left: -20vmax;
+  .aurora-1 {
+    background: radial-gradient(circle at 30% 30%, var(--aurora-1) 0%, transparent 60%);
+    animation: aurora-drift-1 var(--speed) infinite ease-in-out alternate;
   }
-  .auth-blob--sky {
-    --blob-color: var(--auth-sky);
-    --blob-size: 56vmax;
-    --blob-time: 42s;
-    bottom: -30vmax;
-    left: -6vmax;
-    animation-delay: -14s;
+  .aurora-2 {
+    background: radial-gradient(circle at 70% 60%, var(--aurora-2) 0%, transparent 60%);
+    animation: aurora-drift-2 var(--speed) infinite ease-in-out alternate;
   }
-  .auth-blob--rose {
-    --blob-color: var(--auth-rose);
-    --blob-size: 40vmax;
-    --blob-time: 30s;
-    top: 30%;
-    left: 34%;
-    animation-delay: -8s;
-  }
-  .auth-blob--violet {
-    --blob-color: var(--auth-violet);
-    --blob-size: 60vmax;
-    --blob-time: 38s;
-    top: -26vmax;
-    right: -18vmax;
-    animation-delay: -4s;
-    animation-direction: alternate-reverse;
-  }
-  .auth-blob--indigo {
-    --blob-color: var(--auth-indigo);
-    --blob-size: 52vmax;
-    --blob-time: 46s;
-    right: -14vmax;
-    bottom: -28vmax;
-    animation-delay: -22s;
+  .aurora-3 {
+    background: radial-gradient(circle at 50% 40%, var(--aurora-3) 0%, transparent 60%);
+    animation: aurora-drift-3 var(--speed) infinite ease-in-out alternate;
   }
   .auth-stage {
     position: relative;
@@ -733,7 +780,7 @@ a:focus:not(:focus-visible) {
     box-shadow var(--dur-fast);
   &:focus-visible {
     border-color: var(--primary);
-    box-shadow: var(--shadow-focus);
+    box-shadow: none;
   }
 }
 /* Atalho para barras de vidro. Em componentes que aceitam className prefira
@@ -1004,6 +1051,29 @@ a:focus:not(:focus-visible) {
   90%,
   100% { stroke-dasharray: 0 200; stroke-dashoffset: -100; }
 }
+/* Troca de aba do Financeiro: o conteúdo entra deslizando no sentido da navegação (data-dir). */
+@keyframes fin-tab-in {
+  from { opacity: 0; transform: translateX(var(--fin-dx, 0)); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fin-tab-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.fin-tab-enter { animation: fin-tab-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.fin-tab-enter[data-dir="1"] { --fin-dx: 28px; }
+.fin-tab-enter[data-dir="-1"] { --fin-dx: -28px; }
+.fin-tab-indicator { transition: left 300ms cubic-bezier(0.22, 1, 0.36, 1), width 300ms cubic-bezier(0.22, 1, 0.36, 1); }
+/* "Reduzir movimento" (ex.: Windows com efeitos de animação desligados) zera tudo na regra global;
+   aqui a troca de aba continua perceptível, só que sem deslocamento do conteúdo. */
+@media (prefers-reduced-motion: reduce) {
+  .fin-tab-enter {
+    animation-name: fin-tab-fade !important;
+    animation-duration: 220ms !important;
+  }
+  .fin-tab-indicator { transition-duration: 220ms !important; }
+}
+
 /* Com "reduzir movimento" ligado, a regra global (* { animation-duration: 0.001ms !important })
    apagava o trecho que caminha. O loading é indicador de progresso: segue animando, mais devagar. */
 @media (prefers-reduced-motion: reduce) {
@@ -1028,17 +1098,23 @@ a:focus:not(:focus-visible) {
   animation: slideDrawerToRight var(--dur-fast) ease-in both;
 }
 
-/* Login: aurora, ícones flutuantes e entrada dos vidros. */
-@keyframes auth-drift {
-  0% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(5vmax, 4vmax, 0) scale(1.08);
-  }
-  100% {
-    transform: translate3d(-3vmax, 7vmax, 0) scale(0.95);
-  }
+/* Login: aurora com derivação de ondas e entrada dos vidros. */
+@keyframes aurora-drift-1 {
+  0% { transform: skewY(-15deg) translate(-10%, -10%) scale(1); }
+  50% { transform: skewY(-10deg) translate(5%, 5%) scale(1.1); }
+  100% { transform: skewY(-15deg) translate(-5%, -5%) scale(0.95); }
+}
+
+@keyframes aurora-drift-2 {
+  0% { transform: skewY(-15deg) translate(5%, 5%) scale(0.9); }
+  50% { transform: skewY(-20deg) translate(-10%, -10%) scale(1.15); }
+  100% { transform: skewY(-15deg) translate(10%, 0) scale(1); }
+}
+
+@keyframes aurora-drift-3 {
+  0% { transform: skewY(-15deg) translate(-5%, 10%) scale(1.1); }
+  50% { transform: skewY(-12deg) translate(10%, -5%) scale(0.9); }
+  100% { transform: skewY(-15deg) translate(-10%, -10%) scale(1.05); }
 }
 @keyframes auth-float {
   from {
@@ -1078,9 +1154,8 @@ a:focus:not(:focus-visible) {
 .auth-card input:-webkit-autofill:focus {
   -webkit-text-fill-color: var(--foreground);
   caret-color: var(--foreground);
-  box-shadow:
-    inset 0 0 0 100px var(--auth-autofill),
-    var(--shadow-focus);
+  /* Só a borda do campo marca o foco: sem anel extra por fora. */
+  box-shadow: inset 0 0 0 100px var(--auth-autofill);
   transition: background-color 100000s 0s;
 }
 .auth-card input:autofill {
@@ -1099,7 +1174,10 @@ a:focus:not(:focus-visible) {
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
-  .auth-blob,
+  .aurora-wave,
+  .aurora-1,
+  .aurora-2,
+  .aurora-3,
   .auth-tile,
   .auth-rise,
   .auth-pop,

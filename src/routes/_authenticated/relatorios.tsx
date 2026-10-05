@@ -1,4 +1,3 @@
-import { PageHeader } from "@/components/ui-app/PageHeader";
 import { getFinancialReportingRows } from "@/features/finance/finance-api";
 import { errorMessage, localDate } from "@/features/acompanhamentos/followup-utils";
 import type { DbRow, Json, IconType } from "@/lib/types";
@@ -21,10 +20,11 @@ import type { ApexOptions } from "apexcharts";
 import { Card as DSCard, CardHeader, KPICard } from "@/components/ds/Card";
 import { Chart, CHART_COLORS } from "@/components/ds/Chart";
 import { SegmentedControl } from "@/components/ui-app/SegmentedControl";
-import { StickyToolbar } from "@/components/ui-app/StickyToolbar";
+import { UnderlineTabs, useTabDirection } from "@/components/ui-app/UnderlineTabs";
 import { Button } from "@/components/ui/button";
 import AppShell from "@/components/AppShell";
 import { supabase } from "@/integrations/supabase/client";
+import { parseMeta } from "@/features/dashboard/dashboard-utils";
 
 export const Route = createFileRoute("/_authenticated/relatorios")({
   head: () => ({
@@ -60,6 +60,40 @@ const brl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", curren
 
 const monthKey = (d: string) => d.slice(0, 7);
 
+type ReportAppointment = { id: string; date: string; status: string };
+
+/**
+ * Atendimentos do período. A agenda grava em "events" (status nos metadados do agendamento);
+ * "appointments" é uma cópia que só existe quando o profissional tem cadastro de médico e não
+ * acompanha mudanças de status. Por isso events é a fonte, e appointments só completa
+ * consultas que não vieram da agenda (mesma regra do Dashboard).
+ */
+async function loadReportAppointments(from: Date): Promise<{ data: ReportAppointment[] }> {
+  const fromIso = localDate(from);
+  const [ev, ap] = await Promise.all([
+    supabase
+      .from("events")
+      .select("id, description, starts_at, patient_id")
+      .gte("starts_at", from.toISOString()),
+    supabase.from("appointments").select("id, date, status").gte("date", fromIso),
+  ]);
+  if (ev.error) throw ev.error;
+  if (ap.error) throw ap.error;
+
+  const rows: ReportAppointment[] = [];
+  for (const e of ev.data ?? []) {
+    const meta = parseMeta(e.description);
+    // Só atendimentos (ignora bloqueios, lembretes e eventos internos)
+    if (meta?.type ? meta.type !== "atendimento" : !e.patient_id) continue;
+    rows.push({ id: e.id, date: localDate(new Date(e.starts_at)), status: meta?.status || "agendado" });
+  }
+  const known = new Set(rows.map((r) => r.id));
+  for (const a of ap.data ?? []) {
+    if (!known.has(a.id)) rows.push({ id: a.id, date: a.date, status: a.status || "agendado" });
+  }
+  return { data: rows };
+}
+
 function RelatoriosPage() {
   const { aba } = Route.useSearch();
   const [cat, setCat] = useState<Category>(aba ?? "financeiro");
@@ -93,9 +127,7 @@ function RelatoriosPage() {
 
       const [tx, ap, pa, tr, inv, mv] = await Promise.all([
         needFin ? getFinancialReportingRows() : Promise.resolve([]),
-        needFin || needClin || needOp
-          ? supabase.from("appointments").select("*").gte("date", fromIso)
-          : Promise.resolve({ data: [] }),
+        needFin || needClin || needOp ? loadReportAppointments(from) : Promise.resolve({ data: [] }),
         needClin
           ? supabase.from("patients").select("id,created_at,gender,birth_date")
           : Promise.resolve({ data: [] }),
@@ -269,6 +301,11 @@ function RelatoriosPage() {
     [inventory],
   );
 
+  const catDirection = useTabDirection(
+    CATEGORIES.map((c) => c.id),
+    cat,
+  );
+
   function exportCSV() {
     let rows: string[] = [];
     const filename = `relatorio-${cat}-${periodId}.csv`;
@@ -301,43 +338,27 @@ function RelatoriosPage() {
   return (
     <AppShell title="Relatórios">
       <div className="page-container space-y-5">
-        <PageHeader
-          title="Relatórios"
-          description="Análises por área, com o período de consulta e exportação explícitos."
-          icon={BarChart3}
-          className="mb-0"
-          actions={
-            <>
-              <SegmentedControl
-                aria-label="Período do relatório"
-                value={periodId}
-                onChange={setPeriodId}
-                options={PERIODS.map((p) => ({ value: p.id, label: p.label }))}
-              />
-              <Button variant="outline" disabled={loading || !!reportError} onClick={exportCSV}>
-                <Download /> Exportar CSV…
-              </Button>
-            </>
-          }
+        <UnderlineTabs
+          label="Categorias de relatório"
+          tabs={CATEGORIES}
+          value={cat}
+          onChange={setCat}
         />
 
-        <StickyToolbar className="mb-0" label="Categorias de relatório">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <SegmentedControl
-            aria-label="Categoria do relatório"
-            value={cat}
-            onChange={setCat}
-            options={CATEGORIES.map(({ id, label, icon: Icon }) => ({
-              value: id,
-              label: (
-                <>
-                  <Icon aria-hidden="true" />
-                  {label}
-                </>
-              ),
-            }))}
+            aria-label="Período do relatório"
+            value={periodId}
+            onChange={setPeriodId}
+            options={PERIODS.map((p) => ({ value: p.id, label: p.label }))}
           />
-        </StickyToolbar>
+          <Button variant="outline" disabled={loading || !!reportError} onClick={exportCSV}>
+            <Download /> Exportar CSV…
+          </Button>
+        </div>
 
+        {/* key troca a cada categoria: o conteúdo entra deslizando no sentido da navegação */}
+        <div key={cat} className="fin-tab-enter" data-dir={catDirection}>
         {reportError ? (
           <p role="alert" className="text-destructive">
             {errorMessage(reportError)}. Relatório indisponível; nenhum total foi estimado.
@@ -353,6 +374,7 @@ function RelatoriosPage() {
         ) : (
           <EstoqueView kpis={estKpis} critical={estCritical} movements={movements} />
         )}
+        </div>
       </div>
     </AppShell>
   );

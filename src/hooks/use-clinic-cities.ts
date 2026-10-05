@@ -1,125 +1,114 @@
-import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useActiveCompany } from "@/hooks/use-active-company";
 
 export const DEFAULT_CITIES: string[] = [];
 
-const STORAGE_KEY = "clinic_cities";
-const MIGRATION_KEY = "clinic_cities_migrated_v3";
+const QUERY_KEY = ["clinic_cities"] as const;
+// Versões anteriores guardavam as cidades só no navegador.
+const LEGACY_STORAGE_KEY = "clinic_cities";
+const LEGACY_MIGRATION_KEY = "clinic_cities_migrated_v3";
 
-const LEGACY_DEFAULT_CITIES = new Set([
-  "são paulo",
-  "sao paulo",
-  "rio de janeiro",
-  "campinas",
-  "belo horizonte",
-  "curitiba",
-  "brasília",
-  "brasilia",
-  "porto alegre",
-]);
+type Rpc = (fn: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
+const rpc = supabase.rpc as unknown as Rpc;
 
-export function getStoredCities(): string[] {
+function readLegacyCities(): string[] {
   if (typeof window === "undefined") return [];
-
   try {
-    // Migration: One-time purge of the old hardcoded default list
-    const isMigrated = localStorage.getItem(MIGRATION_KEY);
-    const raw = localStorage.getItem(STORAGE_KEY);
-
-    if (!isMigrated) {
-      localStorage.setItem(MIGRATION_KEY, "true");
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) {
-            // Remove legacy defaults
-            const filtered = parsed.filter(
-              (c) => typeof c === "string" && !LEGACY_DEFAULT_CITIES.has(c.trim().toLowerCase()),
-            );
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
-            return filtered;
-          }
-        } catch {
-          // ignore
-        }
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
-      return [];
-    }
-
-    if (raw !== null) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed))
-        return parsed.filter((c) => typeof c === "string" && c.trim().length > 0);
-    }
+    const parsed = JSON.parse(localStorage.getItem(LEGACY_STORAGE_KEY) ?? "[]");
+    return Array.isArray(parsed)
+      ? parsed.filter((c): c is string => typeof c === "string" && c.trim().length > 0)
+      : [];
   } catch {
-    /* fallback */
+    return [];
   }
-
-  return [];
 }
 
-export function saveStoredCities(cities: string[]) {
-  if (typeof window === "undefined") return;
+function clearLegacyCities() {
   try {
-    localStorage.setItem(MIGRATION_KEY, "true");
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cities));
-    window.dispatchEvent(new CustomEvent("clinic_cities_updated", { detail: cities }));
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
+    localStorage.removeItem(LEGACY_MIGRATION_KEY);
   } catch {
-    /* noop */
+    // Armazenamento indisponível: nada a limpar.
   }
+}
+
+async function saveCities(companyId: string, cities: string[]): Promise<string[]> {
+  const { data, error } = await rpc("save_clinic_cities", {
+    p_company_id: companyId,
+    p_cities: cities,
+  });
+  if (error) throw new Error(error.message);
+  return (data as string[] | null) ?? [];
 }
 
 export function useClinicCities() {
   const qc = useQueryClient();
+  const { companyId } = useActiveCompany();
 
   const { data: cities = [] } = useQuery({
-    queryKey: ["clinic_cities"],
-    queryFn: () => getStoredCities(),
-    staleTime: Infinity,
+    queryKey: QUERY_KEY,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await rpc("get_clinic_cities");
+      if (error) throw new Error(error.message);
+      const remote = (data as string[] | null) ?? [];
+
+      // Leva para o banco, uma única vez, as cidades que estavam só neste navegador.
+      const legacy = readLegacyCities();
+      if (legacy.length > 0 && companyId) {
+        const known = new Set(remote.map((c) => c.toLowerCase()));
+        const missing = legacy.filter((c) => !known.has(c.trim().toLowerCase()));
+        if (missing.length === 0) {
+          clearLegacyCities();
+        } else {
+          try {
+            const saved = await saveCities(companyId, [...remote, ...missing]);
+            clearLegacyCities();
+            return saved;
+          } catch {
+            // Sem permissão para configurar: mantém a cópia antiga até alguém com permissão abrir.
+          }
+        }
+      }
+      return remote;
+    },
   });
 
-  useEffect(() => {
-    const handleUpdate = () => {
-      qc.setQueryData(["clinic_cities"], getStoredCities());
-    };
-    window.addEventListener("clinic_cities_updated", handleUpdate);
-    window.addEventListener("storage", handleUpdate);
-    return () => {
-      window.removeEventListener("clinic_cities_updated", handleUpdate);
-      window.removeEventListener("storage", handleUpdate);
-    };
-  }, [qc]);
-
-  const setCities = (newCities: string[]) => {
-    saveStoredCities(newCities);
-    qc.setQueryData(["clinic_cities"], newCities);
+  const persist = async (next: string[]): Promise<boolean> => {
+    if (!companyId) {
+      toast.error("Clínica não identificada. Recarregue a página.");
+      return false;
+    }
+    try {
+      const saved = await saveCities(companyId, next);
+      qc.setQueryData(QUERY_KEY, saved);
+      return true;
+    } catch (error) {
+      toast.error("Não foi possível salvar as cidades.", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+      return false;
+    }
   };
 
-  const addCity = (cityName: string): boolean => {
+  const addCity = async (cityName: string): Promise<boolean> => {
     const trimmed = cityName.trim();
     if (!trimmed) return false;
-    const current = qc.getQueryData<string[]>(["clinic_cities"]) ?? getStoredCities();
-    if (current.some((c) => c.toLowerCase() === trimmed.toLowerCase())) {
+    if (cities.some((c) => c.toLowerCase() === trimmed.toLowerCase())) {
       toast.error(`A cidade "${trimmed}" já está cadastrada na lista.`);
       return false;
     }
-    const next = [...current, trimmed];
-    setCities(next);
-    return true;
+    return persist([...cities, trimmed]);
   };
 
-  const removeCity = (cityName: string) => {
-    const current = qc.getQueryData<string[]>(["clinic_cities"]) ?? getStoredCities();
-    const next = current.filter((c) => c !== cityName);
-    setCities(next);
-  };
+  const removeCity = (cityName: string) => persist(cities.filter((c) => c !== cityName));
 
   return {
     cities,
     addCity,
     removeCity,
-    setCities,
+    setCities: persist,
   };
 }

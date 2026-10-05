@@ -6,8 +6,7 @@ import {
   LineChart,
   Tags,
 } from "lucide-react";
-import { SegmentedControl } from "@/components/ui-app/SegmentedControl";
-import { StickyToolbar } from "@/components/ui-app/StickyToolbar";
+import { UnderlineTabs } from "@/components/ui-app/UnderlineTabs";
 
 export type FinanceTabId = "fluxo" | "pagar" | "receber" | "conciliacao" | "categorias";
 export const financeTabs: { id: FinanceTabId; label: string; icon: ElementType }[] = [
@@ -27,7 +26,7 @@ export function resolveFinanceTab(value: unknown): FinanceTabId {
   return "fluxo";
 }
 
-/** Seções do financeiro num controle segmentado de vidro que acompanha a rolagem. */
+/** Seções do financeiro: abas com sublinhado deslizante que acompanham a rolagem. */
 export default function FinanceTabs({
   activeTab,
   onSelectTab,
@@ -55,26 +54,14 @@ export default function FinanceTabs({
           ))}
         </select>
       </label>
-      <StickyToolbar className="mb-0 hidden md:flex">
-        <nav aria-label="Seções do financeiro" className="min-w-0">
-          <SegmentedControl
-            aria-label="Seções do financeiro"
-            semantics="navigation"
-            value={activeTab}
-            onChange={onSelectTab}
-            options={financeTabs.map(({ id, label, icon: Icon }) => ({
-              value: id,
-              disabled,
-              label: (
-                <>
-                  <Icon aria-hidden="true" />
-                  {label}
-                </>
-              ),
-            }))}
-          />
-        </nav>
-      </StickyToolbar>
+      <UnderlineTabs
+        className="hidden md:flex"
+        label="Seções do financeiro"
+        tabs={financeTabs}
+        value={activeTab}
+        onChange={onSelectTab}
+        disabled={disabled}
+      />
     </>
   );
 }

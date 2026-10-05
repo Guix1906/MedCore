@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Activity } from "@/components/agenda/agenda-types";
+import { showSuccessToast } from "@/components/ui/success-toast";
 
 type MemberOpt = {
   id: string;
@@ -79,7 +80,6 @@ import { useAuth } from "@/hooks/use-auth";
 import { useActiveCompany } from "@/hooks/use-active-company";
 import { isUuid } from "@/lib/uuid";
 import { mergeWithLocalPatients } from "@/lib/local-patients";
-import { getStoredLocalDoctors, saveStoredLocalDoctor } from "@/lib/local-doctors";
 import { useClinicCities } from "@/hooks/use-clinic-cities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -129,7 +129,7 @@ const GREEN = {
   grad: "bg-primary",
   gradSoft: "bg-primary/15",
   text: "text-primary",
-  ring: "focus-within:ring-2 focus-within:ring-primary/40 focus-within:border-primary/60",
+  ring: "focus-within:border-primary",
   border: "border-primary/40",
   hover: "hover:bg-primary/10",
   chip: "bg-primary/10 text-primary dark:text-primary border-primary/30",
@@ -902,25 +902,6 @@ export function NovoAgendamentoDialog({
         }
       } catch {}
 
-      // 3. Mescla com médicos locais (garante que médico recém-criado nunca suma)
-      try {
-        const localDocs = getStoredLocalDoctors();
-        if (localDocs.length > 0) {
-          const existingIds = new Set(list.map((m) => m.id));
-          localDocs.forEach((d) => {
-            if (!existingIds.has(d.id)) {
-              list.push({
-                id: d.id,
-                full_name: d.name,
-                avatar_url: d.avatar_url || null,
-                role: d.specialty || d.role || "Médico",
-              });
-              existingIds.add(d.id);
-            }
-          });
-        }
-      } catch {}
-
       return dedupeMembers(list);
     },
   });
@@ -1233,6 +1214,10 @@ export function NovoAgendamentoDialog({
         toast.success(
           "Agendamento salvo e vinculado ao plano de tratamento do paciente (sem cobrança duplicada).",
         );
+      } else if (activityToEdit) {
+        showSuccessToast("Agendamento atualizado!", "As alterações foram salvas com sucesso.");
+      } else {
+        showSuccessToast("Agendamento salvo!", "Novo agendamento adicionado com sucesso.");
       }
 
       const createdActivity = {
@@ -2500,17 +2485,6 @@ function NewDoctorDialog({
       avatar_url: null,
     };
 
-    saveStoredLocalDoctor({
-      id: newId,
-      name: name.trim(),
-      email: cleanEmail,
-      specialty: specialty.trim() || null,
-      crm: crm.trim() || null,
-      phone: phone.trim() || null,
-      role: "medico",
-      active: true,
-    });
-
     const payload = {
       id: newId,
       name: name.trim(),
@@ -2791,7 +2765,7 @@ const ClientPicker = memo(function ClientPicker({
             onFocus={() => setOpen(true)}
             onClick={() => setOpen(true)}
             placeholder="Clique para ver a lista de pacientes ou digite para buscar..."
-            className="w-full h-12 pl-10 pr-10 rounded-2xl border-2 border-border/80 bg-background text-sm font-medium focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-muted-foreground cursor-pointer !cursor-pointer"
+            className="w-full h-12 pl-10 pr-10 rounded-2xl border border-border bg-background text-sm font-medium focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-muted-foreground cursor-pointer !cursor-pointer"
           />
           {query ? (
             <button

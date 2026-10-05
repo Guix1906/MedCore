@@ -16,6 +16,12 @@ import {
   DollarSign,
   User,
   FileText,
+  HelpCircle,
+  Info,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -53,8 +59,10 @@ export function PatientFinanceTab({ patientId, patientName }: PatientFinanceTabP
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<
-    "todos" | "aberto" | "pago" | "vencido" | "saldo_livre"
+    "todos" | "a_receber" | "aberto" | "pago" | "vencido"
   >("todos");
+  const [pageSize, setPageSize] = useState(10);
+  const [page, setPage] = useState(1);
   const [selectedTitle, setSelectedTitle] = useState<FinancialTitle | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -93,20 +101,26 @@ export function PatientFinanceTab({ patientId, patientName }: PatientFinanceTabP
 
   // Compute metrics
   const metrics = useMemo(() => {
+    const today = localDate();
     let totalBilled = 0;
     let totalPaid = 0;
     let totalOpen = 0;
+    let totalToReceive = 0;
+    let totalOverdue = 0;
 
     for (const t of patientTitles) {
       if (t.status === "cancelado") continue;
       if (t.type === "receita") {
+        const rest = remaining(t);
         totalBilled += Number(t.amount || 0);
         totalPaid += Number(t.paid_amount || 0);
-        totalOpen += remaining(t);
+        totalOpen += rest;
+        if (rest > 0 && !isFreeBalance(t) && t.due_date < today) totalOverdue += rest;
+        else totalToReceive += rest;
       }
     }
 
-    return { totalBilled, totalPaid, totalOpen };
+    return { totalBilled, totalPaid, totalOpen, totalToReceive, totalOverdue };
   }, [patientTitles]);
 
   // Filtered titles by search and status
@@ -122,13 +136,13 @@ export function PatientFinanceTab({ patientId, patientName }: PatientFinanceTabP
       }
 
       // Status
-      if (statusFilter === "aberto") {
+      if (statusFilter === "a_receber") {
         return (
           remaining(t) > 0 && t.status !== "cancelado" && (isFreeBalance(t) || t.due_date >= today)
         );
       }
-      if (statusFilter === "saldo_livre") {
-        return remaining(t) > 0 && t.status !== "cancelado" && isFreeBalance(t);
+      if (statusFilter === "aberto") {
+        return remaining(t) > 0 && t.status !== "cancelado";
       }
       if (statusFilter === "pago") {
         return remaining(t) <= 0 && t.status !== "cancelado";
@@ -142,6 +156,10 @@ export function PatientFinanceTab({ patientId, patientName }: PatientFinanceTabP
       return true;
     });
   }, [patientTitles, search, statusFilter]);
+
+  const pageCount = Math.max(1, Math.ceil(filteredTitles.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pagedTitles = filteredTitles.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const handleOpenModal = () => {
     setTitleId(crypto.randomUUID());
@@ -236,103 +254,82 @@ export function PatientFinanceTab({ patientId, patientName }: PatientFinanceTabP
         </button>
       </div>
 
-      {/* Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="p-4 rounded-2xl bg-card border border-border shadow-xs space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Total Cobrado
-            </span>
-            <div className="h-8 w-8 rounded-lg bg-primary-soft text-primary flex items-center justify-center">
-              <Receipt size={16} />
-            </div>
-          </div>
-          <p className="text-2xl font-semibold text-foreground">{currency(metrics.totalBilled)}</p>
-          <p className="text-xs text-muted-foreground">Total de serviços e tratamentos</p>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-card border border-border shadow-xs space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-success uppercase tracking-wider">
-              Total Pago
-            </span>
-            <div className="h-8 w-8 rounded-lg bg-success/10 text-success flex items-center justify-center">
-              <CheckCircle2 size={16} />
-            </div>
-          </div>
-          <p className="text-2xl font-semibold text-success">{currency(metrics.totalPaid)}</p>
-          <p className="text-xs text-muted-foreground">Valores já liquidados/recebidos</p>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-card border border-border shadow-xs space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-warning uppercase tracking-wider">
-              Saldo em Aberto
-            </span>
-            <div className="h-8 w-8 rounded-lg bg-warning/10 text-warning flex items-center justify-center">
-              <Clock size={16} />
-            </div>
-          </div>
-          <p className="text-2xl font-semibold text-warning">{currency(metrics.totalOpen)}</p>
-          <p className="text-xs text-muted-foreground">Parcelas e títulos pendentes</p>
-        </div>
-      </div>
-
-      {/* Filters and Search */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="relative w-full sm:w-72">
+      {/* Busca */}
+      <div className="flex justify-end">
+        <div className="relative w-full sm:w-80">
           <Search
             size={15}
             className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground"
           />
           <input
             type="text"
-            placeholder="Buscar por descrição ou categoria..."
+            placeholder="Buscar"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-sm bg-muted/60 rounded-xl border border-border focus:bg-card focus:border-primary focus:ring-2 focus:ring-primary/15 outline-none transition-all"
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="w-full pl-9 pr-3 py-2 text-sm bg-card rounded-xl border border-border focus:border-primary focus:ring-2 focus:ring-primary/15 outline-none transition-all"
           />
-        </div>
-
-        <div className="flex items-center gap-1.5 p-1 bg-muted rounded-xl w-full sm:w-auto overflow-x-auto">
-          {(
-            [
-              { id: "todos", label: "Todos" },
-              { id: "aberto", label: "Em aberto" },
-              { id: "saldo_livre", label: "Saldos sem vencimento" },
-              { id: "pago", label: "Pagos" },
-              { id: "vencido", label: "Vencidos" },
-            ] as const
-          ).map((filter) => (
-            <button
-              key={filter.id}
-              type="button"
-              onClick={() => setStatusFilter(filter.id)}
-              className={cn(
-                "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap",
-                statusFilter === filter.id
-                  ? "bg-card text-primary shadow-xs"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {filter.label}
-            </button>
-          ))}
         </div>
       </div>
 
+      {/* Indicadores (clique para filtrar) */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 rounded-2xl border border-border bg-card overflow-hidden">
+        {(
+          [
+            { id: "pago", label: "Realizado", dot: "bg-success", tone: "border-success from-success/0 to-success/12", value: metrics.totalPaid, help: "Valores já recebidos do paciente." },
+            { id: "a_receber", label: "A receber", dot: "bg-info", tone: "border-info from-info/0 to-info/12", value: metrics.totalToReceive, help: "Saldos pendentes que ainda não venceram." },
+            { id: "aberto", label: "Em aberto", dot: "bg-warning", tone: "border-warning from-warning/0 to-warning/12", value: metrics.totalOpen, help: "Todo saldo pendente, vencido ou não." },
+            { id: "vencido", label: "Em atraso", dot: "bg-destructive", tone: "border-destructive from-destructive/0 to-destructive/12", value: metrics.totalOverdue, help: "Saldos pendentes com vencimento passado." },
+            { id: "todos", label: "Total do período", dot: "bg-primary", tone: "border-primary from-primary/0 to-primary/12", value: metrics.totalBilled, help: "Soma de todas as cobranças não canceladas." },
+          ] as const
+        ).map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            onClick={() => {
+              setStatusFilter(m.id);
+              setPage(1);
+            }}
+            className={cn(
+              "group/metric relative text-left px-5 py-4 transition-colors cursor-pointer",
+              m.tone,
+            )}
+          >
+            <span
+              aria-hidden
+              className={cn(
+                "pointer-events-none absolute inset-0 bg-gradient-to-b border-b-[3px] transition-opacity duration-300",
+                m.tone,
+                statusFilter === m.id ? "opacity-100" : "opacity-0 group-hover/metric:opacity-100",
+              )}
+            />
+            <span className="relative flex items-center gap-2 text-sm text-foreground/80">
+              <span className={cn("h-2 w-2 rounded-full", m.dot)} />
+              {m.label}
+              <span title={m.help} className="text-muted-foreground cursor-help">
+                <HelpCircle size={14} />
+              </span>
+            </span>
+            <span className="relative mt-1 block pl-4 text-lg font-semibold text-foreground">
+              {currency(m.value)}
+            </span>
+          </button>
+        ))}
+      </div>
       {/* Titles List */}
       <div className="space-y-3">
         {filteredTitles.length === 0 ? (
           <div className="text-center py-16 bg-muted/36 rounded-2xl border border-dashed border-border">
-            <Receipt className="h-10 w-10 text-muted-foreground/60 mx-auto mb-2" />
-            <p className="text-sm font-semibold text-foreground/80">
-              Nenhum título financeiro encontrado
-            </p>
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary-soft text-primary">
+              <Info size={20} />
+            </div>
+            <p className="text-[15px] font-semibold text-foreground">Hmm, está vazio por aqui!</p>
             <p className="text-sm text-muted-foreground mt-0.5">
               {patientTitles.length === 0
-                ? "Este paciente ainda não possui cobranças ou receitas registradas."
-                : "Nenhum título corresponde aos filtros aplicados."}
+                ? "Nenhum registro encontrado."
+                : "Nenhum registro encontrado para os filtros aplicados."}
             </p>
             {patientTitles.length === 0 && (
               <button
@@ -346,7 +343,7 @@ export function PatientFinanceTab({ patientId, patientName }: PatientFinanceTabP
             )}
           </div>
         ) : (
-          filteredTitles.map((t) => {
+          pagedTitles.map((t) => {
             const isPaid = remaining(t) <= 0 && t.status !== "cancelado";
             const isCancelled = t.status === "cancelado";
             const isFree = isFreeBalance(t);
@@ -468,6 +465,49 @@ export function PatientFinanceTab({ patientId, patientName }: PatientFinanceTabP
             );
           })
         )}
+      </div>
+
+      {/* Paginação */}
+      <div className="flex items-center justify-between gap-3">
+        <select
+          value={pageSize}
+          onChange={(e) => {
+            setPageSize(Number(e.target.value));
+            setPage(1);
+          }}
+          className="h-10 rounded-xl border border-border bg-card px-3 text-sm text-foreground outline-none focus:border-primary cursor-pointer"
+          aria-label="Itens por página"
+        >
+          {[10, 20, 50].map((n) => (
+            <option key={n} value={n}>
+              {n} por página
+            </option>
+          ))}
+        </select>
+        <div className="flex items-center gap-2">
+          <span className="mr-1 text-sm text-muted-foreground">
+            {currentPage} de {pageCount}
+          </span>
+          {(
+            [
+              { icon: ChevronsLeft, to: 1, label: "Primeira página", off: currentPage <= 1 },
+              { icon: ChevronLeft, to: currentPage - 1, label: "Página anterior", off: currentPage <= 1 },
+              { icon: ChevronRight, to: currentPage + 1, label: "Próxima página", off: currentPage >= pageCount },
+              { icon: ChevronsRight, to: pageCount, label: "Última página", off: currentPage >= pageCount },
+            ] as const
+          ).map(({ icon: Icon, to, label, off }) => (
+            <button
+              key={label}
+              type="button"
+              disabled={off}
+              onClick={() => setPage(to)}
+              aria-label={label}
+              className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-muted-foreground hover:bg-primary-soft hover:text-primary disabled:opacity-50 disabled:hover:bg-muted disabled:hover:text-muted-foreground cursor-pointer disabled:cursor-not-allowed"
+            >
+              <Icon size={16} />
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Modal de Baixas & Histórico */}

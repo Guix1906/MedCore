@@ -44,3 +44,6 @@ scratch
 *.db
 
 .env*
+
+.vercel
+.env*

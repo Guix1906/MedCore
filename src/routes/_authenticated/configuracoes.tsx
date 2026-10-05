@@ -734,12 +734,12 @@ function CitySettings() {
   const { cities, addCity, removeCity } = useClinicCities();
   const [newCity, setNewCity] = useState("");
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!newCity.trim()) {
       toast.error("Digite o nome da cidade.");
       return;
     }
-    const added = addCity(newCity.trim());
+    const added = await addCity(newCity.trim());
     if (added) {
       toast.success(`Cidade "${newCity.trim()}" adicionada com sucesso!`);
       setNewCity("");
@@ -753,8 +753,7 @@ function CitySettings() {
       confirmText: "Remover",
       destructive: true,
     });
-    if (ok) {
-      removeCity(cityName);
+    if (ok && (await removeCity(cityName))) {
       toast.success(`Cidade "${cityName}" removida.`);
     }
   };

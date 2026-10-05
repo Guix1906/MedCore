@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { X, UserPlus, UserCheck, CheckCircle2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { showSuccessToast } from "@/components/ui/success-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { patientsService } from "@/services/api";
 import { cn } from "@/lib/utils";
@@ -287,9 +288,11 @@ export function PatientModal({
       queryClient.invalidateQueries({ queryKey: ["patients"] }),
     ]);
 
-    toast.success(
-      patient?.id ? "Paciente atualizado com sucesso" : "Paciente cadastrado com sucesso",
-    );
+    if (patient?.id) {
+      showSuccessToast("Paciente atualizado!", "Alterações salvas com sucesso.", "info");
+    } else {
+      showSuccessToast("Paciente cadastrado!", "Novo paciente adicionado com sucesso.");
+    }
     onSaved(finalPatient);
     onClose();
   };

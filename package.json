@@ -11,6 +11,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "sync": "node scripts/auto-sync.js",
+    "build:vercel": "vite build",
+    "deploy:vercel": "vercel --prod --prebuilt",
     "build:cloudflare": "node scripts/build-cloudflare.mjs",
     "deploy:cloudflare": "npm run build:cloudflare && wrangler deploy --config .output/server/wrangler.json"
   },

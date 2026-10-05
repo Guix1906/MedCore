@@ -151,9 +151,18 @@ function EstoquePage() {
       return;
     } catch {}
 
-    const { error } = await supabase.from("inventory_items").delete().eq("id", item.id);
+    const { data: removed, error } = await supabase
+      .from("inventory_items")
+      .delete()
+      .eq("id", item.id)
+      .select("id");
     if (error) {
       toast.error("Erro: " + error.message);
+      return;
+    }
+    // O RLS bloqueia sem devolver erro: confere se o item saiu de fato.
+    if (!removed?.length) {
+      toast.error("Item não excluído: sem permissão para alterar o estoque.");
       return;
     }
     toast.success("Item excluído");

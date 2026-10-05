@@ -475,22 +475,8 @@ export function ContasReceberTab({
       {/* ========================================================================= */}
       {/* 1. CABEÇALHO DA TELA COM ÍCONE AZUL E BOTÃO DE ATUALIZAR                   */}
       {/* ========================================================================= */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <div className="h-11 w-11 rounded-2xl bg-info text-white flex items-center justify-center shadow-xs shrink-0">
-            <ArrowUpRight className="h-6 w-6" strokeWidth={2.5} />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">
-              Contas a Receber
-            </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Honorários contratuais, parcelas de clientes e alertas de cobrança
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+      <div className="flex justify-end">
+        <div className="flex items-center gap-2">
           {onOpenNew && (
             <Button
               onClick={() => onOpenNew("receita")}
@@ -619,9 +605,6 @@ export function ContasReceberTab({
         <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 dark:bg-amber-950/20 p-4.5 space-y-3 shadow-xs animate-in fade-in">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
-                <Bell className="h-5 w-5" />
-              </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30">
@@ -742,9 +725,6 @@ export function ContasReceberTab({
               {metrics.aReceberCount} pagamentos com data
             </p>
           </div>
-          <div className="h-9 w-9 rounded-full bg-warning/10 text-warning flex items-center justify-center shrink-0">
-            <Clock className="h-4 w-4" />
-          </div>
         </div>
 
         {/* CARD 2: EM ATRASO */}
@@ -769,9 +749,6 @@ export function ContasReceberTab({
               {metrics.emAtrasoClientesCount} clientes com débitos
             </p>
           </div>
-          <div className="h-9 w-9 rounded-full bg-destructive/10 text-destructive flex items-center justify-center shrink-0">
-            <AlertTriangle className="h-4 w-4" />
-          </div>
         </div>
 
         {/* CARD 3: SALDOS LIVRES */}
@@ -792,9 +769,6 @@ export function ContasReceberTab({
             <p className="text-xs text-muted-foreground">
               {metrics.saldoLivreCount} planos a combinar
             </p>
-          </div>
-          <div className="h-9 w-9 rounded-full bg-primary-soft text-primary flex items-center justify-center shrink-0">
-            <Wallet className="h-4 w-4" />
           </div>
         </div>
 
@@ -819,9 +793,6 @@ export function ContasReceberTab({
             <p className="text-xs text-muted-foreground">
               {metrics.recebidoCount} pagamentos recebidos
             </p>
-          </div>
-          <div className="h-9 w-9 rounded-full bg-info/10 text-info flex items-center justify-center shrink-0">
-            <CheckCircle2 className="h-4 w-4" />
           </div>
         </div>
       </div>
@@ -878,9 +849,6 @@ export function ContasReceberTab({
         {/* COLUNA DIREITA: RECEBIMENTOS PREVISTOS */}
         <div className="rounded-xl border border-border bg-card p-5 shadow-xs flex flex-col justify-between">
           <div className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-full bg-success/10 text-success flex items-center justify-center shrink-0">
-              <TrendingUp className="h-3.5 w-3.5" />
-            </div>
             <div>
               <h2 className="font-semibold text-sm text-foreground">Recebimentos Previstos</h2>
               <p className="text-xs text-muted-foreground">

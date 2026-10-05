@@ -10,51 +10,23 @@ import { invalidateAuthRouteCache } from "@/routes/_authenticated/route";
 import { qk } from "@/lib/query-keys";
 import { getSiteOrigin } from "@/services/site-origin";
 import {
-  Activity,
   ArrowRight,
-  CalendarCheck,
   Eye,
   EyeOff,
-  HeartPulse,
   Loader2,
   LockKeyhole,
   Mail,
-  Salad,
   UserRound,
-  type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 type AuthSearch = { redirect?: string; modo?: "convite" | "nova-senha" };
 type AuthMode = "signin" | "signup" | "forgot" | "password";
 
-// Ícones decorativos que flutuam em volta do logo da clínica (só atmosfera, sem texto).
-const HERO_TILES: { icon: LucideIcon; slot: string; tile: string }[] = [
-  {
-    icon: CalendarCheck,
-    slot: "-top-7 left-[7%] size-16 [animation-delay:380ms]",
-    tile: "text-blue-600 [--tile-time:7.5s] dark:text-blue-300",
-  },
-  {
-    icon: HeartPulse,
-    slot: "top-[26%] -right-7 size-14 [animation-delay:480ms]",
-    tile: "text-rose-600 [--tile-time:6.5s] [animation-delay:-2s] dark:text-rose-300",
-  },
-  {
-    icon: Salad,
-    slot: "-bottom-8 right-[12%] size-17 [animation-delay:580ms]",
-    tile: "text-emerald-600 [--tile-time:8.5s] [animation-delay:-4s] dark:text-emerald-300",
-  },
-  {
-    icon: Activity,
-    slot: "bottom-[22%] -left-7 size-13 [animation-delay:680ms]",
-    tile: "text-violet-600 [--tile-time:7s] [animation-delay:-1s] dark:text-violet-300",
-  },
-];
 
 const FIELD_CLASS =
-  "peer h-12 border-(--auth-field-line) bg-(--auth-field) pl-11 shadow-none hover:border-(--auth-field-line-hover) focus:bg-(--auth-field-focus)";
+  "peer h-12 border-(--auth-field-line) bg-(--auth-field) pl-11 shadow-none hover:border-(--auth-field-line-hover) focus:bg-(--auth-field-focus) focus-visible:outline-none focus-visible:ring-0";
 const FIELD_ICON_CLASS =
   "pointer-events-none absolute left-4 top-1/2 size-[18px] -translate-y-1/2 text-muted-foreground transition-colors peer-focus:text-primary";
 
@@ -201,6 +173,16 @@ function AuthPage() {
   const [busy, setBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
   const goToTarget = useCallback(() => router.history.push(target), [router, target]);
+  // O painel da marca acompanha a altura do cartão de acesso (que muda conforme o modo).
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [cardHeight, setCardHeight] = useState<number | null>(null);
+  useEffect(() => {
+    const card = cardRef.current;
+    if (!card || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setCardHeight(card.offsetHeight));
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -396,44 +378,45 @@ function AuthPage() {
 
   return (
     <div className="auth-canvas grid min-h-dvh lg:grid-cols-2">
-      <div className="auth-aurora" aria-hidden="true">
-        <span className="auth-blob auth-blob--aqua" />
-        <span className="auth-blob auth-blob--sky" />
-        <span className="auth-blob auth-blob--rose" />
-        <span className="auth-blob auth-blob--violet" />
-        <span className="auth-blob auth-blob--indigo" />
+      <div className="aurora-container auth-aurora" aria-hidden="true">
+        <div className="aurora-wave aurora-1" />
+        <div className="aurora-wave aurora-2" />
+        <div className="aurora-wave aurora-3" />
       </div>
-      <aside className="hidden min-w-0 items-center justify-center p-10 lg:flex xl:p-16">
-        <div className="auth-stage w-full max-w-[34rem] 2xl:max-w-[38rem]">
-          <div className="auth-plate auth-edge auth-rise">
-            <img
-              src="/assets/dr-jonatas-bandeira-logo.png"
-              alt="Dr. Jonatas Bandeira - Nutrologia"
-              draggable={false}
-              className="relative w-[78%] select-none object-contain"
-            />
+      <aside className="hidden min-w-0 items-center justify-start p-8 lg:flex lg:order-2 lg:pl-6 lg:pr-16 xl:p-12 xl:pl-10 xl:pr-24 2xl:p-16 2xl:pl-14 2xl:pr-32">
+        <div className="auth-stage w-full max-w-[36rem] xl:max-w-[40rem] 2xl:max-w-[44rem] flex items-center justify-center lg:-translate-x-4 xl:-translate-x-8 2xl:-translate-x-12">
+          <div
+            className="auth-plate auth-edge auth-rise w-full p-8 sm:p-10 md:p-12"
+            style={cardHeight ? { height: cardHeight, aspectRatio: "auto" } : undefined}
+          >
+            <div className="relative flex flex-col items-center gap-6 text-center">
+              <img
+                src="/assets/dr-jonatas-bandeira-logo@2x.png"
+                srcSet="/assets/dr-jonatas-bandeira-logo.png 800w, /assets/dr-jonatas-bandeira-logo@2x.png 1600w, /assets/dr-jonatas-bandeira-logo@3x.png 2400w"
+                sizes="(max-width: 1280px) 520px, 640px"
+                alt="Dr. Jonatas Bandeira - Nutrologia"
+                draggable={false}
+                className="auth-plate-logo w-[88%] max-w-[520px] select-none object-contain"
+              />
+              <p className="max-w-[22rem] text-[15px] leading-relaxed text-white/80">
+                Cuidado nutrológico com precisão, do primeiro atendimento ao acompanhamento.
+              </p>
+            </div>
           </div>
-          {HERO_TILES.map(({ icon: Icon, slot, tile }) => (
-            <span key={slot} aria-hidden="true" className={cn("auth-tile-slot auth-pop", slot)}>
-              <span className={cn("auth-tile auth-edge", tile)}>
-                <Icon strokeWidth={1.75} />
-              </span>
-            </span>
-          ))}
         </div>
       </aside>
-      <main className="flex min-w-0 flex-col items-center justify-center px-4 py-6 sm:px-8">
-        <div className="auth-card auth-edge auth-rise w-full max-w-[440px] rounded-[28px] p-6 [animation-delay:120ms] sm:px-10 sm:py-9">
+      <main className="flex min-w-0 flex-col items-center justify-center px-4 pb-20 pt-8 sm:px-8 lg:order-1 lg:py-8">
+        <div className="relative w-full max-w-[440px]">
+        <div ref={cardRef} className="auth-card auth-edge auth-rise w-full max-w-[440px] rounded-[28px] p-6 [animation-delay:120ms] sm:px-10 sm:py-9">
           <div className="mb-6 flex flex-col items-center text-center">
             <img
-              src="/assets/dr-jonatas-bandeira-logo.png"
+              src="/assets/dr-jonatas-bandeira-logo@2x.png"
+              srcSet="/assets/dr-jonatas-bandeira-logo.png 800w, /assets/dr-jonatas-bandeira-logo@2x.png 1600w, /assets/dr-jonatas-bandeira-logo@3x.png 2400w"
+              sizes="(max-width: 640px) 260px, 340px"
               alt="Dr. Jonatas Bandeira - Nutrologia"
               draggable={false}
-              className="mb-5 h-20 w-auto max-w-full select-none object-contain lg:hidden"
+              className="mb-6 h-24 sm:h-28 w-auto max-w-[85%] select-none object-contain drop-shadow-sm lg:hidden"
             />
-            <div className="auth-avatar mb-5 hidden place-items-center lg:grid">
-              <BrandSymbol size="large" interactive={false} />
-            </div>
             <div key={mode} className="auth-swap">
               <h1 className="text-[28px] font-semibold leading-tight tracking-tight sm:text-display">
                 {titles[mode]}
@@ -678,9 +661,11 @@ function AuthPage() {
             )}
           </div>
         </div>
-        <div className="mt-6 flex items-center justify-center gap-2 text-center text-xs text-foreground/70">
+        {/* Rodapé fora do fluxo: o cartão fica centralizado na mesma linha do painel da marca. */}
+        <div className="absolute left-0 right-0 top-full mt-6 flex items-center justify-center gap-2 text-center text-xs text-foreground/70">
           <BrandSymbol size="small" interactive={false} className="[&_img]:size-4" />
           <span>MedCore © {new Date().getFullYear()} · Consultório Dr. Jonatas Bandeira</span>
+        </div>
         </div>
       </main>
     </div>

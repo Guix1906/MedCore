@@ -1,6 +1,7 @@
 import { PatientFinanceTab } from "@/components/pacientes/PatientFinanceTab";
 import { RecordAddenda } from "@/components/pacientes/RecordAddenda";
 import { PatientPackagesTab } from "@/components/pacientes/PatientPackagesTab";
+import { PatientTimelineTab } from "@/components/pacientes/PatientTimelineTab";
 import {
   AiRecordAssistantModal,
   type AiSectionContext,
@@ -29,6 +30,7 @@ import {
   type ClinicalHistoryItem,
 } from "@/hooks/usePatientClinicalHistory";
 import { supabase } from "@/integrations/supabase/client";
+import { deleteViaRpc } from "@/lib/safe-delete";
 import {
   appendToRecord,
   formatConsultationRecord,
@@ -320,39 +322,26 @@ export function PatientFullProfileView({
     try {
       if (data.id && !isExample) {
         if (deletingItem.kind === "prontuario") {
-          let recDeleted = false;
-          try {
-            const { error } = await (supabase.rpc as any)("delete_medical_record", {
-              p_id: deletingItem.id,
-            });
-            if (!error) recDeleted = true;
-          } catch {}
-
-          if (!recDeleted) {
-            await supabase.from("prescriptions").delete().eq("medical_record_id", deletingItem.id);
-            const { error } = await supabase.from("medical_records").delete().eq("id", deletingItem.id);
-            if (error) throw error;
-          }
+          await deleteViaRpc(
+            "delete_medical_record",
+            { p_id: deletingItem.id },
+            { table: "medical_records", id: deletingItem.id },
+          );
           await prontuarioService.deleteRecord(deletingItem.id).catch(() => {});
         } else if (deletingItem.kind === "consulta") {
-          try {
-            await (supabase.rpc as any)("delete_agenda_event", { p_event_id: deletingItem.id });
-          } catch {}
+          // Agendamento da agenda (mesmo id) + registro da consulta
+          const { error: evErr } = await (supabase.rpc as any)("delete_agenda_event", {
+            p_event_id: deletingItem.id,
+          });
+          if (evErr && !/not find the function/i.test(evErr.message)) throw evErr;
           const { error } = await supabase.from("appointments").delete().eq("id", deletingItem.id);
           if (error) throw error;
         } else if (deletingItem.kind === "evolucao") {
-          let evDeleted = false;
-          try {
-            const { error } = await (supabase.rpc as any)("delete_treatment_evolution", {
-              p_id: deletingItem.id,
-            });
-            if (!error) evDeleted = true;
-          } catch {}
-
-          if (!evDeleted) {
-            const { error } = await (supabase as any).from("treatment_evolutions").delete().eq("id", deletingItem.id);
-            if (error) throw error;
-          }
+          await deleteViaRpc(
+            "delete_treatment_evolution",
+            { p_id: deletingItem.id },
+            { table: "treatment_evolutions", id: deletingItem.id },
+          );
         }
       }
 
@@ -563,15 +552,17 @@ export function PatientFullProfileView({
           {/* ============================================================ */}
           {/* ABA: PRONTUÁRIO & ANAMNESE COMPLETA */}
           {/* ============================================================ */}
-          {(activeTab === "prontuario" || activeTab === "timeline") && (
+          {activeTab === "timeline" && data.id && (
+            <PatientTimelineTab patientId={data.id} patientCreatedAt={data.created_at} />
+          )}
+
+          {activeTab === "prontuario" && (
             <div className="space-y-6 max-w-4xl">
               <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-border-soft">
                 <div>
                   <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
                     <FileText className="h-5 w-5 text-primary" />
-                    {activeTab === "timeline"
-                      ? "Linha do Tempo de Atendimentos"
-                      : "Prontuário Clínico & Atendimentos"}
+                    Prontuário Clínico & Atendimentos
                   </h2>
                   <p className="text-sm text-muted-foreground mt-0.5">
                     Histórico unificado de atendimentos, consultas e evoluções de{" "}

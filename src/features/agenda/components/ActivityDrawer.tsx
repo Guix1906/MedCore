@@ -472,14 +472,14 @@ export function ActivityDrawer({
     setSettling(true);
     try {
       let success = false;
-      try {
-        const { error: rpcErr } = await (supabase as any).rpc("settle_appointment_remaining", {
-          p_event_id: eventRawId,
-          p_amount: value,
-          p_method: settleMethod,
-        });
-        if (!rpcErr) success = true;
-      } catch {}
+      const { error: rpcErr } = await (supabase as any).rpc("settle_appointment_remaining", {
+        p_event_id: eventRawId,
+        p_amount: value,
+        p_method: settleMethod,
+      });
+      if (!rpcErr) success = true;
+      // Recusa real (permissão, valor acima do saldo…): mostra o motivo em vez de tentar outro caminho.
+      else if (!/not find the function/i.test(rpcErr.message)) throw rpcErr;
 
       if (!success && linkedTitle?.id) {
         const { error: payErr } = await supabase.rpc("record_financial_payment", {
@@ -784,7 +784,7 @@ export function ActivityDrawer({
                   <div className="rounded-lg bg-card p-2 border border-success/15">
                     <span className="text-muted-foreground block text-xs">Valor Total</span>
                     <strong className="text-foreground text-sm font-semibold">
-                      {currency(linkedTitle?.amount ?? Number(meta?.procedurePrice) ?? 0)}
+                      {currency(linkedTitle?.amount ?? (Number(meta?.procedurePrice) || 0))}
                     </strong>
                   </div>
                   <div className="rounded-lg bg-card p-2 border border-success/15">
@@ -793,7 +793,7 @@ export function ActivityDrawer({
                       {currency(
                         linkedTitle
                           ? (linkedTitle.paid_amount ?? 0)
-                          : (Number(meta?.downPayment) ?? 0),
+                          : Number(meta?.downPayment) || 0,
                       )}
                     </strong>
                   </div>

@@ -6,30 +6,17 @@ import {
   Building2,
   Calendar as CalendarIcon,
   Landmark,
-  Wallet,
   ArrowUpRight,
   ArrowDownLeft,
   ArrowLeftRight,
   FileSpreadsheet,
-  Plus,
   Search,
   CheckCircle2,
-  Clock,
   Pencil,
   Trash2,
-  FileText,
-  DollarSign,
-  X,
   Tag,
-  Zap,
-  MoreVertical,
-  Scale,
-  MessageSquare,
-  AlertTriangle,
   Eye,
   EyeOff,
-  ChevronDown,
-  ChevronUp,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -37,8 +24,6 @@ import {
   format,
   parseISO,
   isToday,
-  startOfDay,
-  differenceInDays,
   startOfWeek,
   endOfWeek,
   startOfMonth,
@@ -98,16 +83,23 @@ import { cashFlow } from "./cash-flow-math";
 import type { CashAccount, CashFlowSnapshot } from "./cash-flow-schema";
 import type { FinanceSnapshot, FinancialTitle } from "./finance-schema";
 import type { OperationsSnapshot } from "./operations-schema";
-import {
-  GraficoFluxoDeCaixa,
-  type LancamentoFluxo,
-  type ChartGranularity,
-} from "@/components/finance/GraficoFluxoDeCaixa";
+import type { LancamentoFluxo } from "@/components/finance/GraficoFluxoDeCaixa";
 import { CountUp } from "@/components/finance/CountUp";
 import { cn } from "@/lib/utils";
 import PaymentHistory from "./PaymentHistory";
 
-type CashEntry = LancamentoFluxo & { date: string };
+// effectiveDate: data usada nos filtros de período. Para previstos vencidos e em aberto é hoje,
+// a mesma regra dos cards de previsão.
+type CashEntry = LancamentoFluxo & { date: string; effectiveDate?: string };
+
+// Comparação sem acento e sem caixa (ex.: "Débito" casa com "debito")
+const normalize = (value: string | null | undefined) =>
+  (value || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+
+const todayIso = () => format(new Date(), "yyyy-MM-dd");
 
 const balance = (value: number | null) =>
   value === null ? "Pendente de conferência" : currency(value);
@@ -125,7 +117,10 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
   const qc = useQueryClient();
 
   // Escopo de Clínica e Contas
-  const [scope, setScope] = useState<string>("all");
+  // Com uma única clínica já começa nela (o saldo por conta depende de uma clínica selecionada)
+  const [scope, setScope] = useState<string>(() =>
+    finance.scopes.length === 1 ? finance.scopes[0].id || "legacy" : "all",
+  );
   const [selectedAccount, setSelectedAccount] = useState<string>("todas");
   const [showChart, setShowChart] = useState<boolean>(true);
 
@@ -138,7 +133,8 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
   const [customEndDate, setCustomEndDate] = useState(() =>
     format(endOfMonth(new Date()), "yyyy-MM-dd"),
   );
-  const [chartGranularity, setChartGranularity] = useState<ChartGranularity>("dia");
+  const customRangeInvalid =
+    periodMode === "custom" && !!customStartDate && !!customEndDate && customStartDate > customEndDate;
 
   const { start, end, periodLabel } = useMemo(() => {
     if (periodMode === "dia") {
@@ -170,19 +166,22 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
     if (periodMode === "custom") {
       const sLabel = customStartDate ? format(parseISO(customStartDate), "dd/MM/yyyy") : "Início";
       const eLabel = customEndDate ? format(parseISO(customEndDate), "dd/MM/yyyy") : "Fim";
+      // Datas invertidas: aplica o intervalo na ordem certa em vez de esvaziar a lista
+      const inverted = !!customStartDate && !!customEndDate && customStartDate > customEndDate;
       return {
-        start: customStartDate,
-        end: customEndDate,
+        start: inverted ? customEndDate : customStartDate,
+        end: inverted ? customStartDate : customEndDate,
         periodLabel: `${sLabel} - ${eLabel}`,
       };
     }
     // Default: "mes"
     const s = startOfMonth(currentPeriodDate);
     const e = endOfMonth(currentPeriodDate);
+    const monthLabel = format(s, "MMMM yyyy", { locale: ptBR });
     return {
       start: format(s, "yyyy-MM-dd"),
       end: format(e, "yyyy-MM-dd"),
-      periodLabel: `${format(s, "dd/MM/yyyy")} - ${format(e, "dd/MM/yyyy")}`,
+      periodLabel: monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1),
     };
   }, [periodMode, currentPeriodDate, customStartDate, customEndDate]);
 
@@ -211,16 +210,16 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
   };
 
   // Sub-abas (Lançamentos / Excluídos)
-  const [activeSubTab, setActiveSubTab] = useState<"lancamentos" | "previstos" | "excluidos">(
+  const [activeSubTab, setActiveSubTab] = useState<
+    "lancamentos" | "previstos" | "excluidos" | "contas"
+  >(
     "lancamentos",
   );
 
   // Barra de Filtros
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<"todos" | "receitas" | "despesas">("todos");
-  const [statusFilter, setStatusFilter] = useState<string>("todos");
   const [formaFilter, setFormaFilter] = useState<string>("todas");
-  const [origemFilter, setOrigemFilter] = useState<string>("todas");
   const [areaFilter, setAreaFilter] = useState<string>("todas");
 
   // Modal de Transferência entre contas
@@ -235,9 +234,8 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
   // Modal interno de histórico/baixa caso onSelectTitle não seja fornecido
   const [internalSelectedTitleId, setInternalSelectedTitleId] = useState<string | null>(null);
 
-  // Painel colapsável de auditoria de saldos bancários
-  const [showAccountAudit, setShowAccountAudit] = useState(false);
-
+  // Paginação da lista
+  const [page, setPage] = useState(0);
 
   // Modal de Exclusão de Movimentação
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -384,13 +382,16 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
 
   // 2b. Previstos: saldo que falta de cada título em aberto (a receber / a pagar), no vencimento
   const forecastEntries = useMemo(() => {
+    const today = todayIso();
     return (finance.titles || [])
       .filter((t) => t && t.status !== "cancelado" && remaining(t) > 0)
-      .map(
-        (t): CashEntry => ({
+      .map((t): CashEntry => {
+        const due = String(t.due_date || t.date || "").slice(0, 10);
+        return {
           id: `prev:${t.id}`,
           transaction_id: t.id,
-          date: String(t.due_date || t.date || "").slice(0, 10),
+          date: due,
+          effectiveDate: due && due < today ? today : due,
           description: t.description || (t.type === "despesa" ? "Conta a pagar" : "Conta a receber"),
           category: t.category || (t.type === "despesa" ? "Despesas Gerais" : "Receitas"),
           client_name: t.patient_name || t.payer_name || "Avulso",
@@ -404,9 +405,32 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
           status: "pendente",
           badgeLabel: getTitleEventKey(t) ? "AGENDAMENTO" : t.treatment_id ? "PLANO" : "MANUAL",
           title: t,
-        }),
-      );
+        };
+      });
   }, [finance.titles]);
+
+  // Categorias reais presentes nos lançamentos (alimenta o filtro de categoria)
+  const categoryOptions = useMemo(() => {
+    const set = new Set<string>();
+    [...allRealizedEntries, ...forecastEntries].forEach((e) => {
+      if (e.category) set.add(e.category);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [allRealizedEntries, forecastEntries]);
+
+  // Previstos no escopo e período (contador da sub-aba)
+  const forecastInPeriodCount = useMemo(
+    () =>
+      forecastEntries.filter((e) => {
+        if (scope !== "all" && e.company_id && e.company_id !== scope) return false;
+        const d = e.effectiveDate || e.date;
+        if (!d) return false;
+        if (start && d < start) return false;
+        if (end && d > end) return false;
+        return true;
+      }).length,
+    [forecastEntries, scope, start, end],
+  );
 
   // 3. Filtragem dos Lançamentos para exibição na tabela
   const filteredEntries = useMemo(() => {
@@ -418,20 +442,23 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
           ? forecastEntries
           : allRealizedEntries;
 
-    return source.filter((e) => {
+    const isForecast = activeSubTab === "previstos";
+
+    const rows = source.filter((e) => {
       // Clínica / Scope
       if (scope !== "all" && e.company_id && e.company_id !== scope) return false;
 
-      // Conta Bancária
-      if (selectedAccount !== "todas") {
+      // Conta Bancária (previstos ainda não têm conta; seguem a mesma regra dos cards)
+      if (!isForecast && selectedAccount !== "todas") {
         if (e.account_id !== selectedAccount && e.payment_account !== selectedAccount) {
           return false;
         }
       }
 
-      // Período
-      if (start && e.date < start) return false;
-      if (end && e.date > end) return false;
+      // Período (previsto vencido conta como hoje, igual aos cards)
+      const d = isForecast ? e.effectiveDate || e.date : e.date;
+      if (start && (!d || d < start)) return false;
+      if (end && (!d || d > end)) return false;
 
       // Sub-aba: Lançamentos (exclui cancelados) vs Excluídos (somente cancelados)
       if (activeSubTab === "lancamentos" && (e.status === "cancelado" || e.reversed_at))
@@ -441,27 +468,13 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       if (typeFilter === "receitas" && e.is_expense) return false;
       if (typeFilter === "despesas" && !e.is_expense) return false;
 
-      // Filtro por natureza
-      if (statusFilter === "recebimento" && e.is_expense) return false;
-      if (statusFilter === "pagamento" && !e.is_expense) return false;
-
-      // Filtro por forma de pagamento
+      // Filtro por forma de pagamento (sem acento: "Débito" casa com "debito")
       if (formaFilter !== "todas") {
-        const m = (e.payment_method || "").toLowerCase();
-        if (!m.includes(formaFilter.toLowerCase())) return false;
+        if (!normalize(e.payment_method).includes(formaFilter)) return false;
       }
 
-      // Filtro por conta / origem
-      if (origemFilter !== "todas") {
-        const a = (e.payment_account || "").toLowerCase();
-        if (!a.includes(origemFilter.toLowerCase())) return false;
-      }
-
-      // Filtro por categoria / área
-      if (areaFilter !== "todas") {
-        const c = (e.category || "").toLowerCase();
-        if (!c.includes(areaFilter.toLowerCase())) return false;
-      }
+      // Filtro por categoria (valor exato vindo dos próprios lançamentos)
+      if (areaFilter !== "todas" && e.category !== areaFilter) return false;
 
       // Busca textual
       if (q) {
@@ -471,6 +484,14 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       }
 
       return true;
+    });
+
+    // Realizados/excluídos: mais recentes primeiro. Previstos: próximos vencimentos primeiro.
+    return rows.sort((a, b) => {
+      const da = (isForecast ? a.effectiveDate || a.date : a.date) || "";
+      const db = (isForecast ? b.effectiveDate || b.date : b.date) || "";
+      if (da !== db) return isForecast ? da.localeCompare(db) : db.localeCompare(da);
+      return isForecast ? a.date.localeCompare(b.date) : (b.created_at || "").localeCompare(a.created_at || "");
     });
   }, [
     allRealizedEntries,
@@ -482,15 +503,13 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
     start,
     end,
     typeFilter,
-    statusFilter,
     formaFilter,
-    origemFilter,
     areaFilter,
     search,
   ]);
 
   // 4. Cálculos dos 3 Cards de Métricas e dados do Gráfico
-  const { totalEntradas, totalDespesas, saldoFinal, chartData, totalEntradasPrev, totalSaidasPrev } = useMemo(() => {
+  const { totalEntradas, totalDespesas, saldoFinal, totalEntradasPrev, totalSaidasPrev } = useMemo(() => {
     let entradas = 0;
     let saidas = 0;
     let entradasPrev = 0;
@@ -518,107 +537,36 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       }
     });
 
-    // Agrupamento diário para o ComposedChart (inclui Entradas reais e Previsão a Receber)
-    const dayMap = new Map<
-      string,
-      { entradas: number; saidas: number; aReceber: number; aPagar: number; iso: string }
-    >();
-    const sorted = [...base].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
-
-    sorted.forEach((e) => {
-      const dStr = (e.date || "").slice(0, 10);
-      if (!dStr) return;
-      let label = dStr;
-      try {
-        const parsed = parseISO(dStr);
-        if (!isNaN(parsed.getTime())) {
-          label = format(parsed, "dd/MM/yyyy");
-        }
-      } catch {
-        label = dStr;
-      }
-
-      const cur = dayMap.get(label) || { entradas: 0, saidas: 0, aReceber: 0, aPagar: 0, iso: dStr };
-      const paid = Number(e.paid_amount) || 0;
-      if (!e.is_expense) {
-        cur.entradas += paid;
-      } else {
-        cur.saidas += paid;
-      }
-      dayMap.set(label, cur);
+    // Previstos: mesma fonte e mesma regra de data da sub-aba Previstos (vencido em aberto = hoje)
+    forecastEntries.forEach((e) => {
+      if (scope !== "all" && e.company_id && e.company_id !== scope) return;
+      const d = e.effectiveDate || e.date;
+      if (!d) return;
+      if (start && d < start) return;
+      if (end && d > end) return;
+      if (e.is_expense) saidasPrev += e.amount;
+      else entradasPrev += e.amount;
     });
-
-    // Previstos: o que falta receber/pagar de cada título (ex.: restante da consulta após o sinal,
-    // contas a pagar/receber com data futura), na data de vencimento
-    const titles = Array.isArray(finance?.titles) ? finance.titles : [];
-    titles
-      .filter(
-        (t) =>
-          t &&
-          t.status !== "cancelado" &&
-          remaining(t) > 0 &&
-          (scope === "all" || !t.company_id || t.company_id === scope),
-      )
-      .forEach((t) => {
-        // Vencido e ainda em aberto: conta como previsto hoje (mesma regra do gráfico)
-        const todayStr = format(new Date(), "yyyy-MM-dd");
-        const dueStr = String(t.due_date || t.date || "").slice(0, 10);
-        const dStr = dueStr && dueStr < todayStr ? todayStr : dueStr;
-        if (!dStr) return;
-        if (start && dStr < start) return;
-        if (end && dStr > end) return;
-
-        let label = dStr;
-        try {
-          const parsed = parseISO(dStr);
-          if (!isNaN(parsed.getTime())) {
-            label = format(parsed, "dd/MM/yyyy");
-          }
-        } catch {
-          label = dStr;
-        }
-
-        const cur = dayMap.get(label) || { entradas: 0, saidas: 0, aReceber: 0, aPagar: 0, iso: dStr };
-        const rest = remaining(t);
-        if (t.type === "despesa") {
-          cur.aPagar += rest;
-          saidasPrev += rest;
-        } else {
-          cur.aReceber += rest;
-          entradasPrev += rest;
-        }
-        dayMap.set(label, cur);
-      });
-
-    // Dias só com valores a receber entram no mapa depois; ordena para o eixo e o acumulado.
-    let running = 0;
-    const chartPoints = Array.from(dayMap.entries())
-      .sort(([, a], [, b]) => (a.iso || "").localeCompare(b.iso || ""))
-      .map(([date, vals]) => {
-        running += vals.entradas - vals.saidas;
-        return {
-          date,
-          iso: vals.iso,
-          entradas: vals.entradas,
-          saidas: vals.saidas,
-          aReceber: vals.aReceber,
-          aPagar: vals.aPagar,
-          saldo: running,
-        };
-      });
 
     return {
       totalEntradas: entradas,
       totalDespesas: saidas,
       saldoFinal: entradas - saidas,
-      chartData: chartPoints,
       totalEntradasPrev: entradasPrev,
       totalSaidasPrev: saidasPrev,
     };
-  }, [allRealizedEntries, finance.titles, scope, selectedAccount, start, end]);
+  }, [allRealizedEntries, forecastEntries, scope, selectedAccount, start, end]);
 
   // Dados do gráfico compartilhado: pagamentos (realizado) + saldo em aberto (previsto), por clínica
-  const [flowChartPeriod, setFlowChartPeriod] = useState<CashFlowPeriod>("week");
+  // Agrupamento do gráfico segue o período do topo
+  const flowChartPeriod = useMemo<CashFlowPeriod>(() => {
+    if (periodMode === "dia" || periodMode === "semana") return "day";
+    if (periodMode === "mes") return "week";
+    if (periodMode === "ano") return "month";
+    const days =
+      start && end ? (parseISO(end).getTime() - parseISO(start).getTime()) / 86_400_000 : 31;
+    return days <= 31 ? "day" : days <= 120 ? "week" : "month";
+  }, [periodMode, start, end]);
   const flowChartRows = useMemo(() => {
     const inScope = (companyId: string | null | undefined) =>
       scope === "all" || !companyId || companyId === scope;
@@ -705,7 +653,15 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       `"${(e.category || "").replace(/"/g, '""')}"`,
       `"${(e.payment_method || "").replace(/"/g, '""')}"`,
       `"${(e.payment_account || "").replace(/"/g, '""')}"`,
-      e.status === "cancelado" ? "Cancelado" : e.is_expense ? "Pago" : "Recebido",
+      e.status === "cancelado"
+        ? "Cancelado"
+        : e.status === "pendente"
+          ? e.is_expense
+            ? "A pagar"
+            : "A receber"
+          : e.is_expense
+            ? "Pago"
+            : "Recebido",
       e.is_expense ? "Despesa" : "Receita",
       `${e.is_expense ? "-" : ""}${e.amount.toFixed(2).replace(".", ",")}`,
     ]);
@@ -752,42 +708,214 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
     return finance.titles.find((t) => t.id === internalSelectedTitleId) || null;
   }, [internalSelectedTitleId, finance.titles]);
 
+  // Saldos (caixa e bancos): exigem saldo de abertura conferido em todas as contas
+  const availableRows = result?.rows.filter((r) => r.account.kind === "available") ?? [];
+  const saldoInicial =
+    result && result.available !== null && availableRows.every((r) => r.opening !== null)
+      ? availableRows.reduce((sum, r) => sum + (r.opening ?? 0), 0)
+      : null;
+  const saldoAtual = result?.available ?? null;
+  const saldoProjetado =
+    saldoAtual === null ? null : saldoAtual + totalEntradasPrev - totalSaidasPrev;
+  const saldoHint = !selectedScope
+    ? "Selecione uma clínica para ver o saldo"
+    : query.isLoading
+      ? "Carregando saldos..."
+      : calculationError || "Confirme o saldo de abertura na aba Contas";
+
+  // Paginação
+  const PAGE_SIZE = 50;
+  const pageCount = Math.max(1, Math.ceil(filteredEntries.length / PAGE_SIZE));
+  const pagedEntries = filteredEntries.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  useEffect(() => {
+    setPage(0);
+  }, [activeSubTab, scope, selectedAccount, start, end, typeFilter, formaFilter, areaFilter, search]);
+
+  const isForecastTab = activeSubTab === "previstos";
+  const tableColSpan = isForecastTab ? 7 : 6;
+  const today = todayIso();
+
+  const periodOptions: [typeof periodMode, string][] = [
+    ["dia", "Dia"],
+    ["semana", "Semana"],
+    ["mes", "Mês"],
+    ["ano", "Ano"],
+  ];
+
+  const subTabs: { key: typeof activeSubTab; label: string; icon: React.ReactNode; count?: number }[] = [
+    { key: "lancamentos", label: "Realizados", icon: <Tag className="h-3.5 w-3.5" /> },
+    {
+      key: "previstos",
+      label: "Previstos",
+      icon: <CalendarIcon className="h-3.5 w-3.5" />,
+      count: forecastInPeriodCount,
+    },
+    { key: "excluidos", label: "Excluídos", icon: <Trash2 className="h-3.5 w-3.5" /> },
+    { key: "contas", label: "Contas", icon: <Landmark className="h-3.5 w-3.5" /> },
+  ];
+
+  const tabHelp =
+    activeSubTab === "previstos"
+      ? "Saldo que falta receber ou pagar de cada título em aberto. Use Receber / Pagar para registrar a baixa."
+      : activeSubTab === "excluidos"
+        ? "Pagamentos estornados e títulos cancelados. Ficam só para histórico e não entram nos totais."
+        : activeSubTab === "contas"
+          ? "Saldo de abertura, movimentos e saldo final de cada conta no período, para conferir com o extrato."
+          : "Entradas e saídas que efetivamente aconteceram no caixa e nas contas da clínica.";
+
+  // Situação exibida abaixo da data
+  const dateNote = (e: CashEntry) => {
+    if (e.status === "pendente") {
+      if (e.date && e.date < today) return { text: "Vencido", cls: "text-destructive" };
+      if (e.date === today) return { text: "Vence hoje", cls: "text-warning" };
+      return { text: "Previsto", cls: "text-info" };
+    }
+    if (e.status === "cancelado")
+      return {
+        text: e.badgeLabel === "CANCELADO" ? "Cancelado" : "Estornado",
+        cls: "text-muted-foreground",
+      };
+    if (e.date === today) return { text: "Hoje", cls: "text-success" };
+    return null;
+  };
+
+  const shortDate = (d: string) => {
+    if (!d) return "—";
+    const parsed = parseISO(d);
+    return isNaN(parsed.getTime()) ? d : format(parsed, "dd/MM/yy");
+  };
+
+  const rowActions = (e: CashEntry) =>
+    activeSubTab === "previstos" ? (
+      <Button
+        size="sm"
+        className={cn(
+          "h-7 cursor-pointer rounded-md px-2.5 text-xs font-semibold text-white",
+          e.is_expense ? "bg-destructive hover:bg-destructive/90" : "bg-success hover:bg-success/90",
+        )}
+        title={e.is_expense ? "Registrar o pagamento" : "Registrar o recebimento"}
+        onClick={() => handleOpenEditOrHistory(e)}
+      >
+        {e.is_expense ? "Pagar" : "Receber"}
+      </Button>
+    ) : activeSubTab === "lancamentos" ? (
+      <>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7 text-muted-foreground hover:text-foreground/80 hover:bg-muted cursor-pointer"
+          title="Ver histórico / recibo"
+          onClick={() => handleOpenEditOrHistory(e)}
+          aria-label="Ver histórico"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer"
+          title="Estornar movimentação"
+          onClick={() => handleOpenDelete(e)}
+          aria-label="Estornar movimentação"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </>
+    ) : null;
+
+  const listTotals = filteredEntries.reduce(
+    (acc, entry) => {
+      if (entry.status === "cancelado") return acc;
+      const amount = Number(entry.amount) || 0;
+      if (entry.is_expense) acc.saidas += amount;
+      else acc.entradas += amount;
+      return acc;
+    },
+    { entradas: 0, saidas: 0 },
+  );
+  const listNet = listTotals.entradas - listTotals.saidas;
+
+  // Select discreto (sem borda) para clínica e conta
+  const ghostSelect =
+    "h-9 w-auto gap-1.5 border-0 bg-transparent px-2 text-sm font-medium text-foreground/80 shadow-none hover:bg-muted/60 hover:text-foreground focus:ring-0 rounded-lg";
+
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-5 pb-12">
       {/* ========================================================================= */}
-      {/* CABEÇALHO DA TELA COM TÍTULO E BOTÃO NOVO LANÇAMENTO (CANTO SUPERIOR DIREITO) */}
+      {/* BARRA SUPERIOR: CLÍNICA, CONTA, PERÍODO E AÇÕES                           */}
       {/* ========================================================================= */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">
-            Fluxo de Caixa
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Movimentações realizadas no período, por data de pagamento ou vencimento quando não há
-            data de pagamento.
-          </p>
-        </div>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          {/* Período: um controle só (navegação + agrupamento) */}
+          <div className="flex h-9 items-center rounded-lg border border-border bg-card shadow-2xs">
+            {periodMode !== "custom" ? (
+              <>
+                <button
+                  type="button"
+                  onClick={handlePrevPeriod}
+                  className="inline-flex h-9 w-8 cursor-pointer items-center justify-center rounded-l-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  title="Período anterior"
+                  aria-label="Período anterior"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="min-w-[120px] select-none px-1 text-center text-sm font-semibold text-foreground">
+                  {periodLabel}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleNextPeriod}
+                  className="inline-flex h-9 w-8 cursor-pointer items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  title="Próximo período"
+                  aria-label="Próximo período"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </>
+            ) : (
+              <div className="flex items-center gap-1.5 px-3 text-xs">
+                <input
+                  type="date"
+                  aria-label="Data inicial"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  className="bg-transparent text-xs font-medium text-foreground outline-hidden cursor-pointer"
+                />
+                <span className="text-muted-foreground">até</span>
+                <input
+                  type="date"
+                  aria-label="Data final"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  className="bg-transparent text-xs font-medium text-foreground outline-hidden cursor-pointer"
+                />
+              </div>
+            )}
+            <div className="h-5 w-px bg-border" aria-hidden="true" />
+            <Select value={periodMode} onValueChange={(v) => setPeriodMode(v as typeof periodMode)}>
+              <SelectTrigger
+                aria-label="Tipo de período"
+                className="h-9 w-auto gap-1 rounded-l-none rounded-r-lg border-0 bg-transparent px-3 text-xs font-medium text-muted-foreground shadow-none hover:text-foreground focus:ring-0"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="end">
+                {periodOptions.map(([key, label]) => (
+                  <SelectItem key={key} value={key}>
+                    {label}
+                  </SelectItem>
+                ))}
+                <SelectItem value="custom">Datas</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-        {/* Botão Novo Lançamento no Canto Superior Direito */}
-        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-          <Button
-            size="sm"
-            className="h-10 px-4 bg-primary hover:bg-primary-hover text-white font-semibold text-sm shadow-xs cursor-pointer "
-            onClick={() =>
-              onOpenNew ? onOpenNew("receita") : (window.location.href = "/financeiro?novo=1")
-            }
-          >
-            Novo lançamento
-          </Button>
-        </div>
-      </div>
+          {customRangeInvalid && (
+            <span className="text-[11px] font-medium text-warning" role="status">
+              Datas invertidas, aplicadas na ordem certa
+            </span>
+          )}
 
-      {/* ========================================================================= */}
-      {/* BARRA DE CONTROLES: CONTAS BANCÁRIAS, NAVEGAÇÃO DE MÊS E EXIBIR/OCULTAR GRÁFICO */}
-      {/* ========================================================================= */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Seletor de Clínica (se houver múltiplas) */}
           {finance.scopes.length > 1 && (
             <Select
               value={scope}
@@ -796,12 +924,11 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                 setSelectedAccount("todas");
               }}
             >
-              <SelectTrigger className="h-9 w-auto min-w-[170px] bg-card border-border text-xs font-medium text-foreground/80 shadow-2xs rounded-lg">
-                <Building2 className="h-3.5 w-3.5 mr-2 text-muted-foreground shrink-0" />
+              <SelectTrigger aria-label="Clínica" className={ghostSelect}>
                 <SelectValue placeholder="Clínica" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todas as Clínicas</SelectItem>
+                <SelectItem value="all">Todas as clínicas</SelectItem>
                 {finance.scopes.map((s) => (
                   <SelectItem key={s.id || "legacy"} value={s.id || "legacy"}>
                     {s.name}
@@ -811,13 +938,8 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
             </Select>
           )}
 
-          {/* Seletor de Conta Bancária */}
           <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-            <SelectTrigger
-              aria-label="Conta bancária do fluxo de caixa"
-              className="h-9 w-auto min-w-[190px] bg-card border-border text-xs font-medium text-foreground/80 shadow-2xs rounded-lg"
-            >
-              <Landmark className="h-3.5 w-3.5 mr-2 text-muted-foreground shrink-0" />
+            <SelectTrigger aria-label="Conta bancária do fluxo de caixa" className={ghostSelect}>
               <SelectValue placeholder="Todas as contas" />
             </SelectTrigger>
             <SelectContent>
@@ -829,863 +951,553 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
               ))}
             </SelectContent>
           </Select>
+        </div>
 
-          {/* Seletor de Período: Dia | Semana | Mês | Ano | Datas */}
-          <div className="inline-flex items-center bg-muted/60 p-0.5 rounded-lg border border-border shadow-2xs">
-            <button
-              type="button"
-              onClick={() => {
-                setPeriodMode("dia");
-                setChartGranularity("dia");
-              }}
-              className={cn(
-                "px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
-                periodMode === "dia"
-                  ? "bg-card text-foreground shadow-2xs"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              Dia
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setPeriodMode("semana");
-                setChartGranularity("dia");
-              }}
-              className={cn(
-                "px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
-                periodMode === "semana"
-                  ? "bg-card text-foreground shadow-2xs"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              Semana
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setPeriodMode("mes");
-                setChartGranularity("dia");
-              }}
-              className={cn(
-                "px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
-                periodMode === "mes"
-                  ? "bg-card text-foreground shadow-2xs"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              Mês
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setPeriodMode("ano");
-                setChartGranularity("anual");
-              }}
-              className={cn(
-                "px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
-                periodMode === "ano"
-                  ? "bg-card text-foreground shadow-2xs"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              Ano
-            </button>
-            <button
-              type="button"
-              onClick={() => setPeriodMode("custom")}
-              className={cn(
-                "px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer flex items-center gap-1",
-                periodMode === "custom"
-                  ? "bg-card text-foreground shadow-2xs"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <CalendarIcon className="h-3 w-3" />
-              Datas
-            </button>
-          </div>
-
-          {/* Stepper ou Inputs de Data Personalizada */}
-          {periodMode !== "custom" ? (
-            <div className="flex items-center bg-card border border-border rounded-lg h-9 px-1 shadow-2xs">
-              <button
-                type="button"
-                onClick={handlePrevPeriod}
-                className="h-7 w-7 inline-flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground/80 hover:bg-muted transition-colors cursor-pointer"
-                title="Período anterior"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <span className="px-3 text-xs font-semibold text-foreground/80 tracking-wide select-none">
-                {periodLabel}
-              </span>
-              <button
-                type="button"
-                onClick={handleNextPeriod}
-                className="h-7 w-7 inline-flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground/80 hover:bg-muted transition-colors cursor-pointer"
-                title="Próximo período"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5 bg-card border border-border rounded-lg h-9 px-2 shadow-2xs text-xs">
-              <span className="text-muted-foreground text-[11px] font-medium">De:</span>
-              <input
-                type="date"
-                value={customStartDate}
-                onChange={(e) => setCustomStartDate(e.target.value)}
-                className="bg-transparent text-xs text-foreground font-medium outline-hidden cursor-pointer"
-              />
-              <span className="text-muted-foreground text-[11px] font-medium ml-1">Até:</span>
-              <input
-                type="date"
-                value={customEndDate}
-                onChange={(e) => setCustomEndDate(e.target.value)}
-                className="bg-transparent text-xs text-foreground font-medium outline-hidden cursor-pointer"
-              />
-            </div>
-          )}
-
-          {/* Botão Alternar Exibição do Gráfico */}
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           <Button
             variant="outline"
             size="sm"
             className="h-9 bg-card border-border text-foreground/80 text-xs font-medium gap-1.5 shadow-2xs hover:bg-muted/60 cursor-pointer"
-            onClick={() => setShowChart((v) => !v)}
+            onClick={handleExportCsv}
           >
-            {showChart ? (
-              <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
-            ) : (
-              <Eye className="h-3.5 w-3.5 text-muted-foreground" />
-            )}
-            {showChart ? "Ocultar Gráfico" : "Exibir Gráfico"}
+            <FileSpreadsheet className="h-3.5 w-3.5 text-success" />
+            Planilha
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 bg-card border-border text-foreground/80 text-xs font-medium gap-1.5 shadow-2xs hover:bg-muted/60 cursor-pointer"
+            onClick={() => setTransferOpen(true)}
+          >
+            <ArrowLeftRight className="h-3.5 w-3.5 text-info" />
+            Transferência
+          </Button>
+          <Button
+            size="sm"
+            className="h-9 px-4 bg-primary hover:bg-primary-hover text-white font-semibold text-xs shadow-xs cursor-pointer"
+            onClick={() =>
+              onOpenNew ? onOpenNew("receita") : (window.location.href = "/financeiro?novo=1")
+            }
+          >
+            Novo lançamento
           </Button>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* 3 CARDS DE MÉTRICAS (ENTRADAS, DESPESAS, RESULTADO DO PERÍODO)             */}
+      {/* CARDS: REALIZADO (SALDO INICIAL → ENTRADAS → SAÍDAS → SALDO ATUAL)        */}
       {/* ========================================================================= */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        {/* CARD 1: ENTRADAS */}
-        <div className="rounded-xl border border-border bg-card p-4 shadow-2xs flex items-center justify-between">
-          <div className="space-y-1">
-            <span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-              ENTRADAS
-            </span>
-            <p className="text-2xl font-semibold text-foreground tracking-tight">
-              <CountUp value={totalEntradas} format={(v) => currency(v)} />
-            </p>
-            <p className="text-xs text-muted-foreground">Total liquidado no período</p>
-          </div>
-          <div className="h-8 w-8 rounded-full bg-success/10 text-success flex items-center justify-center shrink-0">
-            <ArrowUpRight className="h-4 w-4" strokeWidth={2.5} />
-          </div>
-        </div>
-
-        {/* CARD 2: DESPESAS */}
-        <div className="rounded-xl border border-border bg-card p-4 shadow-2xs flex items-center justify-between">
-          <div className="space-y-1">
-            <span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-              DESPESAS
-            </span>
-            <p className="text-2xl font-semibold text-foreground tracking-tight">
-              <CountUp value={totalDespesas} format={(v) => currency(v)} />
-            </p>
-            <p className="text-xs text-muted-foreground">Despesas da clínica no período</p>
-          </div>
-          <div className="h-8 w-8 rounded-full bg-destructive/10 text-destructive/80 flex items-center justify-center shrink-0">
-            <ArrowDownLeft className="h-4 w-4" strokeWidth={2.5} />
-          </div>
-        </div>
-
-        {/* ENTRADAS PREVISTAS: saldo a receber (ex.: restante da consulta após o sinal) */}
-        <button
-          type="button"
-          onClick={() => {
-            setActiveSubTab("previstos");
-            setTypeFilter("receitas");
-          }}
-          className="flex cursor-pointer items-center justify-between rounded-xl border border-border bg-card p-4 text-left shadow-2xs transition-colors hover:border-success/40"
-        >
-          <div className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              ENTRADAS PREVISTAS
-            </span>
-            <p className="text-2xl font-semibold tracking-tight text-foreground">
-              <CountUp value={totalEntradasPrev} format={(v) => currency(v)} />
-            </p>
-            <p className="text-xs text-muted-foreground">A receber no período</p>
-          </div>
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-success/10 text-success/70">
-            <ArrowUpRight className="h-4 w-4" strokeWidth={2.5} />
-          </div>
-        </button>
-
-        {/* SAÍDAS PREVISTAS: contas a pagar com vencimento no período */}
-        <button
-          type="button"
-          onClick={() => {
-            setActiveSubTab("previstos");
-            setTypeFilter("despesas");
-          }}
-          className="flex cursor-pointer items-center justify-between rounded-xl border border-border bg-card p-4 text-left shadow-2xs transition-colors hover:border-destructive/40"
-        >
-          <div className="space-y-1">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              SAÍDAS PREVISTAS
-            </span>
-            <p className="text-2xl font-semibold tracking-tight text-foreground">
-              <CountUp value={totalSaidasPrev} format={(v) => currency(v)} />
-            </p>
-            <p className="text-xs text-muted-foreground">A pagar no período</p>
-          </div>
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive/60">
-            <ArrowDownLeft className="h-4 w-4" strokeWidth={2.5} />
-          </div>
-        </button>
-
-        {/* CARD 3: RESULTADO DO PERÍODO */}
-        <div className="rounded-xl border border-border bg-card p-4 shadow-2xs flex items-center justify-between">
-          <div className="space-y-1">
-            <span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-              RESULTADO DO PERÍODO
-            </span>
-            <p className="text-2xl font-semibold text-foreground tracking-tight">
-              <CountUp value={saldoFinal} format={(v) => currency(v)} />
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="rounded-xl border border-border bg-card p-4 shadow-2xs space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">Saldo inicial</span>
+            <p className="text-xl font-semibold tracking-tight text-foreground tabular-nums">
+              {saldoInicial === null ? "—" : <CountUp value={saldoInicial} format={(v) => currency(v)} />}
             </p>
             <p className="text-xs text-muted-foreground">
-              Entradas menos despesas (não inclui saldo inicial)
+              {saldoInicial === null ? saldoHint : "Caixa e bancos no início do período"}
             </p>
           </div>
-          <div className="h-8 w-8 rounded-full bg-info/10 text-info flex items-center justify-center shrink-0">
-            <ArrowLeftRight className="h-4 w-4" strokeWidth={2.5} />
+
+          <div className="rounded-xl border border-border bg-card p-4 shadow-2xs space-y-1">
+            <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <ArrowUpRight className="h-3.5 w-3.5 text-success" strokeWidth={2.5} />
+              Entradas
+            </span>
+            <p className="text-xl font-semibold tracking-tight text-success tabular-nums">
+              <CountUp value={totalEntradas} format={(v) => currency(v)} />
+            </p>
+            <p className="text-xs text-muted-foreground">Recebido no período</p>
           </div>
+
+          <div className="rounded-xl border border-border bg-card p-4 shadow-2xs space-y-1">
+            <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <ArrowDownLeft className="h-3.5 w-3.5 text-destructive" strokeWidth={2.5} />
+              Saídas
+            </span>
+            <p className="text-xl font-semibold tracking-tight text-destructive tabular-nums">
+              <CountUp value={totalDespesas} format={(v) => currency(v)} />
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Pago no período · resultado{" "}
+              <span className={cn("font-medium", saldoFinal < 0 ? "text-destructive" : "text-foreground")}>
+                {currency(saldoFinal)}
+              </span>
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 shadow-2xs space-y-1">
+            <span className="text-xs font-semibold text-primary">Saldo atual</span>
+            <p
+              className={cn(
+                "text-xl font-semibold tracking-tight tabular-nums",
+                saldoAtual !== null && saldoAtual < 0 ? "text-destructive" : "text-foreground",
+              )}
+            >
+              {saldoAtual === null ? "—" : <CountUp value={saldoAtual} format={(v) => currency(v)} />}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {saldoAtual === null ? saldoHint : "Caixa e bancos no fim do período"}
+            </p>
+          </div>
+        </div>
+
+        {/* Linha de previstos (menor) */}
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-dashed border-border bg-muted/30 px-4 py-2.5 text-xs">
+          <span className="font-semibold text-muted-foreground">Previsto no período</span>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveSubTab("previstos");
+              setTypeFilter("receitas");
+            }}
+            className="cursor-pointer text-muted-foreground hover:text-foreground"
+          >
+            A receber{" "}
+            <strong className="font-semibold text-success tabular-nums">
+              {currency(totalEntradasPrev)}
+            </strong>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveSubTab("previstos");
+              setTypeFilter("despesas");
+            }}
+            className="cursor-pointer text-muted-foreground hover:text-foreground"
+          >
+            A pagar{" "}
+            <strong className="font-semibold text-destructive tabular-nums">
+              {currency(totalSaidasPrev)}
+            </strong>
+          </button>
+          <span className="text-muted-foreground">
+            Saldo projetado{" "}
+            <strong
+              className={cn(
+                "font-semibold tabular-nums",
+                saldoProjetado !== null && saldoProjetado < 0 ? "text-destructive" : "text-foreground",
+              )}
+              title="Saldo atual + a receber − a pagar"
+            >
+              {saldoProjetado === null ? "—" : currency(saldoProjetado)}
+            </strong>
+          </span>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* GRÁFICO PRINCIPAL ("MOVIMENTO POR DIA / SEMANA / ANO" - APEXCHARTS)        */}
+      {/* GRÁFICO COMPACTO E RECOLHÍVEL (SEGUE O PERÍODO DO TOPO)                   */}
       {/* ========================================================================= */}
-      {showChart && (
-        // Mesmo gráfico do Dashboard (componente compartilhado), no período e clínica desta tela
+      {showChart ? (
         <CashFlowChartCard
           rows={flowChartRows}
           range={flowChartRange}
           period={flowChartPeriod}
-          onPeriodChange={setFlowChartPeriod}
+          onPeriodChange={() => {}}
+          useRange
+          hidePeriodTabs
+          height={220}
           className="border border-border"
+          actions={
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 text-xs text-muted-foreground cursor-pointer"
+              onClick={() => setShowChart(false)}
+            >
+              <EyeOff className="h-3.5 w-3.5" />
+              Ocultar
+            </Button>
+          }
         />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setShowChart(true)}
+          className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+        >
+          <Eye className="h-3.5 w-3.5" />
+          Exibir gráfico do período
+        </button>
       )}
 
       {/* ========================================================================= */}
-      {/* SEÇÃO COMPLETA DE LANÇAMENTOS E MOVIMENTAÇÕES                             */}
+      {/* SUB-ABAS, FILTROS E LISTA                                                 */}
       {/* ========================================================================= */}
-      <div className="space-y-4 pt-2">
-        {/* Cabeçalho da Seção de Lançamentos com Botões: Planilha, Transferência, + Novo Lançamento */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-info flex items-center justify-center text-white shadow-2xs">
-              <Landmark className="h-4 w-4" />
-            </div>
-            <div>
-              <h2 className="text-base font-semibold text-foreground">Lançamentos</h2>
-              <p className="text-xs text-muted-foreground">
-                Receitas, despesas e movimentações financeiras
-              </p>
-            </div>
+      <div className="space-y-3">
+        <div>
+          <div className="flex items-center gap-4 overflow-x-auto border-b border-border text-xs font-semibold">
+            {subTabs.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                className={cn(
+                  "pb-2.5 pt-1 border-b-2 flex items-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap",
+                  activeSubTab === t.key
+                    ? "border-info text-info"
+                    : "border-transparent text-muted-foreground hover:text-foreground/80",
+                )}
+                onClick={() => setActiveSubTab(t.key)}
+              >
+                {t.icon} {t.label}
+                {!!t.count && (
+                  <span className="rounded-full bg-info/12 px-1.5 text-[11px] text-info">{t.count}</span>
+                )}
+              </button>
+            ))}
           </div>
-
-          {/* Botões de Ação Topo Direito (Excluir Todas, Planilha e Transferência) */}
-          <div className="flex items-center gap-2 flex-wrap">
-
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 bg-card border-border text-foreground/80 text-xs font-medium gap-1.5 shadow-2xs hover:bg-muted/60 cursor-pointer"
-              onClick={handleExportCsv}
-            >
-              <FileSpreadsheet className="h-3.5 w-3.5 text-success" />
-              Planilha
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 bg-card border-border text-foreground/80 text-xs font-medium gap-1.5 shadow-2xs hover:bg-muted/60 cursor-pointer"
-              onClick={() => setTransferOpen(true)}
-            >
-              <ArrowLeftRight className="h-3.5 w-3.5 text-info" />
-              Transferência
-            </Button>
-          </div>
+          <p className="pt-2 text-xs text-muted-foreground">{tabHelp}</p>
         </div>
 
-        {/* Sub-abas (Lançamentos | Excluídos) */}
-        <div className="flex items-center gap-4 border-b border-border text-xs font-semibold">
-          <button
-            type="button"
-            className={cn(
-              "pb-2.5 pt-1 border-b-2 flex items-center gap-1.5 cursor-pointer transition-colors",
-              activeSubTab === "lancamentos"
-                ? "border-info text-info"
-                : "border-transparent text-muted-foreground hover:text-foreground/80",
+        {activeSubTab === "contas" ? (
+          <div className="space-y-4">
+            {!result ? (
+              <div className="rounded-xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
+                {saldoHint}
+              </div>
+            ) : (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border bg-card p-4">
+                    <span className="text-xs text-muted-foreground block">
+                      Saldo disponível em caixa/bancos
+                    </span>
+                    <strong className="text-lg font-semibold text-foreground">
+                      {balance(result.available)}
+                    </strong>
+                  </div>
+                  <div className="rounded-xl border bg-card p-4">
+                    <span className="text-xs text-muted-foreground block">
+                      Recebíveis futuros de cartão (a liquidar)
+                    </span>
+                    <strong className="text-lg font-semibold text-foreground">
+                      {balance(result.receivable)}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto rounded-xl border bg-card">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-muted/60 text-xs font-semibold text-muted-foreground">
+                      <tr>
+                        {[
+                          "Conta",
+                          "Saldo anterior",
+                          "Recebimentos",
+                          "Pagamentos",
+                          "Resultado",
+                          "Transferências",
+                          "Saldo final",
+                        ].map((h) => (
+                          <th key={h} className="p-3 whitespace-nowrap">
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.rows.map((r) => (
+                        <tr key={r.account.id} className="border-t text-xs">
+                          <td className="p-3">
+                            <strong className="text-foreground block">{r.account.name}</strong>
+                            <span className="text-xs text-muted-foreground">
+                              {r.account.kind === "available" ? "Caixa / Banco" : "Recebíveis de cartão"}
+                            </span>
+                          </td>
+                          {[r.opening, r.income, r.expense, r.result, r.transfers, r.closing].map(
+                            (v, i) => (
+                              <td key={i} className="p-3 tabular-nums font-medium whitespace-nowrap">
+                                {balance(v)}
+                              </td>
+                            ),
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
-            onClick={() => setActiveSubTab("lancamentos")}
-          >
-            <Tag className="h-3.5 w-3.5" /> Lançamentos
-          </button>
-          <button
-            type="button"
-            className={cn(
-              "pb-2.5 pt-1 border-b-2 flex items-center gap-1.5 cursor-pointer transition-colors",
-              activeSubTab === "previstos"
-                ? "border-info text-info"
-                : "border-transparent text-muted-foreground hover:text-foreground/80",
-            )}
-            onClick={() => setActiveSubTab("previstos")}
-          >
-            <CalendarIcon className="h-3.5 w-3.5" /> Previstos
-            {forecastEntries.length > 0 && (
-              <span className="rounded-full bg-info/12 px-1.5 text-[11px] text-info">
-                {forecastEntries.length}
-              </span>
-            )}
-          </button>
-          <button
-            type="button"
-            className={cn(
-              "pb-2.5 pt-1 border-b-2 flex items-center gap-1.5 cursor-pointer transition-colors",
-              activeSubTab === "excluidos"
-                ? "border-info text-info"
-                : "border-transparent text-muted-foreground hover:text-foreground/80",
-            )}
-            onClick={() => setActiveSubTab("excluidos")}
-          >
-            <Trash2 className="h-3.5 w-3.5" /> Excluídos
-          </button>
-        </div>
 
-        {/* Barra de Filtros */}
-        <div className="rounded-xl border border-border bg-card p-3 shadow-2xs space-y-2.5">
-          <div className="flex flex-wrap items-center gap-2.5">
-            {/* Busca por descrição ou paciente */}
-            <div className="relative flex-1 min-w-[200px] max-w-xs">
-              <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar por desc..."
-                className="pl-8 h-8 text-xs bg-card border-border rounded-lg placeholder:text-muted-foreground"
-              />
-            </div>
+            {selectedScope?.can_accounts && <OpeningForm accounts={query.data?.accounts || []} />}
+          </div>
+        ) : (
+          <>
+            {/* Filtros da lista */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative flex-1 min-w-[200px] max-w-xs">
+                <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar descrição, paciente, data..."
+                  className="pl-8 h-8 text-xs bg-card border-border rounded-lg placeholder:text-muted-foreground"
+                />
+              </div>
 
-            {/* Segmented Buttons (Todos, Receitas, Despesas) */}
-            <div className="inline-flex items-center bg-muted p-0.5 rounded-lg border border-border/50">
-              <button
-                type="button"
-                className={cn(
-                  "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
-                  typeFilter === "todos"
-                    ? "bg-info text-white shadow-2xs"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-                onClick={() => setTypeFilter("todos")}
-              >
-                Todos
-              </button>
-              <button
-                type="button"
-                className={cn(
-                  "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
-                  typeFilter === "receitas"
-                    ? "bg-info text-white shadow-2xs"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-                onClick={() => setTypeFilter("receitas")}
-              >
-                Receitas
-              </button>
-              <button
-                type="button"
-                className={cn(
-                  "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
-                  typeFilter === "despesas"
-                    ? "bg-info text-white shadow-2xs"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-                onClick={() => setTypeFilter("despesas")}
-              >
-                Despesas
-              </button>
-            </div>
-
-            {/* Filtro por Natureza de Liquidação */}
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger
-                aria-label="Natureza da movimentação realizada"
-                className="h-8 w-auto min-w-[130px] text-xs bg-card border-border rounded-lg text-foreground/80"
-              >
-                <SelectValue placeholder="Todas Realizadas" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todas Realizadas</SelectItem>
-                <SelectItem value="recebimento">Entradas Realizadas</SelectItem>
-                <SelectItem value="pagamento">Saídas Realizadas</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* Filtro por Forma de Pagamento */}
-            <Select value={formaFilter} onValueChange={setFormaFilter}>
-              <SelectTrigger
-                aria-label="Forma de pagamento"
-                className="h-8 w-auto min-w-[115px] text-xs bg-card border-border rounded-lg text-foreground/80"
-              >
-                <SelectValue placeholder="Todas formas" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todas">Todas formas</SelectItem>
-                <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                <SelectItem value="debito">Débito</SelectItem>
-                <SelectItem value="credito">Crédito</SelectItem>
-                <SelectItem value="pix">PIX</SelectItem>
-                <SelectItem value="boleto">Boleto</SelectItem>
-                <SelectItem value="transferencia">Transferência</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* Filtro por Origem / Conta */}
-            <Select value={origemFilter} onValueChange={setOrigemFilter}>
-              <SelectTrigger
-                aria-label="Conta de origem"
-                className="h-8 w-auto min-w-[125px] text-xs bg-card border-border rounded-lg text-foreground/80"
-              >
-                <SelectValue placeholder="Todas as contas" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todas">Todas as contas</SelectItem>
-                {availableAccounts.map((acc) => (
-                  <SelectItem key={acc.id} value={acc.name}>
-                    {acc.name}
-                  </SelectItem>
+              <div className="inline-flex items-center bg-muted p-0.5 rounded-lg border border-border/50">
+                {(
+                  [
+                    ["todos", "Todos"],
+                    ["receitas", "Receitas"],
+                    ["despesas", "Despesas"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={cn(
+                      "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
+                      typeFilter === key
+                        ? "bg-info text-white shadow-2xs"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                    onClick={() => setTypeFilter(key)}
+                  >
+                    {label}
+                  </button>
                 ))}
-              </SelectContent>
-            </Select>
+              </div>
 
-            {/* Filtro por Categoria / Área Médica */}
-            <Select value={areaFilter} onValueChange={setAreaFilter}>
-              <SelectTrigger
-                aria-label="Categoria / Procedimento"
-                className="h-8 w-auto min-w-[120px] text-xs bg-card border-border rounded-lg text-foreground/80"
-              >
-                <SelectValue placeholder="Todas as áreas" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todas">Todas as áreas</SelectItem>
-                <SelectItem value="atendiment">Atendimentos / Consultas</SelectItem>
-                <SelectItem value="procediment">Procedimentos</SelectItem>
-                <SelectItem value="plano">Planos de Tratamento</SelectItem>
-                <SelectItem value="insumo">Insumos & Medicamentos</SelectItem>
-                <SelectItem value="administrativ">Despesas Administrativas</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+              <Select value={formaFilter} onValueChange={setFormaFilter}>
+                <SelectTrigger
+                  aria-label="Forma de pagamento"
+                  className="h-8 w-auto min-w-[115px] text-xs bg-card border-border rounded-lg text-foreground/80"
+                >
+                  <SelectValue placeholder="Todas formas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todas">Todas formas</SelectItem>
+                  <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                  <SelectItem value="debito">Débito</SelectItem>
+                  <SelectItem value="credito">Crédito</SelectItem>
+                  <SelectItem value="pix">PIX</SelectItem>
+                  <SelectItem value="boleto">Boleto</SelectItem>
+                  <SelectItem value="transferencia">Transferência</SelectItem>
+                </SelectContent>
+              </Select>
 
-          <p className="text-xs text-muted-foreground">
-            Período aplicado: {periodLabel}. Exportação desta lista respeita os filtros.
-          </p>
-        </div>
+              <Select value={areaFilter} onValueChange={setAreaFilter}>
+                <SelectTrigger
+                  aria-label="Categoria"
+                  className="h-8 w-auto min-w-[140px] text-xs bg-card border-border rounded-lg text-foreground/80"
+                >
+                  <SelectValue placeholder="Todas as categorias" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todas">Todas as categorias</SelectItem>
+                  {categoryOptions.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-        {/* Banner Informativo da Regra de Ouro */}
-        <div className="rounded-xl border border-info/20 bg-info/4 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
-          <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="h-4 w-4 text-info shrink-0" />
-            <p className="text-xs text-foreground/80 leading-relaxed">
-              <strong className="text-foreground font-semibold">Fluxo de Caixa Realizado:</strong>{" "}
-              Esta tela apresenta{" "}
-              <strong className="font-semibold text-foreground">exclusivamente</strong> entradas e
-              saídas que realmente se efetivaram no caixa e nas contas bancárias da clínica. Contas
-              a receber e a pagar previstas/pendentes são geridas em suas respectivas abas.
-            </p>
-          </div>
-          <span className="inline-flex items-center rounded-full border border-info/25 bg-card px-3 py-1 text-xs font-medium text-info shrink-0 shadow-2xs whitespace-nowrap">
-            Movimentações realizadas
-          </span>
-        </div>
+              {selectedAccount !== "todas" && isForecastTab && (
+                <span className="text-xs text-muted-foreground">
+                  Previstos ainda não têm conta; o filtro de conta não se aplica a eles.
+                </span>
+              )}
+            </div>
 
-        {/* Tabela de Movimentações Financeiras */}
-        <div className="bg-card rounded-xl border border-border overflow-hidden shadow-2xs">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-card hover:bg-card border-b border-border text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  <TableHead className="w-[100px] text-muted-foreground">DATA</TableHead>
-                  <TableHead className="text-muted-foreground">DESCRIÇÃO</TableHead>
-                  <TableHead className="w-[110px] text-muted-foreground">FORMA</TableHead>
-                  <TableHead className="w-[150px] text-muted-foreground">CONTA/CARTÃO</TableHead>
-                  <TableHead className="w-[110px] text-center text-muted-foreground">
-                    STATUS
-                  </TableHead>
-                  <TableHead className="w-[130px] text-right text-muted-foreground">
-                    VALOR
-                  </TableHead>
-                  <TableHead className="w-[80px] text-right text-muted-foreground">AÇÕES</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredEntries.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={7}
-                      className="text-center py-12 text-sm text-muted-foreground"
-                    >
-                      Nenhuma movimentação encontrada para os filtros selecionados.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredEntries.map((e) => {
-                    const isDespesa = e.is_expense;
-                    const dateStr = e.date || "";
-                    let displayDate = "—";
-                    let isCurrentDay = false;
-                    if (dateStr) {
-                      try {
-                        const parsed = parseISO(dateStr);
-                        if (!isNaN(parsed.getTime())) {
-                          displayDate = format(parsed, "dd/MM/yy");
-                          isCurrentDay = isToday(parsed);
-                        } else {
-                          displayDate = dateStr;
-                        }
-                      } catch {
-                        displayDate = dateStr;
-                      }
-                    }
-
-                    const contaCartao = (e.payment_account || "—").toUpperCase();
-                    const forma = e.payment_method || "—";
-                    const typeBadge = isDespesa ? "◆ DESPESA" : "◆ HONORÁRIO";
-                    const categorySubtitle = (
-                      e.category || (isDespesa ? "Despesas Gerais" : "Honorários Iniciais / Sinal")
-                    ).toUpperCase();
-
-                    return (
-                      <TableRow
-                        key={e.id}
-                        className="hover:bg-muted/42 border-b border-border-soft text-xs"
-                      >
-                        {/* DATA */}
-                        <TableCell className="align-middle py-3">
-                          <span className="font-semibold text-foreground block text-xs">
-                            {displayDate}
-                          </span>
-                          {e.status === "pendente" ? (
-                            <span
-                              className={cn(
-                                "block text-xs font-medium",
-                                e.date && e.date < format(new Date(), "yyyy-MM-dd")
-                                  ? "text-destructive"
-                                  : "text-info",
-                              )}
-                            >
-                              {e.date && e.date < format(new Date(), "yyyy-MM-dd")
-                                ? "Vencido"
-                                : isCurrentDay
-                                  ? "Vence hoje"
-                                  : "Previsto"}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-success font-medium block">
-                              {isCurrentDay ? "Hoje" : "Realizado"}
-                            </span>
-                          )}
-                        </TableCell>
-
-                        {/* DESCRIÇÃO */}
-                        <TableCell className="align-middle py-3">
-                          <div className="flex items-start gap-2">
-                            <div
-                              className={cn(
-                                "h-5 w-5 rounded-full flex items-center justify-center shrink-0 mt-0.5",
-                                isDespesa
-                                  ? "bg-destructive/10 text-destructive"
-                                  : "bg-success/10 text-success",
-                              )}
-                            >
-                              {isDespesa ? (
-                                <ArrowDownLeft className="h-3 w-3" strokeWidth={2.5} />
-                              ) : (
-                                <ArrowUpRight className="h-3 w-3" strokeWidth={2.5} />
-                              )}
-                            </div>
-
-                            <div className="space-y-0.5 min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="inline-flex items-center text-xs font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground uppercase tracking-wider">
-                                  {typeBadge}
-                                </span>
-
-                                <span className="font-semibold text-foreground text-xs truncate">
-                                  {e.description}
-                                </span>
-                              </div>
-
-                              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground truncate">
-                                {categorySubtitle}
-                              </p>
-                            </div>
-                          </div>
-                        </TableCell>
-
-                        {/* FORMA DE PAGAMENTO */}
-                        <TableCell className="align-middle py-3 text-xs text-muted-foreground">
-                          {forma}
-                        </TableCell>
-
-                        {/* CONTA / CAIXA */}
-                        <TableCell className="align-middle py-3 font-semibold text-foreground/80 text-xs tracking-wider uppercase">
-                          {contaCartao}
-                        </TableCell>
-
-                        {/* STATUS */}
-                        <TableCell className="align-middle py-3 text-center">
-                          <span
-                            className={cn(
-                              "inline-block px-2 py-0.5 rounded-md text-xs font-semibold uppercase tracking-wider",
-                              e.status === "cancelado"
-                                ? "bg-muted text-muted-foreground border border-border"
-                                : isDespesa
-                                  ? "bg-destructive/10 text-destructive border border-destructive/25"
-                                  : "bg-success/10 text-success border border-success/25",
-                            )}
-                          >
-                            {e.status === "cancelado"
-                              ? "CANCELADO"
-                              : e.status === "pendente"
-                                ? isDespesa
-                                  ? "A PAGAR"
-                                  : "A RECEBER"
-                                : isDespesa
-                                  ? "PAGO"
-                                  : "RECEBIDO"}
-                          </span>
-                        </TableCell>
-
-                        {/* VALOR */}
+            {/* Lista: tabela no desktop, cartões no celular */}
+            <div className="bg-card rounded-xl border border-border overflow-hidden shadow-2xs">
+              <div className="hidden md:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-card hover:bg-card border-b border-border text-xs font-medium text-muted-foreground">
+                      <TableHead className="w-[90px] text-muted-foreground">Data</TableHead>
+                      <TableHead className="text-muted-foreground">Descrição</TableHead>
+                      <TableHead className="w-[110px] text-muted-foreground">Forma</TableHead>
+                      <TableHead className="w-[150px] text-muted-foreground">Conta</TableHead>
+                      {isForecastTab && (
+                        <TableHead className="w-[100px] text-center text-muted-foreground">
+                          Situação
+                        </TableHead>
+                      )}
+                      <TableHead className="w-[130px] text-right text-muted-foreground">Valor</TableHead>
+                      <TableHead className="w-[90px] text-right text-muted-foreground">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pagedEntries.length === 0 ? (
+                      <TableRow>
                         <TableCell
-                          className={cn(
-                            "align-middle py-3 text-right font-semibold tabular-nums text-xs",
-                            isDespesa ? "text-destructive" : "text-success",
-                          )}
+                          colSpan={tableColSpan}
+                          className="text-center py-12 text-sm text-muted-foreground"
                         >
-                          {isDespesa ? "- " : "+ "}
-                          {currency(e.amount)}
-                        </TableCell>
-
-                        {/* AÇÕES */}
-                        <TableCell className="align-middle py-3 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            {activeSubTab === "previstos" ? (
-                              <Button
-                                size="sm"
-                                className={cn(
-                                  "h-7 cursor-pointer rounded-md px-2.5 text-xs font-semibold text-white",
-                                  isDespesa
-                                    ? "bg-destructive hover:bg-destructive/90"
-                                    : "bg-success hover:bg-success/90",
-                                )}
-                                title={isDespesa ? "Registrar o pagamento" : "Registrar o recebimento"}
-                                onClick={() => handleOpenEditOrHistory(e)}
-                              >
-                                {isDespesa ? "Pagar" : "Receber"}
-                              </Button>
-                            ) : activeSubTab === "lancamentos" ? (
-                              <>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-7 w-7 text-muted-foreground hover:text-foreground/80 hover:bg-muted cursor-pointer"
-                                  title="Ver histórico / Baixa"
-                                  onClick={() => handleOpenEditOrHistory(e)}
-                                  aria-label="Ver histórico"
-                                >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </Button>
-
-                                {!isDespesa && (
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-7 w-7 text-info hover:text-info hover:bg-info/10 cursor-pointer"
-                                    title="Recibo / Histórico"
-                                    onClick={() => handleOpenEditOrHistory(e)}
-                                    aria-label="Recibo"
-                                  >
-                                    <FileText className="h-3.5 w-3.5" />
-                                  </Button>
-                                )}
-
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer"
-                                  title="Excluir movimentação"
-                                  onClick={() => handleOpenDelete(e)}
-                                  aria-label="Excluir movimentação"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              </>
-                            ) : null}
-                          </div>
+                          Nenhuma movimentação encontrada para os filtros selecionados.
                         </TableCell>
                       </TableRow>
+                    ) : (
+                      pagedEntries.map((e) => {
+                        const note = dateNote(e);
+                        const showClient = e.client_name && e.client_name !== "Avulso";
+                        return (
+                          <TableRow key={e.id} className="hover:bg-muted/42 border-b border-border-soft text-xs">
+                            <TableCell className="align-middle py-2.5">
+                              <span className="font-medium text-foreground block">{shortDate(e.date)}</span>
+                              {note && <span className={cn("block text-[11px] font-medium", note.cls)}>{note.text}</span>}
+                            </TableCell>
+                            <TableCell className="align-middle py-2.5">
+                              <div className="flex items-start gap-2 min-w-0">
+                                <div
+                                  className={cn(
+                                    "h-5 w-5 rounded-full flex items-center justify-center shrink-0 mt-0.5",
+                                    e.is_expense ? "bg-destructive/10 text-destructive" : "bg-success/10 text-success",
+                                  )}
+                                  aria-label={e.is_expense ? "Despesa" : "Receita"}
+                                >
+                                  {e.is_expense ? (
+                                    <ArrowDownLeft className="h-3 w-3" strokeWidth={2.5} />
+                                  ) : (
+                                    <ArrowUpRight className="h-3 w-3" strokeWidth={2.5} />
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <span className="font-medium text-foreground block truncate">{e.description}</span>
+                                  <span className="text-muted-foreground block truncate">
+                                    {showClient ? `${e.client_name} · ` : ""}
+                                    {e.category}
+                                    {e.status === "cancelado" && e.reversal_reason ? ` · ${e.reversal_reason}` : ""}
+                                  </span>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="align-middle py-2.5 text-muted-foreground">{e.payment_method || "—"}</TableCell>
+                            <TableCell className="align-middle py-2.5 text-foreground/80">{e.payment_account || "—"}</TableCell>
+                            {isForecastTab && (
+                              <TableCell className="align-middle py-2.5 text-center">
+                                <span
+                                  className={cn(
+                                    "inline-block px-2 py-0.5 rounded-md text-[11px] font-medium",
+                                    e.is_expense ? "bg-destructive/10 text-destructive" : "bg-success/10 text-success",
+                                  )}
+                                >
+                                  {e.is_expense ? "A pagar" : "A receber"}
+                                </span>
+                              </TableCell>
+                            )}
+                            <TableCell
+                              className={cn(
+                                "align-middle py-2.5 text-right font-semibold tabular-nums",
+                                e.status === "cancelado"
+                                  ? "text-muted-foreground line-through"
+                                  : e.is_expense
+                                    ? "text-destructive"
+                                    : "text-success",
+                              )}
+                            >
+                              {e.is_expense ? "- " : "+ "}
+                              {currency(e.amount)}
+                            </TableCell>
+                            <TableCell className="align-middle py-2.5 text-right">
+                              <div className="flex items-center justify-end gap-1">{rowActions(e)}</div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Celular */}
+              <div className="md:hidden divide-y divide-border">
+                {pagedEntries.length === 0 ? (
+                  <p className="py-10 text-center text-sm text-muted-foreground">
+                    Nenhuma movimentação encontrada para os filtros selecionados.
+                  </p>
+                ) : (
+                  pagedEntries.map((e) => {
+                    const note = dateNote(e);
+                    const showClient = e.client_name && e.client_name !== "Avulso";
+                    return (
+                      <div key={e.id} className="flex items-start justify-between gap-3 p-3 text-xs">
+                        <div className="min-w-0 space-y-0.5">
+                          <p className="font-medium text-foreground truncate">{e.description}</p>
+                          <p className="text-muted-foreground truncate">
+                            {shortDate(e.date)}
+                            {note ? ` · ${note.text}` : ""}
+                            {showClient ? ` · ${e.client_name}` : ""}
+                          </p>
+                          <p className="text-muted-foreground truncate">
+                            {e.payment_method && e.payment_method !== "—" ? `${e.payment_method} · ` : ""}
+                            {e.payment_account && e.payment_account !== "—" ? e.payment_account : e.category}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1.5">
+                          <span
+                            className={cn(
+                              "font-semibold tabular-nums",
+                              e.status === "cancelado"
+                                ? "text-muted-foreground line-through"
+                                : e.is_expense
+                                  ? "text-destructive"
+                                  : "text-success",
+                            )}
+                          >
+                            {e.is_expense ? "- " : "+ "}
+                            {currency(e.amount)}
+                          </span>
+                          <div className="flex items-center gap-1">{rowActions(e)}</div>
+                        </div>
+                      </div>
                     );
                   })
                 )}
-              </TableBody>
-              {filteredEntries.length > 0 &&
-                (() => {
-                  const totals = filteredEntries.reduce(
-                    (acc, entry) => {
-                      if (entry.status === "cancelado") return acc;
-                      const amount = Number(entry.amount) || 0;
-                      if (entry.is_expense) acc.saidas += amount;
-                      else acc.entradas += amount;
-                      return acc;
-                    },
-                    { entradas: 0, saidas: 0 },
-                  );
-                  const net = totals.entradas - totals.saidas;
-                  return (
-                    <TableFooter>
-                      <TableRow className="hover:bg-transparent">
-                        <TableCell colSpan={5} className="py-3 text-xs text-muted-foreground">
-                          Total filtrado, sem cancelados · entradas{" "}
-                          <span className="tabular-nums text-success">
-                            {currency(totals.entradas)}
-                          </span>{" "}
-                          · saídas{" "}
-                          <span className="tabular-nums text-destructive">
-                            {currency(totals.saidas)}
-                          </span>
-                        </TableCell>
-                        <TableCell
-                          className={cn(
-                            "py-3 text-right text-xs tabular-nums",
-                            net < 0 ? "text-destructive" : "text-success",
-                          )}
-                        >
-                          {net < 0 ? "- " : "+ "}
-                          {currency(Math.abs(net))}
-                        </TableCell>
-                        <TableCell />
-                      </TableRow>
-                    </TableFooter>
-                  );
-                })()}
-            </Table>
-          </div>
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* PAINEL DE POSIÇÃO E CONFERÊNCIA POR CONTA BANCÁRIA (AUDITORIA CONTÁBIL)   */}
-      {/* ========================================================================= */}
-      <div className="rounded-xl border border-border bg-card p-5 shadow-xs space-y-4">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div>
-            <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-primary" />
-              Posição e Fechamento por Conta Bancária
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              Saldos de abertura, movimentações consolidadas e conciliação por conta.
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs font-semibold cursor-pointer"
-            onClick={() => setShowAccountAudit((v) => !v)}
-          >
-            {showAccountAudit ? "Ocultar Detalhamento" : "Exibir Detalhamento"}
-          </Button>
-        </div>
-
-        {showAccountAudit && result && (
-          <div className="space-y-4 pt-2">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border bg-muted/30 p-4">
-                <span className="text-xs text-muted-foreground block">
-                  Saldo disponível em caixa/bancos
-                </span>
-                <strong className="text-lg font-semibold text-foreground">
-                  {balance(result.available)}
-                </strong>
               </div>
-              <div className="rounded-xl border bg-muted/30 p-4">
-                <span className="text-xs text-muted-foreground block">
-                  Recebíveis futuros de cartão (a liquidar)
-                </span>
-                <strong className="text-lg font-semibold text-foreground">
-                  {balance(result.receivable)}
-                </strong>
-              </div>
-            </div>
 
-            <div className="overflow-x-auto rounded-xl border">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-muted/60 text-xs uppercase font-semibold text-muted-foreground">
-                  <tr>
-                    {[
-                      "Conta / Abertura",
-                      "Saldo Anterior",
-                      "Recebimentos",
-                      "Pagamentos",
-                      "Resultado",
-                      "Transferências",
-                      "Saldo Final",
-                    ].map((h) => (
-                      <th key={h} className="p-3">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.rows.map((r) => (
-                    <tr key={r.account.id} className="border-t text-xs">
-                      <td className="p-3">
-                        <strong className="text-foreground block">{r.account.name}</strong>
-                        <span className="text-xs text-muted-foreground">
-                          {r.account.kind === "available"
-                            ? "Caixa / Banco"
-                            : "Recebíveis de Cartão"}
+              {/* Totais e paginação */}
+              {filteredEntries.length > 0 && (
+                <div className="flex flex-col gap-2 border-t border-border bg-muted/30 px-4 py-2.5 text-xs sm:flex-row sm:items-center sm:justify-between">
+                  <span className="text-muted-foreground">
+                    {filteredEntries.length} {filteredEntries.length === 1 ? "item" : "itens"}
+                    {activeSubTab !== "excluidos" && (
+                      <>
+                        {" "}· entradas <span className="tabular-nums text-success">{currency(listTotals.entradas)}</span>
+                        {" "}· saídas <span className="tabular-nums text-destructive">{currency(listTotals.saidas)}</span>
+                        {" "}· líquido{" "}
+                        <span className={cn("font-semibold tabular-nums", listNet < 0 ? "text-destructive" : "text-success")}>
+                          {listNet < 0 ? "- " : "+ "}
+                          {currency(Math.abs(listNet))}
                         </span>
-                      </td>
-                      {[r.opening, r.income, r.expense, r.result, r.transfers, r.closing].map(
-                        (v, i) => (
-                          <td key={i} className="p-3 tabular-nums font-medium">
-                            {balance(v)}
-                          </td>
-                        ),
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </>
+                    )}
+                  </span>
+                  {pageCount > 1 && (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 cursor-pointer"
+                        disabled={page === 0}
+                        onClick={() => setPage((p) => Math.max(0, p - 1))}
+                        aria-label="Página anterior"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <span className="tabular-nums text-muted-foreground">
+                        {page + 1} / {pageCount}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 cursor-pointer"
+                        disabled={page >= pageCount - 1}
+                        onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                        aria-label="Próxima página"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-
-            {selectedScope?.can_accounts && (
-              <div className="pt-2">
-                <OpeningForm accounts={query.data?.accounts || []} />
-              </div>
-            )}
-          </div>
+          </>
         )}
       </div>
 
@@ -1754,7 +1566,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
               <Input
                 type="number"
                 min="0"
-                step="1"
+                step="0.01"
                 value={transferAmount || ""}
                 onChange={(e) => setTransferAmount(Number(e.target.value) || 0)}
                 placeholder="0,00"
@@ -1816,11 +1628,11 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
               </div>
               <div>
                 <DialogTitle className="text-base font-semibold text-foreground">
-                  Excluir movimentação
+                  Estornar movimentação
                 </DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">
-                  Esta ação estornará o lançamento do fluxo de caixa e moverá o registro para a aba
-                  de excluídos.
+                  O pagamento sai dos totais do caixa e vai para a sub-aba Excluídos. O título volta
+                  a ficar em aberto.
                 </DialogDescription>
               </div>
             </div>
@@ -1898,11 +1710,11 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
               disabled={isDeleting}
             >
               {isDeleting ? (
-                <>Excluindo...</>
+                <>Estornando...</>
               ) : (
                 <>
                   <Trash2 className="h-3.5 w-3.5" />
-                  Excluir Movimentação
+                  Estornar movimentação
                 </>
               )}
             </Button>

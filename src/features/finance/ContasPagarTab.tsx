@@ -220,25 +220,8 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
       {/* ========================================================================= */}
       {/* 1. CABEÇALHO COM ÍCONE VERMELHO, TÍTULO, BADGE E BOTÕES DE AÇÃO           */}
       {/* ========================================================================= */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <div className="h-11 w-11 rounded-2xl bg-destructive text-white flex items-center justify-center shadow-xs shrink-0">
-            <ArrowDownLeft className="h-6 w-6" strokeWidth={2.5} />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">
-              Contas a Pagar
-              <span className="text-xs font-semibold text-destructive border border-destructive/25 bg-destructive/6 px-2.5 py-0.5 rounded-full">
-                {despesas.length} despesas
-              </span>
-            </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Despesas da clínica, fornecedores, repasses e faturas.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+      <div className="flex justify-end">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button
             size="sm"
             onClick={() => onOpenNew("despesa")}
@@ -413,9 +396,6 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
               {metrics.aVencerCount} lançamentos pendentes
             </p>
           </div>
-          <div className="h-9 w-9 rounded-full bg-warning/10 text-warning flex items-center justify-center shrink-0">
-            <Clock className="h-4 w-4" />
-          </div>
         </div>
 
         {/* VENCIDO */}
@@ -432,9 +412,6 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
             </p>
             <p className="text-xs text-muted-foreground">{metrics.vencidoCount} em atraso</p>
           </div>
-          <div className="h-9 w-9 rounded-full bg-destructive/10 text-destructive flex items-center justify-center shrink-0">
-            <AlertTriangle className="h-4 w-4" />
-          </div>
         </div>
 
         {/* PAGO / LIQUIDADO */}
@@ -449,9 +426,6 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
             <p className="text-xs text-muted-foreground">
               {metrics.pagoCount} lançamentos liquidados
             </p>
-          </div>
-          <div className="h-9 w-9 rounded-full bg-info/10 text-info flex items-center justify-center shrink-0">
-            <CheckCircle2 className="h-4 w-4" />
           </div>
         </div>
       </div>
@@ -508,9 +482,6 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
         {/* COLUNA DIREITA: CONTROLE DE SAÍDAS */}
         <div className="rounded-xl border border-border bg-card p-5 shadow-xs flex flex-col justify-between">
           <div className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-full bg-destructive/10 text-destructive flex items-center justify-center shrink-0">
-              <TrendingDown className="h-3.5 w-3.5" />
-            </div>
             <div>
               <h2 className="font-semibold text-sm text-foreground">Controle de Saídas</h2>
               <p className="text-xs text-muted-foreground">
@@ -557,9 +528,6 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
 
         {filteredList.length === 0 ? (
           <div className="py-12 text-center space-y-3">
-            <div className="h-10 w-10 rounded-full bg-muted text-muted-foreground mx-auto flex items-center justify-center">
-              <ArrowDownLeft className="h-5 w-5" />
-            </div>
             <div>
               <p className="text-xs font-semibold text-foreground/80">
                 Nenhuma despesa encontrada nesta visualização.

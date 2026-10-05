@@ -1,16 +1,15 @@
-import { PageHeader } from "@/components/ui-app/PageHeader";
 import { createFileRoute, useBlocker, type SearchSchemaInput } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import AppShell from "@/components/AppShell";
 import FinanceTabs, {
+  financeTabs,
   resolveFinanceTab,
   type FinanceTabId,
 } from "@/components/finance/FinanceTabs";
 import { errorMessage } from "@/features/acompanhamentos/followup-utils";
 import { getFinancialSnapshot, refreshFinance } from "@/features/finance/finance-api";
 import { Button } from "@/components/ui/button";
-import { Tags } from "lucide-react";
 import TitleList from "@/features/finance/TitleList";
 import CashFlow from "@/features/finance/CashFlow";
 import { ContasPagarTab } from "@/features/finance/ContasPagarTab";
@@ -65,6 +64,13 @@ function FinanceiroPage() {
   useBlocker({ shouldBlockFn: () => locked, enableBeforeUnload: locked });
   const data = query.data;
   const currentTitle = data?.titles.find((t) => t.id === selected);
+  // Sentido da animação: aba à direita entra pela direita, à esquerda pela esquerda
+  const tabIndex = financeTabs.findIndex((t) => t.id === search.tab);
+  const prevTabIndex = useRef(tabIndex);
+  const direction = Math.sign(tabIndex - prevTabIndex.current);
+  useEffect(() => {
+    prevTabIndex.current = tabIndex;
+  }, [tabIndex]);
   const changeTab = (tab: FinanceTabId) => {
     void navigate({ search: { tab, novo: false }, replace: true });
   };
@@ -73,25 +79,6 @@ function FinanceiroPage() {
     <AppShell title="Financeiro">
       <OperationLock.Provider value={{ active, setActive }}>
         <main className="page-container space-y-5">
-          <PageHeader
-            title="Financeiro"
-            description="Acompanhe o caixa, os compromissos e os recebimentos da clínica."
-            actions={
-              <div className="flex items-center gap-2">
-                <Button
-                  variant={search.tab === "categorias" ? "default" : "outline"}
-                  size="sm"
-                  className="text-xs gap-1.5 cursor-pointer"
-                  onClick={() => changeTab("categorias")}
-                  title="Cadastrar e gerenciar categorias financeiras de receitas e despesas"
-                >
-                  <Tags className="h-3.5 w-3.5" />
-                  Categorias
-                </Button>
-
-              </div>
-            }
-          />
           <FinanceTabs activeTab={search.tab} onSelectTab={changeTab} disabled={locked} />
           {query.isPending && search.tab !== "categorias" && <p role="status">Carregando financeiro...</p>}
           {query.error && search.tab !== "categorias" && (
@@ -103,6 +90,8 @@ function FinanceiroPage() {
               </button>
             </div>
           )}
+          {/* key troca a cada aba: o conteúdo entra deslizando no sentido da navegação */}
+          <div key={search.tab} className="fin-tab-enter" data-dir={direction}>
           {search.tab === "categorias" ? (
             <CategoriesManager />
           ) : data && !query.error ? (
@@ -214,6 +203,7 @@ function FinanceiroPage() {
               </Dialog>
             </>
           ) : null}
+          </div>
         </main>
       </OperationLock.Provider>
     </AppShell>

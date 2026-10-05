@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import {
   FileText,
   RotateCw,
@@ -66,7 +67,29 @@ export interface OfxBatch {
   totalDebits: number;
 }
 
-const STORAGE_KEY = "medcore_ofx_batches_v1";
+// Versões anteriores guardavam os lotes só no navegador.
+const LEGACY_STORAGE_KEY = "medcore_ofx_batches_v1";
+
+// Tabela criada em 20261004130000 (ainda fora dos tipos gerados).
+const ofxTable = () => (supabase.from as unknown as (t: string) => any)("ofx_batches");
+
+function readLegacyBatches(): OfxBatch[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed = JSON.parse(localStorage.getItem(LEGACY_STORAGE_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function clearLegacyBatches() {
+  try {
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
+  } catch {
+    // Armazenamento indisponível: nada a limpar.
+  }
+}
 
 function formatMonthLabel(monthValue: string): string {
   if (!monthValue || !monthValue.includes("-")) return "----- de ----";
@@ -128,49 +151,71 @@ export default function BankReconciliation({
     "todas",
   );
 
-  // Load from localStorage
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          setBatches(parsed);
-        }
-      }
-    } catch {
-      // ignore parse error
+  // Lotes ficam no banco (ofx_batches): a equipe toda vê a mesma conferência.
+  const loadBatches = useCallback(async (): Promise<boolean> => {
+    const { data, error } = await ofxTable()
+      .select("id, data")
+      .order("created_at", { ascending: false });
+    if (error) {
+      toast.error("Não foi possível carregar as conferências de extrato.", {
+        description: error.message,
+      });
+      return false;
     }
+    const remote = ((data ?? []) as { id: string; data: OfxBatch }[]).map((row) => row.data);
+
+    // Leva para o banco, uma única vez, os lotes que estavam só neste navegador.
+    const legacy = readLegacyBatches();
+    if (legacy.length > 0) {
+      const known = new Set(remote.map((b) => b.id));
+      const missing = legacy.filter((b) => !known.has(b.id));
+      if (missing.length > 0) {
+        const { error: migrateError } = await ofxTable().upsert(
+          missing.map((b) => ({ id: b.id, data: b })),
+        );
+        if (migrateError) {
+          toast.error("Não foi possível enviar ao banco os extratos salvos neste navegador.", {
+            description: migrateError.message,
+          });
+          setBatches([...missing, ...remote]);
+          return false;
+        }
+        remote.unshift(...missing);
+      }
+      clearLegacyBatches();
+    }
+    setBatches(remote);
+    return true;
   }, []);
 
-  // Save to localStorage
+  useEffect(() => {
+    void loadBatches();
+  }, [loadBatches]);
+
   const saveBatches = (newBatches: OfxBatch[]) => {
+    const previous = batches;
     setBatches(newBatches);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newBatches));
-    } catch {
-      // ignore
-    }
+    const changed = newBatches.filter((b) => !previous.includes(b));
+    const removed = previous.filter((p) => !newBatches.some((b) => b.id === p.id)).map((p) => p.id);
+    void (async () => {
+      const results = await Promise.all([
+        changed.length ? ofxTable().upsert(changed.map((b) => ({ id: b.id, data: b }))) : null,
+        removed.length ? ofxTable().delete().in("id", removed) : null,
+      ]);
+      const failure = results.find((r) => r?.error)?.error;
+      if (failure) {
+        toast.error("A conferência não foi salva.", { description: failure.message });
+        void loadBatches();
+      }
+    })();
   };
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setIsRefreshingLocal(true);
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          setBatches(parsed);
-        }
-      }
-    } catch {
-      // ignore
-    }
     onRefresh?.();
-    setTimeout(() => {
-      setIsRefreshingLocal(false);
-      toast.success("Dados atualizados com sucesso.");
-    }, 400);
+    const ok = await loadBatches();
+    setIsRefreshingLocal(false);
+    if (ok) toast.success("Dados atualizados com sucesso.");
   };
 
   // Handle OFX file selection
@@ -249,7 +294,7 @@ export default function BankReconciliation({
   // Batch actions
   const handleDeleteBatch = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!window.confirm("Deseja realmente excluir este lote de conferência local?")) return;
+    if (!window.confirm("Deseja realmente excluir este lote de conferência?")) return;
     const updated = batches.filter((b) => b.id !== id);
     saveBatches(updated);
     if (activeBatch?.id === id) setActiveBatch(null);
@@ -370,22 +415,10 @@ export default function BankReconciliation({
 
   return (
     <div className="space-y-4">
-      {/* Header matching media_1789940209124.png exactly */}
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-info/15 bg-info/8 text-info shadow-xs">
-            <FileSpreadsheet className="h-6 w-6 stroke-[1.75]" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-              Conferência OFX
-            </h1>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {batches.length} lote(s) · Importe seus arquivos bancários (.OFX) para conciliação das
-              contas.
-            </p>
-          </div>
-        </div>
+        <p className="text-xs text-muted-foreground">
+          {batches.length} lote(s) importado(s) · arquivos .OFX do banco para conciliação
+        </p>
 
         <div className="flex items-center gap-2">
           <button
@@ -519,7 +552,7 @@ export default function BankReconciliation({
             </h4>
             <p className="mt-1 max-w-md text-xs text-muted-foreground">
               Clique em "Importar extratos" para carregar seus arquivos bancários e iniciar a
-              conferência local.
+              conferência.
             </p>
           </div>
         ) : (
@@ -672,7 +705,7 @@ export default function BankReconciliation({
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
               Selecione o arquivo .OFX exportado do seu banco (até 2 MB). Os lançamentos serão
-              extraídos para conferência local.
+              extraídos para conferência e ficam disponíveis para toda a equipe.
             </DialogDescription>
           </DialogHeader>
 

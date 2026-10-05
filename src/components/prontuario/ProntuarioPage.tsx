@@ -8,6 +8,7 @@ import {
   type ClinicalHistoryItem,
 } from "@/hooks/usePatientClinicalHistory";
 import { supabase } from "@/integrations/supabase/client";
+import { deleteViaRpc } from "@/lib/safe-delete";
 import {
   appendToRecord,
   formatConsultationRecord,
@@ -376,18 +377,7 @@ export default function ProntuarioPage() {
     if (!ok) return;
     try {
       if (rec.kind === "prontuario") {
-        let recDeleted = false;
-        try {
-          const { error } = await (supabase.rpc as any)("delete_medical_record", { p_id: rec.id });
-          if (!error) recDeleted = true;
-        } catch {}
-
-        if (!recDeleted) {
-          // Remove prescrições vinculadas e o prontuário diretamente
-          await supabase.from("prescriptions").delete().eq("medical_record_id", rec.id);
-          const { error: directErr } = await supabase.from("medical_records").delete().eq("id", rec.id);
-          if (directErr) throw directErr;
-        }
+        await deleteViaRpc("delete_medical_record", { p_id: rec.id }, { table: "medical_records", id: rec.id });
         // Remove também de registro via backend local/PHP se existir
         await prontuarioService.deleteRecord(rec.id).catch(() => {});
       } else if (rec.kind === "consulta") {
@@ -398,16 +388,11 @@ export default function ProntuarioPage() {
         if (error) throw error;
       } else {
         // Evolução clínica
-        let evDeleted = false;
-        try {
-          const { error: rpcErr } = await (supabase.rpc as any)("delete_treatment_evolution", { p_id: rec.id });
-          if (!rpcErr) evDeleted = true;
-        } catch {}
-
-        if (!evDeleted) {
-          const { error } = await (supabase as any).from("treatment_evolutions").delete().eq("id", rec.id);
-          if (error) throw error;
-        }
+        await deleteViaRpc(
+          "delete_treatment_evolution",
+          { p_id: rec.id },
+          { table: "treatment_evolutions", id: rec.id },
+        );
       }
 
       toast.success(`${kindLabel.charAt(0).toUpperCase()}${kindLabel.slice(1)} excluído(a).`);
@@ -1510,7 +1495,7 @@ const RichEditor = forwardRef<
 
   return (
     <div
-      className="w-full overflow-hidden rounded-[8px] border border-border bg-card transition-[border-color,box-shadow] focus-within:border-primary/50 focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--primary)_10%,transparent)]"
+      className="w-full overflow-hidden rounded-[8px] border border-border bg-card transition-[border-color,box-shadow] focus-within:border-primary"
       style={{ minHeight: 285 }}
     >
       <div className="flex min-h-12 flex-wrap items-center gap-[6px] overflow-x-auto whitespace-nowrap border-b border-border bg-muted/40 px-3 py-2">
