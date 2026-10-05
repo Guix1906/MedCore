@@ -2,7 +2,13 @@ import { PageHeader } from "@/components/ui-app/PageHeader";
 import { KPICard } from "@/components/ds/Card";
 import TreatmentAlerts from "@/features/acompanhamentos/TreatmentAlerts";
 import { changeTreatmentStatus } from "@/features/acompanhamentos/ClinicalFollowup";
-import { errorMessage, localDate, protocolDeadline } from "@/features/acompanhamentos/followup-utils";
+import {
+  errorMessage,
+  formatClinicalDate,
+  localDate,
+  PAYMENT_METHODS,
+  protocolDeadline,
+} from "@/features/acompanhamentos/followup-utils";
 import type { DbRow } from "@/lib/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, Outlet, useRouterState, useNavigate } from "@tanstack/react-router";
@@ -870,6 +876,155 @@ async function recordImmediateTreatmentPayment({
     p_payer_name: payerName,
   });
   if (error) throw error;
+}
+
+// ============== VENCIMENTOS DO PLANO (lista da janela do acompanhamento) ==============
+const MONTHS_SHORT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+const DUE_TONES = {
+  paid: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
+  free: "bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300",
+  late: "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300",
+  soon: "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300",
+  future: "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300",
+};
+
+function PlanDueDates({ titles }: { titles: any[] }) {
+  const today = localDate();
+  const isFree = (t: any) =>
+    (t.category || "").toLowerCase().includes("saldo livre") ||
+    (t.description || "").toLowerCase().includes("saldo livre");
+  const isDown = (t: any) => t.installments?.number === 0 || /entrada/i.test(t.description || "");
+  const paidOf = (t: any) => Number(t.paid_amount ?? (t.status === "pago" ? t.amount : 0)) || 0;
+  const isPaid = (t: any) =>
+    t.status === "pago" || (paidOf(t) >= Number(t.amount) && Number(t.amount) > 0);
+
+  // Parcelas substituídas numa repactuação ficam canceladas: saem da lista principal
+  const active = titles
+    .filter((t) => t.status !== "cancelado" && !t.deleted_at)
+    .sort((a, b) => (a.due_date || "9999").localeCompare(b.due_date || "9999"));
+  const hidden = titles.length - active.length;
+  // Numeração pela ordem de vencimento (após repactuação os números gravados ficam salteados)
+  const parts = active.filter((t) => !isDown(t) && !isFree(t));
+  const order = new Map(parts.map((t, idx) => [t.id, idx + 1]));
+  const paidCount = active.filter(isPaid).length;
+  const openTotal = active.reduce(
+    (sum, t) => sum + Math.max(0, Number(t.amount || 0) - paidOf(t)),
+    0,
+  );
+  const next = active.find((t) => !isPaid(t) && !isFree(t) && t.due_date);
+
+  const situation = (t: any): { label: string; tone: keyof typeof DUE_TONES } => {
+    if (isPaid(t)) return { label: "Pago", tone: "paid" };
+    if (isFree(t) || !t.due_date) return { label: "Sem vencimento", tone: "free" };
+    const days = daysBetween(today, t.due_date.slice(0, 10));
+    if (days < 0) return { label: `Atrasada há ${-days} dia${days === -1 ? "" : "s"}`, tone: "late" };
+    if (days === 0) return { label: "Vence hoje", tone: "soon" };
+    if (days === 1) return { label: "Vence amanhã", tone: "soon" };
+    if (days <= 30) return { label: `Vence em ${days} dias`, tone: days <= 7 ? "soon" : "future" };
+    return { label: "A vencer", tone: "future" };
+  };
+
+  return (
+    <div className="mt-2 pt-3 border-t border-border-soft space-y-2.5">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          Vencimentos do plano
+        </span>
+        <Link
+          to="/financeiro"
+          className="text-primary hover:underline text-xs font-semibold inline-flex items-center gap-1"
+        >
+          <span>Ir para Contas a Receber</span>
+          <ExternalLink size={11} />
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 text-xs">
+        <div className="p-2 rounded-lg bg-muted/40 border border-border-soft">
+          <div className="text-muted-foreground">Pagas</div>
+          <div className="font-semibold text-foreground tabular-nums">
+            {paidCount} de {active.length}
+          </div>
+        </div>
+        <div className="p-2 rounded-lg bg-muted/40 border border-border-soft">
+          <div className="text-muted-foreground">Em aberto</div>
+          <div className="font-semibold text-foreground tabular-nums">{brl(openTotal)}</div>
+        </div>
+        <div className="p-2 rounded-lg bg-muted/40 border border-border-soft">
+          <div className="text-muted-foreground">Próximo vencimento</div>
+          <div className="font-semibold text-primary tabular-nums">
+            {next ? formatClinicalDate(next.due_date) : "—"}
+          </div>
+        </div>
+      </div>
+
+      <div className="max-h-80 overflow-y-auto space-y-1.5 pr-1">
+        {active.map((t) => {
+          const due = isFree(t) || !t.due_date ? null : String(t.due_date).slice(0, 10);
+          const [year, month, day] = due ? due.split("-") : [];
+          const amount = Number(t.amount || 0);
+          const paid = paidOf(t);
+          const partial = paid > 0 && !isPaid(t);
+          const label = isDown(t)
+            ? "Entrada"
+            : isFree(t)
+              ? "Saldo livre"
+              : `Parcela ${order.get(t.id)} de ${parts.length}`;
+          const method =
+            PAYMENT_METHODS[t.payment_method as keyof typeof PAYMENT_METHODS] || t.payment_method;
+          const info = situation(t);
+          return (
+            <div
+              key={t.id}
+              className={`flex items-center gap-3 p-2 rounded-xl border transition ${
+                next?.id === t.id
+                  ? "border-primary/50 bg-primary-soft/40"
+                  : "border-border-soft bg-muted/30 hover:bg-muted/60"
+              }`}
+            >
+              <div className="w-12 shrink-0 rounded-lg bg-card border border-border py-1 text-center leading-none">
+                {due ? (
+                  <>
+                    <div className="text-base font-bold text-foreground tabular-nums">{day}</div>
+                    <div className="mt-0.5 text-2xs font-semibold uppercase text-muted-foreground">
+                      {MONTHS_SHORT[Number(month) - 1]}/{year.slice(2)}
+                    </div>
+                  </>
+                ) : (
+                  <div className="py-1.5 text-2xs font-semibold uppercase text-muted-foreground">
+                    Livre
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold text-foreground">{label}</div>
+                <div className="truncate text-xs text-muted-foreground">
+                  {due ? `Vence ${formatClinicalDate(due)}` : "Sem data fixa"}
+                  {method ? ` · ${method}` : ""}
+                  {partial ? ` · pago ${brl(paid)} de ${brl(amount)}` : ""}
+                </div>
+              </div>
+              <div className="shrink-0 text-right">
+                <div className="text-sm font-bold text-foreground tabular-nums">{brl(amount)}</div>
+                <span
+                  className={`mt-0.5 inline-block px-1.5 py-0.5 rounded text-2xs font-semibold ${DUE_TONES[info.tone]}`}
+                >
+                  {info.label}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {hidden > 0 && (
+        <p className="text-2xs text-muted-foreground">
+          {hidden} lançamento(s) cancelado(s) ou substituído(s) em repactuação não aparecem na lista.
+        </p>
+      )}
+    </div>
+  );
 }
 
 // ============== MODAL DE GERENCIAMENTO & EDIÇÃO DE ACOMPANHAMENTO ==============
@@ -1954,81 +2109,8 @@ function TreatmentManageModal({
                       </div>
                     </div>
 
-                    {/* Lista resumida de títulos / parcelas vinculadas */}
-                    {treatmentTitles.length > 0 && (
-                      <div className="mt-2 pt-2 border-t border-border-soft">
-                        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center justify-between">
-                          <span>Lançamentos no Contas a Receber ({treatmentTitles.length})</span>
-                          <Link
-                            to="/financeiro"
-                            className="text-primary hover:underline text-xs font-semibold inline-flex items-center gap-1"
-                          >
-                            <span>Ir para Contas a Receber</span>
-                            <ExternalLink size={11} />
-                          </Link>
-                        </div>
-                        <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1 text-xs">
-                          {treatmentTitles.map((t: any) => {
-                            const isPaid = t.status === "pago" || (Number(t.paid_amount) >= Number(t.amount) && Number(t.amount) > 0);
-                            const isFree = (t.category || "").toLowerCase().includes("saldo livre") || (t.description || "").toLowerCase().includes("saldo livre");
-                            return (
-                              <div
-                                key={t.id}
-                                className="flex items-center justify-between p-2 rounded-lg bg-muted/40 border border-border-soft hover:bg-muted/70 transition"
-                              >
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <span
-                                    className={`h-2 w-2 rounded-full shrink-0 ${
-                                      isPaid
-                                        ? "bg-emerald-500"
-                                        : isFree
-                                          ? "bg-purple-500"
-                                          : t.due_date && t.due_date < new Date().toISOString().slice(0, 10)
-                                            ? "bg-red-500"
-                                            : "bg-blue-500"
-                                    }`}
-                                  />
-                                  <span className="truncate font-medium text-foreground">
-                                    {t.description || "Título"}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2.5 shrink-0">
-                                  <span className="text-muted-foreground">
-                                    {isFree
-                                      ? "Sem vencimento"
-                                      : t.due_date
-                                        ? new Date(t.due_date).toLocaleDateString("pt-BR")
-                                        : "—"}
-                                  </span>
-                                  <span className="font-semibold text-foreground">
-                                    {brl(t.amount)}
-                                  </span>
-                                  <span
-                                    className={`px-1.5 py-0.5 rounded text-2xs font-semibold ${
-                                      isPaid
-                                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
-                                        : isFree
-                                          ? "bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300"
-                                          : t.due_date && t.due_date < new Date().toISOString().slice(0, 10)
-                                            ? "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300"
-                                            : "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300"
-                                    }`}
-                                  >
-                                    {isPaid
-                                      ? "Pago"
-                                      : isFree
-                                        ? "Livre"
-                                        : t.due_date && t.due_date < new Date().toISOString().slice(0, 10)
-                                          ? "Atrasado"
-                                          : "A vencer"}
-                                  </span>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
+                    {/* Vencimentos do plano: parcela, data e situação de cada lançamento */}
+                    {treatmentTitles.length > 0 && <PlanDueDates titles={treatmentTitles} />}
                   </div>
                 ) : (
                   <div className="p-4 rounded-xl bg-muted/40 border border-dashed border-border text-center space-y-2">
