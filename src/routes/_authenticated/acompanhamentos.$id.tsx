@@ -185,9 +185,12 @@ function TreatmentDetailPage() {
   }, [treatment, planTitles, currentPlan]);
 
   const cancelledRef = useRef(false);
+  // Só a primeira carga do plano mostra o esqueleto. Recargas após excluir/salvar atualizam
+  // no lugar: trocar a página pelo esqueleto desmontava a aba e voltava ao topo.
+  const loadedRef = useRef(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!loadedRef.current) setLoading(true);
     setLoadError("");
     try {
       const [t, m] = await Promise.all([
@@ -212,6 +215,7 @@ function TreatmentDetailPage() {
       await queryClient.invalidateQueries({ queryKey: ["treatment-medication-uses", id] });
       setTreatment(t.data);
       setMeds((m.data as DbRow[]) ?? []);
+      loadedRef.current = true;
     } catch (error) {
       if (!cancelledRef.current)
         setLoadError(error instanceof Error ? error.message : "Erro ao carregar acompanhamento.");
@@ -222,6 +226,7 @@ function TreatmentDetailPage() {
 
   useEffect(() => {
     cancelledRef.current = false;
+    loadedRef.current = false; // outro plano: volta a mostrar o esqueleto
     load();
     return () => {
       cancelledRef.current = true;
