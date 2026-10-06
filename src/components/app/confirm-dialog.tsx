@@ -36,23 +36,29 @@ export function confirmDialog(opts: ConfirmOptions = {}): Promise<boolean> {
 
 export function ConfirmDialogHost() {
   const [state, setState] = useState<Internal | null>(null);
+  // O texto continua na tela durante a animação de fechamento (sem piscar "Tem certeza?" vazio).
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    opener = (opts) => setState(opts);
+    opener = (opts) => {
+      setState(opts);
+      setOpen(true);
+    };
     return () => {
       opener = null;
     };
   }, []);
 
   const close = (value: boolean) => {
+    if (!open) return;
     state?.resolve(value);
-    setState(null);
+    setOpen(false);
   };
 
   const destructive = state?.destructive ?? true;
 
   return (
-    <AlertDialog open={!!state} onOpenChange={(o) => !o && close(false)}>
+    <AlertDialog open={open} onOpenChange={(o) => !o && close(false)}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{state?.title ?? "Tem certeza?"}</AlertDialogTitle>
