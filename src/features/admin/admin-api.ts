@@ -175,7 +175,9 @@ const FRIENDLY: Record<string, string> = {
   "admin.invalid_email": "Informe um e-mail válido.",
   "admin.invalid_name": "O nome pode ter no máximo 120 caracteres.",
   "admin.already_member": "Este e-mail já tem acesso a esta clínica.",
-  "admin.password_too_short": "A senha deve ter no mínimo 6 caracteres.",
+  "admin.password_too_short": "A senha deve ter no mínimo 8 caracteres.",
+  "admin.shared_account":
+    "Este usuário também acessa outra clínica. Peça que ele redefina a própria senha pela tela de login.",
   "admin.member_suspended": "Este acesso está suspenso. Reative-o na lista de usuários.",
   "admin.member_pending": "Esta pessoa já se cadastrou e aguarda aprovação na lista de usuários.",
   "admin.invite_exists": "Já existe um convite pendente para este e-mail. Use “Reenviar convite”.",
@@ -694,32 +696,8 @@ export async function createDirectUser(input: {
   agendaProfessionalIds?: string[];
   confirmSensitive?: boolean;
 }) {
-  // 1. Tenta criar pelo Auth do Supabase com cliente isolado (não altera a sessão do admin)
-  try {
-    const { createClient } = await import("@supabase/supabase-js");
-    const authClient = createClient(
-      "https://yqgafvblxxyksximctzk.supabase.co",
-      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlxZ2FmdmJseHh5a3N4aW1jdHprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyNjA5MTYsImV4cCI6MjA5MjgzNjkxNn0.KsHS2h6eqfm9-suJ_yxpgSQLYw44bvqG4S6xUD-ZSX8",
-      {
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-          detectSessionInUrl: false,
-        },
-      },
-    );
-    await authClient.auth.signUp({
-      email: input.email.trim(),
-      password: input.password,
-      options: {
-        data: { full_name: input.fullName.trim() },
-      },
-    });
-  } catch {
-    // Ignora erro de signup no client; a RPC no banco fará o cadastro ou atualização com senha
-  }
-
-  // 2. Chama a RPC segura do banco para ativar o usuário, aplicar perfil e confirmar credenciais
+  // A RPC cria a conta no Auth, aplica o perfil e ativa o vínculo. Conta já existente
+  // (que alguém já usou) é apenas vinculada: a senha dela nunca é trocada por aqui.
   const r = obj(
     await rpc("admin_create_direct_user", {
       p_company_id: input.companyId,
@@ -739,6 +717,7 @@ export async function createDirectUser(input: {
     memberId: String(r.member_id),
     email: String(r.email),
     status: String(r.status),
+    existingAccount: r.existing_account === true,
   };
 }
 

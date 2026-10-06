@@ -126,7 +126,7 @@ function InviteForm({
   const [touched, setTouched] = useState(false);
 
   const emailValid = isValidEmail(email);
-  const passwordValid = mode === "invite" || password.length >= 6;
+  const passwordValid = mode === "invite" || password.length >= 8;
   const passwordMatch = mode === "invite" || password === confirmPassword;
   const selectedRole = roles.find((r) => r.id === roleId);
 
@@ -145,7 +145,7 @@ function InviteForm({
 
     if (mode === "direct") {
       if (!passwordValid) {
-        toast.error("A senha deve ter no mínimo 6 caracteres.");
+        toast.error("A senha deve ter no mínimo 8 caracteres.");
         return;
       }
       if (!passwordMatch) {
@@ -155,7 +155,7 @@ function InviteForm({
 
       setBusy(true);
       try {
-        await createDirectUser({
+        const created = await createDirectUser({
           companyId: overview.company.id,
           email: normalizeEmail(email),
           password,
@@ -164,7 +164,13 @@ function InviteForm({
           doctorId: doctorId === NONE ? null : doctorId,
         });
 
-        toast.success(`Usuário ${email} cadastrado com sucesso!`);
+        if (created.existingAccount) {
+          toast.success(
+            `${email} já tinha conta no MedCore e foi vinculado à clínica. Ele entra com a senha que já usa.`,
+          );
+        } else {
+          toast.success(`Usuário ${email} cadastrado com sucesso!`);
+        }
         await onDone();
         onClose();
       } catch (error) {
@@ -303,8 +309,8 @@ function InviteForm({
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="new-password"
               name="invite-new-password"
-              placeholder="Mínimo de 6 dígitos"
-              minLength={6}
+              placeholder="Mínimo de 8 caracteres"
+              minLength={8}
               required
               className="pr-10 bg-card"
             />
@@ -331,7 +337,7 @@ function InviteForm({
               autoComplete="new-password"
               name="invite-new-password-confirm"
               placeholder="Digite a mesma senha novamente"
-              minLength={6}
+              minLength={8}
               required
               className="bg-card"
             />

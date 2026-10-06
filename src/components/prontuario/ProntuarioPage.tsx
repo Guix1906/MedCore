@@ -1366,6 +1366,16 @@ const GROUP_LIST: ToolButton[] = [
   { icon: ListOrdered, cmd: "insertOrderedList", label: "Lista numerada" },
 ];
 
+/** Texto puro (IA, modelos, texto já digitado) → HTML seguro para o editor: escapa tudo e só cria <br>. */
+function textToHtml(text: string) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/\n/g, "<br>");
+}
+
 const RichEditor = forwardRef<
   RichEditorHandle,
   {
@@ -1383,7 +1393,7 @@ const RichEditor = forwardRef<
     insertText: (text: string) => {
       const el = ref.current;
       if (!el) return;
-      const htmlFormatted = text.replace(/\n/g, "<br>");
+      const htmlFormatted = textToHtml(text);
       if (!el.innerHTML || el.innerHTML === "<br>" || el.textContent?.trim() === "") {
         el.innerHTML = htmlFormatted;
       } else {
@@ -1395,7 +1405,7 @@ const RichEditor = forwardRef<
     setText: (text: string) => {
       const el = ref.current;
       if (!el) return;
-      el.innerHTML = text.replace(/\n/g, "<br>");
+      el.innerHTML = textToHtml(text);
       setEmpty(false);
       onDirty();
     },

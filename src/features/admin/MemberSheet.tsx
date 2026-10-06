@@ -219,8 +219,8 @@ function MemberEditor({
   };
 
   const handleUpdatePassword = async () => {
-    if (newPassword.length < 6) {
-      toast.error("A senha deve ter no mínimo 6 caracteres.");
+    if (newPassword.length < 8) {
+      toast.error("A senha deve ter no mínimo 8 caracteres.");
       return;
     }
     const ok = await confirmDialog({
@@ -488,8 +488,8 @@ function MemberEditor({
                   onChange={(e) => setNewPassword(e.target.value)}
                   autoComplete="new-password"
                   name="member-new-password"
-                  placeholder="Nova senha (mínimo 6 dígitos)"
-                  minLength={6}
+                  placeholder="Nova senha (mínimo 8 caracteres)"
+                  minLength={8}
                   disabled={changingPassword}
                   className="bg-card pr-10"
                 />
@@ -507,7 +507,7 @@ function MemberEditor({
                 type="button"
                 variant="outline"
                 onClick={() => void handleUpdatePassword()}
-                disabled={changingPassword || newPassword.length < 6}
+                disabled={changingPassword || newPassword.length < 8}
               >
                 {changingPassword ? "Salvando…" : "Salvar nova senha"}
               </Button>
