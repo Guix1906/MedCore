@@ -46,10 +46,11 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { KIND_COLOR, type Activity } from "@/components/agenda/agenda-types";
-import { pad2 } from "@/lib/date-utils";
+import { pad2, todayLocal, toLocalDateInputValue } from "@/lib/date-utils";
 import { AddToGoogleCalendarButton } from "./AddToGoogleCalendarButton";
 import { WhatsAppReminderButton } from "./WhatsAppReminderButton";
 import { cn } from "@/utils/cn";
+import { parseMoneyBR } from "@/lib/money";
 
 type Meta = {
   v?: number;
@@ -464,7 +465,7 @@ export function ActivityDrawer({
 
   const handleQuickSettle = async () => {
     if (!eventRawId) return;
-    const value = parseFloat(settleAmount.replace(",", "."));
+    const value = parseMoneyBR(settleAmount) ?? NaN;
     if (isNaN(value) || value <= 0) {
       toast.error("Informe um valor válido para recebimento.");
       return;
@@ -486,7 +487,7 @@ export function ActivityDrawer({
           p_id: crypto.randomUUID(),
           p_transaction_id: linkedTitle.id,
           p_amount: value,
-          p_paid_on: new Date().toISOString().slice(0, 10),
+          p_paid_on: todayLocal(),
           p_method: settleMethod,
           p_account_id: "00000000-0000-0000-0000-000000000001",
           p_payer_name: clientName || null,
@@ -569,8 +570,8 @@ export function ActivityDrawer({
     setGeneratingFinance(true);
     try {
       const dateStr = activity?.start
-        ? activity.start.toISOString().slice(0, 10)
-        : new Date().toISOString().slice(0, 10);
+        ? toLocalDateInputValue(activity.start)
+        : todayLocal();
       const { error } = await supabase.rpc("create_event_financial_title", {
         p_event_id: eventRawId,
         p_amount: amt,
@@ -1095,7 +1096,7 @@ export function ActivityDrawer({
             <div className="rounded-xl bg-surface p-3.5 border border-border flex items-center justify-between">
               <span className="text-xs text-muted-foreground">Saldo a receber</span>
               <span className="text-lg font-bold text-foreground">
-                {currency(parseFloat(settleAmount || "0"))}
+                {currency(parseMoneyBR(settleAmount) ?? 0)}
               </span>
             </div>
 

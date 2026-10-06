@@ -32,6 +32,7 @@ import type { DbRow, IconType } from "@/lib/types";
 import { formatClinicalDate, localDate } from "./followup-utils";
 import MedicationUsePanel, { RegisterApplicationDialog } from "./MedicationUsePanel";
 import { useTreatmentMedicationUses } from "./use-treatment-medication-uses";
+import { todayLocal } from "@/lib/date-utils";
 
 // ============== INJETÁVEIS & CRONOGRAMA ==============
 // Usado na aba "Injetáveis" do acompanhamento e na aba "Injetáveis" do prontuário do paciente.
@@ -769,7 +770,7 @@ function NewMedicationModal({
     route: "Oral",
     period: "manha",
     frequency: "1x ao dia",
-    startDate: new Date().toISOString().slice(0, 10),
+    startDate: todayLocal(),
   });
 
   // 2. Estado da Aba Protocolo Semanal (Tirzepatida / Injetáveis com doses em mg variáveis por semana)

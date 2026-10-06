@@ -33,6 +33,7 @@ import { toast } from "sonner";
 import { currency, formatClinicalDate } from "@/features/acompanhamentos/followup-utils";
 import type { FinanceSnapshot, FinancialAccount } from "./finance-schema";
 import { refreshFinance } from "./finance-api";
+import { todayLocal } from "@/lib/date-utils";
 
 export interface RecurringTransaction {
   id: string;
@@ -530,7 +531,7 @@ function CadastrarCustoFixoModal({
   const [dayOfMonth, setDayOfMonth] = useState("10");
   const [paymentMethod, setPaymentMethod] = useState("boleto");
   const [accountId, setAccountId] = useState(accounts[0]?.id || "");
-  const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [startDate, setStartDate] = useState(todayLocal());
   const [repetition, setRepetition] = useState("mensal");
   const [endDate, setEndDate] = useState("");
   const [hasEndDate, setHasEndDate] = useState(false);

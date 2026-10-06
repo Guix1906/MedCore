@@ -54,6 +54,7 @@ import { refreshFinance, getFinancialSnapshot } from "@/features/finance/finance
 import { patientsService, companyService } from "@/services/api";
 import { getStoredLocalPatients, mergeWithLocalPatients } from "@/lib/local-patients";
 import { PatientModal } from "@/components/pacientes/PatientModal";
+import { todayLocal, formatDateOnly } from "@/lib/date-utils";
 
 export const Route = createFileRoute("/_authenticated/acompanhamentos")({
   head: () => ({
@@ -544,7 +545,7 @@ function AcompanhamentosPage() {
                                 </div>
                                 <div className="text-foreground font-semibold mt-0.5 flex items-center gap-1">
                                   <CalIcon size={12} className="text-primary" />
-                                  {new Date(t.start_date).toLocaleDateString("pt-BR")}
+                                  {formatDateOnly(t.start_date)}
                                 </div>
                               </div>
                               <div>
@@ -870,7 +871,7 @@ async function recordImmediateTreatmentPayment({
     p_id: crypto.randomUUID(),
     p_transaction_id: targetTx.id,
     p_amount: amount,
-    p_paid_on: paidDate || new Date().toISOString().slice(0, 10),
+    p_paid_on: paidDate || todayLocal(),
     p_method: (method || "pix").toLowerCase(),
     p_account_id: accountId,
     p_payer_name: payerName,
@@ -1056,7 +1057,7 @@ function TreatmentManageModal({
     objective: treatment.objective || "",
     doctor_id: treatment.doctor_id || "",
     status: treatment.status,
-    start_date: treatment.start_date || new Date().toISOString().slice(0, 10),
+    start_date: treatment.start_date || todayLocal(),
     protocol_days: String(totalDays > 0 ? totalDays : 90),
     return_days: String(treatment.return_days || 30),
     color: treatment.color || COLORS[0],
@@ -1111,7 +1112,7 @@ function TreatmentManageModal({
     downDue:
       treatment.down_payment_due_date ||
       treatment.start_date ||
-      new Date().toISOString().slice(0, 10),
+      todayLocal(),
     downReceivedNow: true,
     downAccountId: "",
     modality: (isInitiallyLivre ? "livre" : "parcelado") as "parcelado" | "livre",
@@ -1119,7 +1120,7 @@ function TreatmentManageModal({
     installments: String(treatment.installments_count || 1),
     firstDue:
       treatment.first_due_date ||
-      new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+      todayLocal(30),
     aVistaReceivedNow: false,
     aVistaAccountId: "",
   });
@@ -1978,7 +1979,7 @@ function TreatmentManageModal({
                       Início
                     </div>
                     <div className="font-semibold text-foreground mt-0.5">
-                      {new Date(treatment.start_date).toLocaleDateString("pt-BR")}
+                      {formatDateOnly(treatment.start_date)}
                     </div>
                   </div>
                   <div>
@@ -2282,7 +2283,7 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
     doctor_id: "",
     title: "",
     objective: "",
-    start_date: new Date().toISOString().slice(0, 10),
+    start_date: todayLocal(),
     protocol_days: "90",
     return_days: "30",
     color: COLORS[0],
@@ -2296,13 +2297,13 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
     discount: "0",
     down: "0",
     downMethod: "pix",
-    downDue: new Date().toISOString().slice(0, 10),
+    downDue: todayLocal(),
     downReceivedNow: true,
     downAccountId: "",
     modality: "parcelado" as "parcelado" | "livre",
     method: "pix",
     installments: "1",
-    firstDue: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+    firstDue: todayLocal(30),
     aVistaReceivedNow: true,
     aVistaAccountId: "",
   });

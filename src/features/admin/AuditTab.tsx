@@ -17,6 +17,7 @@ import { qk } from "@/lib/query-keys";
 import { fetchAuditPage, toAdminError, type AdminOverview, type AuditEntry } from "./admin-api";
 import { formatDateTime } from "./admin-helpers";
 import { AUDIT_ACTION_GROUPS, AUDIT_ACTION_LABEL, describeAuditChange } from "./permissions";
+import { todayLocal } from "@/lib/date-utils";
 
 const ALL = "__all__";
 
@@ -50,7 +51,7 @@ export function AuditTab({ overview }: { overview: AdminOverview }) {
   );
 
   const exportCsv = () => {
-    exportFinanceCsv(`auditoria-acessos-${new Date().toISOString().slice(0, 10)}.csv`, [
+    exportFinanceCsv(`auditoria-acessos-${todayLocal()}.csv`, [
       ["Data", "Ação", "Autor", "Alvo", "Perfil", "Detalhes", "Motivo"],
       ...entries.map((entry) => [
         formatDateTime(entry.createdAt),

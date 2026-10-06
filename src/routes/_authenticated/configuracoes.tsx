@@ -43,6 +43,7 @@ import { getFinancialSnapshot } from "@/features/finance/finance-api";
 import { errorMessage } from "@/features/acompanhamentos/followup-utils";
 import { usePermissions } from "@/hooks/use-permissions";
 import type { PermissionKey } from "@/features/admin/permissions";
+import { parseMoneyBR } from "@/lib/money";
 
 export const Route = createFileRoute("/_authenticated/configuracoes")({
   head: () => ({
@@ -643,10 +644,10 @@ function ServiceModal({
     setSaving(true);
     const payload = {
       name: f.name.trim(),
-      price: f.price ? parseFloat(f.price.replace(",", ".")) : null,
+      price: parseMoneyBR(f.price),
       duration_minutes: f.duration_minutes ? parseInt(f.duration_minutes) : null,
       commission_percent: f.commission_percent
-        ? parseFloat(f.commission_percent.replace(",", "."))
+        ? parseMoneyBR(f.commission_percent)
         : null,
       active: true,
     };

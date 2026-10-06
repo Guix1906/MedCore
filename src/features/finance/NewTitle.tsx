@@ -37,6 +37,8 @@ import type { FinanceSnapshot, FinancialTitle } from "./finance-schema";
 import { refreshFinance } from "./finance-api";
 import { CategoryModal } from "./CategoriesManager";
 import { getFinanceCategories } from "./finance-categories";
+import { parseMoneyBR } from "@/lib/money";
+import { todayLocal } from "@/lib/date-utils";
 
 const EXPENSE_CATEGORIES_DEFAULT = [
   "Aluguel e Condomínio",
@@ -61,9 +63,7 @@ const INCOME_CATEGORIES_DEFAULT = [
 function parseMoneyValue(val: string | number): number {
   if (typeof val === "number") return isNaN(val) ? 0 : val;
   if (!val) return 0;
-  const cleaned = String(val).replace(/[^\d.,]/g, "").replace(",", ".");
-  const num = parseFloat(cleaned);
-  return isNaN(num) ? 0 : Math.round(num * 100) / 100;
+  return parseMoneyBR(String(val).replace(/[^\d.,]/g, "")) ?? 0;
 }
 
 export default function NewTitle({
@@ -158,7 +158,7 @@ export default function NewTitle({
     setBusy(true);
     try {
       const titleId = crypto.randomUUID();
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = todayLocal();
       // Competência calculada automaticamente a partir do vencimento (primeiro dia do mês)
       const competenceStr = dueDate.slice(0, 7) + "-01";
       const resolvedPayer = payer.trim() || (isExpense ? "Despesa da clínica" : "Cliente");

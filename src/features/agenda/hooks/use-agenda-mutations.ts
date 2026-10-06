@@ -113,7 +113,12 @@ export function useAgendaMutations(onDone: (a: Activity | null) => void) {
       toast.success("Agendamento reposicionado");
       onDone(null);
     },
-    onError: (e: Error) => toast.error("Erro ao reagendar", { description: e.message }),
+    onError: (e: Error) => {
+      toast.error("Erro ao reagendar", { description: e.message });
+      // A tela já mostrava o novo horário (atualização otimista): volta ao que está no banco.
+      qc.invalidateQueries({ queryKey: ["agenda-events"] });
+      onDone(null);
+    },
   });
 
   const resize = useMutation({
@@ -194,6 +199,8 @@ export function useAgendaMutations(onDone: (a: Activity | null) => void) {
     onError: (e: Error) => {
       console.error("Erro ao alterar duração:", e);
       toast.error("Erro ao alterar duração", { description: e.message });
+      qc.invalidateQueries({ queryKey: ["agenda-events"] });
+      onDone(null);
     },
   });
 

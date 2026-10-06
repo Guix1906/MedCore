@@ -41,6 +41,7 @@ import {
 import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
 import { supabase } from "@/integrations/supabase/client";
+import { formatDateOnly } from "@/lib/date-utils";
 
 export const Route = createFileRoute("/_authenticated/acompanhamentos/$id")({
   head: () => ({ meta: [{ title: "Acompanhamento Clínico • MedCore" }] }),
@@ -324,7 +325,7 @@ function TreatmentDetailPage() {
     }
 
     if (treatment.next_return_date) {
-      msg += `🗓️ *Previsão do Próximo Retorno:* ${new Date(treatment.next_return_date).toLocaleDateString("pt-BR")} (estimativa do plano — consulte a recepção para agendar o horário)\n\n`;
+      msg += `🗓️ *Previsão do Próximo Retorno:* ${formatDateOnly(treatment.next_return_date)} (estimativa do plano — consulte a recepção para agendar o horário)\n\n`;
     }
     msg += `Qualquer dúvida ou reação, entre em contato conosco. Tenha um excelente tratamento! 🩺✨`;
 
@@ -402,7 +403,7 @@ function TreatmentDetailPage() {
                   )}
                   <span className="inline-flex items-center gap-1.5">
                     <CalIcon size={14} className="text-muted-foreground" /> Início:{" "}
-                    {new Date(treatment.start_date).toLocaleDateString("pt-BR")}
+                    {formatDateOnly(treatment.start_date)}
                   </span>
                 </div>
               </div>

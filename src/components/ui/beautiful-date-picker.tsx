@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { todayLocal } from "@/lib/date-utils";
 
 const MONTHS_PT = [
   "Janeiro",
@@ -379,7 +380,7 @@ export function BeautifulDatePicker({
           <div className="grid grid-cols-7 gap-1 text-center">
             {calendarDays.map((dObj, idx) => {
               const isSelected = value === dObj.dateStr;
-              const isToday = new Date().toISOString().slice(0, 10) === dObj.dateStr;
+              const isToday = todayLocal() === dObj.dateStr;
 
               return (
                 <button
@@ -407,7 +408,7 @@ export function BeautifulDatePicker({
             <button
               type="button"
               onClick={() => {
-                const todayStr = new Date().toISOString().slice(0, 10);
+                const todayStr = todayLocal();
                 handleSelectDay(todayStr);
               }}
               className="text-primary font-semibold hover:underline cursor-pointer"

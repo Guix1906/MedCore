@@ -121,6 +121,7 @@ import {
   methodLabel,
   toMinutes,
 } from "@/components/agenda/novo-agendamento/composer-parts";
+import { parseMoneyBR } from "@/lib/money";
 
 // ============================================================
 // Design tokens (verde-limão premium, sem roxo)
@@ -307,8 +308,8 @@ const FinancialNumberInput = memo(function FinancialNumberInput({
     const formatted = value === "" || value === undefined || value === null ? "" : String(value);
     setLocalText((prev) => {
       // Only sync if actual numerical value differs to avoid cursor jump while typing
-      const prevNum = parseFloat(prev.replace(",", "."));
-      const nextNum = parseFloat(formatted.replace(",", "."));
+      const prevNum = parseMoneyBR(prev) ?? NaN;
+      const nextNum = parseMoneyBR(formatted) ?? NaN;
       if (prev === "" && formatted === "") return "";
       if (!isNaN(prevNum) && !isNaN(nextNum) && prevNum === nextNum) return prev;
       return formatted;
@@ -322,9 +323,8 @@ const FinancialNumberInput = memo(function FinancialNumberInput({
       onChange("");
       return;
     }
-    const clean = raw.replace(",", ".");
-    const num = parseFloat(clean);
-    onChange(isNaN(num) ? "" : num);
+    const num = parseMoneyBR(raw);
+    onChange(num === null ? "" : num);
   };
 
   return (
@@ -1044,9 +1044,7 @@ export function NovoAgendamentoDialog({
       const parseMoney = (v: any): number => {
         if (!v) return 0;
         if (typeof v === "number") return isNaN(v) ? 0 : v;
-        const cleaned = String(v).replace(/\s/g, "").replace(",", ".");
-        const parsed = parseFloat(cleaned);
-        return isNaN(parsed) ? 0 : parsed;
+        return parseMoneyBR(String(v)) ?? 0;
       };
 
       const isIncludedInPlan = type === "atendimento" && planCoverage === "incluso";

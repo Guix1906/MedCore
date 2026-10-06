@@ -97,6 +97,7 @@ import { confirmDialog } from "@/components/app/confirm-dialog";
 import InjectablesTab from "./InjectablesTab";
 import QuotesTab from "./QuotesTab";
 import { PatientPackagesTab } from "@/components/pacientes/PatientPackagesTab";
+import { formatDateOnly, parseDateOnly } from "@/lib/date-utils";
 
 export interface RichEditorHandle {
   insertText: (text: string) => void;
@@ -127,8 +128,8 @@ function extractRecordSection(text: string | undefined, label: string): string {
 
 function ageFrom(birthDate?: string | null): string {
   if (!birthDate) return "";
-  const b = new Date(birthDate);
-  if (Number.isNaN(b.getTime())) return "";
+  const b = parseDateOnly(birthDate);
+  if (!b) return "";
   const now = new Date();
   let age = now.getFullYear() - b.getFullYear();
   if (now < new Date(now.getFullYear(), b.getMonth(), b.getDate())) age--;
@@ -255,7 +256,7 @@ export default function ProntuarioPage() {
       initials: initials || "PA",
       name: cleanName,
       age: dbPatient?.birth_date
-        ? `Nasc: ${new Date(dbPatient.birth_date).toLocaleDateString("pt-BR")}`
+        ? `Nasc: ${formatDateOnly(dbPatient.birth_date)}`
         : dbPatient?.insurance || "Em atendimento",
     };
   }, [dbPatient, paramPatientName, paramPatientId]);
@@ -1015,7 +1016,7 @@ export default function ProntuarioPage() {
                 {recordToPrint.returnDate && (
                   <div className="p-3 rounded-xl border border-border bg-surface text-xs text-muted-foreground">
                     <strong>Previsão de Retorno:</strong>{" "}
-                    {new Date(recordToPrint.returnDate).toLocaleDateString("pt-BR")}{" "}
+                    {formatDateOnly(recordToPrint.returnDate)}{" "}
                     {recordToPrint.returnNotes ? `— ${recordToPrint.returnNotes}` : ""}
                   </div>
                 )}
@@ -1810,7 +1811,7 @@ function HistoryCard({
           )}
           {rec.returnDate && (
             <p>
-              <strong>Retorno:</strong> {new Date(rec.returnDate).toLocaleDateString("pt-BR")}
+              <strong>Retorno:</strong> {formatDateOnly(rec.returnDate)}
               {rec.returnNotes ? ` — ${rec.returnNotes}` : ""}
             </p>
           )}

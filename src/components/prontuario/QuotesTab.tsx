@@ -7,6 +7,7 @@ import { currency, errorMessage } from "@/features/acompanhamentos/followup-util
 import { whatsappNumber } from "@/features/agenda/components/WhatsAppReminderButton";
 import { printClinicalDocument } from "@/lib/clinical-documents";
 import { confirmDialog } from "@/components/app/confirm-dialog";
+import { todayLocal } from "@/lib/date-utils";
 
 type QuoteStatus = "rascunho" | "enviado" | "aprovado" | "recusado";
 
@@ -43,9 +44,7 @@ const subtotalOf = (items: QuoteItem[]) =>
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 function defaultValidity() {
-  const d = new Date();
-  d.setDate(d.getDate() + 15);
-  return d.toISOString().slice(0, 10);
+  return todayLocal(15);
 }
 
 function quoteText(q: Pick<Quote, "title" | "items" | "discount" | "total" | "valid_until" | "notes">) {

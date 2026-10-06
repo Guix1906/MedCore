@@ -24,6 +24,8 @@ import { KPICard } from "@/components/ds/Card";
 import { SortableHeader } from "@/components/ui-app/SortableHeader";
 import { StatusBadge } from "@/components/ui-app/StatusBadge";
 import { nextSort, sortRows, type SortState } from "@/lib/table-sort";
+import { parseMoneyBR } from "@/lib/money";
+import { formatDateOnly, parseDateOnly } from "@/lib/date-utils";
 
 type StockSortKey = "name" | "category" | "supplier" | "expiry" | "quantity" | "cost" | "status";
 
@@ -189,7 +191,7 @@ function EstoquePage() {
     today.setHours(0, 0, 0, 0);
     const in30 = new Date(today);
     in30.setDate(in30.getDate() + 30);
-    const expiring = rows.filter((r) => r.expiry_date && new Date(r.expiry_date) <= in30).length;
+    const expiring = rows.filter((r) => r.expiry_date && parseDateOnly(r.expiry_date)! <= in30).length;
     return { total, low, value, expiring };
   }, [rows]);
 
@@ -201,7 +203,7 @@ function EstoquePage() {
         name: (r) => r.name,
         category: (r) => r.category,
         supplier: (r) => r.supplier,
-        expiry: (r) => (r.expiry_date ? new Date(r.expiry_date) : null),
+        expiry: (r) => (r.expiry_date ? parseDateOnly(r.expiry_date)! : null),
         quantity: (r) => r.quantity,
         cost: (r) => (r.unit_cost ? Number(r.unit_cost) : null),
         status: (r) => r.quantity <= r.min_quantity,
@@ -327,7 +329,7 @@ function EstoquePage() {
               <tbody>
                 {sorted.map((r) => {
                   const low = r.quantity <= r.min_quantity;
-                  const exp = r.expiry_date ? new Date(r.expiry_date) : null;
+                  const exp = r.expiry_date ? parseDateOnly(r.expiry_date)! : null;
                   const today = new Date();
                   today.setHours(0, 0, 0, 0);
                   const in30 = new Date(today);
@@ -342,7 +344,7 @@ function EstoquePage() {
                       <td className="text-foreground/80">{r.category ?? "—"}</td>
                       <td className="text-foreground/80">{r.supplier ?? "—"}</td>
                       <td className={expiring ? "font-medium text-warning" : "text-foreground/80"}>
-                        {r.expiry_date ? new Date(r.expiry_date).toLocaleDateString("pt-BR") : "—"}
+                        {r.expiry_date ? formatDateOnly(r.expiry_date) : "—"}
                       </td>
                       <td className="num font-semibold text-foreground">
                         {r.quantity} {r.unit ?? ""}
@@ -467,7 +469,7 @@ function NewItemModal({
       min_quantity: parseInt(f.min_quantity) || 0,
       expiry_date: f.expiry_date || null,
       supplier: f.supplier || null,
-      unit_cost: f.unit_cost ? parseFloat(f.unit_cost.replace(",", ".")) : null,
+      unit_cost: parseMoneyBR(f.unit_cost),
       location: f.location || null,
     };
     const { error } = item
