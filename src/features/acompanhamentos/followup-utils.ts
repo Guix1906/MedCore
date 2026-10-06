@@ -17,6 +17,13 @@ export function protocolDeadline(status: string, endDate: string | null, today =
   return endDate <= localDate(soon) ? "Protocolo a vencer" : "Dentro do prazo";
 }
 
+/** Planos de emagrecimento/injetáveis abrem o cadastro direto no protocolo semanal. */
+export function isWeightLossTreatment(t?: { title?: string | null; objective?: string | null }) {
+  const title = t?.title?.toLowerCase() ?? "";
+  const objective = t?.objective?.toLowerCase() ?? "";
+  return title.includes("emagre") || objective.includes("emagre") || title.includes("injet");
+}
+
 export const PAYMENT_METHODS = {
   pix: "Pix",
   dinheiro: "Dinheiro",

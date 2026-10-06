@@ -2,11 +2,38 @@ import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { errorMessage, localDate } from "./followup-utils";
-import { CheckCircle2, AlertTriangle, XCircle, Clock, Pill } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { errorMessage, formatClinicalDate, localDate } from "./followup-utils";
+import { useTreatmentMedicationUses } from "./use-treatment-medication-uses";
+import { CheckCircle2, AlertTriangle, XCircle, Clock, Pill, Syringe } from "lucide-react";
 
 const input = "w-full rounded-lg border border-border p-2 text-sm";
 const nowInput = () => `${localDate()}T${new Date().toTimeString().slice(0, 5)}`;
+
+export type MedicationPreset = {
+  id: string;
+  name: string;
+  dose?: string | null;
+  unit?: string | null;
+  route?: string | null;
+  start_date?: string | null;
+};
+
+const emptyForm = (medication?: MedicationPreset) => ({
+  medication: medication?.id ?? "",
+  dose: medication ? `${medication.dose || ""} ${medication.unit || ""}`.trim() : "",
+  route: medication?.route || "",
+  usedAt: nowInput(),
+  notes: "",
+  item: "",
+  quantity: "1",
+});
 
 const QUICK_REASONS = [
   "Esquecimento do paciente",
@@ -17,49 +44,53 @@ const QUICK_REASONS = [
   "Paciente em viagem",
 ];
 
-export default function MedicationUsePanel({ treatmentId }: { treatmentId: string }) {
+export default function MedicationUsePanel({
+  treatmentId,
+  medication,
+  variant = "panel",
+  onSaved,
+}: {
+  treatmentId: string;
+  /** Medicação já escolhida (botão "Registrar aplicação" de uma semana do cronograma). */
+  medication?: MedicationPreset;
+  /** "dialog" mostra só o formulário, sem moldura, seletor de medicação nem histórico. */
+  variant?: "panel" | "dialog";
+  onSaved?: () => void;
+}) {
+  const isDialog = variant === "dialog";
   const qc = useQueryClient();
   const requestId = useRef(crypto.randomUUID());
   const [busy, setBusy] = useState(false);
   const [statusType, setStatusType] = useState<"tomou" | "nao_tomou" | "suspensa" | "adiada">(
     "tomou",
   );
-  const [form, setForm] = useState({
-    medication: "",
-    dose: "",
-    route: "",
-    usedAt: nowInput(),
-    notes: "",
-    item: "",
-    quantity: "1",
-  });
+  const [form, setForm] = useState(() => emptyForm(medication));
   const query = useQuery({
-    queryKey: ["treatment-medication-uses", treatmentId],
+    queryKey: ["treatment-medication-uses", treatmentId, "options"],
     queryFn: async () => {
-      const [meds, items, uses] = await Promise.all([
+      const [meds, items] = await Promise.all([
         supabase
           .from("treatment_medications")
           .select("id,name,dose,unit,route")
           .eq("treatment_id", treatmentId)
-          .eq("status", "ativo")
-          .order("name"),
+          .eq("status", "ativo"),
         supabase
           .from("inventory_items")
           .select("id,name,unit,quantity")
           .eq("active", true)
           .order("name"),
-        supabase
-          .from("treatment_medication_uses")
-          .select("*")
-          .eq("treatment_id", treatmentId)
-          .order("used_at", { ascending: false }),
       ]);
       if (meds.error) throw meds.error;
       if (items.error) throw items.error;
-      if (uses.error) throw uses.error;
-      return { meds: meds.data, items: items.data, uses: uses.data };
+      // Ordem natural: "(Sem. 2)" antes de "(Sem. 10)".
+      const sortedMeds = [...meds.data].sort((a, b) =>
+        a.name.localeCompare(b.name, "pt-BR", { numeric: true }),
+      );
+      return { meds: sortedMeds, items: items.data };
     },
   });
+  const usesQuery = useTreatmentMedicationUses(treatmentId);
+  const uses = usesQuery.data ?? [];
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!form.medication || !form.dose.trim() || !form.usedAt) {
@@ -102,15 +133,7 @@ export default function MedicationUsePanel({ treatmentId }: { treatmentId: strin
       });
       if (error) throw error;
       requestId.current = crypto.randomUUID();
-      setForm({
-        medication: "",
-        dose: "",
-        route: "",
-        usedAt: nowInput(),
-        notes: "",
-        item: "",
-        quantity: "1",
-      });
+      setForm(emptyForm(medication));
       setStatusType("tomou");
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["treatment-medication-uses", treatmentId] }),
@@ -135,6 +158,7 @@ export default function MedicationUsePanel({ treatmentId }: { treatmentId: strin
             : "Uso externo / do paciente registrado com sucesso.",
         );
       }
+      onSaved?.();
     } catch (error) {
       toast.error(errorMessage(error));
     } finally {
@@ -143,26 +167,30 @@ export default function MedicationUsePanel({ treatmentId }: { treatmentId: strin
   };
 
   return (
-    <section className="rounded-2xl border bg-card p-5 space-y-4 mt-5 shadow-xs">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="font-semibold text-foreground flex items-center gap-2">
-            <Pill className="h-5 w-5 text-primary" />
-            Registro de Medicação & Adesão do Paciente
-          </h3>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Registre administrações reais ou anote ocorrências de não adesão ("não tomou",
-            suspensões ou pausas), preservando o histórico da ficha física.
-          </p>
+    <section
+      className={isDialog ? "space-y-4" : "rounded-2xl border bg-card p-5 space-y-4 mt-5 shadow-xs"}
+    >
+      {!isDialog && (
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-foreground flex items-center gap-2">
+              <Pill className="h-5 w-5 text-primary" />
+              Registro de Medicação & Adesão do Paciente
+            </h3>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Registre administrações reais ou anote ocorrências de não adesão ("não tomou",
+              suspensões ou pausas), preservando o histórico da ficha física.
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
-      {query.error && (
+      {(query.error || usesQuery.error) && (
         <p
           role="alert"
           className="text-sm text-destructive bg-destructive/10 p-3 rounded-lg border border-destructive/25"
         >
-          {errorMessage(query.error)}
+          {errorMessage(query.error || usesQuery.error)}
         </p>
       )}
       {query.isPending && (
@@ -227,30 +255,32 @@ export default function MedicationUsePanel({ treatmentId }: { treatmentId: strin
       </div>
 
       <form onSubmit={save} className="grid sm:grid-cols-2 gap-3 pt-1">
-        <label className="text-sm font-medium text-foreground/80">
-          Medicação
-          <select
-            required
-            className={input}
-            value={form.medication}
-            onChange={(e) => {
-              const med = query.data?.meds.find((m) => m.id === e.target.value);
-              setForm({
-                ...form,
-                medication: e.target.value,
-                dose: med ? `${med.dose || ""} ${med.unit || ""}`.trim() : "",
-                route: med?.route || "",
-              });
-            }}
-          >
-            <option value="">Selecione</option>
-            {query.data?.meds.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {!isDialog && (
+          <label className="text-sm font-medium text-foreground/80">
+            Medicação
+            <select
+              required
+              className={input}
+              value={form.medication}
+              onChange={(e) => {
+                const med = query.data?.meds.find((m) => m.id === e.target.value);
+                setForm({
+                  ...form,
+                  medication: e.target.value,
+                  dose: med ? `${med.dose || ""} ${med.unit || ""}`.trim() : "",
+                  route: med?.route || "",
+                });
+              }}
+            >
+              <option value="">Selecione</option>
+              {query.data?.meds.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="text-sm font-medium text-foreground/80">
           {statusType === "tomou" ? "Dose tomada / aplicada" : "Dose prevista (não administrada)"}
           <input
@@ -392,92 +422,132 @@ export default function MedicationUsePanel({ treatmentId }: { treatmentId: strin
       </form>
 
       {/* Histórico com Adesão Visual */}
-      <div className="border-t pt-4 space-y-3">
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Histórico de Aplicações & Interrupções
-        </h4>
+      {!isDialog && (
+        <div className="border-t pt-4 space-y-3">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Histórico de Aplicações & Interrupções
+          </h4>
 
-        {query.data?.uses.length === 0 && (
-          <p className="text-sm text-muted-foreground py-3 text-center bg-muted/60 rounded-xl">
-            Nenhum registro de medicação ou ocorrência anotado.
-          </p>
-        )}
+          {usesQuery.data?.length === 0 && (
+            <p className="text-sm text-muted-foreground py-3 text-center bg-muted/60 rounded-xl">
+              Nenhum registro de medicação ou ocorrência anotado.
+            </p>
+          )}
 
-        <div className="space-y-2.5">
-          {query.data?.uses.map((u) => {
-            const rawDose = u.dose || "";
-            const isNaoTomou = rawDose.includes("[NÃO TOMOU]");
-            const isSuspensa = rawDose.includes("[SUSPENSA]");
-            const isAdiada = rawDose.includes("[ADIADA]");
-            const cleanDose = rawDose
-              .replace("[NÃO TOMOU]", "")
-              .replace("[SUSPENSA]", "")
-              .replace("[ADIADA]", "")
-              .trim();
+          <div className="space-y-2.5">
+            {uses.map((u) => {
+              const rawDose = u.dose || "";
+              const isNaoTomou = rawDose.includes("[NÃO TOMOU]");
+              const isSuspensa = rawDose.includes("[SUSPENSA]");
+              const isAdiada = rawDose.includes("[ADIADA]");
+              const cleanDose = rawDose
+                .replace("[NÃO TOMOU]", "")
+                .replace("[SUSPENSA]", "")
+                .replace("[ADIADA]", "")
+                .trim();
 
-            return (
-              <article
-                key={u.id}
-                className={`p-3 rounded-xl border text-sm transition ${
-                  isNaoTomou
-                    ? "bg-destructive/5 border-destructive/25"
-                    : isSuspensa
-                      ? "bg-primary-soft/50 border-primary/25"
-                      : isAdiada
-                        ? "bg-warning/5 border-warning/25"
-                        : "bg-muted/42 border-border"
-                }`}
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    {isNaoTomou ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-destructive/15 text-destructive border border-destructive/35">
-                        <XCircle className="h-3 w-3" /> Não Tomou
-                      </span>
-                    ) : isSuspensa ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-primary-soft text-primary-hover border border-primary/35">
-                        <AlertTriangle className="h-3 w-3" /> Suspensa
-                      </span>
-                    ) : isAdiada ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-warning/15 text-warning border border-warning/35">
-                        <Clock className="h-3 w-3" /> Adiada
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-success/15 text-success border border-success/35">
-                        <CheckCircle2 className="h-3 w-3" /> Aplicada
-                      </span>
-                    )}
-                    <span className="font-semibold text-foreground">{u.medication_name}</span>
-                    {cleanDose && (
-                      <span className="text-muted-foreground font-medium">({cleanDose})</span>
-                    )}
-                    {u.route && <span className="text-muted-foreground text-xs">• {u.route}</span>}
+              return (
+                <article
+                  key={u.id}
+                  className={`p-3 rounded-xl border text-sm transition ${
+                    isNaoTomou
+                      ? "bg-destructive/5 border-destructive/25"
+                      : isSuspensa
+                        ? "bg-primary-soft/50 border-primary/25"
+                        : isAdiada
+                          ? "bg-warning/5 border-warning/25"
+                          : "bg-muted/42 border-border"
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      {isNaoTomou ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-destructive/15 text-destructive border border-destructive/35">
+                          <XCircle className="h-3 w-3" /> Não Tomou
+                        </span>
+                      ) : isSuspensa ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-primary-soft text-primary-hover border border-primary/35">
+                          <AlertTriangle className="h-3 w-3" /> Suspensa
+                        </span>
+                      ) : isAdiada ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-warning/15 text-warning border border-warning/35">
+                          <Clock className="h-3 w-3" /> Adiada
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-success/15 text-success border border-success/35">
+                          <CheckCircle2 className="h-3 w-3" /> Aplicada
+                        </span>
+                      )}
+                      <span className="font-semibold text-foreground">{u.medication_name}</span>
+                      {cleanDose && (
+                        <span className="text-muted-foreground font-medium">({cleanDose})</span>
+                      )}
+                      {u.route && (
+                        <span className="text-muted-foreground text-xs">• {u.route}</span>
+                      )}
+                    </div>
+                    <span className="text-xs text-muted-foreground font-medium">
+                      {new Date(u.used_at).toLocaleString("pt-BR")}
+                    </span>
                   </div>
-                  <span className="text-xs text-muted-foreground font-medium">
-                    {new Date(u.used_at).toLocaleString("pt-BR")}
-                  </span>
-                </div>
 
-                <div className="mt-1.5 text-xs text-muted-foreground flex items-center gap-2">
-                  <span>
-                    {u.inventory_item_id
-                      ? `Consumo da clínica: ${u.quantity} unidade(s) de estoque`
-                      : isNaoTomou || isSuspensa || isAdiada
-                        ? "Sem saída de estoque (ocorrência clínica de interrupção/ausência)"
-                        : "Uso externo / trazido pelo paciente (sem saída de estoque)"}
-                  </span>
-                </div>
+                  <div className="mt-1.5 text-xs text-muted-foreground flex items-center gap-2">
+                    <span>
+                      {u.inventory_item_id
+                        ? `Consumo da clínica: ${u.quantity} unidade(s) de estoque`
+                        : isNaoTomou || isSuspensa || isAdiada
+                          ? "Sem saída de estoque (ocorrência clínica de interrupção/ausência)"
+                          : "Uso externo / trazido pelo paciente (sem saída de estoque)"}
+                    </span>
+                  </div>
 
-                {u.notes && (
-                  <p className="mt-2 text-xs bg-card/80 p-2 rounded-lg border border-border/60 text-foreground/80 whitespace-pre-wrap font-sans">
-                    <strong className="text-foreground">Observação:</strong> {u.notes}
-                  </p>
-                )}
-              </article>
-            );
-          })}
+                  {u.notes && (
+                    <p className="mt-2 text-xs bg-card/80 p-2 rounded-lg border border-border/60 text-foreground/80 whitespace-pre-wrap font-sans">
+                      <strong className="text-foreground">Observação:</strong> {u.notes}
+                    </p>
+                  )}
+                </article>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
     </section>
+  );
+}
+
+/** Diálogo do botão "Registrar aplicação" de cada item do cronograma. */
+export function RegisterApplicationDialog({
+  treatmentId,
+  medication,
+  onClose,
+}: {
+  treatmentId: string;
+  medication: MedicationPreset;
+  onClose: () => void;
+}) {
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Syringe className="h-4 w-4 text-primary" />
+            Registrar aplicação
+          </DialogTitle>
+          <DialogDescription>
+            {medication.name}
+            {medication.start_date
+              ? ` — prevista para ${formatClinicalDate(medication.start_date)}`
+              : ""}
+          </DialogDescription>
+        </DialogHeader>
+        <MedicationUsePanel
+          treatmentId={treatmentId}
+          medication={medication}
+          variant="dialog"
+          onSaved={onClose}
+        />
+      </DialogContent>
+    </Dialog>
   );
 }

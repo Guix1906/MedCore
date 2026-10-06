@@ -1,14 +1,18 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ExternalLink, Syringe } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import MedicationUsePanel from "@/features/acompanhamentos/MedicationUsePanel";
-import { formatClinicalDate } from "@/features/acompanhamentos/followup-utils";
+import type { DbRow } from "@/lib/types";
+import InjectablesWorkspace from "@/features/acompanhamentos/InjectablesWorkspace";
+import {
+  formatClinicalDate,
+  isWeightLossTreatment,
+} from "@/features/acompanhamentos/followup-utils";
 
 /**
- * Injetáveis do paciente: escolhe o plano de tratamento e registra aplicações
- * (medicação, dose, via, lote/estoque) no mesmo painel usado nos acompanhamentos.
+ * Injetáveis do paciente: escolhe o plano de tratamento e mostra o mesmo cronograma
+ * do acompanhamento (semanas, "Registrar aplicação" por item, novo injetável e histórico).
  */
 export default function InjectablesTab({
   patientId,
@@ -17,13 +21,14 @@ export default function InjectablesTab({
   patientId?: string;
   onCreatePlan: () => void;
 }) {
+  const qc = useQueryClient();
   const { data: treatments = [], isLoading } = useQuery({
     queryKey: ["patient-treatments-injectables", patientId],
     enabled: Boolean(patientId),
     queryFn: async () => {
       const { data, error } = await supabase
         .from("treatments")
-        .select("id,title,status,start_date")
+        .select("id,title,objective,status,start_date")
         .eq("patient_id", patientId!)
         .order("start_date", { ascending: false });
       if (error) throw error;
@@ -39,11 +44,31 @@ export default function InjectablesTab({
     }
   }, [treatments, selectedId]);
 
+  const medsQuery = useQuery({
+    queryKey: ["treatment-medications", selectedId],
+    enabled: Boolean(selectedId),
+    // O cronograma também é editado no acompanhamento; sempre busca de novo ao abrir.
+    refetchOnMount: "always",
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("treatment_medications")
+        .select("*")
+        .eq("treatment_id", selectedId)
+        .order("created_at");
+      if (error) throw error;
+      return (data as DbRow[]) ?? [];
+    },
+  });
+
   if (!patientId) {
     return <p className="text-sm text-muted-foreground">Paciente sem cadastro completo.</p>;
   }
   if (isLoading) {
-    return <p className="rounded-2xl border border-border bg-card p-8 text-sm text-muted-foreground">Carregando…</p>;
+    return (
+      <p className="rounded-2xl border border-border bg-card p-8 text-sm text-muted-foreground">
+        Carregando…
+      </p>
+    );
   }
   if (treatments.length === 0) {
     return (
@@ -65,6 +90,12 @@ export default function InjectablesTab({
       </div>
     );
   }
+
+  const selected = treatments.find((t) => t.id === selectedId);
+  const reload = () => {
+    medsQuery.refetch();
+    qc.invalidateQueries({ queryKey: ["treatment-medication-uses", selectedId] });
+  };
 
   return (
     <div className="space-y-4">
@@ -96,7 +127,26 @@ export default function InjectablesTab({
           </Link>
         )}
       </div>
-      {selectedId && <MedicationUsePanel key={selectedId} treatmentId={selectedId} />}
+      {medsQuery.error && (
+        <p role="alert" className="text-sm text-destructive">
+          Não foi possível carregar o cronograma: {(medsQuery.error as Error).message}
+        </p>
+      )}
+      {selectedId && medsQuery.isPending && (
+        <p className="rounded-2xl border border-border bg-card p-8 text-sm text-muted-foreground">
+          Carregando cronograma…
+        </p>
+      )}
+      {selectedId && medsQuery.data && (
+        <InjectablesWorkspace
+          key={selectedId}
+          treatmentId={selectedId}
+          treatmentStatus={selected?.status}
+          meds={medsQuery.data}
+          reload={reload}
+          isEmagrecimento={isWeightLossTreatment(selected)}
+        />
+      )}
     </div>
   );
 }
