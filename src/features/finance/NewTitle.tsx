@@ -96,7 +96,8 @@ export default function NewTitle({
   const [isPaidNow, setIsPaidNow] = useState(defaultPaidNow ?? false);
   const [paymentMethod, setPaymentMethod] = useState("PIX");
   const [selectedAccount, setSelectedAccount] = useState(() => {
-    return finance.accounts[0]?.id || "00000000-0000-0000-0000-000000000001";
+    // Primeira conta ativa (a lista pode começar por uma conta inativa, que não aparece no seletor)
+    return (finance.accounts.find((a) => a.active) ?? finance.accounts[0])?.id || "00000000-0000-0000-0000-000000000001";
   });
 
   const [busy, setBusy] = useState(false);
@@ -404,7 +405,9 @@ export default function NewTitle({
                 : "border-border/80 bg-muted/30"
             }`}
           >
-            <div className="flex items-start gap-2.5 cursor-pointer" onClick={() => setIsPaidNow(!isPaidNow)}>
+            {/* Um único <label>: clicar na caixa, no título ou na descrição alterna uma vez só
+                (antes a caixa e o bloco alternavam juntos e o clique se anulava). */}
+            <label className="flex items-start gap-2.5 cursor-pointer">
               <Checkbox
                 id="is-paid-now"
                 checked={isPaidNow}
@@ -412,10 +415,7 @@ export default function NewTitle({
                 className="mt-0.5 rounded-md"
               />
               <div className="space-y-0.5">
-                <label
-                  htmlFor="is-paid-now"
-                  className="text-xs font-semibold text-foreground cursor-pointer select-none flex items-center gap-1.5"
-                >
+                <span className="text-xs font-semibold text-foreground cursor-pointer select-none flex items-center gap-1.5">
                   <span>
                     {isExpense
                       ? "Despesa à vista / já paga (Lançar no Fluxo de Caixa)"
@@ -426,14 +426,14 @@ export default function NewTitle({
                       Fluxo de Caixa
                     </span>
                   )}
-                </label>
+                </span>
                 <p className="text-[11px] text-muted-foreground select-none">
                   {isExpense
                     ? "Lança imediatamente a saída no Fluxo de Caixa Realizado e debita da conta bancária da clínica."
                     : "Lança imediatamente a entrada no Fluxo de Caixa Realizado e credita na conta bancária da clínica."}
                 </p>
               </div>
-            </div>
+            </label>
 
             {isPaidNow && (
               <div className="pt-2 border-t border-emerald-500/20 grid grid-cols-1 sm:grid-cols-2 gap-3">
