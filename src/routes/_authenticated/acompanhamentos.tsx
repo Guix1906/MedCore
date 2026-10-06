@@ -1259,6 +1259,14 @@ function TreatmentManageModal({
     }
 
     setSaving(true);
+    // Recebido no ato: a baixa só aceita data de hoje ou anterior (o banco recusa data futura)
+    // e o vencimento acompanha o recebimento, para o título não ficar esperando baixa.
+    const today = todayLocal();
+    const downNow = downNum > 0 && financeForm.downReceivedNow && !isDownAlreadyPaid;
+    const aVistaNow =
+      downNum === 0 && countNum === 1 && financeForm.modality === "parcelado" && financeForm.aVistaReceivedNow;
+    const downDue = downNow && financeForm.downDue > today ? today : financeForm.downDue;
+    const firstDue = aVistaNow && (!financeForm.firstDue || financeForm.firstDue > today) ? today : financeForm.firstDue;
     const startDateObj = new Date(form.start_date);
     const protocolDaysNum = Number(form.protocol_days) || 90;
     const endDateObj = new Date(startDateObj.getTime() + protocolDaysNum * 86400000);
@@ -1278,8 +1286,8 @@ function TreatmentManageModal({
       Number(treatment.installments_count || 1) !== rpcCount ||
       (treatment.payment_type || "") !== rpcType ||
       (treatment.payment_method || "pix") !== (financeForm.method || "pix") ||
-      (downNum > 0 && (treatment.down_payment_due_date || "") !== financeForm.downDue) ||
-      (!isLivre && financePreview.balance > 0 && (treatment.first_due_date || "") !== financeForm.firstDue);
+      (downNum > 0 && (treatment.down_payment_due_date || "") !== downDue) ||
+      (!isLivre && financePreview.balance > 0 && (treatment.first_due_date || "") !== firstDue);
 
     if (totalNum > 0 && financeChanged) {
       const { error: confErr } = await supabase.rpc("configure_treatment_payment", {
@@ -1291,8 +1299,8 @@ function TreatmentManageModal({
         p_down_method: downNum > 0 ? financeForm.downMethod : null,
         p_method: financeForm.method || "pix",
         p_count: rpcCount,
-        p_down_due: downNum > 0 ? financeForm.downDue : null,
-        p_first_due: financeForm.firstDue || null,
+        p_down_due: downNum > 0 ? downDue : null,
+        p_first_due: firstDue || null,
       });
       if (confErr) {
         setSaving(false);
@@ -1323,8 +1331,8 @@ function TreatmentManageModal({
       payment_type: isLivre ? "parcelado" : countNum === 1 && downNum === 0 ? "a_vista" : "parcelado",
       down_payment_method: downNum > 0 ? financeForm.downMethod : null,
       payment_method: financeForm.method,
-      down_payment_due_date: downNum > 0 ? financeForm.downDue : null,
-      first_due_date: isLivre ? null : financeForm.firstDue || null,
+      down_payment_due_date: downNum > 0 ? downDue : null,
+      first_due_date: isLivre ? null : firstDue || null,
     };
 
     const { error } = await supabase.from("treatments").update(payload).eq("id", treatment.id);
@@ -1354,7 +1362,7 @@ function TreatmentManageModal({
             treatmentId: treatment.id,
             isDown: true,
             amount: downNum,
-            paidDate: financeForm.downDue,
+            paidDate: downDue,
             method: financeForm.downMethod,
             accountId: financeForm.downAccountId || financialAccounts[0]?.id || "",
             payerName: patName,
@@ -1365,7 +1373,7 @@ function TreatmentManageModal({
             treatmentId: treatment.id,
             isDown: false,
             amount: totalNum - discountNum,
-            paidDate: financeForm.firstDue,
+            paidDate: firstDue,
             method: financeForm.method,
             accountId: financeForm.aVistaAccountId || financialAccounts[0]?.id || "",
             payerName: patName,
@@ -2438,6 +2446,14 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
     }
 
     setSaving(true);
+    // Recebido no ato: a baixa só aceita data de hoje ou anterior (o banco recusa data futura)
+    // e o vencimento acompanha o recebimento, para o título não ficar esperando baixa.
+    const today = todayLocal();
+    const downNow = downNum > 0 && financeForm.downReceivedNow;
+    const aVistaNow =
+      downNum === 0 && countNum === 1 && financeForm.modality === "parcelado" && financeForm.aVistaReceivedNow;
+    const downDue = downNow && financeForm.downDue > today ? today : financeForm.downDue;
+    const firstDue = aVistaNow && (!financeForm.firstDue || financeForm.firstDue > today) ? today : financeForm.firstDue;
     const startDateObj = new Date(form.start_date);
     const protocolDaysNum = Number(form.protocol_days) || 90;
     const endDateObj = new Date(startDateObj.getTime() + protocolDaysNum * 86400000);
@@ -2460,8 +2476,8 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
       payment_type: isLivre ? "parcelado" : (countNum === 1 && downNum === 0 ? "a_vista" : "parcelado"),
       down_payment_method: downNum > 0 ? financeForm.downMethod : null,
       payment_method: financeForm.method,
-      down_payment_due_date: downNum > 0 ? financeForm.downDue : null,
-      first_due_date: financeForm.firstDue || null,
+      down_payment_due_date: downNum > 0 ? downDue : null,
+      first_due_date: firstDue || null,
     };
 
     const { data, error } = await supabase.from("treatments").insert(payload).select("id").single();
@@ -2483,8 +2499,8 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
           p_down_method: downNum > 0 ? financeForm.downMethod : null,
           p_method: financeForm.method || "pix",
           p_count: isLivre || (countNum === 1 && downNum === 0) ? 1 : countNum,
-          p_down_due: downNum > 0 ? financeForm.downDue : null,
-          p_first_due: financeForm.firstDue || null,
+          p_down_due: downNum > 0 ? downDue : null,
+          p_first_due: firstDue || null,
         });
 
         if (confErr) {
@@ -2508,7 +2524,7 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
             treatmentId: data.id,
             isDown: true,
             amount: downNum,
-            paidDate: financeForm.downDue,
+            paidDate: downDue,
             method: financeForm.downMethod,
             accountId: financeForm.downAccountId || financialAccounts[0]?.id || "",
             payerName: patName,
@@ -2519,7 +2535,7 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
             treatmentId: data.id,
             isDown: false,
             amount: totalNum - discountNum,
-            paidDate: financeForm.firstDue,
+            paidDate: firstDue,
             method: financeForm.method,
             accountId: financeForm.aVistaAccountId || financialAccounts[0]?.id || "",
             payerName: patName,
