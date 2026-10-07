@@ -807,7 +807,7 @@ function ResumoTab({
                       </div>
                       <div>
                         <div className="font-semibold text-foreground">{desc}</div>
-                        <div className="text-2xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                        <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
                           <span>Data: {formatClinicalDate(p.paid_on)}</span>
                           <span>•</span>
                           <span className="font-medium text-foreground/80">{methodLabel}</span>

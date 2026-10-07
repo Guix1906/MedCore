@@ -268,20 +268,20 @@ export default function InjectablesWorkspace({
         {/* KPIs de Injetáveis */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="p-3.5 bg-emerald-500/6 rounded-xl border border-emerald-500/15">
-            <span className="text-2xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">
+            <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">
               Doses Tomadas / Aplicadas
             </span>
             <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1.5">
               <CheckCircle2 size={18} />
               <span>{appliedUses.length} doses</span>
             </div>
-            <span className="text-2xs text-muted-foreground mt-0.5 block">
+            <span className="text-[11px] text-muted-foreground mt-0.5 block">
               Histórico confirmado do paciente
             </span>
           </div>
 
           <div className="p-3.5 bg-primary/6 rounded-xl border border-primary/15">
-            <span className="text-2xs font-semibold text-primary uppercase tracking-wider block">
+            <span className="text-[11px] font-semibold text-primary uppercase tracking-wider block">
               Último Injetável Aplicado
             </span>
             <div className="text-sm font-bold text-foreground mt-1 truncate">
@@ -289,7 +289,7 @@ export default function InjectablesWorkspace({
                 ? `${lastApplied.medication_name} (${cleanDose(lastApplied.dose)})`
                 : "Nenhuma aplicação ainda"}
             </div>
-            <span className="text-2xs text-muted-foreground mt-0.5 block">
+            <span className="text-[11px] text-muted-foreground mt-0.5 block">
               {lastApplied
                 ? `Em ${new Date(lastApplied.used_at).toLocaleDateString("pt-BR")} às ${new Date(lastApplied.used_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`
                 : "Aguardando 1ª aplicação"}
@@ -297,7 +297,7 @@ export default function InjectablesWorkspace({
           </div>
 
           <div className="p-3.5 bg-amber-500/6 rounded-xl border border-amber-500/15">
-            <span className="text-2xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider block">
+            <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider block">
               Itens no Cronograma
             </span>
             <div className="text-xl font-bold text-foreground mt-1 flex items-center gap-1.5">
@@ -306,7 +306,7 @@ export default function InjectablesWorkspace({
                 {activeItems} {activeItems === 1 ? "prescrição ativa" : "prescrições ativas"}
               </span>
             </div>
-            <span className="text-2xs text-muted-foreground mt-0.5 block">
+            <span className="text-[11px] text-muted-foreground mt-0.5 block">
               {protocolCount} {protocolCount === 1 ? "protocolo semanal" : "protocolos semanais"}
             </span>
           </div>
@@ -360,19 +360,19 @@ export default function InjectablesWorkspace({
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         {isNaoTomou ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-2xs font-semibold bg-rose-500/15 text-rose-600 dark:text-rose-400 ">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-500/15 text-rose-600 dark:text-rose-400 ">
                             Não Tomou
                           </span>
                         ) : isSuspensa ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-2xs font-semibold bg-purple-500/15 text-purple-600 dark:text-purple-400 ">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-500/15 text-purple-600 dark:text-purple-400 ">
                             Suspensa
                           </span>
                         ) : isAdiada ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-2xs font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 ">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 ">
                             Adiada
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-2xs font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 ">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 ">
                             Aplicada
                           </span>
                         )}
@@ -382,7 +382,7 @@ export default function InjectablesWorkspace({
                         </span>
 
                         {doseClean && (
-                          <span className="px-2 py-0.5 rounded-md bg-primary-soft text-primary font-semibold text-2xs">
+                          <span className="px-2 py-0.5 rounded-md bg-primary-soft text-primary font-semibold text-[11px]">
                             {doseClean}
                           </span>
                         )}
@@ -401,7 +401,7 @@ export default function InjectablesWorkspace({
                       </span>
                     </div>
 
-                    <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-2xs text-muted-foreground">
+                    <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
                       <span>
                         {u.inventory_item_id
                           ? `Consumo da clínica: ${u.quantity} un baixada(s) do estoque`
@@ -558,25 +558,25 @@ export default function InjectablesWorkspace({
                               </span>
 
                               {isSemanal && (
-                                <span className="text-2xs font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary ">
+                                <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary ">
                                   💉 Injetável / Semanal
                                 </span>
                               )}
 
                               {isManipulado && (
-                                <span className="text-2xs font-semibold px-2 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 ">
+                                <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 ">
                                   🧪 Manipulado
                                 </span>
                               )}
 
                               {m.period && !isSemanal && (
-                                <span className="text-2xs font-semibold px-2 py-0.5 rounded bg-primary-soft text-primary">
+                                <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-primary-soft text-primary">
                                   {PERIOD_LABEL[m.period] ?? m.period}
                                 </span>
                               )}
 
                               {suspenso && (
-                                <span className="text-2xs font-semibold px-2 py-0.5 rounded bg-destructive/15 text-destructive">
+                                <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-destructive/15 text-destructive">
                                   Suspenso
                                 </span>
                               )}
@@ -860,11 +860,11 @@ function ProtocolCard({
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[15px] font-bold text-foreground">{name}</span>
-                <span className="rounded bg-primary/10 px-2 py-0.5 text-2xs font-semibold text-primary">
+                <span className="rounded bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
                   Protocolo semanal
                 </span>
                 {allSuspended && (
-                  <span className="rounded bg-destructive/15 px-2 py-0.5 text-2xs font-semibold text-destructive">
+                  <span className="rounded bg-destructive/15 px-2 py-0.5 text-[11px] font-semibold text-destructive">
                     Suspenso
                   </span>
                 )}
@@ -1035,7 +1035,7 @@ function ProtocolCard({
                     )}
                   </div>
                   <div className="col-span-3 sm:col-span-1">
-                    <span className={`inline-flex items-center rounded px-2 py-0.5 text-2xs font-semibold ${badge.cls}`}>
+                    <span className={`inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold ${badge.cls}`}>
                       {r.state === "aplicada" && r.applied
                         ? `Aplicada em ${new Date(r.applied.used_at).toLocaleDateString("pt-BR")}`
                         : r.state === "ocorrencia" && r.occurrence
@@ -1110,7 +1110,7 @@ function ApplicationStatus({ med, uses, today }: { med: DbRow; uses: DbRow[]; to
   const Icon = tone === "done" ? CheckCircle2 : tone === "warn" ? AlertCircle : Clock;
   return (
     <span
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-2xs font-semibold ${STATUS_TONE[tone]}`}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold ${STATUS_TONE[tone]}`}
     >
       {label}
     </span>

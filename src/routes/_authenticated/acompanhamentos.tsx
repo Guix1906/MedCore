@@ -679,7 +679,7 @@ function AcompanhamentosPage() {
                           return (
                             <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs bg-muted/48 p-3 rounded-xl">
                               <div>
-                                <div className="text-muted-foreground text-2xs font-semibold uppercase">
+                                <div className="text-muted-foreground text-[11px] font-semibold uppercase">
                                   Próx. retorno
                                 </div>
                                 {(() => {
@@ -693,13 +693,13 @@ function AcompanhamentosPage() {
                                     >
                                       <CalIcon size={12} className={late ? "text-destructive" : "text-primary"} />
                                       {t.next_return_date ? formatDateOnly(t.next_return_date) : "A definir"}
-                                      {late && <span className="text-2xs font-semibold">(vencido)</span>}
+                                      {late && <span className="text-[11px] font-semibold">(vencido)</span>}
                                     </div>
                                   );
                                 })()}
                               </div>
                               <div>
-                                <div className="text-muted-foreground text-2xs font-semibold uppercase">
+                                <div className="text-muted-foreground text-[11px] font-semibold uppercase">
                                   {totalVal > 0 ? "Contratado" : "Prazo"}
                                 </div>
                                 <div className="text-foreground font-bold mt-0.5 flex items-center gap-1">
@@ -715,7 +715,7 @@ function AcompanhamentosPage() {
                               </div>
                               {totalVal > 0 ? (
                                 <div>
-                                  <div className="text-muted-foreground text-2xs font-semibold uppercase flex items-center justify-between">
+                                  <div className="text-muted-foreground text-[11px] font-semibold uppercase flex items-center justify-between">
                                     <span>Pago</span>
                                     {isFullyPaid ? (
                                       <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 font-bold">
@@ -745,7 +745,7 @@ function AcompanhamentosPage() {
                                 </div>
                               ) : (
                                 <div>
-                                  <div className="text-muted-foreground text-2xs font-semibold uppercase">
+                                  <div className="text-muted-foreground text-[11px] font-semibold uppercase">
                                     Retorno
                                   </div>
                                   <div className="text-foreground font-medium mt-0.5">
@@ -2198,7 +2198,7 @@ function TreatmentManageModal({
                           {brl(treatment.total_value)}
                         </div>
                         {Number(treatment.discount) > 0 && (
-                          <div className="text-2xs text-destructive font-medium mt-0.5">
+                          <div className="text-[11px] text-destructive font-medium mt-0.5">
                             Desc: -{brl(treatment.discount)}
                           </div>
                         )}
@@ -2223,7 +2223,7 @@ function TreatmentManageModal({
                           {Number(treatment.down_payment) > 0 ? brl(treatment.down_payment) : "Sem entrada"}
                         </div>
                         {Number(treatment.down_payment) > 0 && (
-                          <div className="text-2xs text-muted-foreground mt-0.5">
+                          <div className="text-[11px] text-muted-foreground mt-0.5">
                             {paymentMethodLabel(treatment.down_payment_method || "pix")}
                           </div>
                         )}
@@ -2243,7 +2243,7 @@ function TreatmentManageModal({
                             ),
                           )}
                         </div>
-                        <div className="text-2xs text-muted-foreground mt-0.5">
+                        <div className="text-[11px] text-muted-foreground mt-0.5">
                           {isInitiallyLivre ? "Saldo Livre" : `${treatment.installments_count || 1}x parcelas`}
                         </div>
                       </div>
@@ -2257,7 +2257,7 @@ function TreatmentManageModal({
                             ? brl(paymentStats.paidTotal)
                             : "Pendente"}
                         </div>
-                        <div className="text-2xs text-muted-foreground mt-0.5">
+                        <div className="text-[11px] text-muted-foreground mt-0.5">
                           {paymentStats.countPaid > 0
                             ? `${paymentStats.countPaid} recebido(s)`
                             : "Aguardando baixa"}
