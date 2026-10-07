@@ -5,11 +5,13 @@ import ClinicalFollowup, {
 import InjectablesWorkspace from "@/features/acompanhamentos/InjectablesWorkspace";
 import { PlanPayments } from "@/features/acompanhamentos/TreatmentFinance";
 import { getFinancialSnapshot } from "@/features/finance/finance-api";
-import { isFreeBalance } from "@/features/finance/finance-math";
+import { isFreeBalance, remaining } from "@/features/finance/finance-math";
+import TreatmentSummary from "@/features/acompanhamentos/TreatmentSummary";
 import {
   currency,
   formatClinicalDate,
   isWeightLossTreatment,
+  localDate,
   protocolDeadline,
 } from "@/features/acompanhamentos/followup-utils";
 import type { DbRow, Json } from "@/lib/types";
@@ -528,6 +530,10 @@ function TreatmentDetailPage() {
                 payments={treatmentPayments}
                 onOpenFinance={() => setTab("financeiro")}
                 installmentOrder={installmentOrder}
+                meds={meds}
+                paymentOverdue={planTitles
+                  .filter((t) => !isFreeBalance(t) && t.due_date && t.due_date < localDate())
+                  .reduce((s, t) => s + remaining(t), 0)}
               />
             )}
             {(tab === "injetaveis" || tab === "medicacoes") && (
@@ -621,6 +627,8 @@ function ResumoTab({
   payments,
   onOpenFinance,
   installmentOrder,
+  meds,
+  paymentOverdue,
 }: {
   treatment: DbRow;
   kpis: {
@@ -642,6 +650,8 @@ function ResumoTab({
   payments: Array<DbRow & { title: DbRow; accountName?: string }>;
   onOpenFinance: () => void;
   installmentOrder: Map<string, number>;
+  meds: DbRow[];
+  paymentOverdue: number;
 }) {
   const cards = [
     {
@@ -839,52 +849,7 @@ function ResumoTab({
         {formatClinicalDate(treatment.end_date)}
       </p>
 
-      {/* Card do Copiloto Clínico IA */}
-      <div className="relative overflow-hidden rounded-xl border border-primary/15 bg-card p-5 text-foreground shadow-xs md:p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[linear-gradient(135deg,#ff7a59,#d946ef_50%,#6366f1)] text-white shadow-sm">
-              <Sparkles size={18} />
-            </div>
-            <div>
-              <h3 className="text-[15px] font-semibold text-foreground">
-                Resumo do acompanhamento
-              </h3>
-              <p className="text-xs text-muted-foreground">Prazos e medicações cadastradas</p>
-            </div>
-          </div>
-
-          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-primary-soft text-primary-hover">
-            Dados do plano
-          </span>
-        </div>
-
-        <div className="mt-4 p-4 rounded-2xl bg-card/90 border border-primary/11 text-sm text-foreground/80 leading-relaxed space-y-2">
-          <p>
-            📍 <b>Status do Tratamento:</b> O paciente encontra-se no{" "}
-            <b>
-              dia {kpis.passedDays} de {kpis.totalDays}
-            </b>{" "}
-            ({kpis.progress}% do prazo transcorrido). Possui{" "}
-            <b>{kpis.activeMeds} medicação(ões) ativa(s)</b> no cronograma diário.
-          </p>
-          <p>
-            🩺 <b>Próximo Passo Clínico:</b>{" "}
-            {kpis.nextReturn ? (
-              <span>
-                Retorno previsto para <b>{formatClinicalDate(kpis.nextReturn)}</b> (estimativa
-                clínica). Recomenda-se avaliar a adesão medicamentosa e registrar fotos de evolução
-                na aba dedicada.
-              </span>
-            ) : (
-              <span>
-                Sem retorno previsto cadastrado. Recomenda-se definir uma data estimada de retorno
-                para o checkpoint clínico.
-              </span>
-            )}
-          </p>
-        </div>
-      </div>
+      <TreatmentSummary treatment={treatment} meds={meds} paymentOverdue={paymentOverdue} />
 
       {/* Grid de KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
