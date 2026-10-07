@@ -88,7 +88,9 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
     let ven_30_plus_count = 0,
       ven_30_plus_val = 0;
 
+    // Cards e análise seguem o período escolhido (por vencimento), como a lista
     despesas.forEach((e) => {
+      if (!inPeriod(e.due_date, period)) return;
       const paid = Number(e.paid_amount ?? (e.status === "pago" ? e.amount : 0));
       const rem = remaining(e);
       const isPaid = e.status === "pago" || rem <= 0;
@@ -168,13 +170,13 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
         ],
       },
     };
-  }, [despesas]);
+  }, [despesas, period]);
 
   // Itens filtrados para exibição na lista
   const filteredList = useMemo(() => {
     const today = startOfDay(new Date());
 
-    return despesas.filter((e) => {
+    const rows = despesas.filter((e) => {
       const rem = remaining(e);
       const isPaid = e.status === "pago" || rem <= 0;
       const isVencido = !isPaid && !!e.due_date && startOfDay(parseISO(e.due_date)) < today;
@@ -213,60 +215,70 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
 
       return true;
     });
+    // Em aberto primeiro, por vencimento (vencidas no topo); pagas depois, mais recentes primeiro
+    const isOpen = (t: FinancialTitle) => t.status !== "pago" && remaining(t) > 0;
+    const byDue = (a: FinancialTitle, b: FinancialTitle) =>
+      (a.due_date || "9999").localeCompare(b.due_date || "9999");
+    return [
+      ...rows.filter(isOpen).sort(byDue),
+      ...rows.filter((t) => !isOpen(t)).sort((a, b) => byDue(b, a)),
+    ];
   }, [despesas, subTab, statusFilter, search, period]);
 
+  const segBtn = (active: boolean) =>
+    cn(
+      "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer whitespace-nowrap",
+      active ? "bg-card text-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground",
+    );
+
   return (
-    <div className="space-y-6 pb-12">
-      {/* ========================================================================= */}
-      {/* 1. CABEÇALHO COM ÍCONE VERMELHO, TÍTULO, BADGE E BOTÕES DE AÇÃO           */}
-      {/* ========================================================================= */}
-      <div className="flex justify-end">
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button
-            size="sm"
-            onClick={() => onOpenNew("despesa")}
-            className="h-9 px-3.5 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary-hover text-white shadow-xs rounded-xl cursor-pointer"
-          >
-            <Plus className="h-3.5 w-3.5" strokeWidth={2.5} /> Nova Conta
-          </Button>
-
-          <Button
-            size="sm"
-            variant={mainSection === "custos-fixos" ? "default" : "outline"}
-            onClick={() => setMainSection("custos-fixos")}
-            className="h-9 px-3.5 text-xs font-semibold gap-1.5 border-border shadow-2xs rounded-xl cursor-pointer"
-          >
-            <Calendar className="h-3.5 w-3.5" /> Custos Fixos Mensais
-          </Button>
-
-          <Button
-            size="sm"
-            variant={mainSection === "calendario" ? "default" : "outline"}
-            onClick={() => setMainSection("calendario")}
-            className="h-9 px-3.5 text-xs font-semibold gap-1.5 border-border shadow-2xs rounded-xl cursor-pointer"
-          >
-            <Clock className="h-3.5 w-3.5" /> Calendário de Vencimentos
-          </Button>
-
-          <Button
-            size="sm"
-            variant={mainSection === "contas" ? "default" : "outline"}
-            onClick={() => setMainSection("contas")}
-            className="h-9 px-3.5 text-xs font-semibold gap-1.5 border-border shadow-2xs rounded-xl cursor-pointer"
-          >
-            <Layers className="h-3.5 w-3.5" /> Contas Cadastradas
-          </Button>
-
+    <div className="min-w-0 space-y-5 pb-12">
+      {/* Seções da tela (abas) + ações */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border">
+        <div className="flex items-center gap-1 overflow-x-auto" role="tablist" aria-label="Seções de contas a pagar">
+          {(
+            [
+              { id: "contas", label: "Contas a pagar", icon: Layers },
+              { id: "custos-fixos", label: "Custos fixos mensais", icon: Calendar },
+              { id: "calendario", label: "Calendário", icon: Clock },
+            ] as const
+          ).map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              role="tab"
+              aria-selected={mainSection === s.id}
+              onClick={() => setMainSection(s.id)}
+              className={cn(
+                "-mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-semibold transition-colors cursor-pointer whitespace-nowrap",
+                mainSection === s.id
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <s.icon className="h-4 w-4" />
+              {s.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 pb-2">
           <Button
             variant="outline"
             size="icon"
-            className="h-9 w-9 border-border bg-card text-muted-foreground hover:bg-muted/60 shadow-xs cursor-pointer "
+            className="h-9 w-9 border-border bg-card text-muted-foreground hover:bg-muted/60 shadow-xs cursor-pointer"
             onClick={() => void onRefresh?.()}
             disabled={refreshing || !onRefresh}
             title="Atualizar"
             aria-label="Atualizar"
           >
             <RotateCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => onOpenNew("despesa")}
+            className="h-9 px-3.5 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary-hover text-white shadow-xs rounded-xl cursor-pointer"
+          >
+            <Plus className="h-3.5 w-3.5" strokeWidth={2.5} /> Nova conta
           </Button>
         </div>
       </div>
@@ -277,253 +289,144 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
         <CalendarioVencimentos finance={finance} onPay={onPay} onEdit={onEdit} />
       ) : (
         <>
-      {/* ========================================================================= */}
-      {/* 2. SUB-ABAS / PILLS (A Pagar, Histórico, Todas)                            */}
-      {/* ========================================================================= */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <button
-          type="button"
-          onClick={() => setSubTab("a-pagar")}
-          className={cn(
-            "rounded-full px-4 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer",
-            subTab === "a-pagar"
-              ? "bg-destructive text-white shadow-xs"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          <Clock className="h-3.5 w-3.5" />A Pagar ({metrics.aVencerCount + metrics.vencidoCount})
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setSubTab("historico")}
-          className={cn(
-            "rounded-full px-4 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer",
-            subTab === "historico"
-              ? "bg-destructive text-white shadow-xs font-semibold"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          <Receipt className="h-3.5 w-3.5" />
-          Histórico ({metrics.pagoCount} pagas)
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setSubTab("todas")}
-          className={cn(
-            "rounded-full px-4 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer",
-            subTab === "todas"
-              ? "bg-destructive text-white shadow-xs font-semibold"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          <Layers className="h-3.5 w-3.5" />
-          Todas ({despesas.length})
-        </button>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 3. BARRA DE FILTROS (POSICIONADA ACIMA DOS CARDS DE KPIS CONFORME IMAGEM) */}
-      {/* ========================================================================= */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-        <div className="relative w-full sm:w-[320px] md:w-[360px]">
-          <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por descrição, favorecido ou data (dd/mm)..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="h-9 pl-8 text-xs bg-card border-border rounded-lg placeholder:text-muted-foreground shadow-2xs"
-          />
-        </div>
-
-        <PeriodFilter value={period} onChange={setPeriod} />
-
-        <div className="inline-flex items-center bg-muted/60 p-0.5 rounded-lg border border-border shadow-2xs">
+      {/* Resumo do período: cada card filtra a lista abaixo */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {(
+          [
+            {
+              id: "pendente",
+              label: "A vencer",
+              value: metrics.aVencerTotal,
+              sub: `${metrics.aVencerCount} conta(s) em aberto`,
+              tone: "text-foreground",
+              active: subTab === "a-pagar" && statusFilter === "pendente",
+              onClick: () => {
+                setSubTab("a-pagar");
+                setStatusFilter("pendente");
+              },
+            },
+            {
+              id: "vencido",
+              label: "Vencido",
+              value: metrics.vencidoTotal,
+              sub: `${metrics.vencidoCount} em atraso`,
+              tone: metrics.vencidoTotal > 0 ? "text-destructive" : "text-foreground",
+              active: subTab === "a-pagar" && statusFilter === "vencido",
+              onClick: () => {
+                setSubTab("a-pagar");
+                setStatusFilter("vencido");
+              },
+            },
+            {
+              id: "pago",
+              label: "Pago",
+              value: metrics.pagoTotal,
+              sub: `${metrics.pagoCount} conta(s) paga(s)`,
+              tone: "text-success",
+              active: subTab === "historico",
+              onClick: () => {
+                setSubTab("historico");
+                setStatusFilter("todos");
+              },
+            },
+          ] as const
+        ).map((k) => (
           <button
+            key={k.id}
             type="button"
-            onClick={() => setStatusFilter("todos")}
+            onClick={k.onClick}
+            aria-pressed={k.active}
             className={cn(
-              "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
-              statusFilter === "todos"
-                ? "bg-card text-foreground shadow-2xs"
-                : "text-muted-foreground hover:text-foreground",
+              "rounded-xl border bg-card px-4 py-3 text-left shadow-2xs transition-colors cursor-pointer hover:border-primary/40",
+              k.active ? "border-primary ring-2 ring-primary/20" : "border-border",
             )}
           >
-            Todos
+            <span className="text-xs font-medium text-muted-foreground">{k.label}</span>
+            <p className={cn("text-xl font-semibold tracking-tight tabular-nums", k.tone)}>
+              <CountUp value={k.value} format={(v) => currency(v)} />
+            </p>
+            <p className="text-xs text-muted-foreground">{k.sub}</p>
           </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter("pendente")}
-            className={cn(
-              "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
-              statusFilter === "pendente"
-                ? "bg-card text-foreground shadow-2xs"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            A Vencer ({metrics.aVencerCount})
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter("vencido")}
-            className={cn(
-              "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
-              statusFilter === "vencido"
-                ? "bg-card text-foreground shadow-2xs"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            Vencidas ({metrics.vencidoCount})
-          </button>
-        </div>
+        ))}
       </div>
 
-      {/* ========================================================================= */}
-      {/* 4. CARDS DE MÉTRICAS (A VENCER, VENCIDO, PAGO / LIQUIDADO)                 */}
-      {/* ========================================================================= */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* A VENCER */}
-        <div className="rounded-xl border border-border bg-card p-5 shadow-xs flex items-center justify-between">
-          <div className="space-y-1">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              A VENCER
-            </span>
-            <p className="text-2xl font-semibold text-foreground tracking-tight">
-              <CountUp value={metrics.aVencerTotal} format={(v) => currency(v)} />
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {metrics.aVencerCount} lançamentos pendentes
-            </p>
-          </div>
-        </div>
-
-        {/* VENCIDO */}
-        <div
-          className="rounded-xl border border-border bg-card p-5 shadow-xs flex items-center justify-between cursor-pointer hover:border-destructive/35 transition-colors"
-          onClick={() => setStatusFilter("vencido")}
-        >
-          <div className="space-y-1">
-            <span className="text-xs font-semibold text-destructive uppercase tracking-wider">
-              VENCIDO
-            </span>
-            <p className="text-2xl font-semibold text-destructive tracking-tight">
-              <CountUp value={metrics.vencidoTotal} format={(v) => currency(v)} />
-            </p>
-            <p className="text-xs text-muted-foreground">{metrics.vencidoCount} em atraso</p>
-          </div>
-        </div>
-
-        {/* PAGO / LIQUIDADO */}
-        <div className="rounded-xl border border-border bg-card p-5 shadow-xs flex items-center justify-between">
-          <div className="space-y-1">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              PAGO / LIQUIDADO
-            </span>
-            <p className="text-2xl font-semibold text-foreground tracking-tight">
-              <CountUp value={metrics.pagoTotal} format={(v) => currency(v)} />
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {metrics.pagoCount} lançamentos liquidados
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 5. SEÇÃO 2 COLUNAS: ANÁLISE DE VENCIMENTO & CONTROLE DE SAÍDAS             */}
-      {/* ========================================================================= */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* COLUNA ESQUERDA: ANÁLISE DE VENCIMENTO */}
-        <div className="rounded-xl border border-border bg-card p-5 shadow-xs space-y-4">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            ANÁLISE DE VENCIMENTO
-          </h2>
-
-          <div className="space-y-2">
-            <span className="text-xs font-semibold text-warning uppercase tracking-wider block">
-              A VENCER
-            </span>
-            <div className="divide-y divide-border-soft">
-              {metrics.faixas.aVencer.map((f) => (
-                <div key={f.label} className="py-2 flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">{f.label}</span>
-                  <div className="flex items-center gap-4">
-                    <span className="text-muted-foreground">{f.count} itens</span>
-                    <strong className="font-semibold text-foreground tabular-nums min-w-[85px] text-right">
-                      {currency(f.val)}
-                    </strong>
+      {/* Análise por faixa de vencimento: recolhida para não empurrar a lista para baixo */}
+      <details className="group rounded-xl border border-border bg-card shadow-2xs">
+        <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-foreground">
+          Análise de vencimento
+          <span className="text-xs font-medium text-muted-foreground group-open:hidden">Mostrar</span>
+          <span className="hidden text-xs font-medium text-muted-foreground group-open:inline">Ocultar</span>
+        </summary>
+        <div className="grid grid-cols-1 gap-6 border-t border-border-soft px-4 py-3 md:grid-cols-2">
+          {(
+            [
+              ["A vencer", metrics.faixas.aVencer, "text-foreground"],
+              ["Vencido", metrics.faixas.vencido, "text-destructive"],
+            ] as const
+          ).map(([title, faixas, tone]) => (
+            <div key={title} className="space-y-1">
+              <span className={cn("text-xs font-semibold", tone)}>{title}</span>
+              <div className="divide-y divide-border-soft">
+                {faixas.map((f) => (
+                  <div key={f.label} className="flex items-center justify-between py-1.5 text-xs">
+                    <span className="text-muted-foreground">{f.label}</span>
+                    <span className="flex items-center gap-4">
+                      <span className="text-muted-foreground">{f.count} itens</span>
+                      <strong className={cn("min-w-[85px] text-right font-semibold tabular-nums", tone)}>
+                        {currency(f.val)}
+                      </strong>
+                    </span>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-
-          <div className="space-y-2 pt-1">
-            <span className="text-xs font-semibold text-destructive uppercase tracking-wider block">
-              VENCIDO
-            </span>
-            <div className="divide-y divide-border-soft">
-              {metrics.faixas.vencido.map((f) => (
-                <div key={f.label} className="py-2 flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">{f.label}</span>
-                  <div className="flex items-center gap-4">
-                    <span className="text-muted-foreground">{f.count} itens</span>
-                    <strong className="font-semibold text-destructive tabular-nums min-w-[85px] text-right">
-                      {currency(f.val)}
-                    </strong>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          ))}
         </div>
+      </details>
 
-        {/* COLUNA DIREITA: CONTROLE DE SAÍDAS */}
-        <div className="rounded-xl border border-border bg-card p-5 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center gap-2">
-            <div>
-              <h2 className="font-semibold text-sm text-foreground">Controle de Saídas</h2>
-              <p className="text-xs text-muted-foreground">
-                Total acumulado de despesas cadastradas
-              </p>
-            </div>
-          </div>
-
-          <div className="py-10 text-center space-y-1">
-            <p className="text-3xl font-semibold text-destructive tracking-tight">
-              {currency(metrics.totalAcumulado)}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {despesas.length} despesas registradas no total
-            </p>
-          </div>
-
-          <div className="border-t border-border-soft pt-3 text-center">
-            <p className="text-xs text-muted-foreground">
-              Atualizado em tempo real com todos os lançamentos
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 6. LISTA PRINCIPAL: LANÇAMENTOS DE DESPESAS                               */}
-      {/* ========================================================================= */}
-      <div className="rounded-xl border border-border bg-card p-5 shadow-xs space-y-4">
-        <div className="flex items-center justify-between gap-3">
+      {/* Lista: filtros ficam no topo do próprio card de lançamentos */}
+      <div className="rounded-xl border border-border bg-card p-4 shadow-xs space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-foreground">
-            Lançamentos de Despesas ({filteredList.length})
+            Lançamentos de despesas ({filteredList.length})
           </h2>
+          <div className="inline-flex items-center bg-muted/60 p-0.5 rounded-lg border border-border">
+            <button type="button" onClick={() => setSubTab("a-pagar")} className={segBtn(subTab === "a-pagar")}>
+              A pagar ({metrics.aVencerCount + metrics.vencidoCount})
+            </button>
+            <button type="button" onClick={() => setSubTab("historico")} className={segBtn(subTab === "historico")}>
+              Pagas ({metrics.pagoCount})
+            </button>
+            <button type="button" onClick={() => setSubTab("todas")} className={segBtn(subTab === "todas")}>
+              Todas
+            </button>
+          </div>
+        </div>
 
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 border-destructive/25 bg-card text-destructive hover:bg-destructive/10 text-xs font-semibold px-3 flex items-center gap-1.5 shadow-2xs cursor-pointer"
-            onClick={() => onOpenNew("despesa")}
-          >
-            <Plus className="h-3.5 w-3.5" /> Adicionar Despesa
-          </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <PeriodFilter value={period} onChange={setPeriod} />
+          <div className="relative min-w-[200px] flex-1">
+            <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Buscar descrição, favorecido ou data (dd/mm)..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-9 pl-8 text-xs bg-card border-border rounded-lg placeholder:text-muted-foreground shadow-2xs"
+            />
+          </div>
+          {subTab !== "historico" && (
+            <div className="inline-flex items-center bg-muted/60 p-0.5 rounded-lg border border-border">
+              <button type="button" onClick={() => setStatusFilter("todos")} className={segBtn(statusFilter === "todos")}>
+                Todas
+              </button>
+              <button type="button" onClick={() => setStatusFilter("pendente")} className={segBtn(statusFilter === "pendente")}>
+                A vencer
+              </button>
+              <button type="button" onClick={() => setStatusFilter("vencido")} className={segBtn(statusFilter === "vencido")}>
+                Vencidas
+              </button>
+            </div>
+          )}
         </div>
 
         {filteredList.length === 0 ? (

@@ -234,6 +234,8 @@ export function ContasReceberTab({
     const overdueClients = new Set<string>();
 
     receitas.forEach((e) => {
+      // Cards seguem o período escolhido (por vencimento); saldo livre não tem data e sempre entra
+      if (!isFreeBalance(e) && !inPeriod(e.due_date, period)) return;
       const { rem, isPaid, paidAmt } = getTitleStatus(e);
       const paid = paidAmt;
 
@@ -333,7 +335,7 @@ export function ContasReceberTab({
         ],
       },
     };
-  }, [receitas]);
+  }, [receitas, period, finance?.payments]);
 
   // Previsão mês a mês (mês atual + 5) do saldo em aberto com vencimento
   const monthlyForecast = useMemo(() => {
@@ -835,6 +837,13 @@ export function ContasReceberTab({
       {/* ========================================================================= */}
       {/* 4. SEÇÃO EM 2 COLUNAS: RECEBIMENTOS POR VENCIMENTO & RECEBIMENTOS PREVISTOS */}
       {/* ========================================================================= */}
+      <details className="group rounded-xl border border-border bg-card shadow-2xs">
+        <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-foreground">
+          Análise de recebimentos (por vencimento e previsão mensal)
+          <span className="text-xs font-medium text-muted-foreground group-open:hidden">Mostrar</span>
+          <span className="hidden text-xs font-medium text-muted-foreground group-open:inline">Ocultar</span>
+        </summary>
+        <div className="border-t border-border-soft p-3">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* COLUNA ESQUERDA: RECEBIMENTOS POR VENCIMENTO */}
         <div className="rounded-xl border border-border bg-card p-5 shadow-xs space-y-4">
@@ -931,17 +940,31 @@ export function ContasReceberTab({
 
           <div className="border-t border-border-soft pt-3 text-center">
             <p className="text-xs text-muted-foreground">
-              Para um dia específico, use o filtro de vencimento abaixo (Hoje ou Personalizado)
+              Clique num mês para filtrar a lista de lançamentos
             </p>
           </div>
         </div>
       </div>
+        </div>
+      </details>
 
       {/* ========================================================================= */}
-      {/* 5. BARRA DE FILTROS: BUSCA, SELETOR DE ASSOCIADO E PILLS (TODOS/PENDENTE)  */}
+      {/* 6. LISTA PRINCIPAL: HONORÁRIOS E RECEBIMENTOS                             */}
       {/* ========================================================================= */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-        <div className="relative w-full sm:w-[280px]">
+      <div className="rounded-xl border border-border bg-card p-5 shadow-xs space-y-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className="font-semibold text-sm text-foreground">
+            Honorários e Recebimentos ({filteredTitles.length})
+          </h3>
+          <span className="text-xs text-muted-foreground">
+            Em aberto nesta lista:{" "}
+            <strong className="text-success tabular-nums">
+              {currency(filteredTitles.reduce((s, t) => s + getTitleStatus(t).rem, 0))}
+            </strong>
+          </span>
+        </div>
+      <div className="flex flex-wrap items-center gap-2 border-b border-border-soft pb-3">
+        <div className="relative min-w-[200px] flex-1">
           <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
@@ -1023,22 +1046,6 @@ export function ContasReceberTab({
           </div>
         </div>
       </div>
-
-      {/* ========================================================================= */}
-      {/* 6. LISTA PRINCIPAL: HONORÁRIOS E RECEBIMENTOS                             */}
-      {/* ========================================================================= */}
-      <div className="rounded-xl border border-border bg-card p-5 shadow-xs space-y-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h3 className="font-semibold text-sm text-foreground">
-            Honorários e Recebimentos ({filteredTitles.length})
-          </h3>
-          <span className="text-xs text-muted-foreground">
-            Em aberto nesta lista:{" "}
-            <strong className="text-success tabular-nums">
-              {currency(filteredTitles.reduce((s, t) => s + getTitleStatus(t).rem, 0))}
-            </strong>
-          </span>
-        </div>
 
         {filteredTitles.length === 0 ? (
           <div className="py-12 text-center text-sm text-muted-foreground">

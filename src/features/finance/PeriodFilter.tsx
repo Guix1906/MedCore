@@ -6,7 +6,17 @@ import { CalendarRange, X } from "lucide-react";
  */
 
 export type Period = { from: string; to: string; preset: PresetKey };
-type PresetKey = "todos" | "hoje" | "semana" | "mes" | "proximos30" | "mesAnterior" | "custom";
+type PresetKey =
+  | "todos"
+  | "hoje"
+  | "semana"
+  | "mes"
+  | "proximos30"
+  | "mesAnterior"
+  | "dia"
+  | "mesEscolhido"
+  | "ano"
+  | "custom";
 
 export const ALL_PERIOD: Period = { from: "", to: "", preset: "todos" };
 
@@ -36,6 +46,13 @@ function presetRange(key: PresetKey): Period {
     }
     case "mesAnterior":
       return { from: iso(new Date(y, m - 1, 1)), to: iso(new Date(y, m, 0)), preset: key };
+    // Escolha livre: começam no dia/mês/ano atual e o usuário troca no campo ao lado
+    case "dia":
+      return { from: iso(t), to: iso(t), preset: key };
+    case "mesEscolhido":
+      return { from: iso(new Date(y, m, 1)), to: iso(new Date(y, m + 1, 0)), preset: key };
+    case "ano":
+      return { from: `${y}-01-01`, to: `${y}-12-31`, preset: key };
     default:
       return ALL_PERIOD;
   }
@@ -73,8 +90,13 @@ const PRESETS: [PresetKey, string][] = [
   ["mes", "Este mês"],
   ["proximos30", "Próximos 30 dias"],
   ["mesAnterior", "Mês anterior"],
+  ["dia", "Escolher dia"],
+  ["mesEscolhido", "Escolher mês"],
+  ["ano", "Escolher ano"],
   ["custom", "Personalizado"],
 ];
+
+const thisYear = new Date().getFullYear();
 
 export function PeriodFilter({ value, onChange }: { value: Period; onChange: (p: Period) => void }) {
   const dateInput =
@@ -99,6 +121,44 @@ export function PeriodFilter({ value, onChange }: { value: Period; onChange: (p:
           </option>
         ))}
       </select>
+      {value.preset === "dia" && (
+        <input
+          type="date"
+          aria-label="Dia"
+          value={value.from}
+          onChange={(e) => e.target.value && onChange({ from: e.target.value, to: e.target.value, preset: "dia" })}
+          className={dateInput}
+        />
+      )}
+      {value.preset === "mesEscolhido" && (
+        <input
+          type="month"
+          aria-label="Mês"
+          value={value.from.slice(0, 7)}
+          onChange={(e) => {
+            if (!e.target.value) return;
+            const [y, m] = e.target.value.split("-").map(Number);
+            onChange({ from: iso(new Date(y, m - 1, 1)), to: iso(new Date(y, m, 0)), preset: "mesEscolhido" });
+          }}
+          className={dateInput}
+        />
+      )}
+      {value.preset === "ano" && (
+        <select
+          aria-label="Ano"
+          value={value.from.slice(0, 4)}
+          onChange={(e) =>
+            onChange({ from: `${e.target.value}-01-01`, to: `${e.target.value}-12-31`, preset: "ano" })
+          }
+          className={`${dateInput} cursor-pointer`}
+        >
+          {Array.from({ length: 8 }, (_, i) => thisYear + 2 - i).map((y) => (
+            <option key={y} value={y}>
+              {y}
+            </option>
+          ))}
+        </select>
+      )}
       {value.preset === "custom" && (
         <>
           <input
