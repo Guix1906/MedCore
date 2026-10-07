@@ -85,6 +85,38 @@ export default function TreatmentSummary({
   const adherence = useList.length ? Math.round((applied.length / useList.length) * 100) : null;
 
   const activeMeds = meds.filter((m) => m.status === "ativo");
+  // Protocolo semanal é salvo como uma linha por semana ("Nome (Sem. 3)"): agrupa num item só,
+  // com a faixa de dose e a semana atual
+  const medItems = (() => {
+    const groups = new Map<string, DbRow[]>();
+    const singles: { key: string; name: string; detail: string }[] = [];
+    for (const m of activeMeds) {
+      const match = String(m.name || "").match(/^(.*)\s+\(Sem\.\s*(\d+)\)$/);
+      if (match) groups.set(match[1], [...(groups.get(match[1]) ?? []), { ...m, _week: Number(match[2]) }]);
+      else
+        singles.push({
+          key: m.id,
+          name: m.name,
+          detail: [m.dose ? `${m.dose}${m.unit || ""}` : "", m.frequency || ""].filter(Boolean).join(" · "),
+        });
+    }
+    const protocols = [...groups.entries()].map(([name, rows]) => {
+      const sorted = rows.sort((a, b) => a._week - b._week);
+      const mgs = sorted.map((r) => Number(String(r.dose).replace(",", "."))).filter(Number.isFinite);
+      const fmt = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+      const range = mgs.length
+        ? Math.min(...mgs) === Math.max(...mgs)
+          ? `${fmt(mgs[0])} mg`
+          : `${fmt(Math.min(...mgs))} → ${fmt(Math.max(...mgs))} mg`
+        : "";
+      const current = [...sorted].reverse().find((r) => r.start_date && String(r.start_date) <= today);
+      const now = current
+        ? `semana ${current._week} de ${sorted[sorted.length - 1]._week} (${fmt(Number(String(current.dose).replace(",", ".")))} mg)`
+        : `${sorted.length} semanas, começa ${formatClinicalDate(sorted[0].start_date)}`;
+      return { key: name, name, detail: ["Semanal", range, now].filter(Boolean).join(" · ") };
+    });
+    return [...protocols, ...singles];
+  })();
   const returns = evolutions.filter((e) => e.is_return).length;
   const daysSinceEvolution = last ? daysBetween(String(last.occurred_on), today) : null;
   const daysToEnd = treatment.end_date ? daysBetween(today, String(treatment.end_date)) : null;
@@ -301,23 +333,20 @@ export default function TreatmentSummary({
         {/* Medicações ativas */}
         <section className="rounded-xl border border-border-soft bg-muted/40 p-3.5 space-y-1.5 md:col-span-2">
           <h4 className="flex items-center gap-1.5 text-xs font-semibold uppercase text-muted-foreground">
-            <Pill size={14} /> Medicações ativas ({activeMeds.length})
+            <Pill size={14} /> Medicações ativas ({medItems.length})
           </h4>
-          {activeMeds.length === 0 ? (
+          {medItems.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nenhuma medicação ativa no cronograma.</p>
           ) : (
-            <ul className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
-              {activeMeds.slice(0, 8).map((m) => (
-                <li key={m.id} className="truncate text-sm text-foreground">
+            <ul className="space-y-1">
+              {medItems.slice(0, 8).map((m) => (
+                <li key={m.key} className="text-sm text-foreground">
                   <b>{m.name}</b>
-                  <span className="text-muted-foreground">
-                    {m.dose ? ` · ${m.dose}${m.unit || ""}` : ""}
-                    {m.frequency ? ` · ${m.frequency}` : ""}
-                  </span>
+                  {m.detail && <span className="text-muted-foreground"> · {m.detail}</span>}
                 </li>
               ))}
-              {activeMeds.length > 8 && (
-                <li className="text-xs text-muted-foreground">+ {activeMeds.length - 8} na aba Injetáveis</li>
+              {medItems.length > 8 && (
+                <li className="text-xs text-muted-foreground">+ {medItems.length - 8} na aba Injetáveis</li>
               )}
             </ul>
           )}

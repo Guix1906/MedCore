@@ -263,7 +263,12 @@ function TreatmentDetailPage() {
   const remainingDays = Math.max(0, totalDays - passedDays);
   const progress = totalDays > 0 ? Math.min(100, Math.round((passedDays / totalDays) * 100)) : 0;
 
-  const activeMeds = meds.filter((m) => m.status === "ativo").length;
+  // Protocolo semanal tem uma linha por semana ("Nome (Sem. 3)"): conta como uma medicação só
+  const activeMeds = new Set(
+    meds
+      .filter((m) => m.status === "ativo")
+      .map((m) => String(m.name || "").replace(/\s+\(Sem\.\s*\d+\)$/, "")),
+  ).size;
   const setStatus = async (status: string) => {
     if (await changeTreatmentStatus(id, status)) {
       await queryClient.invalidateQueries({ queryKey: ["treatment-alerts"] });
