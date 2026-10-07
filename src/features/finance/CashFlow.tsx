@@ -38,6 +38,7 @@ import {
   subMonths,
   addYears,
   subYears,
+  differenceInCalendarDays,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -577,8 +578,10 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
   }, [allRealizedEntries, forecastEntries, scope, selectedAccount, start, end]);
 
   // Dados do gráfico compartilhado: pagamentos (realizado) + saldo em aberto (previsto), por clínica
-  // Agrupamento do gráfico segue o período do topo
-  const flowChartPeriod = useMemo<CashFlowPeriod>(() => {
+  // Agrupamento do gráfico: segue o período do topo até o usuário escolher Diária/Semanal/Mensal/Anual
+  const [chartPeriodChoice, setChartPeriodChoice] = useState<CashFlowPeriod | null>(null);
+  useEffect(() => setChartPeriodChoice(null), [periodMode]);
+  const autoChartPeriod = useMemo<CashFlowPeriod>(() => {
     if (periodMode === "dia" || periodMode === "semana") return "day";
     if (periodMode === "mes") return "week";
     if (periodMode === "ano") return "month";
@@ -601,13 +604,29 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
       return [];
     }
   }, [finance, scope]);
+  const flowChartPeriod = chartPeriodChoice ?? autoChartPeriod;
   const flowChartRange = useMemo<[Date, Date]>(() => {
-    const s = start ? parseISO(start) : startOfMonth(new Date());
-    const e = end ? parseISO(end) : endOfMonth(new Date());
+    let s = start ? parseISO(start) : startOfMonth(new Date());
+    let e = end ? parseISO(end) : endOfMonth(new Date());
+    // Agrupamento maior que o período (ex.: Mensal vendo um mês) daria uma barra só:
+    // amplia a janela do gráfico para o ano (Mensal) ou os últimos 5 anos (Anual).
+    if (flowChartPeriod === "month" && differenceInCalendarDays(e, s) < 62) {
+      s = startOfYear(e);
+      e = endOfYear(e);
+    } else if (flowChartPeriod === "year") {
+      s = startOfYear(new Date(e.getFullYear() - 4, 0, 1));
+      e = endOfYear(e);
+    } else if (flowChartPeriod === "day" && differenceInCalendarDays(e, s) > 62) {
+      // Diária num ano inteiro seriam 365 barras: mostra o último mês do período
+      s = startOfMonth(e);
+    } else if (flowChartPeriod === "week" && differenceInCalendarDays(e, s) < 14) {
+      s = startOfMonth(e);
+      e = endOfMonth(e);
+    }
     s.setHours(0, 0, 0, 0);
     e.setHours(23, 59, 59, 999);
     return [s, e];
-  }, [start, end]);
+  }, [start, end, flowChartPeriod]);
 
   // Execução de transferência entre contas
   const handleExecuteTransfer = async () => {
@@ -1150,9 +1169,8 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
           rows={flowChartRows}
           range={flowChartRange}
           period={flowChartPeriod}
-          onPeriodChange={() => {}}
+          onPeriodChange={setChartPeriodChoice}
           useRange
-          hidePeriodTabs
           height={220}
           className="border border-border"
           actions={
