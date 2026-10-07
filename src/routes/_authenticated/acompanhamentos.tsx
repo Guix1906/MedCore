@@ -549,7 +549,7 @@ function AcompanhamentosPage() {
               <button
                 type="button"
                 onClick={() => setSearch({ filtro: undefined })}
-                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-semibold text-white cursor-pointer"
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-white cursor-pointer"
               >
                 {quickFilter === "retorno"
                   ? "Retorno vencido"
@@ -565,7 +565,7 @@ function AcompanhamentosPage() {
                   type="button"
                   onClick={() => setStatusFilter(s)}
                   aria-pressed={statusFilter === s}
-                  className={`h-8 shrink-0 px-3 rounded-full text-xs font-semibold transition cursor-pointer ${
+                  className={`h-8 shrink-0 px-3 rounded-lg text-xs font-semibold transition cursor-pointer ${
                     statusFilter === s
                       ? "bg-primary text-white"
                       : "bg-muted text-foreground/80 hover:bg-surface-2"
@@ -627,15 +627,6 @@ function AcompanhamentosPage() {
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3 min-w-0">
-                            <div
-                              className="h-11 w-11 shrink-0 rounded-2xl flex items-center justify-center shadow-xs"
-                              style={{
-                                background: (t.color || "#6d3ff5") + "18",
-                                color: t.color || "#6d3ff5",
-                              }}
-                            >
-                              <Activity size={20} />
-                            </div>
                             <div className="min-w-0">
                               {/* Paciente em destaque: os títulos dos planos costumam se repetir */}
                               <div className="text-[15px] font-semibold text-foreground truncate group-hover:text-primary transition-colors">
@@ -647,7 +638,7 @@ function AcompanhamentosPage() {
                             </div>
                           </div>
                           <span
-                            className="text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap"
+                            className="text-xs font-semibold px-2.5 py-1 rounded whitespace-nowrap"
                             style={{ background: st.bg, color: st.fg }}
                           >
                             {st.label}
@@ -833,7 +824,7 @@ function AcompanhamentosPage() {
                     </div>
                     <div className="text-xs text-muted-foreground mt-0.5">{col.subtitle}</div>
                   </div>
-                  <span className="px-2 py-0.5 rounded-full bg-card border border-border text-foreground/80 text-xs font-semibold shadow-2xs">
+                  <span className="px-2 py-0.5 rounded bg-card text-foreground/80 text-xs font-semibold shadow-2xs">
                     {col.badge}
                   </span>
                 </div>
@@ -1574,15 +1565,6 @@ function TreatmentManageModal({
         {/* Top Header */}
         <div className="flex items-center justify-between px-6 py-4.5 border-b border-border-soft sticky top-0 bg-card z-10">
           <div className="flex items-center gap-3 min-w-0">
-            <div
-              className="h-10 w-10 shrink-0 rounded-2xl flex items-center justify-center"
-              style={{
-                background: (treatment.color || "#6d3ff5") + "18",
-                color: treatment.color || "#6d3ff5",
-              }}
-            >
-              <Activity size={20} />
-            </div>
             <div className="min-w-0">
               <DialogTitle className="truncate text-base">{treatment.title}</DialogTitle>
               <div className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
@@ -1590,7 +1572,7 @@ function TreatmentManageModal({
                 <span className="font-semibold">{treatment.patients?.name || "Paciente"}</span>
                 <span>•</span>
                 <span
-                  className="px-2 py-0.5 rounded-full text-xs font-semibold"
+                  className="px-2 py-0.5 rounded text-xs font-semibold"
                   style={{ background: st.bg, color: st.fg }}
                 >
                   {st.label}
@@ -1718,9 +1700,6 @@ function TreatmentManageModal({
               <div className="md:col-span-2 rounded-2xl border border-primary/25 bg-primary-soft/30 p-4 space-y-3.5">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2.5">
-                    <div className="h-8 w-8 rounded-xl bg-primary text-white flex items-center justify-center shadow-xs">
-                      <Wallet size={16} />
-                    </div>
                     <div>
                       <h4 className="text-sm font-semibold text-foreground">
                         Condições Financeiras do Acompanhamento
@@ -2180,9 +2159,6 @@ function TreatmentManageModal({
               <div className="bg-card border border-border/80 rounded-2xl p-4.5 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-                      <Wallet size={16} />
-                    </div>
                     <div>
                       <div className="text-sm font-semibold text-foreground">
                         Condições Financeiras do Acompanhamento
@@ -2378,7 +2354,7 @@ function TreatmentManageModal({
               <button
                 type="button"
                 onClick={handleDelete}
-                className="h-10 px-3 rounded-full text-destructive hover:bg-destructive/10 text-sm font-semibold inline-flex items-center gap-1.5 transition cursor-pointer"
+                className="h-10 px-3 rounded-lg text-destructive hover:bg-destructive/10 text-sm font-semibold inline-flex items-center gap-1.5 transition cursor-pointer"
                 title="Excluir Acompanhamento"
               >
                 <Trash2 size={16} />
@@ -2432,7 +2408,7 @@ function TreatmentManageModal({
                 type="button"
                 disabled={saving}
                 onClick={handleSaveEdit}
-                className="h-10 px-5 rounded-full bg-primary hover:bg-primary-hover text-white text-sm font-semibold shadow-sm inline-flex items-center gap-1.5 transition active:scale-98 disabled:opacity-50 cursor-pointer"
+                className="h-10 px-5 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-semibold shadow-sm inline-flex items-center gap-1.5 transition active:scale-98 disabled:opacity-50 cursor-pointer"
               >
                 <Save size={15} />
                 <span>{saving ? "Salvando…" : "Salvar Alterações"}</span>
@@ -2970,9 +2946,6 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
             <div className="md:col-span-2 rounded-2xl border border-primary/25 bg-primary-soft/30 p-4 space-y-3.5">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2.5">
-                  <div className="h-8 w-8 rounded-xl bg-primary text-white flex items-center justify-center shadow-xs">
-                    <Wallet size={16} />
-                  </div>
                   <div>
                     <h4 className="text-sm font-semibold text-foreground">
                       Condições Financeiras do Acompanhamento
@@ -3308,14 +3281,14 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
           <div className="px-6 py-4 border-t border-border-soft flex justify-end gap-2.5 sticky bottom-0 bg-card">
             <button
               onClick={onClose}
-              className="h-10 px-4 rounded-full bg-muted hover:bg-surface-2 text-foreground/80 text-sm font-semibold transition cursor-pointer"
+              className="h-10 px-4 rounded-lg bg-muted hover:bg-surface-2 text-foreground/80 text-sm font-semibold transition cursor-pointer"
             >
               Cancelar
             </button>
             <button
               disabled={saving}
               onClick={submit}
-              className="h-10 px-5 rounded-full bg-primary hover:bg-primary-hover text-white text-sm font-semibold shadow-sm transition active:scale-98 disabled:opacity-50 cursor-pointer"
+              className="h-10 px-5 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-semibold shadow-sm transition active:scale-98 disabled:opacity-50 cursor-pointer"
             >
               {saving ? "Salvando…" : "Criar acompanhamento"}
             </button>

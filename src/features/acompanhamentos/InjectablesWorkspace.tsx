@@ -243,9 +243,6 @@ export default function InjectablesWorkspace({
       <section className="bg-card rounded-2xl border border-border/90 p-5 md:p-6 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border-soft">
           <div className="flex items-center gap-2.5">
-            <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-              <Syringe size={20} />
-            </div>
             <div>
               <h2 className="text-base md:text-lg font-bold text-foreground flex items-center gap-2">
                 <span>
@@ -253,7 +250,7 @@ export default function InjectablesWorkspace({
                     ? "Injetáveis Administrados (Protocolo de Emagrecimento)"
                     : "Injetáveis Administrados ao Paciente"}
                 </span>
-                <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold">
+                <span className="text-xs px-2.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold">
                   {appliedUses.length} dose(s) aplicada(s)
                 </span>
               </h2>
@@ -363,20 +360,20 @@ export default function InjectablesWorkspace({
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         {isNaoTomou ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-bold bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30">
-                            <XCircle size={11} /> Não Tomou
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-2xs font-semibold bg-rose-500/15 text-rose-600 dark:text-rose-400 ">
+                            Não Tomou
                           </span>
                         ) : isSuspensa ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-bold bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30">
-                            <AlertCircle size={11} /> Suspensa
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-2xs font-semibold bg-purple-500/15 text-purple-600 dark:text-purple-400 ">
+                            Suspensa
                           </span>
                         ) : isAdiada ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
-                            <Clock size={11} /> Adiada
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-2xs font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 ">
+                            Adiada
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-                            <CheckCircle2 size={11} /> Aplicada
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-2xs font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 ">
+                            Aplicada
                           </span>
                         )}
 
@@ -447,7 +444,7 @@ export default function InjectablesWorkspace({
               <button
                 type="button"
                 onClick={onSendWhatsApp}
-                className="h-9 px-3.5 rounded-full bg-success/10 hover:bg-success/15 text-success text-xs font-semibold inline-flex items-center gap-1.5 transition cursor-pointer"
+                className="h-9 px-3.5 rounded-lg bg-success/10 hover:bg-success/15 text-success text-xs font-semibold inline-flex items-center gap-1.5 transition cursor-pointer"
               >
                 <Send size={13} />
                 <span>Disparar no WhatsApp</span>
@@ -554,23 +551,6 @@ export default function InjectablesWorkspace({
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-start gap-3 min-w-0">
-                          <div
-                            className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${
-                              isSemanal
-                                ? "bg-primary/10 text-primary"
-                                : isManipulado
-                                  ? "bg-purple-500/10 text-purple-600 dark:text-purple-400"
-                                  : "bg-primary-soft text-primary"
-                            }`}
-                          >
-                            {isSemanal ? (
-                              <Syringe size={18} />
-                            ) : isManipulado ? (
-                              <FlaskConical size={18} />
-                            ) : (
-                              <PIcon size={18} />
-                            )}
-                          </div>
                           <div className="min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-[15px] font-bold text-foreground">
@@ -578,25 +558,25 @@ export default function InjectablesWorkspace({
                               </span>
 
                               {isSemanal && (
-                                <span className="text-2xs font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                                <span className="text-2xs font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary ">
                                   💉 Injetável / Semanal
                                 </span>
                               )}
 
                               {isManipulado && (
-                                <span className="text-2xs font-bold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                                <span className="text-2xs font-semibold px-2 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 ">
                                   🧪 Manipulado
                                 </span>
                               )}
 
                               {m.period && !isSemanal && (
-                                <span className="text-2xs font-semibold px-2 py-0.5 rounded-full bg-primary-soft text-primary">
+                                <span className="text-2xs font-semibold px-2 py-0.5 rounded bg-primary-soft text-primary">
                                   {PERIOD_LABEL[m.period] ?? m.period}
                                 </span>
                               )}
 
                               {suspenso && (
-                                <span className="text-2xs font-bold px-2 py-0.5 rounded-full bg-destructive/15 text-destructive">
+                                <span className="text-2xs font-semibold px-2 py-0.5 rounded bg-destructive/15 text-destructive">
                                   Suspenso
                                 </span>
                               )}
@@ -877,17 +857,14 @@ function ProtocolCard({
       <div className="space-y-3 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-              <Syringe size={18} />
-            </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[15px] font-bold text-foreground">{name}</span>
-                <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-2xs font-bold text-primary">
+                <span className="rounded bg-primary/10 px-2 py-0.5 text-2xs font-semibold text-primary">
                   Protocolo semanal
                 </span>
                 {allSuspended && (
-                  <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-2xs font-bold text-destructive">
+                  <span className="rounded bg-destructive/15 px-2 py-0.5 text-2xs font-semibold text-destructive">
                     Suspenso
                   </span>
                 )}
@@ -1058,7 +1035,7 @@ function ProtocolCard({
                     )}
                   </div>
                   <div className="col-span-3 sm:col-span-1">
-                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-2xs font-bold ${badge.cls}`}>
+                    <span className={`inline-flex items-center rounded px-2 py-0.5 text-2xs font-semibold ${badge.cls}`}>
                       {r.state === "aplicada" && r.applied
                         ? `Aplicada em ${new Date(r.applied.used_at).toLocaleDateString("pt-BR")}`
                         : r.state === "ocorrencia" && r.occurrence
@@ -1133,9 +1110,8 @@ function ApplicationStatus({ med, uses, today }: { med: DbRow; uses: DbRow[]; to
   const Icon = tone === "done" ? CheckCircle2 : tone === "warn" ? AlertCircle : Clock;
   return (
     <span
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-bold border ${STATUS_TONE[tone]}`}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-2xs font-semibold ${STATUS_TONE[tone]}`}
     >
-      <Icon size={11} />
       {label}
     </span>
   );
@@ -1636,7 +1612,7 @@ function NewMedicationModal({
                                 }
                                 onClick={() => toggleApplied(w.week)}
                                 aria-pressed={applied}
-                                className={`inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-xs font-semibold transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
+                                className={`inline-flex h-7 items-center gap-1 rounded-lg px-2.5 text-xs font-semibold transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
                                   applied
                                     ? "bg-success text-white"
                                     : "border border-border text-muted-foreground hover:border-success/50 hover:text-success"
@@ -1918,7 +1894,7 @@ function Chips({
           key={o}
           type="button"
           onClick={() => onPick(o)}
-          className={`rounded-full border px-2.5 py-1 text-xs font-medium transition cursor-pointer ${
+          className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition cursor-pointer ${
             value === o
               ? "border-primary bg-primary/10 text-primary"
               : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"

@@ -383,7 +383,7 @@ function TreatmentDetailPage() {
 
             <button
               onClick={sendWhatsAppSchedule}
-              className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full bg-success hover:bg-success/90 text-white text-sm font-semibold shadow-sm transition active:scale-98 cursor-pointer"
+              className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-lg bg-success hover:bg-success/90 text-white text-sm font-semibold shadow-sm transition active:scale-98 cursor-pointer"
             >
               <Send size={13} />
               <span>Enviar Cronograma (WhatsApp)</span>
@@ -395,22 +395,13 @@ function TreatmentDetailPage() {
         <div className="bg-card rounded-xl border border-border/90 p-5 md:p-6 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex items-center gap-4 min-w-0">
-              <div
-                className="h-14 w-14 rounded-2xl flex items-center justify-center shrink-0 shadow-xs"
-                style={{
-                  background: (treatment.color || "#6d3ff5") + "20",
-                  color: treatment.color || "#6d3ff5",
-                }}
-              >
-                <Activity size={26} />
-              </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2.5 flex-wrap">
                   <h1 className="text-2xl md:text-[28px] font-semibold text-foreground">
                     {treatment.title}
                   </h1>
                   <span
-                    className="text-xs font-semibold px-3 py-1 rounded-full"
+                    className="text-xs font-semibold px-3 py-1 rounded"
                     style={{ background: st.bg, color: st.fg }}
                   >
                     {st.label}
@@ -685,9 +676,6 @@ function ResumoTab({
       <div className="bg-card rounded-xl p-5 md:p-6 border border-border/90 shadow-xs space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border-soft">
           <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-xl bg-primary-soft text-primary flex items-center justify-center">
-              <Wallet size={18} />
-            </div>
             <div>
               <h3 className="text-[15px] font-semibold text-foreground">
                 Financeiro do Acompanhamento
@@ -702,7 +690,7 @@ function ResumoTab({
               <button
                 type="button"
                 onClick={onOpenFinance}
-                className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground shadow-xs transition hover:bg-primary-hover"
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground shadow-xs transition hover:bg-primary-hover"
               >
                 <span>Receber Pagamento</span>
               </button>
@@ -710,7 +698,7 @@ function ResumoTab({
             <button
               type="button"
               onClick={onOpenFinance}
-              className="inline-flex cursor-pointer items-center gap-1.5 self-start rounded-full bg-primary/10 px-3.5 py-1.5 text-xs font-semibold text-primary transition hover:bg-primary/15 sm:self-auto"
+              className="inline-flex cursor-pointer items-center gap-1.5 self-start rounded-lg bg-primary/10 px-3.5 py-1.5 text-xs font-semibold text-primary transition hover:bg-primary/15 sm:self-auto"
             >
               <span>Gerenciar Condições</span>
               <ChevronRight size={14} />
@@ -837,7 +825,7 @@ function ResumoTab({
                       <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
                         {currency(Number(p.amount) || 0)}
                       </div>
-                      <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold inline-block mt-0.5">
+                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold inline-block mt-0.5">
                         Liquidado
                       </span>
                     </div>

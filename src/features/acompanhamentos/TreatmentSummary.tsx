@@ -168,9 +168,6 @@ export default function TreatmentSummary({
     <div className="rounded-xl border border-border/90 bg-card p-5 shadow-xs md:p-6 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-soft text-primary">
-            <Stethoscope size={18} />
-          </div>
           <div>
             <h3 className="text-[15px] font-semibold text-foreground">Resumo clínico do plano</h3>
             <p className="text-xs text-muted-foreground">
@@ -178,7 +175,7 @@ export default function TreatmentSummary({
             </p>
           </div>
         </div>
-        <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+        <span className="rounded bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
           {evolutions.length} evolução(ões) · {returns} retorno(s) realizado(s)
         </span>
       </div>
