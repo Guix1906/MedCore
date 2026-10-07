@@ -291,19 +291,30 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
   // Busca snapshot do fluxo de caixa e transferências
   const query = useQuery({
     queryKey: ["cash-flow-snapshot", scope],
-    enabled: !!selectedScope,
+    enabled: !!selectedScope || (scope === "all" && finance.scopes.length > 0),
     staleTime: 30_000,
     gcTime: 30 * 60_000,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     placeholderData: (prev) => prev,
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_cash_flow_snapshot", {
-        p_company_id: scope === "legacy" ? null : scope,
-      });
-      if (error) throw error;
-      if (!data) throw new Error("Fluxo de caixa indisponível. Verifique a migração financeira.");
-      return data;
+      const fetchScope = async (id: string | null) => {
+        const { data, error } = await supabase.rpc("get_cash_flow_snapshot", { p_company_id: id });
+        if (error) throw error;
+        if (!data) throw new Error("Fluxo de caixa indisponível. Verifique a migração financeira.");
+        return data as CashFlowSnapshot;
+      };
+      if (scope !== "all") return fetchScope(scope === "legacy" ? null : scope);
+      // "Todas as clínicas": junta o caixa de cada clínica (sem repetir contas/baixas compartilhadas)
+      const parts = await Promise.all(finance.scopes.map((s) => fetchScope(s.id)));
+      const uniq = <T extends { id: string }>(items: T[]) => [
+        ...new Map(items.map((i) => [i.id, i])).values(),
+      ];
+      return {
+        accounts: uniq(parts.flatMap((p) => p.accounts)),
+        payments: uniq(parts.flatMap((p) => p.payments)),
+        transfers: uniq(parts.flatMap((p) => p.transfers)),
+      } satisfies CashFlowSnapshot;
     },
   });
 
@@ -716,7 +727,37 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
     return finance.titles.find((t) => t.id === internalSelectedTitleId) || null;
   }, [internalSelectedTitleId, finance.titles]);
 
-  // Saldos (caixa e bancos): exigem saldo de abertura conferido em todas as contas
+  // Saldos (caixa e bancos). Conta sem saldo de abertura conferido entra com abertura R$ 0 desde o
+  // primeiro movimento: o card mostra o saldo das movimentações e avisa que falta conferir a abertura.
+  let estimated = false;
+  if (query.data && result && result.available === null && !calculationError) {
+    try {
+      const pending = query.data.accounts.filter(
+        (a) => a.opening_amount === null || a.opening_date === null || a.kind === null,
+      );
+      estimated = pending.length > 0;
+      result = cashFlow(
+        {
+          ...query.data,
+          accounts: query.data.accounts.map((a) =>
+            pending.includes(a)
+              ? {
+                  ...a,
+                  kind: a.kind ?? "available",
+                  opening_amount: a.opening_amount ?? 0,
+                  opening_date: a.opening_date ?? "0000-01-01",
+                }
+              : a,
+          ),
+        },
+        start || `${localDate().slice(0, 7)}-01`,
+        end || localDate(),
+        selectedAccount === "todas" ? "" : selectedAccount,
+      );
+    } catch (error) {
+      calculationError = errorMessage(error);
+    }
+  }
   const availableRows = result?.rows.filter((r) => r.account.kind === "available") ?? [];
   const saldoInicial =
     result && result.available !== null && availableRows.every((r) => r.opening !== null)
@@ -725,11 +766,10 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
   const saldoAtual = result?.available ?? null;
   const saldoProjetado =
     saldoAtual === null ? null : saldoAtual + totalEntradasPrev - totalSaidasPrev;
-  const saldoHint = !selectedScope
-    ? "Selecione uma clínica para ver o saldo"
-    : query.isLoading
-      ? "Carregando saldos..."
-      : calculationError || "Confirme o saldo de abertura na aba Contas";
+  const saldoHint = query.isLoading
+    ? "Carregando saldos..."
+    : calculationError || "Confirme o saldo de abertura na aba Contas";
+  const estimatedNote = "Só movimentações · confirme a abertura em Contas";
 
   // Paginação
   const PAGE_SIZE = 50;
@@ -1003,7 +1043,11 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
               {saldoInicial === null ? "—" : <CountUp value={saldoInicial} format={(v) => currency(v)} />}
             </p>
             <p className="text-xs text-muted-foreground">
-              {saldoInicial === null ? saldoHint : "Caixa e bancos no início do período"}
+              {saldoInicial === null
+                ? saldoHint
+                : estimated
+                  ? estimatedNote
+                  : "Caixa e bancos no início do período"}
             </p>
           </div>
 
@@ -1045,7 +1089,11 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
               {saldoAtual === null ? "—" : <CountUp value={saldoAtual} format={(v) => currency(v)} />}
             </p>
             <p className="text-xs text-muted-foreground">
-              {saldoAtual === null ? saldoHint : "Caixa e bancos no fim do período"}
+              {saldoAtual === null
+                ? saldoHint
+                : estimated
+                  ? estimatedNote
+                  : "Caixa e bancos no fim do período"}
             </p>
           </div>
         </div>
@@ -1234,6 +1282,53 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
           <>
             {/* Filtros da lista */}
             <div className="flex flex-wrap items-center gap-2">
+              {/* Filtro direto por dia, mês ou ano: usa o mesmo período do topo (cards e lista batem) */}
+              <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-0.5 shadow-2xs">
+                <select
+                  aria-label="Filtrar lançamentos por"
+                  value={periodMode === "dia" || periodMode === "ano" ? periodMode : "mes"}
+                  onChange={(e) => setPeriodMode(e.target.value as "dia" | "mes" | "ano")}
+                  className="h-8 rounded-md bg-transparent px-1.5 text-xs font-medium text-foreground outline-none cursor-pointer"
+                >
+                  <option value="dia">Dia</option>
+                  <option value="mes">Mês</option>
+                  <option value="ano">Ano</option>
+                </select>
+                {periodMode === "dia" ? (
+                  <input
+                    type="date"
+                    aria-label="Dia"
+                    value={format(currentPeriodDate, "yyyy-MM-dd")}
+                    onChange={(e) => e.target.value && setCurrentPeriodDate(parseISO(e.target.value))}
+                    className="h-8 rounded-md bg-muted/60 px-2 text-xs text-foreground outline-none"
+                  />
+                ) : periodMode === "ano" ? (
+                  <select
+                    aria-label="Ano"
+                    value={currentPeriodDate.getFullYear()}
+                    onChange={(e) => setCurrentPeriodDate(new Date(Number(e.target.value), 0, 1))}
+                    className="h-8 rounded-md bg-muted/60 px-2 text-xs text-foreground outline-none cursor-pointer"
+                  >
+                    {Array.from({ length: 8 }, (_, i) => new Date().getFullYear() + 1 - i).map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="month"
+                    aria-label="Mês"
+                    value={format(currentPeriodDate, "yyyy-MM")}
+                    onChange={(e) => {
+                      if (!e.target.value) return;
+                      setPeriodMode("mes"); // vindo de Semana/Personalizado, passa a filtrar o mês
+                      setCurrentPeriodDate(parseISO(`${e.target.value}-01`));
+                    }}
+                    className="h-8 rounded-md bg-muted/60 px-2 text-xs text-foreground outline-none"
+                  />
+                )}
+              </div>
               <div className="relative flex-1 min-w-[200px] max-w-xs">
                 <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input
