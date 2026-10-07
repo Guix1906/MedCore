@@ -359,75 +359,63 @@ function TreatmentDetailPage() {
 
   return (
     <AppShell title="Detalhes do acompanhamento">
-      <div className="page-container space-y-5">
-        {/* Top bar com Voltar & Atalhos */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <button
-            onClick={() => navigate({ to: "/acompanhamentos" })}
-            className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-primary transition cursor-pointer"
-          >
-            <ArrowLeft size={14} /> Voltar para acompanhamentos
-          </button>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              to="/prontuario"
-              search={
-                { patientName: treatment.patients?.name, patientId: treatment.patient_id } as any
-              }
-              className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl border border-primary/25 bg-primary-soft hover:bg-primary-soft text-primary text-sm font-semibold transition"
-            >
-              <FileText size={14} />
-              <span>Abrir Prontuário do Paciente</span>
-            </Link>
-
-            <button
-              onClick={sendWhatsAppSchedule}
-              className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-lg bg-success hover:bg-success/90 text-white text-sm font-semibold shadow-sm transition active:scale-98 cursor-pointer"
-            >
-              <Send size={13} />
-              <span>Enviar Cronograma (WhatsApp)</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Header do Acompanhamento */}
-        <div className="bg-card rounded-xl border border-border/90 p-5 md:p-6 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="flex items-center gap-4 min-w-0">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  <h1 className="text-2xl md:text-[28px] font-semibold text-foreground">
-                    {treatment.title}
-                  </h1>
-                  <span
-                    className="text-xs font-semibold px-3 py-1 rounded"
-                    style={{ background: st.bg, color: st.fg }}
-                  >
-                    {st.label}
+      <div className="page-container space-y-4">
+        {/* Cabeçalho compacto: identificação do plano + ações numa faixa só */}
+        <div className="rounded-xl border border-border/90 bg-card px-5 py-3.5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <div className="min-w-0">
+              <button
+                onClick={() => navigate({ to: "/acompanhamentos" })}
+                className="mb-0.5 inline-flex items-center gap-1 text-xs font-medium text-muted-foreground transition hover:text-primary cursor-pointer"
+              >
+                <ArrowLeft size={12} /> Acompanhamentos
+              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-xl font-semibold text-foreground">{treatment.title}</h1>
+                <span
+                  className="rounded px-2 py-0.5 text-[11px] font-semibold"
+                  style={{ background: st.bg, color: st.fg }}
+                >
+                  {st.label}
+                </span>
+              </div>
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-muted-foreground">
+                <span className="inline-flex items-center gap-1 font-semibold text-foreground">
+                  <UserIcon size={13} className="text-primary" /> {treatment.patients?.name}
+                </span>
+                {treatment.doctors?.name && <span>Dr(a). {treatment.doctors.name}</span>}
+                <span className="inline-flex items-center gap-1">
+                  <CalIcon size={13} /> Início {formatDateOnly(treatment.start_date)}
+                </span>
+                {treatment.objective && (
+                  <span className="max-w-[420px] truncate" title={treatment.objective}>
+                    <b className="font-semibold text-foreground/80">Objetivo:</b> {treatment.objective}
                   </span>
-                </div>
-                <div className="text-sm text-muted-foreground mt-1 flex items-center gap-3.5 flex-wrap font-medium">
-                  <span className="inline-flex items-center gap-1.5 text-foreground font-semibold">
-                    <UserIcon size={14} className="text-primary" /> {treatment.patients?.name}
-                  </span>
-                  {treatment.doctors?.name && (
-                    <span className="text-muted-foreground">• Dr(a). {treatment.doctors.name}</span>
-                  )}
-                  <span className="inline-flex items-center gap-1.5">
-                    <CalIcon size={14} className="text-muted-foreground" /> Início:{" "}
-                    {formatDateOnly(treatment.start_date)}
-                  </span>
-                </div>
+                )}
               </div>
             </div>
 
-            {/* Ações de Status */}
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                to="/prontuario"
+                search={
+                  { patientName: treatment.patients?.name, patientId: treatment.patient_id } as any
+                }
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-foreground/80 transition hover:bg-muted"
+              >
+                <FileText size={14} /> Prontuário
+              </Link>
+              <button
+                onClick={sendWhatsAppSchedule}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-success transition hover:bg-success/10 cursor-pointer"
+                title="Enviar cronograma pelo WhatsApp"
+              >
+                <Send size={13} /> Cronograma
+              </button>
               {treatment.status === "em_andamento" && (
                 <button
                   onClick={() => setStatus("pausado")}
-                  className="h-9 px-3.5 rounded-xl bg-warning/10 hover:bg-warning/15 text-warning text-sm font-semibold inline-flex items-center gap-1.5 transition cursor-pointer"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-warning transition hover:bg-warning/10 cursor-pointer"
                 >
                   <PauseCircle size={15} /> Pausar
                 </button>
@@ -435,7 +423,7 @@ function TreatmentDetailPage() {
               {treatment.status === "pausado" && (
                 <button
                   onClick={() => setStatus("em_andamento")}
-                  className="h-9 px-3.5 rounded-xl bg-success/10 hover:bg-success/15 text-success text-sm font-semibold inline-flex items-center gap-1.5 transition cursor-pointer"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-success transition hover:bg-success/10 cursor-pointer"
                 >
                   <CheckCircle2 size={15} /> Retomar
                 </button>
@@ -443,20 +431,13 @@ function TreatmentDetailPage() {
               {treatment.status !== "finalizado" && treatment.status !== "cancelado" && (
                 <button
                   onClick={() => setStatus("finalizado")}
-                  className="h-9 px-3.5 rounded-xl bg-info/10 hover:bg-info/15 text-info text-sm font-semibold inline-flex items-center gap-1.5 transition cursor-pointer"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-semibold text-white transition hover:bg-primary-hover cursor-pointer"
                 >
-                  <CheckCircle2 size={15} /> Concluir Protocolo
+                  <CheckCircle2 size={15} /> Concluir protocolo
                 </button>
               )}
             </div>
           </div>
-
-          {treatment.objective && (
-            <div className="mt-4 pt-3.5 border-t border-border-soft text-sm text-foreground/80 leading-relaxed bg-muted/42 p-3 rounded-xl">
-              <span className="font-semibold text-foreground">Objetivo Clínico:</span>{" "}
-              {treatment.objective}
-            </div>
-          )}
         </div>
 
         {/* Barra de Abas */}
@@ -479,18 +460,12 @@ function TreatmentDetailPage() {
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                className={`relative inline-flex shrink-0 whitespace-nowrap items-center gap-2 h-11 px-4 text-sm font-semibold transition cursor-pointer ${
+                className={`relative inline-flex shrink-0 whitespace-nowrap items-center gap-2 h-10 px-4 text-sm font-semibold transition cursor-pointer ${
                   active ? "text-primary" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <Icon size={16} />
                 <span>{t.label}</span>
-                {t.id === "resumo" && (
-                  <Sparkles
-                    size={13}
-                    className={active ? "text-primary" : "text-muted-foreground"}
-                  />
-                )}
                 {active && (
                   <motion.div
                     layoutId="tab-underline-detail"
@@ -649,231 +624,142 @@ function ResumoTab({
   meds: DbRow[];
   paymentOverdue: number;
 }) {
-  const cards = [
-    {
-      label: "Dias restantes",
-      value: `${kpis.remainingDays} dias`,
-      sub: `${kpis.progress}% do prazo (${kpis.passedDays} de ${kpis.totalDays} dias)`,
-      color: "var(--primary)",
-    },
-    {
-      label: "Próximo retorno previsto",
-      value: kpis.nextReturn ? formatClinicalDate(kpis.nextReturn) : "A definir",
-      sub: kpis.nextReturn ? "Previsão clínica" : "Sem data marcada",
-      color: "var(--info)",
-    },
-    {
-      label: "Medicações ativas",
-      value: `${kpis.activeMeds} itens`,
-      sub: "No cronograma do paciente",
-      color: "var(--success)",
-    },
-  ];
+  const today = localDate();
+  const returnLate = !!kpis.nextReturn && kpis.nextReturn < today;
+  const paidPct = financials.total > 0 ? Math.min(100, Math.round((financials.paid / financials.total) * 100)) : 0;
+  const methodLabel = (m?: string | null) =>
+    ({
+      pix: "PIX",
+      cartao_credito: "Cartão de crédito",
+      cartao_debito: "Cartão de débito",
+      boleto: "Boleto",
+      dinheiro: "Dinheiro",
+      transferencia: "Transferência",
+    })[(m || "").toLowerCase()] ||
+    m ||
+    "Outro";
+  const paymentLabel = (p: DbRow & { title: DbRow }) => {
+    if (/entrada/i.test(p.title?.description || "")) return "Entrada";
+    const n = p.title?.id ? installmentOrder.get(p.title.id) : undefined;
+    return n ? `Parcela ${n} de ${installmentOrder.size}` : p.title?.description || "Pagamento";
+  };
 
+  // Painel em duas colunas para caber na tela sem rolar: clínico à esquerda, prazo e financeiro à direita
   return (
-    <div className="space-y-5">
-      {/* Resumo Financeiro Direto no Plano */}
-      <div className="bg-card rounded-xl p-5 md:p-6 border border-border/90 shadow-xs space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border-soft">
-          <div className="flex items-center gap-2.5">
-            <div>
-              <h3 className="text-[15px] font-semibold text-foreground">
-                Financeiro do Acompanhamento
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                Condições contratadas e saldos deste plano
-              </p>
-            </div>
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="lg:col-span-2">
+        <TreatmentSummary treatment={treatment} meds={meds} paymentOverdue={paymentOverdue} />
+      </div>
+
+      <div className="space-y-4">
+        {/* Prazo do protocolo */}
+        <section className="space-y-3 rounded-xl border border-border/90 bg-card p-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-foreground">Prazo do protocolo</h3>
+            <span className="text-xs text-muted-foreground">
+              {protocolDeadline(treatment.status, treatment.end_date)}
+            </span>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {financials.open > 0 && (
-              <button
-                type="button"
-                onClick={onOpenFinance}
-                className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground shadow-xs transition hover:bg-primary-hover"
-              >
-                <span>Receber Pagamento</span>
-              </button>
-            )}
+          <div>
+            <div className="mb-1 flex items-baseline justify-between">
+              <span className="text-2xl font-semibold tabular-nums text-foreground">
+                {kpis.remainingDays} <span className="text-sm font-medium text-muted-foreground">dias restantes</span>
+              </span>
+              <span className="text-xs text-muted-foreground">{kpis.progress}%</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-muted">
+              <div className="h-full rounded-full bg-primary" style={{ width: `${kpis.progress}%` }} />
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Dia {kpis.passedDays} de {kpis.totalDays} · termina {formatClinicalDate(treatment.end_date)}
+            </p>
+          </div>
+          <div className="flex items-center justify-between border-t border-border-soft pt-2.5 text-sm">
+            <span className="text-muted-foreground">Próximo retorno</span>
+            <span className={`font-semibold ${returnLate ? "text-destructive" : "text-foreground"}`}>
+              {kpis.nextReturn ? formatClinicalDate(kpis.nextReturn) : "A definir"}
+              {returnLate ? " (atrasado)" : ""}
+            </span>
+          </div>
+        </section>
+
+        {/* Financeiro do plano */}
+        <section className="space-y-3 rounded-xl border border-border/90 bg-card p-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-foreground">Financeiro</h3>
             <button
               type="button"
               onClick={onOpenFinance}
-              className="inline-flex cursor-pointer items-center gap-1.5 self-start rounded-lg bg-primary/10 px-3.5 py-1.5 text-xs font-semibold text-primary transition hover:bg-primary/15 sm:self-auto"
+              className="inline-flex items-center gap-0.5 text-xs font-semibold text-primary hover:underline cursor-pointer"
             >
-              <span>Gerenciar Condições</span>
-              <ChevronRight size={14} />
+              {financials.open > 0 ? "Receber" : "Detalhes"} <ChevronRight size={13} />
             </button>
           </div>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
-          <div className="p-3 bg-muted/60 rounded-xl border border-border-soft">
-            <span className="text-xs font-semibold text-muted-foreground uppercase block">
-              Contratado
-            </span>
-            <span className="text-base font-semibold text-foreground">
-              {currency(financials.total)}
-            </span>
-          </div>
-          <div className="p-3 bg-success/6 rounded-xl border border-success/12">
-            <span className="text-xs font-semibold text-success uppercase block">
-              Total Recebido
-            </span>
-            <span className="text-base font-semibold text-success">
-              {currency(financials.paid)}
-            </span>
-          </div>
-          <div className="p-3 bg-warning/6 rounded-xl border border-warning/12">
-            <span className="text-xs font-semibold text-warning uppercase block">
-              Saldo em Aberto
-            </span>
-            <span className="text-base font-semibold text-warning">
-              {currency(financials.open)}
-            </span>
-          </div>
-          <div className="p-3 bg-muted/60 rounded-xl border border-border-soft">
-            <span className="text-xs font-semibold text-muted-foreground uppercase block">
-              Vencimento / Modalidade
-            </span>
-            <span className="text-sm font-semibold text-foreground">
-              {financials.hasFreeBalance
-                ? "Pagamentos Livres (Sem vencimento)"
-                : financials.nextDueDate
-                  ? formatClinicalDate(financials.nextDueDate)
-                  : "Em dia / Sem pendências"}
-            </span>
-          </div>
-        </div>
-
-        {/* Detalhamento dos Valores Já Pagos pelo Paciente */}
-        <div className="pt-3 border-t border-border-soft space-y-2.5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-              <CheckCircle2 size={14} className="text-emerald-500" />
-              <span>Valores Já Pagos pelo Paciente ({payments.length})</span>
-            </div>
-            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
-              Total Recebido: {currency(financials.paid)}
-            </span>
-          </div>
-
-          {payments.length === 0 ? (
-            <div className="text-xs text-muted-foreground p-3 rounded-xl bg-muted/40 border border-border-soft flex items-center justify-between">
-              <span>Nenhum pagamento registrado ainda para este acompanhamento.</span>
-              {financials.open > 0 && (
-                <button
-                  type="button"
-                  onClick={onOpenFinance}
-                  className="text-primary hover:underline font-semibold cursor-pointer"
-                >
-                  Registrar primeiro pagamento &rarr;
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
-              {payments.map((p) => {
-                const methodStr = (p.payment_method || "").toLowerCase();
-                const methodLabel =
-                  methodStr === "pix"
-                    ? "PIX"
-                    : methodStr === "cartao_credito"
-                      ? "Cartão de Crédito"
-                      : methodStr === "cartao_debito"
-                        ? "Cartão de Débito"
-                        : methodStr === "boleto"
-                          ? "Boleto"
-                          : methodStr === "dinheiro"
-                            ? "Dinheiro"
-                            : methodStr === "transferencia"
-                              ? "Transferência"
-                              : p.payment_method || "Outro";
-
-                const parcela = p.title?.id ? installmentOrder.get(p.title.id) : undefined;
-                const desc = /entrada/i.test(p.title?.description || "")
-                  ? "Entrada do Plano"
-                  : parcela
-                    ? `Parcela ${parcela} de ${installmentOrder.size}`
-                    : p.title?.description || "Pagamento";
-
-                return (
-                  <div
-                    key={p.id}
-                    className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-card border border-border/80 text-xs shadow-2xs hover:border-emerald-500/30 transition"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <div className="h-7 w-7 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-xs">
-                        ✓
-                      </div>
-                      <div>
-                        <div className="font-semibold text-foreground">{desc}</div>
-                        <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
-                          <span>Data: {formatClinicalDate(p.paid_on)}</span>
-                          <span>•</span>
-                          <span className="font-medium text-foreground/80">{methodLabel}</span>
-                          {p.accountName && (
-                            <>
-                              <span>•</span>
-                              <span>{p.accountName}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="text-right">
-                      <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                        {currency(Number(p.amount) || 0)}
-                      </div>
-                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold inline-block mt-0.5">
-                        Liquidado
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <p className="text-sm font-semibold">
-        {protocolDeadline(treatment.status, treatment.end_date)} —{" "}
-        {formatClinicalDate(treatment.end_date)}
-      </p>
-
-      <TreatmentSummary treatment={treatment} meds={meds} paymentOverdue={paymentOverdue} />
-
-      {/* Grid de KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {cards.map((c, i) => (
-          <motion.div
-            key={c.label}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.04 }}
-            className="bg-card rounded-2xl border border-border/80 p-5 shadow-sm"
-          >
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              {c.label}
-            </div>
-            <div className="text-2xl font-semibold mt-1.5" style={{ color: c.color }}>
-              {c.value}
-            </div>
-            <div className="text-xs text-muted-foreground mt-1 font-medium">{c.sub}</div>
-            {c.label === "Dias restantes" && (
-              <div className="mt-3.5 h-2 rounded-full bg-muted overflow-hidden">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${kpis.progress}%` }}
-                  transition={{ duration: 0.8, ease: "easeOut" }}
-                  className="h-full rounded-full"
-                  style={{ background: c.color }}
-                />
+          {financials.total > 0 ? (
+            <>
+              <div>
+                <div className="mb-1 flex items-baseline justify-between text-sm">
+                  <span>
+                    <b className="tabular-nums text-success">{currency(financials.paid)}</b>
+                    <span className="text-muted-foreground"> de {currency(financials.total)}</span>
+                  </span>
+                  <span className="text-xs text-muted-foreground">{paidPct}%</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-success" style={{ width: `${paidPct}%` }} />
+                </div>
               </div>
-            )}
-          </motion.div>
-        ))}
+              <dl className="space-y-1.5 text-sm">
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">Em aberto</dt>
+                  <dd className={`font-semibold tabular-nums ${financials.open > 0 ? "text-warning" : "text-foreground"}`}>
+                    {currency(financials.open)}
+                  </dd>
+                </div>
+                {paymentOverdue > 0 && (
+                  <div className="flex justify-between">
+                    <dt className="text-muted-foreground">Em atraso</dt>
+                    <dd className="font-semibold tabular-nums text-destructive">{currency(paymentOverdue)}</dd>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">Próximo vencimento</dt>
+                  <dd className="font-semibold text-foreground">
+                    {financials.hasFreeBalance
+                      ? "Saldo livre"
+                      : financials.nextDueDate
+                        ? formatClinicalDate(financials.nextDueDate)
+                        : "—"}
+                  </dd>
+                </div>
+              </dl>
+              {payments.length > 0 && (
+                <div className="border-t border-border-soft pt-2.5">
+                  <p className="mb-1.5 text-xs font-semibold text-muted-foreground">
+                    Últimos pagamentos ({payments.length})
+                  </p>
+                  <ul className="space-y-1.5">
+                    {payments.slice(0, 3).map((p) => (
+                      <li key={p.id} className="flex items-start justify-between gap-2 text-xs">
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium text-foreground">{paymentLabel(p)}</span>
+                          <span className="block truncate text-muted-foreground">
+                            {formatClinicalDate(p.paid_on)} · {methodLabel(p.payment_method)}
+                          </span>
+                        </span>
+                        <span className="shrink-0 font-semibold tabular-nums text-success">
+                          {currency(Number(p.amount) || 0)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">Sem valores configurados para este plano.</p>
+          )}
+        </section>
       </div>
     </div>
   );
