@@ -278,15 +278,7 @@ export default function InjectablesWorkspace({
               <Syringe size={14} />
               <span>{showApplyPanel ? "Ocultar Registro" : "Registrar Aplicação"}</span>
             </button>
-
-            <button
-              type="button"
-              onClick={() => setOpenNew(true)}
-              className="h-9 px-3.5 rounded-xl bg-primary/10 hover:bg-primary/15 text-primary text-xs font-semibold inline-flex items-center gap-1.5 transition cursor-pointer"
-            >
-              <Plus size={14} />
-              <span>Novo Injetável / Manipulado</span>
-            </button>
+            {/* Cadastrar prescrição fica só no "Cronograma Prescrito", onde as prescrições aparecem */}
           </div>
         </div>
 
@@ -327,10 +319,12 @@ export default function InjectablesWorkspace({
             </span>
             <div className="text-xl font-bold text-foreground mt-1 flex items-center gap-1.5">
               <Layers size={18} className="text-amber-500" />
-              <span>{activeItems} prescrição(ões) ativa(s)</span>
+              <span>
+                {activeItems} {activeItems === 1 ? "prescrição ativa" : "prescrições ativas"}
+              </span>
             </div>
             <span className="text-2xs text-muted-foreground mt-0.5 block">
-              {protocolCount} protocolo(s) semanal(is)
+              {protocolCount} {protocolCount === 1 ? "protocolo semanal" : "protocolos semanais"}
             </span>
           </div>
         </div>
