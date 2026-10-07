@@ -1,6 +1,4 @@
 import { PageHeader } from "@/components/ui-app/PageHeader";
-import { KPICard } from "@/components/ds/Card";
-import TreatmentAlerts from "@/features/acompanhamentos/TreatmentAlerts";
 import { changeTreatmentStatus } from "@/features/acompanhamentos/ClinicalFollowup";
 import {
   errorMessage,
@@ -52,6 +50,7 @@ import { confirmDialog } from "@/components/app/confirm-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { refreshFinance, getFinancialSnapshot } from "@/features/finance/finance-api";
+import { isFreeBalance, remaining } from "@/features/finance/finance-math";
 import { patientsService, companyService } from "@/services/api";
 import { getStoredLocalPatients, mergeWithLocalPatients } from "@/lib/local-patients";
 import { PatientModal } from "@/components/pacientes/PatientModal";
@@ -67,8 +66,37 @@ export const Route = createFileRoute("/_authenticated/acompanhamentos")({
       },
     ],
   }),
+  // Busca, filtros, ordem e visualização ficam na URL: voltar de um plano mantém a lista como estava
+  validateSearch: (search: Record<string, unknown>): ListSearch => {
+    const pick = <T extends string>(v: unknown, opts: readonly T[]): T | undefined =>
+      opts.includes(v as T) ? (v as T) : undefined;
+    return {
+      q: typeof search.q === "string" && search.q ? search.q : undefined,
+      status: pick(search.status, STATUS_FILTERS),
+      filtro: pick(search.filtro, QUICK_FILTERS),
+      ordem: pick(search.ordem, SORTS),
+      view: pick(search.view, ["cards", "kanban"] as const),
+    };
+  },
   component: AcompanhamentosPage,
 });
+
+const STATUS_FILTERS = ["todos", "em_andamento", "pausado", "finalizado", "cancelado"] as const;
+const QUICK_FILTERS = ["retorno", "terminando", "atrasado"] as const;
+const SORTS = ["retorno", "recentes", "nome", "prazo"] as const;
+type ListSearch = {
+  q?: string;
+  status?: (typeof STATUS_FILTERS)[number];
+  filtro?: (typeof QUICK_FILTERS)[number];
+  ordem?: (typeof SORTS)[number];
+  view?: "cards" | "kanban";
+};
+const SORT_LABEL: Record<(typeof SORTS)[number], string> = {
+  retorno: "Próximo retorno",
+  prazo: "Fim do protocolo",
+  recentes: "Mais recentes",
+  nome: "Nome do paciente",
+};
 
 export type Treatment = {
   id: string;
@@ -146,9 +174,25 @@ function AcompanhamentosPage() {
   const isChildRoute = routerState.location.pathname !== "/acompanhamentos";
 
   const queryClient = useQueryClient();
-  const [q, setQ] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"todos" | Treatment["status"]>("todos");
-  const [viewMode, setViewMode] = useState<"cards" | "kanban">("cards");
+  const search = Route.useSearch();
+  const navigateList = Route.useNavigate();
+  const setSearch = (patch: Partial<ListSearch>) =>
+    void navigateList({ search: (prev) => ({ ...prev, ...patch }), replace: true });
+  // A busca digitada fica local e vai para a URL com atraso, para não navegar a cada tecla
+  const [q, setQ] = useState(search.q ?? "");
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if ((search.q ?? "") !== q) setSearch({ q: q || undefined });
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q]);
+  const statusFilter = search.status ?? "em_andamento";
+  const quickFilter = search.filtro;
+  const sortBy = search.ordem ?? "retorno";
+  const viewMode = search.view ?? "cards";
+  const setStatusFilter = (status: (typeof STATUS_FILTERS)[number]) =>
+    setSearch({ status, filtro: undefined });
+  const setViewMode = (view: "cards" | "kanban") => setSearch({ view });
   const [openNew, setOpenNew] = useState(false);
   const [selectedTreatment, setSelectedTreatment] = useState<Treatment | null>(null);
 
@@ -195,13 +239,21 @@ function AcompanhamentosPage() {
     queryFn: async () => {
       try {
         const snap = await getFinancialSnapshot();
-        const map: Record<string, { paid: number; total: number; titlesCount: number }> = {};
+        const today = localDate();
+        const map: Record<
+          string,
+          { paid: number; total: number; titlesCount: number; overdue: number }
+        > = {};
         for (const t of snap.titles) {
           if (!t.treatment_id) continue;
-          if (!map[t.treatment_id]) map[t.treatment_id] = { paid: 0, total: 0, titlesCount: 0 };
+          if (!map[t.treatment_id])
+            map[t.treatment_id] = { paid: 0, total: 0, titlesCount: 0, overdue: 0 };
           map[t.treatment_id].paid += Number(t.paid_amount || 0);
           map[t.treatment_id].total += Number(t.amount || 0);
           map[t.treatment_id].titlesCount += 1;
+          // Parcela com vencimento passado e saldo em aberto (saldo livre não atrasa)
+          if (!isFreeBalance(t) && t.due_date && t.due_date < today)
+            map[t.treatment_id].overdue += remaining(t);
         }
         return map;
       } catch (err) {
@@ -217,10 +269,34 @@ function AcompanhamentosPage() {
     queryClient.invalidateQueries({ queryKey: ["treatment-alerts"] });
   };
 
+  // Situações que pedem ação, calculadas dos próprios planos (mesma regra dos cards)
+  const today = localDate();
+  const in7days = todayLocal(7);
+  const isReturnLate = (t: Treatment) =>
+    t.status === "em_andamento" && !!t.next_return_date && t.next_return_date <= today;
+  const isEnding = (t: Treatment) =>
+    t.status === "em_andamento" && !!t.end_date && t.end_date >= today && t.end_date <= in7days;
+  const isPaymentLate = (t: Treatment) =>
+    t.status !== "cancelado" && (treatmentPaymentsMap[t.id]?.overdue ?? 0) > 0;
+  const quickTests: Record<(typeof QUICK_FILTERS)[number], (t: Treatment) => boolean> = {
+    retorno: isReturnLate,
+    terminando: isEnding,
+    atrasado: isPaymentLate,
+  };
+
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return rows.filter((r) => {
-      if (statusFilter !== "todos" && r.status !== statusFilter) return false;
+    const list = rows.filter((r) => {
+      // Atalho de situação substitui o filtro de status (já considera só planos ativos)
+      if (quickFilter) {
+        if (!quickTests[quickFilter](r)) return false;
+      } else if (
+        // O Kanban já separa por situação: lá o filtro de status esconderia colunas inteiras
+        viewMode !== "kanban" &&
+        statusFilter !== "todos" &&
+        r.status !== statusFilter
+      )
+        return false;
       if (!s) return true;
       return (
         r.title.toLowerCase().includes(s) ||
@@ -228,7 +304,17 @@ function AcompanhamentosPage() {
         r.doctors?.name?.toLowerCase().includes(s)
       );
     });
-  }, [rows, q, statusFilter]);
+    const byDate = (a: string | null, b: string | null) => (a || "9999").localeCompare(b || "9999");
+    return list.sort((a, b) =>
+      sortBy === "nome"
+        ? (a.patients?.name || "").localeCompare(b.patients?.name || "", "pt-BR")
+        : sortBy === "recentes"
+          ? b.created_at.localeCompare(a.created_at)
+          : sortBy === "prazo"
+            ? byDate(a.end_date, b.end_date)
+            : byDate(a.next_return_date, b.next_return_date),
+    );
+  }, [rows, q, statusFilter, quickFilter, sortBy, viewMode, treatmentPaymentsMap]);
 
   const multipleDoctors = useMemo(
     () => new Set(rows.map((r) => r.doctor_id).filter(Boolean)).size > 1,
@@ -236,14 +322,16 @@ function AcompanhamentosPage() {
   );
 
   const kpis = useMemo(() => {
-    const total = rows.length;
     const ativos = rows.filter((r) => r.status === "em_andamento").length;
-    const finalizados = rows.filter((r) => r.status === "finalizado").length;
-    const receita = rows
+    const retornos = rows.filter(isReturnLate).length;
+    const terminando = rows.filter(isEnding).length;
+    const atrasados = rows.filter(isPaymentLate).length;
+    // A receber: líquido contratado menos o que já entrou, dos planos não cancelados
+    const aReceber = rows
       .filter((r) => r.status !== "cancelado")
-      .reduce((s, r) => s + Number(r.total_value || 0), 0);
-    return { total, ativos, finalizados, receita };
-  }, [rows]);
+      .reduce((s, r) => s + Math.max(0, netValue(r) - (treatmentPaymentsMap[r.id]?.paid ?? 0)), 0);
+    return { ativos, retornos, terminando, atrasados, aReceber };
+  }, [rows, treatmentPaymentsMap]);
 
   // Agrupamento para Visão Kanban por situação operacional e prazo transcorrido
   const kanbanColumns = useMemo(() => {
@@ -323,49 +411,42 @@ function AcompanhamentosPage() {
     <AppShell title="Acompanhamentos">
       <div className="page-container space-y-5">
         {/* Cabeçalho */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <PageHeader
-            title="Acompanhamentos"
-            icon={Activity}
-            description="Planos, evolução e próximos retornos de cada paciente."
-            className="mb-0"
-          />
+        <div className="flex items-center justify-between gap-3">
+          <PageHeader title="Acompanhamentos" icon={Activity} className="mb-0" />
 
-          <div className="flex items-center gap-2.5">
-            {/* Alternador Cards / Kanban */}
-            <div className="flex items-center bg-muted p-1 rounded-xl border border-black/[0.04]">
-              <button
-                onClick={() => setViewMode("cards")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition cursor-pointer ${
-                  viewMode === "cards"
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                title="Visão em Cards"
-              >
-                <LayoutGrid size={15} />
-                <span className="hidden sm:inline">Cards</span>
-              </button>
-              <button
-                onClick={() => setViewMode("kanban")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition cursor-pointer ${
-                  viewMode === "kanban"
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                title="Visão em Fases / Kanban"
-              >
-                <Kanban size={15} />
-                <span className="hidden sm:inline">Fases / Kanban</span>
-              </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {/* Alternador Cards / Kanban: só ícones, para não quebrar linha */}
+            <div className="flex items-center bg-muted p-1 rounded-xl" role="group" aria-label="Visualização">
+              {(
+                [
+                  { id: "cards", icon: LayoutGrid, label: "Visão em cards" },
+                  { id: "kanban", icon: Kanban, label: "Visão por fases (Kanban)" },
+                ] as const
+              ).map((v) => (
+                <button
+                  key={v.id}
+                  type="button"
+                  onClick={() => setViewMode(v.id)}
+                  aria-pressed={viewMode === v.id}
+                  aria-label={v.label}
+                  title={v.label}
+                  className={`grid size-8 place-items-center rounded-lg transition cursor-pointer ${
+                    viewMode === v.id
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <v.icon size={16} />
+                </button>
+              ))}
             </div>
 
             <button
               onClick={() => setOpenNew(true)}
-              className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-semibold shadow-md shadow-primary/20 active:scale-98 transition cursor-pointer"
+              className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-semibold shadow-md shadow-primary/20 active:scale-98 transition cursor-pointer whitespace-nowrap"
             >
               <Plus size={16} />
-              <span>Novo acompanhamento</span>
+              <span>Novo</span>
             </button>
           </div>
         </div>
@@ -375,71 +456,128 @@ function AcompanhamentosPage() {
             Erro ao carregar acompanhamentos: {listError.message}
           </p>
         )}
-        <TreatmentAlerts scope="clinical" />
-
-        {/* KPIs */}
-        <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
-          <KPICard
-            label="Total cadastrados"
-            value={kpis.total}
-            icon={<Activity className="size-4" />}
-          />
-          <KPICard
-            label="Em andamento"
-            value={kpis.ativos}
-            icon={<TrendingUp className="size-4" />}
-            accent="success"
-          />
-          <KPICard
-            label="Finalizados"
-            value={kpis.finalizados}
-            icon={<CheckCircle2 className="size-4" />}
-            accent="info"
-          />
-          <KPICard
-            label="Retornos necessários"
-            value={
-              rows.filter(
-                (t) =>
-                  t.status === "em_andamento" &&
-                  t.next_return_date &&
-                  t.next_return_date <= localDate(),
-              ).length
-            }
-            icon={<Sparkles className="size-4" />}
-            accent="warning"
-          />
+        {/* Indicadores compactos: cada um é um atalho que filtra a lista */}
+        <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+          {(
+            [
+              {
+                id: "ativos",
+                label: "Em andamento",
+                value: String(kpis.ativos),
+                tone: "text-foreground",
+                active: !quickFilter && statusFilter === "em_andamento",
+                onClick: () => setSearch({ status: "em_andamento", filtro: undefined }),
+              },
+              {
+                id: "retorno",
+                label: "Retorno vencido",
+                value: String(kpis.retornos),
+                tone: kpis.retornos ? "text-destructive" : "text-foreground",
+                active: quickFilter === "retorno",
+                onClick: () => setSearch({ filtro: quickFilter === "retorno" ? undefined : "retorno" }),
+              },
+              {
+                id: "terminando",
+                label: "Terminam em 7 dias",
+                value: String(kpis.terminando),
+                tone: kpis.terminando ? "text-warning" : "text-foreground",
+                active: quickFilter === "terminando",
+                onClick: () =>
+                  setSearch({ filtro: quickFilter === "terminando" ? undefined : "terminando" }),
+              },
+              {
+                id: "atrasado",
+                label: kpis.atrasados ? `A receber · ${kpis.atrasados} em atraso` : "A receber dos planos",
+                value: brl(kpis.aReceber),
+                tone: kpis.atrasados ? "text-destructive" : "text-foreground",
+                active: quickFilter === "atrasado",
+                onClick: () => setSearch({ filtro: quickFilter === "atrasado" ? undefined : "atrasado" }),
+              },
+            ] as const
+          ).map((k) => (
+            <button
+              key={k.id}
+              type="button"
+              onClick={k.onClick}
+              aria-pressed={k.active}
+              className={`rounded-xl border bg-card px-3.5 py-2.5 text-left shadow-2xs transition cursor-pointer hover:border-primary/40 ${
+                k.active ? "border-primary ring-2 ring-primary/20" : "border-border/80"
+              }`}
+            >
+              <div className="truncate text-xs font-medium text-muted-foreground">{k.label}</div>
+              <div className={`mt-0.5 truncate text-xl font-semibold tabular-nums ${k.tone}`}>
+                {k.value}
+              </div>
+            </button>
+          ))}
         </div>
 
         {/* Barra de Filtros e Busca */}
-        <div className="bg-card rounded-2xl border border-border/80 p-3.5 shadow-sm flex flex-wrap items-center gap-2.5">
-          <div className="relative flex-1 min-w-[180px]">
-            <Search
-              size={16}
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-            />
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Buscar por paciente, médico ou título do tratamento…"
-              className="w-full h-10 pl-10 pr-3 rounded-xl bg-muted/60 border border-border focus:border-primary focus:bg-card outline-none text-sm transition"
-            />
+        <div className="space-y-2.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search
+                size={16}
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+              />
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Buscar paciente ou plano…"
+                aria-label="Buscar paciente ou plano"
+                className="w-full h-10 pl-10 pr-3 rounded-xl bg-card border border-border focus:border-primary outline-none text-sm transition"
+              />
+            </div>
+            <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+              Ordenar
+              <select
+                value={sortBy}
+                onChange={(e) => setSearch({ ordem: e.target.value as (typeof SORTS)[number] })}
+                className="h-10 rounded-xl border border-border bg-card px-2.5 text-sm text-foreground outline-none focus:border-primary cursor-pointer"
+              >
+                {SORTS.map((s) => (
+                  <option key={s} value={s}>
+                    {SORT_LABEL[s]}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {(["todos", "em_andamento", "pausado", "finalizado", "cancelado"] as const).map((s) => (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+            {quickFilter ? (
               <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                className={`h-9 px-3 rounded-xl text-sm font-semibold transition cursor-pointer ${
-                  statusFilter === s
-                    ? "bg-primary text-white shadow-sm"
-                    : "bg-muted text-foreground/80 hover:bg-surface-2"
-                }`}
+                type="button"
+                onClick={() => setSearch({ filtro: undefined })}
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-semibold text-white cursor-pointer"
               >
-                {s === "todos" ? "Todos" : STATUS_LABEL[s].label}
+                {quickFilter === "retorno"
+                  ? "Retorno vencido"
+                  : quickFilter === "terminando"
+                    ? "Terminam em 7 dias"
+                    : "Com parcela em atraso"}
+                <X size={13} aria-label="Limpar filtro" />
               </button>
-            ))}
+            ) : viewMode === "kanban" ? null : (
+              STATUS_FILTERS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setStatusFilter(s)}
+                  aria-pressed={statusFilter === s}
+                  className={`h-8 shrink-0 px-3 rounded-full text-xs font-semibold transition cursor-pointer ${
+                    statusFilter === s
+                      ? "bg-primary text-white"
+                      : "bg-muted text-foreground/80 hover:bg-surface-2"
+                  }`}
+                >
+                  {s === "todos" ? "Todos" : STATUS_LABEL[s].label}
+                  {s !== "todos" && (
+                    <span className="ml-1 opacity-70">{rows.filter((r) => r.status === s).length}</span>
+                  )}
+                </button>
+              ))
+            )}
           </div>
         </div>
 
