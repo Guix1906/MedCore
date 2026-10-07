@@ -406,7 +406,7 @@ export default function AppShell({ children }: { children: ReactNode; title?: st
     <div className="app-canvas min-h-dvh" style={shellStyle}>
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-(--z-alert) focus:rounded-full focus:bg-primary focus:px-4 focus:py-3 focus:text-sm focus:text-primary-foreground"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-(--z-alert) focus:rounded focus:bg-primary focus:px-4 focus:py-3 focus:text-sm focus:text-primary-foreground"
       >
         Pular para o conteúdo
       </a>

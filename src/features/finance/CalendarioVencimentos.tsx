@@ -100,9 +100,6 @@ export function CalendarioVencimentos({ finance, onPay, onEdit }: CalendarioVenc
       <div className="bg-card rounded-2xl border border-border p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-xl bg-primary-soft text-primary flex items-center justify-center">
-              <CalIcon className="h-4 w-4" />
-            </div>
             <h2 className="text-lg font-semibold text-foreground">
               Calendário de Vencimentos
             </h2>
@@ -164,7 +161,7 @@ export function CalendarioVencimentos({ finance, onPay, onEdit }: CalendarioVenc
           <div className="text-lg font-bold text-foreground mt-1 tabular-nums">
             {currency(metricasMes.totalGeral)}
           </div>
-          <p className="text-2xs text-muted-foreground mt-0.5">{despesasDoMes.length} conta(s)</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">{despesasDoMes.length} conta(s)</p>
         </div>
 
         <div className="bg-card rounded-xl border border-border p-4 shadow-2xs">
@@ -174,7 +171,7 @@ export function CalendarioVencimentos({ finance, onPay, onEdit }: CalendarioVenc
           <div className="text-lg font-bold text-warning mt-1 tabular-nums">
             {currency(metricasMes.totalPendente)}
           </div>
-          <p className="text-2xs text-muted-foreground mt-0.5">Aguardando vencimento</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">Aguardando vencimento</p>
         </div>
 
         <div className="bg-card rounded-xl border border-border p-4 shadow-2xs">
@@ -184,7 +181,7 @@ export function CalendarioVencimentos({ finance, onPay, onEdit }: CalendarioVenc
           <div className="text-lg font-bold text-destructive mt-1 tabular-nums">
             {currency(metricasMes.totalVencido)}
           </div>
-          <p className="text-2xs text-muted-foreground mt-0.5">Exigem liquidação</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">Exigem liquidação</p>
         </div>
 
         <div className="bg-card rounded-xl border border-border p-4 shadow-2xs">
@@ -194,7 +191,7 @@ export function CalendarioVencimentos({ finance, onPay, onEdit }: CalendarioVenc
           <div className="text-lg font-bold text-success mt-1 tabular-nums">
             {currency(metricasMes.totalPago)}
           </div>
-          <p className="text-2xs text-muted-foreground mt-0.5">Liquidadas com sucesso</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">Liquidadas com sucesso</p>
         </div>
       </div>
 
@@ -292,7 +289,7 @@ export function CalendarioVencimentos({ finance, onPay, onEdit }: CalendarioVenc
                         {item.description || "Despesa"}
                       </span>
                       {item.category && (
-                        <span className="text-2xs font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-muted text-muted-foreground">
                           {item.category}
                         </span>
                       )}

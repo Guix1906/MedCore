@@ -279,11 +279,11 @@ function MemberEditor({
             <SheetDescription className="truncate">{member.email ?? "Sem e-mail"}</SheetDescription>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <StatusBadge status={member.status} />
-              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground/80">
+              <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium text-foreground/80">
                 {roleDisplayName(rolesById.get(member.roleId ?? ""))}
               </span>
               {member.isSelf && (
-                <span className="rounded-full bg-primary-soft px-2 py-0.5 text-xs font-semibold text-primary">
+                <span className="rounded bg-primary-soft px-2 py-0.5 text-xs font-semibold text-primary">
                   Você
                 </span>
               )}

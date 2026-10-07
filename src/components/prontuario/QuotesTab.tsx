@@ -173,7 +173,7 @@ export default function QuotesTab({
           onClick={() =>
             setEditing({ title: "", items: [emptyItem()], discount: 0, valid_until: defaultValidity(), status: "rascunho" })
           }
-          className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary-hover"
+          className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary-hover"
         >
           <Plus size={16} /> Novo orçamento
         </button>
@@ -448,13 +448,13 @@ function QuoteEditor({
       </div>
 
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={onCancel} className="h-10 cursor-pointer rounded-full px-4 text-sm font-medium text-muted-foreground hover:bg-muted">
+        <button type="button" onClick={onCancel} className="h-10 cursor-pointer rounded-lg px-4 text-sm font-medium text-muted-foreground hover:bg-muted">
           Cancelar
         </button>
         <button
           type="submit"
           disabled={saving}
-          className="h-10 cursor-pointer rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground hover:bg-primary-hover disabled:opacity-50"
+          className="h-10 cursor-pointer rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground hover:bg-primary-hover disabled:opacity-50"
         >
           {saving ? "Salvando…" : "Salvar orçamento"}
         </button>

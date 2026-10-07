@@ -462,19 +462,19 @@ export default function MedicationUsePanel({
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       {isNaoTomou ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-destructive/15 text-destructive border border-destructive/35">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-destructive/15 text-destructive">
                           <XCircle className="h-3 w-3" /> Não Tomou
                         </span>
                       ) : isSuspensa ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-primary-soft text-primary-hover border border-primary/35">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-primary-soft text-primary-hover">
                           <AlertTriangle className="h-3 w-3" /> Suspensa
                         </span>
                       ) : isAdiada ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-warning/15 text-warning border border-warning/35">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-warning/15 text-warning">
                           <Clock className="h-3 w-3" /> Adiada
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-success/15 text-success border border-success/35">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-success/15 text-success">
                           <CheckCircle2 className="h-3 w-3" /> Aplicada
                         </span>
                       )}

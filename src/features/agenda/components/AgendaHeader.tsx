@@ -40,7 +40,7 @@ export function AgendaHeader({
             <SlidersHorizontal />
             Filtros
             {activeFilterCount > 0 && (
-              <span className="rounded-full bg-primary/10 px-1.5 text-xs text-primary">
+              <span className="rounded bg-primary/10 px-1.5 text-xs text-primary">
                 {activeFilterCount}
               </span>
             )}

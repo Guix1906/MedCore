@@ -544,7 +544,7 @@ export function ContasReceberTab({
           type="button"
           onClick={() => setSubTab("geral")}
           className={cn(
-            "rounded-full px-4 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer",
+            "rounded-lg px-4 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer",
             subTab === "geral"
               ? "bg-info text-white shadow-xs"
               : "border border-border bg-card text-muted-foreground hover:bg-muted/60",
@@ -558,7 +558,7 @@ export function ContasReceberTab({
           type="button"
           onClick={() => setSubTab("hoje")}
           className={cn(
-            "rounded-full px-4 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer",
+            "rounded-lg px-4 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer",
             subTab === "hoje"
               ? "bg-amber-600 text-white shadow-xs"
               : "border border-amber-500/30 bg-card text-amber-600 dark:text-amber-400 hover:bg-amber-500/10",
@@ -567,7 +567,7 @@ export function ContasReceberTab({
           <Bell className="h-3.5 w-3.5" />
           Vencem Hoje
           {metrics.vencemHojeCount > 0 && (
-            <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold">
+            <span className="ml-1 px-1.5 py-0.2 rounded text-[10px] bg-amber-500/20 text-amber-700 dark:text-amber-300 font-semibold">
               {metrics.vencemHojeCount}
             </span>
           )}
@@ -577,7 +577,7 @@ export function ContasReceberTab({
           type="button"
           onClick={() => setSubTab("parcelados")}
           className={cn(
-            "rounded-full px-4 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer",
+            "rounded-lg px-4 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer",
             subTab === "parcelados"
               ? "bg-info text-white shadow-xs"
               : "border border-border bg-card text-muted-foreground hover:bg-muted/60",
@@ -591,7 +591,7 @@ export function ContasReceberTab({
           type="button"
           onClick={() => setSubTab("livre")}
           className={cn(
-            "rounded-full px-4 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer",
+            "rounded-lg px-4 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer",
             subTab === "livre"
               ? "bg-primary text-white shadow-xs"
               : "border border-primary/30 bg-card text-primary hover:bg-primary/10",
@@ -600,7 +600,7 @@ export function ContasReceberTab({
           <Wallet className="h-3.5 w-3.5" />
           Saldos Livres
           {metrics.saldoLivreCount > 0 && (
-            <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-primary/15 font-bold">
+            <span className="ml-1 px-1.5 py-0.2 rounded text-[10px] bg-primary/15 font-semibold">
               {metrics.saldoLivreCount}
             </span>
           )}
@@ -610,7 +610,7 @@ export function ContasReceberTab({
           type="button"
           onClick={() => setSubTab("clientes")}
           className={cn(
-            "rounded-full px-4 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer",
+            "rounded-lg px-4 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer",
             subTab === "clientes"
               ? "bg-destructive text-white shadow-xs"
               : "border border-destructive/25 bg-card text-destructive hover:bg-destructive/5",
@@ -624,7 +624,7 @@ export function ContasReceberTab({
           type="button"
           onClick={() => setSubTab("cartoes")}
           className={cn(
-            "rounded-full px-4 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer",
+            "rounded-lg px-4 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer",
             subTab === "cartoes"
               ? "bg-info text-white shadow-xs font-semibold"
               : "border border-border bg-card text-muted-foreground hover:bg-muted/60",
@@ -644,7 +644,7 @@ export function ContasReceberTab({
             <div className="flex items-center gap-3">
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded bg-amber-500/20">
                     Cobranças de Hoje
                   </span>
                   <h3 className="font-semibold text-sm text-foreground">
@@ -1084,7 +1084,7 @@ export function ContasReceberTab({
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-medium text-foreground">{t.description}</span>
                             {paidAmt > 0 && rem > 0 && (
-                              <span className="inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/25">
+                              <span className="inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600">
                                 Sinal pago: {currency(paidAmt)}
                               </span>
                             )}

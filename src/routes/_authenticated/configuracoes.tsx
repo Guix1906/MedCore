@@ -255,7 +255,7 @@ function ConfiguracoesPage() {
               {showAdminLink && (
                 <Link
                   to="/admin"
-                  className="shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10"
+                  className="shrink-0 whitespace-nowrap rounded px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10"
                 >
                   Usuários e permissões →
                 </Link>

@@ -390,7 +390,7 @@ export function PatientFinanceTab({ patientId, patientName }: PatientFinanceTabP
                       {/* Badge de status */}
                       <span
                         className={cn(
-                          "px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider",
+                          "px-2.5 py-0.5 rounded text-xs font-semibold uppercase tracking-wider",
                           isPaid && "bg-success/11 text-success",
                           isFree && !isPaid && "bg-primary-soft/70 text-primary",
                           isOpen && !isFree && "bg-info/11 text-info",

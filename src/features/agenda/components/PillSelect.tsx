@@ -26,7 +26,7 @@ export const PillSelect = memo(function PillSelect({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className="h-9 px-3.5 rounded-full border border-border bg-card hover:bg-accent hover:border-border text-sm text-foreground inline-flex items-center gap-1.5 transition-colors">
+        <button className="h-9 px-3.5 rounded-lg border border-border bg-card hover:bg-accent hover:border-border text-sm text-foreground inline-flex items-center gap-1.5 transition-colors">
           <span className="text-muted-foreground text-xs uppercase tracking-wider">{label}:</span>{" "}
           {current}
           <ChevronRight className="h-3 w-3 rotate-90 text-muted-foreground" />

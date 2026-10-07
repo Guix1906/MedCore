@@ -468,7 +468,7 @@ export const ContasPagarTab = React.memo(function ContasPagarTab({
                         {item.description || "Despesa sem descrição"}
                       </span>
                       {item.category && (
-                        <span className="inline-flex items-center text-xs font-semibold px-2.5 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
+                        <span className="inline-flex items-center text-xs font-semibold px-2.5 py-0.5 rounded bg-muted text-muted-foreground">
                           {item.category}
                         </span>
                       )}

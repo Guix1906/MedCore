@@ -376,7 +376,7 @@ export function ProntuarioHub({
                         <button
                           type="button"
                           onClick={() => onSelectPatient({ id: p.id, name: p.name, tab: "anamnese" })}
-                          className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary-hover"
+                          className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary-hover"
                         >
                           <Play size={12} fill="currentColor" /> Atender
                         </button>
@@ -465,17 +465,17 @@ export function ProntuarioHub({
                             {item.patientName}
                           </span>
                           {isNext && (
-                            <span className="shrink-0 rounded-full bg-primary/12 px-2 py-0.5 text-xs font-semibold text-primary">
+                            <span className="shrink-0 rounded bg-primary/12 px-2 py-0.5 text-xs font-semibold text-primary">
                               Próximo
                             </span>
                           )}
                           {late && (
-                            <span className="shrink-0 rounded-full bg-warning/12 px-2 py-0.5 text-xs font-semibold text-warning">
+                            <span className="shrink-0 rounded bg-warning/12 px-2 py-0.5 text-xs font-semibold text-warning">
                               Atrasado
                             </span>
                           )}
                           {(done || cancelled) && (
-                            <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                            <span className="shrink-0 rounded bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
                               {done ? "Atendido" : "Cancelado"}
                             </span>
                           )}
@@ -491,7 +491,7 @@ export function ProntuarioHub({
                           onClick={() =>
                             onSelectPatient({ id: item.patientId, name: item.patientName, tab: "anamnese" })
                           }
-                          className={`inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-4 text-sm font-semibold transition-colors ${
+                          className={`inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-4 text-sm font-semibold transition-colors ${
                             isNext
                               ? "bg-primary text-primary-foreground hover:bg-primary-hover"
                               : "border border-border text-foreground hover:bg-surface"

@@ -103,7 +103,7 @@ export function KPICard({
         {trend ? (
           <span
             className={cn(
-              "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-semibold",
+              "inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-xs font-semibold",
               positive ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive",
             )}
           >

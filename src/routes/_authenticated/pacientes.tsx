@@ -97,7 +97,7 @@ const columns = [
 function PatientStatus({ active }: { active: boolean }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium ${active ? "border-success/20 bg-success/10 text-success" : "border-border bg-muted text-muted-foreground"}`}
+      className={`inline-flex items-center gap-1.5 rounded border px-2 py-0.5 text-xs font-medium ${active ? "border-success/20 bg-success/10 text-success" : "border-border bg-muted text-muted-foreground"}`}
     >
       <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
       {active ? "Ativo" : "Inativo"}

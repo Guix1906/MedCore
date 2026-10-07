@@ -1216,7 +1216,7 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
               >
                 {t.icon} {t.label}
                 {!!t.count && (
-                  <span className="rounded-full bg-info/12 px-1.5 text-[11px] text-info">{t.count}</span>
+                  <span className="rounded bg-info/12 px-1.5 text-[11px] text-info">{t.count}</span>
                 )}
               </button>
             ))}

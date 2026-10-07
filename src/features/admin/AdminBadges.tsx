@@ -13,7 +13,7 @@ export function StatusBadge({ status, className }: { status: MemberStatus; class
   return (
     <span
       className={cn(
-        "inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold",
+        "inline-flex items-center whitespace-nowrap rounded border px-2 py-0.5 text-xs font-semibold",
         STATUS_TONE[status],
         className,
       )}
@@ -27,7 +27,7 @@ export function InviteBadge({ expired }: { expired: boolean }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold",
+        "inline-flex items-center whitespace-nowrap rounded border px-2 py-0.5 text-xs font-semibold",
         expired
           ? "border-border bg-muted text-muted-foreground"
           : "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300",

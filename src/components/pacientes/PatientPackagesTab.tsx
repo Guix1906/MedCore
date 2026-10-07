@@ -397,9 +397,6 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Total de Pacotes
             </span>
-            <div className="h-8 w-8 rounded-lg bg-primary-soft text-primary flex items-center justify-center">
-              <Package size={16} />
-            </div>
           </div>
           <p className="text-2xl font-semibold text-foreground">{metrics.total}</p>
           <p className="text-xs text-muted-foreground">
@@ -412,9 +409,6 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
             <span className="text-xs font-semibold text-success uppercase tracking-wider">
               Em Andamento
             </span>
-            <div className="h-8 w-8 rounded-lg bg-success/10 text-success flex items-center justify-center">
-              <Activity size={16} />
-            </div>
           </div>
           <p className="text-2xl font-semibold text-success">{metrics.inProgress}</p>
           <p className="text-xs text-muted-foreground">Protocolos ativos no momento</p>
@@ -425,9 +419,6 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
             <span className="text-xs font-semibold text-info uppercase tracking-wider">
               Concluídos
             </span>
-            <div className="h-8 w-8 rounded-lg bg-info/10 text-info flex items-center justify-center">
-              <CheckCircle2 size={16} />
-            </div>
           </div>
           <p className="text-2xl font-semibold text-info">{metrics.completed}</p>
           <p className="text-xs text-muted-foreground">Tratamentos finalizados com sucesso</p>
@@ -494,15 +485,12 @@ export function PatientPackagesTab({ patientId, patientName }: PatientPackagesTa
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-start gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-primary-soft text-primary flex items-center justify-center shrink-0 mt-0.5">
-                      <Sparkles size={18} />
-                    </div>
                     <div>
                       <div className="flex items-center gap-2.5 flex-wrap">
                         <h4 className="text-[15px] font-semibold text-foreground">{item.title}</h4>
                         <span
                           className={cn(
-                            "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border",
+                            "inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-semibold border",
                             st.bg,
                             st.text,
                           )}

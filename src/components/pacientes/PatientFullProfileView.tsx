@@ -594,7 +594,7 @@ export function PatientFullProfileView({
                       type="button"
                       onClick={handleSaveProntuario}
                       disabled={isSavingRecord || !anamnese.trim()}
-                      className="inline-flex items-center gap-1.5 h-10 px-4.5 rounded-full bg-primary text-white hover:bg-primary-hover disabled:opacity-50 text-sm font-semibold shadow-sm transition-all cursor-pointer"
+                      className="inline-flex items-center gap-1.5 h-10 px-4.5 rounded-lg bg-primary text-white hover:bg-primary-hover disabled:opacity-50 text-sm font-semibold shadow-sm transition-all cursor-pointer"
                     >
                       <Save size={15} />
                       <span>{isSavingRecord ? "Salvando..." : "Salvar Atendimento"}</span>
@@ -608,9 +608,6 @@ export function PatientFullProfileView({
                 <div className="rounded-2xl border border-primary/15 bg-card p-5 shadow-xs space-y-3">
                   <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-border-soft">
                     <div className="flex items-center gap-2.5">
-                      <div className="h-7 w-7 rounded-lg bg-primary-soft text-primary flex items-center justify-center">
-                        <ClipboardList size={16} />
-                      </div>
                       <div>
                         <h3 className="text-sm font-semibold text-foreground">
                           Novo Atendimento / Evolução Clínica
@@ -646,7 +643,7 @@ export function PatientFullProfileView({
                             placeholder: "Descreva a consulta do paciente...",
                           })
                         }
-                        className="flex cursor-pointer items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
+                        className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
                       >
                         <Sparkles size={12} />
                         <span>Preencher com IA</span>
@@ -1014,7 +1011,7 @@ export function PatientFullProfileView({
                       "edit",
                     )
                   }
-                  className="flex cursor-pointer items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
+                  className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
                 >
                   <Sparkles size={12} />
                   <span>Preencher com IA</span>

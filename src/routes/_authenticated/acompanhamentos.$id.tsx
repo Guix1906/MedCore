@@ -563,9 +563,6 @@ function TreatmentDetailPage() {
                   <PlanPayments plan={currentPlan} />
                 ) : (
                   <div className="py-12 text-center space-y-3">
-                    <div className="h-12 w-12 rounded-2xl bg-primary-soft text-primary flex items-center justify-center mx-auto">
-                      <Wallet size={24} />
-                    </div>
                     <h3 className="text-base font-semibold text-foreground">
                       Condições financeiras não configuradas
                     </h3>

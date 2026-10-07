@@ -760,7 +760,7 @@ export function ActivityDrawer({
                   {linkedTitle ? (
                     <span
                       className={cn(
-                        "px-2 py-0.5 rounded-full text-xs font-semibold",
+                        "px-2 py-0.5 rounded text-xs font-semibold",
                         linkedTitle.status === "pago"
                           ? "bg-success/15 text-success"
                           : Number(linkedTitle.paid_amount || 0) > 0
@@ -775,7 +775,7 @@ export function ActivityDrawer({
                           : "Pendente"}
                     </span>
                   ) : (
-                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-warning/15 text-warning">
+                    <span className="px-2 py-0.5 rounded text-xs font-semibold bg-warning/15 text-warning">
                       Não gerado
                     </span>
                   )}
@@ -906,7 +906,7 @@ export function ActivityDrawer({
                   {meta.participants.map((p) => (
                     <span
                       key={p.id}
-                      className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-foreground"
+                      className="inline-flex items-center gap-1 rounded bg-muted px-2.5 py-1 text-xs font-medium text-foreground"
                     >
                       {p.name}
                     </span>
@@ -925,7 +925,7 @@ export function ActivityDrawer({
                   {meta.reminders.map((r: string | { id: string; label: string }, i: number) => (
                     <span
                       key={typeof r === "string" ? `${r}-${i}` : r.id}
-                      className="rounded-full bg-primary/10 text-primary px-2.5 py-1 text-xs font-medium"
+                      className="rounded bg-primary/10 text-primary px-2.5 py-1 text-xs font-medium"
                     >
                       {typeof r === "string" ? r : r.label}
                     </span>
@@ -967,7 +967,7 @@ export function ActivityDrawer({
                   {meta.tags.map((t) => (
                     <span
                       key={t}
-                      className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-foreground"
+                      className="rounded bg-muted px-2.5 py-1 text-xs font-medium text-foreground"
                     >
                       {t}
                     </span>

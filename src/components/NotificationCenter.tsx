@@ -141,7 +141,7 @@ export default function NotificationCenter({ onClose }: { onClose: () => void })
           <Bell size={18} className="text-primary" aria-hidden="true" />
           <h2 className="text-base font-semibold">Notificações</h2>
           {unread.length > 0 && (
-            <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-semibold tabular-nums text-primary-foreground">
+            <span className="rounded bg-primary px-2 py-0.5 text-xs font-semibold tabular-nums text-primary-foreground">
               {unread.length}
               <span className="sr-only"> não lidas</span>
             </span>

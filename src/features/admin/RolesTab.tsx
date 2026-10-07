@@ -111,7 +111,7 @@ export function RolesTab({
                     {role.isSystem ? "Perfil do sistema" : "Personalizado"}
                   </p>
                 </div>
-                <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground/80">
+                <span className="shrink-0 rounded bg-muted px-2 py-0.5 text-xs font-medium text-foreground/80">
                   {role.memberCount} {role.memberCount === 1 ? "usuário" : "usuários"}
                 </span>
               </div>

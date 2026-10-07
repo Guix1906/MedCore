@@ -164,9 +164,6 @@ export function BlockedAccessScreen({
   return (
     <div className="flex min-h-[calc(100vh-64px)] items-start justify-center p-4 md:items-center md:p-8">
       <div className="w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-sm">
-        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-soft text-primary">
-          <Icon size={24} aria-hidden="true" />
-        </div>
         <h1 className="text-lg font-semibold text-foreground">{copy.title}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{copy.description}</p>
         {access.companyName && access.status !== "none" && (
@@ -230,9 +227,6 @@ export function NoAccessScreen({
         role="alert"
         className="w-full max-w-md rounded-2xl border border-border bg-card p-6 text-center shadow-sm"
       >
-        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-warning/10 text-warning">
-          <ShieldAlert size={24} aria-hidden="true" />
-        </div>
         <h1 className="text-lg font-semibold text-foreground">Sem acesso a {moduleLabel}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Seu perfil não inclui este módulo. Se precisar dele, peça a liberação ao administrador da

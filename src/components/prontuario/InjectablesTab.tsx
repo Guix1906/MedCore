@@ -83,7 +83,7 @@ export default function InjectablesTab({
         <button
           type="button"
           onClick={onCreatePlan}
-          className="inline-flex h-10 cursor-pointer items-center rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground hover:bg-primary-hover"
+          className="inline-flex h-10 cursor-pointer items-center rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground hover:bg-primary-hover"
         >
           Criar plano de tratamento
         </button>

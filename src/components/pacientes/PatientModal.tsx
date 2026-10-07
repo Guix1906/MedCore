@@ -524,14 +524,14 @@ export function PatientModal({
             <button
               type="button"
               onClick={onClose}
-              className="h-10 px-4 rounded-full border border-border text-sm font-semibold text-foreground/80 hover:bg-muted/60 cursor-pointer"
+              className="h-10 px-4 rounded-lg border border-border text-sm font-semibold text-foreground/80 hover:bg-muted/60 cursor-pointer"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={saving || !f.name.trim()}
-              className="h-10 px-5 rounded-full bg-primary hover:bg-primary-hover text-white text-sm font-semibold disabled:opacity-60 transition-colors cursor-pointer shadow-sm"
+              className="h-10 px-5 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-semibold disabled:opacity-60 transition-colors cursor-pointer shadow-sm"
             >
               {saving ? "Salvando…" : "Salvar informações"}
             </button>

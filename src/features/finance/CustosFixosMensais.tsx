@@ -242,9 +242,6 @@ export function CustosFixosMensais({ finance, onRefreshFinance }: CustosFixosMen
       <div className="bg-card rounded-2xl border border-border p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-xl bg-destructive/10 text-destructive flex items-center justify-center">
-              <Calendar className="h-4 w-4" />
-            </div>
             <h2 className="text-lg font-semibold text-foreground">
               Custos Fixos Mensais Recorrentes
             </h2>
@@ -290,7 +287,7 @@ export function CustosFixosMensais({ finance, onRefreshFinance }: CustosFixosMen
             {currency(resumo.totalMensal)}
             <span className="text-xs font-normal text-muted-foreground ml-1">/mês</span>
           </div>
-          <p className="text-2xs text-muted-foreground mt-1">
+          <p className="text-[11px] text-muted-foreground mt-1">
             Soma dos {resumo.countAtivos} custos fixos ativos
           </p>
         </div>
@@ -305,7 +302,7 @@ export function CustosFixosMensais({ finance, onRefreshFinance }: CustosFixosMen
               ativos ({resumo.countTotal} total)
             </span>
           </div>
-          <p className="text-2xs text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1 font-medium">
+          <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1 font-medium">
             <CheckCircle2 size={12} />
             Gerados automaticamente a cada mês
           </p>
@@ -355,9 +352,6 @@ export function CustosFixosMensais({ finance, onRefreshFinance }: CustosFixosMen
           </p>
         ) : custosFixos.length === 0 ? (
           <div className="py-12 text-center space-y-3">
-            <div className="h-11 w-11 rounded-2xl bg-muted text-muted-foreground mx-auto flex items-center justify-center">
-              <Calendar className="h-5 w-5" />
-            </div>
             <div>
               <p className="text-sm font-semibold text-foreground">
                 Nenhum custo fixo mensal cadastrado
@@ -392,12 +386,12 @@ export function CustosFixosMensais({ finance, onRefreshFinance }: CustosFixosMen
                         {item.description}
                       </span>
                       {item.category && (
-                        <span className="inline-flex items-center text-2xs font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
+                        <span className="inline-flex items-center text-[11px] font-semibold px-2 py-0.5 rounded bg-muted text-muted-foreground">
                           {item.category}
                         </span>
                       )}
                       <span
-                        className={`text-2xs font-bold px-2 py-0.5 rounded-full ${
+                        className={`text-[11px] font-semibold px-2 py-0.5 rounded ${
                           item.is_active
                             ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
                             : "bg-muted text-muted-foreground"
@@ -419,7 +413,7 @@ export function CustosFixosMensais({ finance, onRefreshFinance }: CustosFixosMen
                     </div>
 
                     {item.notes && (
-                      <p className="text-2xs text-muted-foreground bg-muted/40 p-1.5 rounded-lg border border-border-soft mt-1">
+                      <p className="text-[11px] text-muted-foreground bg-muted/40 p-1.5 rounded-lg border border-border-soft mt-1">
                         <b>Obs:</b> {item.notes}
                       </p>
                     )}
@@ -430,7 +424,7 @@ export function CustosFixosMensais({ finance, onRefreshFinance }: CustosFixosMen
                       <div className="text-sm font-bold text-destructive tabular-nums">
                         {currency(item.amount)}
                       </div>
-                      <span className="text-2xs text-muted-foreground">por mês</span>
+                      <span className="text-[11px] text-muted-foreground">por mês</span>
                     </div>
 
                     <Button
@@ -629,9 +623,6 @@ function CadastrarCustoFixoModal({
       <DialogContent className="max-w-xl gap-0 p-0">
         <DialogHeader className="border-b border-border-soft px-6 py-4">
           <div className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-xl bg-destructive/10 text-destructive flex items-center justify-center">
-              <Calendar className="h-4 w-4" />
-            </div>
             <div>
               <DialogTitle className="text-base font-semibold">
                 Cadastrar Custo Fixo Mensal
@@ -782,7 +773,7 @@ function CadastrarCustoFixoModal({
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-xs font-semibold text-foreground/80">Data Final</label>
-                <label className="text-2xs text-muted-foreground flex items-center gap-1 cursor-pointer">
+                <label className="text-[11px] text-muted-foreground flex items-center gap-1 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={hasEndDate}
@@ -834,7 +825,7 @@ function CadastrarCustoFixoModal({
               <Button
                 type="submit"
                 disabled={saving}
-                className="rounded-full bg-primary hover:bg-primary-hover text-white text-xs font-semibold px-5"
+                className="rounded bg-primary hover:bg-primary-hover text-white text-xs font-semibold px-5"
               >
                 {saving ? "Salvando e gerando..." : "Salvar Custo Fixo"}
               </Button>

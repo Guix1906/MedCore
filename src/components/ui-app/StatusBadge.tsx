@@ -35,7 +35,7 @@ export function StatusBadge({ tone, children, icon, className }: StatusBadgeProp
   return (
     <span
       className={cn(
-        "inline-flex max-w-full items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium",
+        "inline-flex max-w-full items-center gap-1 whitespace-nowrap rounded border px-2 py-0.5 text-xs font-medium",
         toneClass[tone],
         className,
       )}

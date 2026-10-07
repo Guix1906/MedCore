@@ -109,7 +109,7 @@ export function AgendaToolbar({
           <PopoverTrigger asChild>
             <button
               type="button"
-              className="min-w-0 rounded-full px-2 py-2 text-left text-[15px] font-semibold text-foreground hover:bg-foreground/[0.05] md:px-3"
+              className="min-w-0 rounded px-2 py-2 text-left text-[15px] font-semibold text-foreground hover:bg-foreground/[0.05] md:px-3"
               aria-label="Escolher data"
             >
               <span className="block leading-snug">{label ?? formatDateLong(date)}</span>

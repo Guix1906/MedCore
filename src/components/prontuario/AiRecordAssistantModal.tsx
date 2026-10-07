@@ -609,7 +609,7 @@ export function AiRecordAssistantModal({
         <button
           type="button"
           onClick={() => setMinimized(false)}
-          className="h-8 cursor-pointer rounded-full bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary-hover"
+          className="h-8 cursor-pointer rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary-hover"
         >
           Abrir
         </button>
@@ -636,7 +636,7 @@ export function AiRecordAssistantModal({
               <div>
                 <div className="flex flex-wrap items-center gap-2.5">
                   <DialogTitle className="tracking-tight">Assistente de Prontuário IA</DialogTitle>
-                  <span className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary-soft px-2.5 py-0.5 text-xs font-semibold text-primary">
+                  <span className="inline-flex items-center gap-1 rounded bg-primary-soft px-2.5 py-0.5 text-xs font-semibold text-primary">
                     <Layers size={11} />
                     Revisão profissional necessária
                   </span>
@@ -775,7 +775,7 @@ export function AiRecordAssistantModal({
                 </div>
 
                 {isRecording && (
-                  <div className="flex items-center gap-2 rounded-full border border-destructive/25 bg-destructive/10 px-3 py-1 text-sm font-semibold text-destructive">
+                  <div className="flex items-center gap-2 rounded bg-destructive/10 px-3 py-1 text-sm font-semibold text-destructive">
                     <span className="h-2 w-2 animate-pulse rounded-full bg-destructive" />
                     Gravando {formatSeconds(recordingSeconds)}
                   </div>
@@ -859,7 +859,7 @@ export function AiRecordAssistantModal({
                       <button
                         type="button"
                         onClick={finishConsultation}
-                        className="mt-4 inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background shadow-sm transition-opacity hover:opacity-90"
+                        className="mt-4 inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-foreground px-4 py-2 text-sm font-semibold text-background shadow-sm transition-opacity hover:opacity-90"
                       >
                         <Square size={13} className="fill-current" />
                         Finalizar e transcrever
@@ -980,7 +980,7 @@ export function AiRecordAssistantModal({
                       type="button"
                       onClick={() => cycleSpeaker(i)}
                       title="Trocar falante"
-                      className={`mt-1 h-fit w-28 shrink-0 cursor-pointer truncate rounded-full border px-2 py-0.5 text-center text-xs font-semibold transition-opacity hover:opacity-80 ${SPEAKER_STYLES[turn.speaker]}`}
+                      className={`mt-1 h-fit w-28 shrink-0 cursor-pointer truncate rounded-lg border px-2 py-0.5 text-center text-xs font-semibold transition-opacity hover:opacity-80 ${SPEAKER_STYLES[turn.speaker]}`}
                     >
                       {SPEAKER_LABELS[turn.speaker]}
                     </button>
@@ -1083,7 +1083,7 @@ export function AiRecordAssistantModal({
                     {conditions.map((c) => (
                       <span
                         key={c}
-                        className="inline-flex items-center gap-1 rounded-full border border-primary/25 bg-primary-soft px-2.5 py-0.5 text-xs font-semibold text-primary"
+                        className="inline-flex items-center gap-1 rounded bg-primary-soft px-2.5 py-0.5 text-xs font-semibold text-primary"
                       >
                         {c}
                         <button
@@ -1106,7 +1106,7 @@ export function AiRecordAssistantModal({
                       <span
                         key={c.codigo}
                         title={c.descricao}
-                        className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2.5 py-0.5 text-xs text-foreground"
+                        className="inline-flex items-center gap-1 rounded bg-card px-2.5 py-0.5 text-xs text-foreground"
                       >
                         <strong>{c.codigo}</strong> {c.descricao}
                         <button
@@ -1451,7 +1451,7 @@ function PrimaryButton({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-xs transition-colors hover:bg-primary-hover active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40"
+      className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-xs transition-colors hover:bg-primary-hover active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40"
     >
       {children}
     </button>
@@ -1474,7 +1474,7 @@ function SecondaryButton({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-full border border-input bg-card px-4 text-sm font-semibold text-foreground/80 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+      className="inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-lg border border-input bg-card px-4 text-sm font-semibold text-foreground/80 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
     >
       {loading ? <RefreshCw size={14} className="animate-spin" /> : null}
       {children}

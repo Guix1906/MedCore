@@ -171,7 +171,7 @@ export function CashFlowDetailsDialog({
                     </td>
                     <td className="px-3 py-3 text-muted-foreground">{r.method}</td>
                     <td className="px-3 py-3">
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${badge(r.situation)}`}>
+                      <span className={`rounded px-2.5 py-1 text-xs font-medium ${badge(r.situation)}`}>
                         {r.situation}
                       </span>
                     </td>

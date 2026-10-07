@@ -638,7 +638,7 @@ export default function ProntuarioPage() {
                     )}
                     {t.key === "prontuarios" && clinicalHistory.length > 0 && (
                       <span
-                        className={`rounded-full px-1.5 text-xs ${active ? "bg-white/20" : "bg-primary/12 text-primary"}`}
+                        className={`rounded px-1.5 text-xs ${active ? "bg-white/20" : "bg-primary/12 text-primary"}`}
                       >
                         {clinicalHistory.length}
                       </span>
@@ -699,7 +699,7 @@ export default function ProntuarioPage() {
                       type="button"
                       aria-pressed={historyFilterKind === key}
                       onClick={() => setHistoryFilterKind(key)}
-                      className={`shrink-0 cursor-pointer rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      className={`shrink-0 cursor-pointer rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
                         historyFilterKind === key
                           ? "border-primary bg-primary text-primary-foreground"
                           : "border-border bg-card text-muted-foreground hover:text-foreground"
@@ -741,7 +741,7 @@ export default function ProntuarioPage() {
                     <button
                       type="button"
                       onClick={() => setTab("anamnese")}
-                      className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground hover:bg-primary-hover"
+                      className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground hover:bg-primary-hover"
                     >
                       <Stethoscope size={16} /> Iniciar primeiro atendimento
                     </button>
@@ -1085,7 +1085,7 @@ function SaveIndicator({ state }: { state: SaveState }) {
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -4 }}
         transition={{ duration: 0.18, ease: EASE_OUT }}
-        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${cfg.cls}`}
+        className={`inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-xs font-medium ${cfg.cls}`}
       >
         <Icon className={`h-3 w-3 ${state === "saving" ? "animate-pulse" : ""}`} />
         {cfg.label}

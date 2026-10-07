@@ -457,7 +457,7 @@ export function WeeklyGrid({
               />
               {/* Badge com horário atual na coluna de horários */}
               <div
-                className="absolute left-2.5 -top-[10px] px-1.5 py-0.5 rounded-full bg-[#FF2D55] text-white text-xs font-semibold tabular-nums shadow-sm flex items-center justify-center z-40 leading-tight"
+                className="absolute left-2.5 -top-[10px] px-1.5 py-0.5 rounded bg-[#FF2D55] text-white text-xs font-semibold tabular-nums shadow-sm flex items-center justify-center z-40 leading-tight"
                 style={{ minWidth: 42 }}
               >
                 {nowLabel}
