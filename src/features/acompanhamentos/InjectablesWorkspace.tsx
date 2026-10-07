@@ -134,16 +134,56 @@ export default function InjectablesWorkspace({
       );
     }
     if (filter === "manipulados") {
+      // Semanas do protocolo têm observação longa: não são manipulados
       return meds.filter(
         (m) =>
-          m.unit === "dose" ||
+          m.period !== "semanal" &&
+          (m.unit === "dose" ||
           m.name.toLowerCase().includes("fórmula") ||
           m.name.toLowerCase().includes("manipulado") ||
-          (m.notes && m.notes.length > 30),
+          (m.notes && m.notes.length > 30)),
       );
     }
     return meds.filter((m) => m.period === filter);
   }, [meds, filter]);
+
+  // Protocolo semanal é gravado como uma linha por semana ("Nome (Sem. 3)"): na tela vira um
+  // card só, com a tabela de semanas. O resto segue um card por medicação. Ordem: 1ª data.
+  type ListItem =
+    | { kind: "med"; key: string; med: DbRow; date: string }
+    | { kind: "protocol"; key: string; name: string; weeks: DbRow[]; date: string };
+  const items = useMemo(() => {
+    const out: ListItem[] = [];
+    const groups = new Map<string, DbRow[]>();
+    for (const m of filtered) {
+      if (m.period === "semanal") {
+        const name = protocolBase(m.name);
+        if (!groups.has(name)) {
+          groups.set(name, []);
+          out.push({ kind: "protocol", key: `p:${name}`, name, weeks: groups.get(name)!, date: "" });
+        }
+        groups.get(name)!.push(m);
+      } else out.push({ kind: "med", key: m.id, med: m, date: String(m.start_date || "") });
+    }
+    for (const it of out)
+      if (it.kind === "protocol") {
+        it.weeks.sort(
+          (a, b) =>
+            String(a.start_date || "9999").localeCompare(String(b.start_date || "9999")) ||
+            weekNumber(a.name) - weekNumber(b.name),
+        );
+        it.date = String(it.weeks[0]?.start_date || "");
+      }
+    return out.sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999"));
+  }, [filtered]);
+  const protocolCount = new Set(
+    meds.filter((m) => m.period === "semanal").map((m) => protocolBase(m.name)),
+  ).size;
+  const activeItems =
+    meds.filter((m) => m.status === "ativo" && m.period !== "semanal").length +
+    new Set(
+      meds.filter((m) => m.status === "ativo" && m.period === "semanal").map((m) => protocolBase(m.name)),
+    ).size;
 
   const filters = [
     { id: "todos", label: "Todas" },
@@ -281,10 +321,10 @@ export default function InjectablesWorkspace({
             </span>
             <div className="text-xl font-bold text-foreground mt-1 flex items-center gap-1.5">
               <Layers size={18} className="text-amber-500" />
-              <span>{meds.filter((m) => m.status === "ativo").length} prescrições</span>
+              <span>{activeItems} prescrição(ões) ativa(s)</span>
             </div>
             <span className="text-2xs text-muted-foreground mt-0.5 block">
-              {meds.filter((m) => m.period === "semanal").length} escalonamento(s) semanais
+              {protocolCount} protocolo(s) semanal(is)
             </span>
           </div>
         </div>
@@ -493,7 +533,29 @@ export default function InjectablesWorkspace({
           <div className="relative pl-5">
             <div className="absolute left-1.5 top-0 bottom-0 w-px bg-border" />
             <div className="space-y-3">
-              {filtered.map((m, i) => {
+              {items.map((it, i) => {
+                if (it.kind === "protocol")
+                  return (
+                    <motion.div
+                      key={it.key}
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: i * 0.03 }}
+                      className="relative"
+                    >
+                      <div className="absolute -left-[13px] top-5 h-3.5 w-3.5 rounded-full bg-card border-2 border-primary" />
+                      <ProtocolCard
+                        name={it.name}
+                        weeks={it.weeks}
+                        usesByMedication={usesByMedication}
+                        planActive={planActive}
+                        today={today}
+                        onRegister={setRegistering}
+                        reload={reload}
+                      />
+                    </motion.div>
+                  );
+                const m = it.med;
                 const PIcon = PERIOD_ICON[m.period] ?? Clock;
                 const suspenso = m.status !== "ativo";
                 const isSemanal = m.period === "semanal";
@@ -682,6 +744,369 @@ export default function InjectablesWorkspace({
           }}
           onClose={() => setRegistering(null)}
         />
+      )}
+    </div>
+  );
+}
+
+// ============== PROTOCOLO SEMANAL (um card para todas as semanas) ==============
+
+const protocolBase = (name?: string | null) => String(name || "").replace(/\s+\(Sem\.\s*\d+\)$/, "");
+const weekNumber = (name?: string | null) =>
+  Number(String(name || "").match(/\(Sem\.\s*(\d+)\)$/)?.[1] ?? 0);
+const mgNumber = (dose?: string | null) => Number(String(dose ?? "").replace(",", "."));
+const fmtDose = (dose?: string | null) => {
+  const n = mgNumber(dose);
+  return Number.isFinite(n) && String(dose ?? "").trim() !== ""
+    ? `${n.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} mg`
+    : String(dose || "—");
+};
+
+function ProtocolCard({
+  name,
+  weeks,
+  usesByMedication,
+  planActive,
+  today,
+  onRegister,
+  reload,
+}: {
+  name: string;
+  weeks: DbRow[];
+  usesByMedication: Map<string, DbRow[]>;
+  planActive: boolean;
+  today: string;
+  onRegister: (m: DbRow) => void;
+  reload: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const rows = weeks.map((w, idx) => {
+    const uses = usesByMedication.get(w.id) ?? [];
+    const applied = uses.find(isAppliedUse);
+    const occurrence = !applied ? uses[0] : undefined;
+    const suspended = w.status !== "ativo";
+    const date = String(w.start_date || "");
+    const state: "aplicada" | "ocorrencia" | "suspensa" | "atrasada" | "hoje" | "prevista" = applied
+      ? "aplicada"
+      : occurrence
+        ? "ocorrencia"
+        : suspended
+          ? "suspensa"
+          : date && date < today
+            ? "atrasada"
+            : date === today
+              ? "hoje"
+              : "prevista";
+    return { w, n: idx + 1, uses, applied, occurrence, suspended, date, state };
+  });
+
+  const appliedCount = rows.filter((r) => r.state === "aplicada").length;
+  const late = rows.filter((r) => r.state === "atrasada");
+  const next = rows.find((r) => r.state === "atrasada" || r.state === "hoje" || r.state === "prevista");
+  const allSuspended = rows.every((r) => r.suspended);
+  const mgs = rows.map((r) => mgNumber(r.w.dose)).filter(Number.isFinite);
+  const range =
+    mgs.length && Math.min(...mgs) !== Math.max(...mgs)
+      ? `${fmtDose(String(Math.min(...mgs)))} → ${fmtDose(String(Math.max(...mgs)))}`
+      : fmtDose(rows[0]?.w.dose);
+  const pct = rows.length ? Math.round((appliedCount / rows.length) * 100) : 0;
+  // Orientações comuns: tira o prefixo "Semana N do protocolo de X (Ymg)." gravado em cada semana
+  const guidance = String(weeks[0]?.notes || "").replace(/^Semana \d+ do protocolo de .*?\([^)]*\)\.\s*/, "");
+
+  const update = async (id: string, patch: { start_date?: string; dose?: string }) => {
+    const { error } = await supabase.from("treatment_medications").update(patch).eq("id", id);
+    if (error) {
+      toast.error("Não foi possível salvar: " + error.message);
+      return;
+    }
+    reload();
+  };
+
+  const setAllStatus = async (status: "ativo" | "suspenso") => {
+    // Suspender só mexe nas semanas ainda não aplicadas; reativar volta todas
+    const ids = rows
+      .filter((r) => (status === "suspenso" ? !r.applied && !r.suspended : r.suspended))
+      .map((r) => r.w.id);
+    if (!ids.length) return;
+    setBusy(true);
+    const { error } = await supabase.from("treatment_medications").update({ status }).in("id", ids);
+    setBusy(false);
+    if (error) return toast.error(error.message);
+    toast.success(status === "suspenso" ? "Protocolo suspenso" : "Protocolo reativado");
+    reload();
+  };
+
+  const removePending = async () => {
+    const pending = rows.filter((r) => r.uses.length === 0);
+    if (!pending.length) return toast.info("Todas as semanas já têm registro; use Suspender.");
+    const ok = await confirmDialog({
+      title: "Remover semanas sem registro?",
+      description: `${pending.length} semana(s) de ${name} sem aplicação registrada serão removidas do cronograma. As já aplicadas continuam no histórico.`,
+      confirmText: "Remover",
+      destructive: true,
+    });
+    if (!ok) return;
+    setBusy(true);
+    const { error } = await supabase
+      .from("treatment_medications")
+      .delete()
+      .in("id", pending.map((r) => r.w.id));
+    setBusy(false);
+    if (error) return toast.error("Não foi possível remover: " + error.message);
+    toast.success(`${pending.length} semana(s) removida(s)`);
+    reload();
+  };
+
+  const addWeek = async () => {
+    const last = rows[rows.length - 1]?.w;
+    if (!last) return;
+    const d = new Date(`${last.start_date || today}T12:00:00`);
+    d.setDate(d.getDate() + 7);
+    const nextNum = Math.max(...weeks.map((w) => weekNumber(w.name)), rows.length) + 1;
+    setBusy(true);
+    const { error } = await supabase.from("treatment_medications").insert({
+      treatment_id: last.treatment_id,
+      name: `${name} (Sem. ${nextNum})`,
+      dose: last.dose,
+      unit: last.unit || "mg",
+      route: last.route,
+      frequency: last.frequency || "1x por semana",
+      period: "semanal",
+      start_date: localDate(d),
+      notes: `Semana ${nextNum} do protocolo de ${name} (${last.dose}mg). ${guidance}`.trim(),
+      status: "ativo",
+    });
+    setBusy(false);
+    if (error) return toast.error("Não foi possível adicionar: " + error.message);
+    setOpen(true);
+    reload();
+  };
+
+  const STATE_BADGE: Record<(typeof rows)[number]["state"], { label: string; cls: string }> = {
+    aplicada: { label: "Aplicada", cls: STATUS_TONE.done },
+    ocorrencia: { label: "Ocorrência", cls: STATUS_TONE.warn },
+    suspensa: { label: "Suspensa", cls: STATUS_TONE.idle },
+    atrasada: { label: "Atrasada", cls: STATUS_TONE.warn },
+    hoje: { label: "Hoje", cls: STATUS_TONE.today },
+    prevista: { label: "Prevista", cls: STATUS_TONE.idle },
+  };
+
+  return (
+    <div className={`rounded-2xl border border-border/90 bg-card shadow-2xs ${allSuspended ? "opacity-70" : ""}`}>
+      <div className="space-y-3 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+              <Syringe size={18} />
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[15px] font-bold text-foreground">{name}</span>
+                <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-2xs font-bold text-primary">
+                  Protocolo semanal
+                </span>
+                {allSuspended && (
+                  <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-2xs font-bold text-destructive">
+                    Suspenso
+                  </span>
+                )}
+              </div>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {rows.length} semana(s) · {range}
+                {weeks[0]?.route ? ` · ${weeks[0].route}` : ""}
+                {rows[0]?.date ? ` · ${formatClinicalDate(rows[0].date)} a ${formatClinicalDate(rows[rows.length - 1].date)}` : ""}
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setAllStatus(allSuspended ? "ativo" : "suspenso")}
+              className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground cursor-pointer"
+              title={allSuspended ? "Reativar protocolo" : "Suspender semanas não aplicadas"}
+              aria-label={allSuspended ? "Reativar protocolo" : "Suspender protocolo"}
+            >
+              {allSuspended ? <CheckCircle2 size={16} /> : <PauseCircle size={16} />}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={removePending}
+              className="grid h-8 w-8 place-items-center rounded-lg text-destructive transition hover:bg-destructive/10 cursor-pointer"
+              title="Remover semanas sem registro"
+              aria-label="Remover semanas sem registro"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        </div>
+
+        {/* Progresso */}
+        <div>
+          <div className="mb-1 flex items-center justify-between text-xs">
+            <span className="font-semibold text-foreground">
+              {appliedCount} de {rows.length} aplicada(s)
+            </span>
+            <span className="text-muted-foreground">{pct}%</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div className="h-full rounded-full bg-success transition-all" style={{ width: `${pct}%` }} />
+          </div>
+        </div>
+
+        {/* Próxima dose + aviso único de atraso */}
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border-soft bg-muted/40 px-3 py-2.5">
+          {next ? (
+            <div className="text-sm">
+              <span className="text-muted-foreground">Próxima: </span>
+              <b className="text-foreground">
+                Semana {next.n} · {fmtDose(next.w.dose)}
+              </b>
+              <span className={next.state === "atrasada" ? "text-warning" : "text-muted-foreground"}>
+                {" "}
+                · {next.state === "hoje" ? "hoje" : formatClinicalDate(next.date)}
+                {next.state === "atrasada" ? " (atrasada)" : ""}
+              </span>
+            </div>
+          ) : (
+            <span className="flex items-center gap-1.5 text-sm font-semibold text-success">
+              <CheckCircle2 size={15} /> Protocolo concluído
+            </span>
+          )}
+          {next && !next.suspended && (
+            <button
+              type="button"
+              disabled={!planActive}
+              onClick={() => onRegister(next.w)}
+              title={planActive ? undefined : "Retome o plano (em andamento) para registrar aplicações"}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-white shadow-2xs transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+            >
+              <Syringe size={13} /> Registrar aplicação
+            </button>
+          )}
+        </div>
+        {late.length > 1 && (
+          <p className="flex items-center gap-1.5 text-xs text-warning">
+            <AlertCircle size={13} /> {late.length} semanas passadas sem registro (semanas{" "}
+            {late.map((r) => r.n).join(", ")}).
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="text-xs font-semibold text-primary hover:underline cursor-pointer"
+          aria-expanded={open}
+        >
+          {open ? "Ocultar semanas" : `Ver as ${rows.length} semanas`}
+        </button>
+      </div>
+
+      {open && (
+        <div className="border-t border-border-soft">
+          <div className="hidden grid-cols-[48px_150px_110px_1fr_auto] items-center gap-2 bg-muted/50 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:grid">
+            <span>Sem.</span>
+            <span>Data</span>
+            <span>Dose</span>
+            <span>Situação</span>
+            <span />
+          </div>
+          <ul className="divide-y divide-border-soft">
+            {rows.map((r) => {
+              // Semana já com registro fica travada: a data/dose valem como histórico
+              const editable = r.uses.length === 0 && !r.suspended;
+              const badge = STATE_BADGE[r.state];
+              return (
+                <li
+                  key={r.w.id}
+                  className="grid grid-cols-[48px_1fr_auto] items-center gap-2 px-4 py-2 sm:grid-cols-[48px_150px_110px_1fr_auto]"
+                >
+                  <span className="grid size-7 place-items-center rounded-lg bg-primary/10 text-xs font-bold text-primary">
+                    {r.n}
+                  </span>
+                  {editable ? (
+                    <input
+                      type="date"
+                      aria-label={`Data da semana ${r.n}`}
+                      defaultValue={r.date}
+                      onBlur={(e) => e.target.value && e.target.value !== r.date && update(r.w.id, { start_date: e.target.value })}
+                      className="h-8 w-full rounded-lg border border-border bg-card px-2 text-xs outline-none focus:border-primary"
+                    />
+                  ) : (
+                    <span className="text-sm text-foreground">{r.date ? formatClinicalDate(r.date) : "—"}</span>
+                  )}
+                  <span className="sm:order-last">
+                    {!r.applied && !r.suspended && (
+                      <button
+                        type="button"
+                        disabled={!planActive}
+                        onClick={() => onRegister(r.w)}
+                        className="inline-flex h-7 items-center gap-1 rounded-lg border border-border px-2 text-[11px] font-semibold text-muted-foreground transition hover:border-primary/40 hover:text-primary disabled:opacity-50 cursor-pointer"
+                        title="Registrar aplicação desta semana"
+                      >
+                        <Syringe size={12} /> Registrar
+                      </button>
+                    )}
+                  </span>
+                  <div className="col-span-3 flex items-center gap-2 sm:col-span-1">
+                    {editable ? (
+                      <div className="relative w-24">
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          aria-label={`Dose da semana ${r.n}`}
+                          defaultValue={String(mgNumber(r.w.dose) || "")}
+                          onBlur={(e) => {
+                            const v = e.target.value;
+                            if (!v || Number(v) <= 0 || Number(v) === mgNumber(r.w.dose)) return;
+                            void update(r.w.id, { dose: v });
+                          }}
+                          className="h-8 w-full rounded-lg border border-border bg-card pl-2 pr-8 text-xs font-semibold tabular-nums outline-none focus:border-primary"
+                        />
+                        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground">
+                          mg
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-sm font-semibold tabular-nums text-foreground">{fmtDose(r.w.dose)}</span>
+                    )}
+                  </div>
+                  <div className="col-span-3 sm:col-span-1">
+                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-2xs font-bold ${badge.cls}`}>
+                      {r.state === "aplicada" && r.applied
+                        ? `Aplicada em ${new Date(r.applied.used_at).toLocaleDateString("pt-BR")}`
+                        : r.state === "ocorrencia" && r.occurrence
+                          ? `${occurrenceLabel(r.occurrence)} em ${new Date(r.occurrence.used_at).toLocaleDateString("pt-BR")}`
+                          : badge.label}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border-soft px-4 py-2.5">
+            <span className="text-[11px] text-muted-foreground">
+              Datas e doses podem ser alteradas nas semanas ainda sem registro.
+            </span>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={addWeek}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline cursor-pointer"
+            >
+              <Plus size={13} /> Adicionar semana
+            </button>
+          </div>
+          {guidance && (
+            <p className="border-t border-border-soft px-4 py-2.5 text-xs text-muted-foreground">
+              <b className="text-foreground/80">Orientações:</b> {guidance}
+            </p>
+          )}
+        </div>
       )}
     </div>
   );
@@ -886,6 +1311,31 @@ function NewMedicationModal({
     }
     if (weeks.length === 0) {
       return toast.error("Adicione ao menos uma semana de protocolo.");
+    }
+    const noDate = weeks.find((w) => !w.date);
+    if (noDate) return toast.error(`Informe a data da semana ${noDate.week}.`);
+    const badDose = weeks.find((w) => !(Number(String(w.mg).replace(",", ".")) > 0));
+    if (badDose) return toast.error(`Informe uma dose maior que zero na semana ${badDose.week}.`);
+    const outOfOrder = weeks.find((w, i) => i > 0 && w.date <= weeks[i - 1].date);
+    if (outOfOrder)
+      return toast.error(
+        `A semana ${outOfOrder.week} precisa ser depois da semana ${outOfOrder.week - 1} (datas repetidas ou fora de ordem).`,
+      );
+    // Mesmo nome já usado num protocolo deste plano: as semanas se misturariam na tela
+    const { data: existing } = await supabase
+      .from("treatment_medications")
+      .select("id")
+      .eq("treatment_id", treatmentId)
+      .eq("period", "semanal")
+      .like("name", `${escalonada.medName.trim()} (Sem. %`)
+      .limit(1);
+    if (existing?.length) {
+      const ok = await confirmDialog({
+        title: "Já existe um protocolo com este nome",
+        description: `As novas semanas serão somadas ao protocolo "${escalonada.medName.trim()}" que já está no cronograma. Para um protocolo separado, mude o nome (ex.: "${escalonada.medName.trim()} - renovação").`,
+        confirmText: "Somar ao protocolo",
+      });
+      if (!ok) return;
     }
     setSaving(true);
     const weekName = (w: WeekStep) => `${escalonada.medName.trim()} (Sem. ${w.week})`;
