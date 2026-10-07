@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/dialog";
 import type { DbRow, IconType } from "@/lib/types";
 import { formatClinicalDate, localDate } from "./followup-utils";
-import MedicationUsePanel, { RegisterApplicationDialog } from "./MedicationUsePanel";
+import { RegisterApplicationDialog } from "./MedicationUsePanel";
 import { useTreatmentMedicationUses } from "./use-treatment-medication-uses";
 import { todayLocal } from "@/lib/date-utils";
 
@@ -101,7 +101,6 @@ export default function InjectablesWorkspace({
 }) {
   const [filter, setFilter] = useState<string>("todos");
   const [openNew, setOpenNew] = useState(false);
-  const [showApplyPanel, setShowApplyPanel] = useState(false);
   const [registering, setRegistering] = useState<DbRow | null>(null);
 
   const usesQuery = useTreatmentMedicationUses(treatmentId);
@@ -265,21 +264,8 @@ export default function InjectablesWorkspace({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={() => setShowApplyPanel(!showApplyPanel)}
-              className={`h-9 px-3.5 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition cursor-pointer ${
-                showApplyPanel
-                  ? "bg-muted text-foreground hover:bg-muted/80"
-                  : "bg-primary text-white hover:bg-primary-hover shadow-2xs"
-              }`}
-            >
-              <Syringe size={14} />
-              <span>{showApplyPanel ? "Ocultar Registro" : "Registrar Aplicação"}</span>
-            </button>
-            {/* Cadastrar prescrição fica só no "Cronograma Prescrito", onde as prescrições aparecem */}
-          </div>
+          {/* Registrar aplicação e nova prescrição ficam só no cronograma abaixo: cada item já abre o
+              registro com medicação, semana e dose preenchidas (sem botões repetidos aqui) */}
         </div>
 
         {/* KPIs de Injetáveis */}
@@ -329,13 +315,6 @@ export default function InjectablesWorkspace({
           </div>
         </div>
 
-        {/* Painel expansível de registro de aplicação */}
-        {showApplyPanel && (
-          <div className="pt-2">
-            <MedicationUsePanel treatmentId={treatmentId} />
-          </div>
-        )}
-
         {/* Histórico detalhado dos injetáveis tomados */}
         <div className="space-y-3 pt-2">
           <div className="flex items-center justify-between">
@@ -355,17 +334,9 @@ export default function InjectablesWorkspace({
                 Nenhum injetável registrado para este paciente até o momento.
               </p>
               <p className="text-xs max-w-md mx-auto">
-                Registre cada aplicação (como Tirzepatida, Semaglutida ou Lipolíticos) com dose em
-                mg, data e confirmação de estoque da clínica.
+                Use "Registrar aplicação" no item do cronograma abaixo: a medicação, a semana e a
+                dose já vêm preenchidas.
               </p>
-              <button
-                type="button"
-                onClick={() => setShowApplyPanel(true)}
-                className="mt-2 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary-hover transition cursor-pointer"
-              >
-                <Plus size={13} />
-                <span>Registrar Primeira Aplicação</span>
-              </button>
             </div>
           ) : (
             <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
