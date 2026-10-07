@@ -33,6 +33,13 @@ export const PAYMENT_METHODS = {
   transferencia: "Transferência",
   convenio: "Convênio",
 };
+
+/** Nome legível da forma de pagamento ("cartao_credito" -> "Cartão de crédito"); nunca mostra o código cru. */
+export function paymentMethodLabel(value: string | null | undefined): string {
+  if (!value || value === "—") return "";
+  const key = value.trim().toLowerCase();
+  return (PAYMENT_METHODS as Record<string, string>)[key] ?? value.replace(/_/g, " ");
+}
 export const currency = (value: number) =>
   value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 

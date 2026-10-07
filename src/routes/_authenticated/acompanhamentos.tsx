@@ -7,6 +7,7 @@ import {
   formatClinicalDate,
   localDate,
   PAYMENT_METHODS,
+  paymentMethodLabel,
   protocolDeadline,
 } from "@/features/acompanhamentos/followup-utils";
 import type { DbRow } from "@/lib/types";
@@ -120,8 +121,14 @@ function parseBrlNumber(val: string | number | null | undefined): number {
     const cleaned = s.replace(/\./g, "").replace(",", ".");
     return Number(cleaned) || 0;
   }
+  // "1.500" / "12.000.000" sem vírgula: pontos são separador de milhar
+  if (/^\d{1,3}(\.\d{3})+$/.test(s)) return Number(s.replace(/\./g, "")) || 0;
   return Number(s) || 0;
 }
+
+// Valor líquido contratado (bruto menos desconto): é o que o paciente efetivamente deve.
+const netValue = (t: Pick<Treatment, "total_value" | "discount">) =>
+  Math.max(0, Number(t.total_value || 0) - Number(t.discount || 0));
 
 const daysBetween = (a: string | Date, b: string | Date) =>
   Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000);
@@ -223,6 +230,11 @@ function AcompanhamentosPage() {
     });
   }, [rows, q, statusFilter]);
 
+  const multipleDoctors = useMemo(
+    () => new Set(rows.map((r) => r.doctor_id).filter(Boolean)).size > 1,
+    [rows],
+  );
+
   const kpis = useMemo(() => {
     const total = rows.length;
     const ativos = rows.filter((r) => r.status === "em_andamento").length;
@@ -241,6 +253,7 @@ function AcompanhamentosPage() {
     const c4: Treatment[] = [];
 
     filtered.forEach((t) => {
+      if (t.status === "cancelado") return;
       if (t.status === "finalizado") {
         c4.push(t);
       } else if (t.status === "pausado") {
@@ -474,18 +487,7 @@ function AcompanhamentosPage() {
                         onClick={() => setSelectedTreatment(t)}
                         className="block bg-card rounded-2xl border border-border/80 p-5 hover:shadow-md hover:border-primary/30 transition-all group relative overflow-hidden cursor-pointer"
                       >
-                        {/* Indicador de progresso no topo do card */}
-                        <div className="absolute top-0 left-0 right-0 h-1 bg-muted">
-                          <div
-                            className="h-full transition-all duration-700"
-                            style={{
-                              width: `${prog}%`,
-                              background: t.color || "#6d3ff5",
-                            }}
-                          />
-                        </div>
-
-                        <div className="flex items-start justify-between gap-3 mt-1">
+                        <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3 min-w-0">
                             <div
                               className="h-11 w-11 shrink-0 rounded-2xl flex items-center justify-center shadow-xs"
@@ -497,12 +499,12 @@ function AcompanhamentosPage() {
                               <Activity size={20} />
                             </div>
                             <div className="min-w-0">
+                              {/* Paciente em destaque: os títulos dos planos costumam se repetir */}
                               <div className="text-[15px] font-semibold text-foreground truncate group-hover:text-primary transition-colors">
-                                {t.title}
+                                {t.patients?.name ?? "Paciente não identificado"}
                               </div>
-                              <div className="text-sm text-muted-foreground truncate flex items-center gap-1.5 mt-0.5">
-                                <UserIcon size={13} className="text-muted-foreground" />
-                                <span className="font-semibold">{t.patients?.name ?? "—"}</span>
+                              <div className="text-sm text-muted-foreground truncate mt-0.5">
+                                {t.title}
                               </div>
                             </div>
                           </div>
@@ -518,7 +520,15 @@ function AcompanhamentosPage() {
                         <div className="mt-4 pt-1">
                           <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground mb-1.5">
                             <span>Prazo transcorrido</span>
-                            <span className="font-semibold text-foreground">{prog}%</span>
+                            <span className="font-semibold text-foreground">
+                              {prog}%
+                              {t.status === "em_andamento" && t.end_date
+                                ? (() => {
+                                    const left = daysBetween(localDate(), t.end_date);
+                                    return left > 0 ? ` · faltam ${left} dias` : " · prazo encerrado";
+                                  })()
+                                : ""}
+                            </span>
                           </div>
                           <div className="h-2 rounded-full bg-muted overflow-hidden">
                             <div
@@ -532,7 +542,7 @@ function AcompanhamentosPage() {
                         {(() => {
                           const payInfo = treatmentPaymentsMap[t.id];
                           const paidVal = payInfo ? payInfo.paid : 0;
-                          const totalVal = Number(t.total_value) || 0;
+                          const totalVal = netValue(t);
                           const openVal = Math.max(0, totalVal - paidVal);
                           const isFullyPaid = totalVal > 0 && paidVal >= totalVal;
                           const isPartial = totalVal > 0 && paidVal > 0 && paidVal < totalVal;
@@ -541,12 +551,23 @@ function AcompanhamentosPage() {
                             <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs bg-muted/48 p-3 rounded-xl">
                               <div>
                                 <div className="text-muted-foreground text-2xs font-semibold uppercase">
-                                  Início
+                                  Próx. retorno
                                 </div>
-                                <div className="text-foreground font-semibold mt-0.5 flex items-center gap-1">
-                                  <CalIcon size={12} className="text-primary" />
-                                  {formatDateOnly(t.start_date)}
-                                </div>
+                                {(() => {
+                                  const late =
+                                    t.status === "em_andamento" &&
+                                    !!t.next_return_date &&
+                                    t.next_return_date <= localDate();
+                                  return (
+                                    <div
+                                      className={`font-semibold mt-0.5 flex items-center gap-1 ${late ? "text-destructive" : "text-foreground"}`}
+                                    >
+                                      <CalIcon size={12} className={late ? "text-destructive" : "text-primary"} />
+                                      {t.next_return_date ? formatDateOnly(t.next_return_date) : "A definir"}
+                                      {late && <span className="text-2xs font-semibold">(vencido)</span>}
+                                    </div>
+                                  );
+                                })()}
                               </div>
                               <div>
                                 <div className="text-muted-foreground text-2xs font-semibold uppercase">
@@ -621,9 +642,12 @@ function AcompanhamentosPage() {
                                 <span>WhatsApp</span>
                               </button>
                             )}
-                            <span className="text-xs text-muted-foreground truncate max-w-[130px]">
-                              {t.doctors?.name ? `Dr(a). ${t.doctors.name}` : ""}
-                            </span>
+                            {/* Médico só ajuda a distinguir quando a clínica tem mais de um */}
+                            {multipleDoctors && t.doctors?.name && (
+                              <span className="text-xs text-muted-foreground truncate max-w-[130px]">
+                                Dr(a). {t.doctors.name}
+                              </span>
+                            )}
                           </div>
 
                           <div
@@ -692,11 +716,10 @@ function AcompanhamentosPage() {
                           className="block bg-card rounded-xl border border-border/90 p-3.5 shadow-2xs hover:shadow-md hover:border-primary/50 transition group cursor-pointer"
                         >
                           <div className="text-sm font-semibold text-foreground truncate group-hover:text-primary">
-                            {t.title}
+                            {t.patients?.name ?? "Paciente não identificado"}
                           </div>
-                          <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1 truncate font-medium">
-                            <UserIcon size={12} className="text-muted-foreground" />
-                            {t.patients?.name ?? "—"}
+                          <div className="text-xs text-muted-foreground mt-1 truncate font-medium">
+                            {t.title}
                           </div>
 
                           <div className="mt-3">
@@ -715,7 +738,7 @@ function AcompanhamentosPage() {
                           {(() => {
                             const payInfo = treatmentPaymentsMap[t.id];
                             const paidVal = payInfo ? payInfo.paid : 0;
-                            const totalVal = Number(t.total_value) || (payInfo ? payInfo.total : 0);
+                            const totalVal = netValue(t) || (payInfo ? payInfo.total : 0);
                             if (totalVal <= 0 && paidVal <= 0) return null;
                             const isFullyPaid = totalVal > 0 && paidVal >= totalVal;
                             const isPartial = totalVal > 0 && paidVal > 0 && paidVal < totalVal;
@@ -804,12 +827,8 @@ const useFinancialAccounts = () => {
         .from("financial_accounts")
         .select("id, name, type, active")
         .order("name");
-      const active = (data || []).filter((a) => a.active ?? true);
-      if (active.length > 0) return active;
-      return [
-        { id: "00000000-0000-0000-0000-000000000001", name: "Banco Principal / PIX", type: "corrente" },
-        { id: "00000000-0000-0000-0000-000000000002", name: "Caixa Geral / Dinheiro", type: "caixa" },
-      ];
+      // Sem contas reais: lista vazia (a baixa exige conta cadastrada; ids fictícios falhariam no banco)
+      return (data || []).filter((a) => a.active ?? true);
     },
     staleTime: 60000,
   });
@@ -844,6 +863,7 @@ async function recordImmediateTreatmentPayment({
 
   // Identifica a transação correspondente (Entrada número 0 ou Parcela número 1 para à vista)
   const targetTx = createdTxs.find((tx: any) => {
+    if (tx.status === "cancelado") return false;
     if (isDown) {
       return (
         tx.installments?.number === 0 ||
@@ -1094,7 +1114,8 @@ function TreatmentManageModal({
 
   const isDownAlreadyPaid = useMemo(() => {
     return treatmentTitles.some((t: any) => {
-      const isDown = t.installment_id?.number === 0 || t.description?.toLowerCase().includes("entrada");
+      if (t.status === "cancelado") return false;
+      const isDown = t.installments?.number === 0 || t.description?.toLowerCase().includes("entrada");
       const isPaid = t.status === "pago" || (Number(t.paid_amount) >= Number(t.amount) && Number(t.amount) > 0);
       return isDown && isPaid;
     });
@@ -1699,7 +1720,13 @@ function TreatmentManageModal({
                                     setFinanceForm({ ...financeForm, downAccountId: e.target.value })
                                   }
                                 >
-                                  {financialAccounts.map((acc) => (
+                                  {financialAccounts.length === 0 && (
+                                  <option value="">Cadastre uma conta no Financeiro</option>
+                                )}
+                                {financialAccounts.length === 0 && (
+                                <option value="">Cadastre uma conta no Financeiro</option>
+                              )}
+                              {financialAccounts.map((acc) => (
                                     <option key={acc.id} value={acc.id}>
                                       {acc.name}
                                     </option>
@@ -1766,7 +1793,13 @@ function TreatmentManageModal({
                                   setFinanceForm({ ...financeForm, aVistaAccountId: e.target.value })
                                 }
                               >
-                                {financialAccounts.map((acc) => (
+                                {financialAccounts.length === 0 && (
+                                  <option value="">Cadastre uma conta no Financeiro</option>
+                                )}
+                                {financialAccounts.length === 0 && (
+                                <option value="">Cadastre uma conta no Financeiro</option>
+                              )}
+                              {financialAccounts.map((acc) => (
                                   <option key={acc.id} value={acc.id}>
                                     {acc.name}
                                   </option>
@@ -2062,7 +2095,7 @@ function TreatmentManageModal({
                           <span>Entrada</span>
                           {Number(treatment.down_payment) > 0 && (
                             <span
-                              className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                              className={`whitespace-nowrap text-[10px] font-bold px-1.5 py-0.2 rounded ${
                                 isDownAlreadyPaid
                                   ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
                                   : "bg-warning/15 text-warning"
@@ -2076,8 +2109,8 @@ function TreatmentManageModal({
                           {Number(treatment.down_payment) > 0 ? brl(treatment.down_payment) : "Sem entrada"}
                         </div>
                         {Number(treatment.down_payment) > 0 && (
-                          <div className="text-2xs text-muted-foreground uppercase mt-0.5">
-                            {treatment.down_payment_method || "pix"}
+                          <div className="text-2xs text-muted-foreground mt-0.5">
+                            {paymentMethodLabel(treatment.down_payment_method || "pix")}
                           </div>
                         )}
                       </div>
@@ -2312,7 +2345,7 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
     method: "pix",
     installments: "1",
     firstDue: todayLocal(30),
-    aVistaReceivedNow: true,
+    aVistaReceivedNow: false,
     aVistaAccountId: "",
   });
 
@@ -2933,6 +2966,9 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
                                 setFinanceForm({ ...financeForm, downAccountId: e.target.value })
                               }
                             >
+                              {financialAccounts.length === 0 && (
+                                <option value="">Cadastre uma conta no Financeiro</option>
+                              )}
                               {financialAccounts.map((acc) => (
                                 <option key={acc.id} value={acc.id}>
                                   {acc.name}
@@ -2999,6 +3035,9 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
                                 setFinanceForm({ ...financeForm, aVistaAccountId: e.target.value })
                               }
                             >
+                              {financialAccounts.length === 0 && (
+                                <option value="">Cadastre uma conta no Financeiro</option>
+                              )}
                               {financialAccounts.map((acc) => (
                                 <option key={acc.id} value={acc.id}>
                                   {acc.name}

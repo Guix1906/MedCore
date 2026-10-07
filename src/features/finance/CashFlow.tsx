@@ -74,6 +74,7 @@ import {
   formatClinicalDate,
   localDate,
   moneyCents,
+  paymentMethodLabel,
 } from "@/features/acompanhamentos/followup-utils";
 import { refreshFinance, getTitleEventKey } from "./finance-api";
 import { remaining, reportingRows } from "./finance-math";
@@ -98,6 +99,13 @@ const normalize = (value: string | null | undefined) =>
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase();
+
+// "Acompanhamento: Plano X - Parcela 2" -> "Parcela 2 · Plano X": o que muda entre as linhas vem primeiro
+const entryDescription = (description: string | null | undefined) => {
+  const text = (description || "").replace(/^Acompanhamento:\s*/i, "").trim();
+  const m = text.match(/^(.*?)\s+-\s+((?:Parcela\s+\d+|Entrada|Saldo livre).*)$/i);
+  return m ? `${m[2]} · ${m[1]}` : text;
+};
 
 const todayIso = () => format(new Date(), "yyyy-MM-dd");
 
@@ -1357,16 +1365,18 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                                   )}
                                 </div>
                                 <div className="min-w-0">
-                                  <span className="font-medium text-foreground block truncate">{e.description}</span>
+                                  <span className="font-medium text-foreground block truncate">
+                                    {showClient ? e.client_name : entryDescription(e.description)}
+                                  </span>
                                   <span className="text-muted-foreground block truncate">
-                                    {showClient ? `${e.client_name} · ` : ""}
+                                    {showClient ? `${entryDescription(e.description)} · ` : ""}
                                     {e.category}
                                     {e.status === "cancelado" && e.reversal_reason ? ` · ${e.reversal_reason}` : ""}
                                   </span>
                                 </div>
                               </div>
                             </TableCell>
-                            <TableCell className="align-middle py-2.5 text-muted-foreground">{e.payment_method || "—"}</TableCell>
+                            <TableCell className="align-middle py-2.5 text-muted-foreground">{paymentMethodLabel(e.payment_method) || "—"}</TableCell>
                             <TableCell className="align-middle py-2.5 text-foreground/80">{e.payment_account || "—"}</TableCell>
                             {isForecastTab && (
                               <TableCell className="align-middle py-2.5 text-center">
@@ -1417,14 +1427,16 @@ export function CashFlow({ finance, onOpenNew, onSelectTitle }: CashFlowProps) {
                     return (
                       <div key={e.id} className="flex items-start justify-between gap-3 p-3 text-xs">
                         <div className="min-w-0 space-y-0.5">
-                          <p className="font-medium text-foreground truncate">{e.description}</p>
+                          <p className="font-medium text-foreground truncate">
+                            {showClient ? e.client_name : entryDescription(e.description)}
+                          </p>
                           <p className="text-muted-foreground truncate">
                             {shortDate(e.date)}
                             {note ? ` · ${note.text}` : ""}
-                            {showClient ? ` · ${e.client_name}` : ""}
+                            {showClient ? ` · ${entryDescription(e.description)}` : ""}
                           </p>
                           <p className="text-muted-foreground truncate">
-                            {e.payment_method && e.payment_method !== "—" ? `${e.payment_method} · ` : ""}
+                            {paymentMethodLabel(e.payment_method) ? `${paymentMethodLabel(e.payment_method)} · ` : ""}
                             {e.payment_account && e.payment_account !== "—" ? e.payment_account : e.category}
                           </p>
                         </div>

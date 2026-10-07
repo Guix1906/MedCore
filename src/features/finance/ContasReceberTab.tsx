@@ -150,6 +150,35 @@ export function ContasReceberTab({
     return `${n ? `Parcela ${n} de ${info.parcelas}` : `${info.parcelas} parcela(s)`} · ${plano}`;
   };
 
+  // Texto da linha: num plano, "Entrada" / "Parcela 3 de 7" vem primeiro e o nome do plano vai
+  // para a linha de detalhe (todas as linhas começavam com "Acompanhamento: Plano de…" e cortavam).
+  const rowText = (t: FinancialTitle, person: string, free: boolean) => {
+    const base = (t.description || "")
+      .replace(
+        person ? new RegExp(`^${person.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*[-–·:]\\s*`, "i") : /^$/,
+        "",
+      )
+      .replace(/^Acompanhamento:\s*/i, "")
+      .replace(/\s*-\s*(Parcela\s+\d+|Entrada)\s*$/i, "")
+      .trim();
+    if (t.treatment_id) {
+      const info = planInfo.get(t.treatment_id);
+      const n = info?.order.get(t.id);
+      const kind = free
+        ? "Saldo livre"
+        : /entrada/i.test(t.description || "")
+          ? "Entrada"
+          : n
+            ? `Parcela ${n} de ${info!.parcelas}`
+            : "Parcela";
+      const plano = info
+        ? `${currency(info.total)}${info.open > 0 ? ` · falta ${currency(info.open)}` : " · quitado"}`
+        : "";
+      return { description: kind, details: [base, plano].filter(Boolean).join(" · ") };
+    }
+    return { description: base || "Atendimento", details: free ? "Saldo livre" : t.category || "" };
+  };
+
   // Helper para verificar status de liquidação estrito cruzando título e pagamentos
   const getTitleStatus = (t: FinancialTitle) => {
     const directPayments = (finance?.payments || []).filter(
@@ -340,8 +369,8 @@ export function ContasReceberTab({
   const filteredTitles = useMemo(() => {
     const today = startOfDay(new Date());
 
-    return receitas.filter((e) => {
-      const { rem, isPaid } = getTitleStatus(e);
+    const rows = receitas.filter((e) => {
+      const { isPaid } = getTitleStatus(e);
       const isVencido = !isPaid && !isFreeBalance(e) && !!e.due_date && startOfDay(parseISO(e.due_date)) < today;
 
       // Filtro de sub-abas
@@ -411,6 +440,12 @@ export function ContasReceberTab({
 
       return true;
     });
+    // Em aberto primeiro (atrasados no topo, por vencimento); recebidos depois, mais recentes primeiro
+    const open = rows.filter((t) => !getTitleStatus(t).isPaid);
+    const paid = rows.filter((t) => getTitleStatus(t).isPaid);
+    const byDue = (a: FinancialTitle, b: FinancialTitle) =>
+      (a.due_date || "9999").localeCompare(b.due_date || "9999");
+    return [...open.sort(byDue), ...paid.sort((a, b) => byDue(b, a))];
   }, [receitas, subTab, statusFilter, selectedAssociado, search, period, finance?.payments]);
 
   // Agrupamento por cliente para a sub-aba "Central de Recebíveis por Cliente"
@@ -471,7 +506,7 @@ export function ContasReceberTab({
   };
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="min-w-0 space-y-6 pb-12">
       {/* ========================================================================= */}
       {/* 1. CABEÇALHO DA TELA COM ÍCONE AZUL E BOTÃO DE ATUALIZAR                   */}
       {/* ========================================================================= */}
@@ -1108,16 +1143,82 @@ export function ContasReceberTab({
             ))}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
+          <>
+          {/* Celular / tela estreita: cards (a tabela larga empurrava Receber/Cobrar para fora da tela) */}
+          <div className="divide-y divide-border-soft lg:hidden">
+            {filteredTitles.map((t) => {
+              const { rem, isPaid, paidAmt } = getTitleStatus(t);
+              const free = isFreeBalance(t);
+              const person = t.patient_name || t.payer_name || "";
+              const { description, details } = rowText(t, person, free);
+              const late = !isPaid && !free && !!t.due_date && startOfDay(parseISO(t.due_date)) < startOfDay(new Date());
+              const status = isPaid
+                ? { label: "Recebido", cls: "text-success" }
+                : late
+                  ? { label: "Vencido", cls: "text-destructive" }
+                  : paidAmt > 0
+                    ? { label: "Parcial", cls: "text-warning" }
+                    : { label: "A receber", cls: "text-info" };
+              return (
+                <div key={t.id} className="flex items-start justify-between gap-3 py-3 text-xs">
+                  <div className="min-w-0 space-y-0.5">
+                    <p className="truncate text-sm font-semibold text-foreground">{person || description}</p>
+                    <p className="truncate text-muted-foreground">
+                      {person ? `${description} · ` : ""}
+                      {free ? "Sem vencimento" : t.due_date ? formatClinicalDate(t.due_date) : "—"}
+                    </p>
+                    {details && <p className="truncate text-muted-foreground">{details}</p>}
+                    <p className={`font-medium ${status.cls}`}>
+                      {status.label}
+                      {!isPaid && paidAmt > 0 ? ` · falta ${currency(rem)}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1.5">
+                    <span className="font-semibold tabular-nums text-foreground">{currency(t.amount)}</span>
+                    <div className="flex items-center gap-1">
+                      {isPaid ? (
+                        <button
+                          type="button"
+                          onClick={() => onReceive(t)}
+                          className="h-8 cursor-pointer rounded-md px-2.5 font-medium text-muted-foreground hover:bg-muted"
+                        >
+                          Ver
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenCobrar(t)}
+                            className="grid size-8 cursor-pointer place-items-center rounded-md text-muted-foreground hover:bg-muted"
+                            aria-label="Cobrar pelo WhatsApp"
+                          >
+                            <MessageCircle className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onReceive(t)}
+                            className="h-8 cursor-pointer rounded-md bg-success px-3 font-semibold text-white hover:bg-success/90"
+                          >
+                            Receber
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="hidden lg:block">
+            <table className="w-full table-fixed text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs font-medium text-muted-foreground">
-                  <th className="py-2 pr-3 font-medium">Vencimento</th>
+                  <th className="w-[110px] py-2 pr-3 font-medium">Vencimento</th>
+                  <th className="w-[22%] py-2 pr-3 font-medium">Paciente</th>
                   <th className="py-2 pr-3 font-medium">Descrição</th>
-                  <th className="py-2 pr-3 font-medium">Paciente</th>
-                  <th className="py-2 pr-3 font-medium">Situação</th>
-                  <th className="py-2 pr-3 text-right font-medium">Valor</th>
-                  <th className="py-2 text-right font-medium">
+                  <th className="w-[110px] py-2 pr-3 font-medium">Situação</th>
+                  <th className="w-[120px] py-2 pr-3 text-right font-medium">Valor</th>
+                  <th className="w-[190px] py-2 text-right font-medium">
                     <span className="sr-only">Ações</span>
                   </th>
                 </tr>
@@ -1130,17 +1231,7 @@ export function ContasReceberTab({
                     !isPaid && !free && !!t.due_date && startOfDay(parseISO(t.due_date)) < startOfDay(new Date());
                   const person = t.patient_name || t.payer_name || "";
                   // Descrição sem o nome do paciente repetido ("FULANO - Agendamento" -> "Agendamento")
-                  const description =
-                    (person
-                      ? (t.description || "").replace(
-                          new RegExp(`^${person.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*[-–·:]\\s*`, "i"),
-                          "",
-                        )
-                      : t.description
-                    )
-                      // "Parcela N" já aparece abaixo como "Parcela X de Y" (numerada pelo vencimento)
-                      ?.replace(/\s*-\s*Parcela\s+\d+\s*$/i, "") || "Atendimento";
-                  const details = [free ? "Saldo livre" : t.category, parcelaLabel(t)].filter(Boolean).join(" · ");
+                  const { description, details } = rowText(t, person, free);
                   const status = isPaid
                     ? { label: "Recebido", dot: "bg-success", text: "text-success" }
                     : isVencido
@@ -1154,7 +1245,8 @@ export function ContasReceberTab({
                       <td className="whitespace-nowrap py-3 pr-3 tabular-nums text-foreground">
                         {free ? <span className="text-muted-foreground">Sem vencimento</span> : t.due_date ? formatClinicalDate(t.due_date) : "—"}
                       </td>
-                      <td className="max-w-[280px] py-3 pr-3">
+                      <td className="truncate py-3 pr-3 font-medium text-foreground">{person || "—"}</td>
+                      <td className="py-3 pr-3">
                         <p className="truncate font-medium text-foreground">{description}</p>
                         {(details || t.treatment_id) && (
                           <p className="truncate text-xs text-muted-foreground">
@@ -1175,7 +1267,6 @@ export function ContasReceberTab({
                           </p>
                         )}
                       </td>
-                      <td className="max-w-[200px] truncate py-3 pr-3 text-foreground/80">{person || "—"}</td>
                       <td className="whitespace-nowrap py-3 pr-3">
                         <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${status.text}`}>
                           <span className={`size-1.5 rounded-full ${status.dot}`} aria-hidden="true" />
@@ -1250,6 +1341,7 @@ export function ContasReceberTab({
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
 

@@ -126,6 +126,18 @@ function TreatmentDetailPage() {
     return financeSnapshot.data.titles.filter((t) => t.treatment_id === id);
   }, [financeSnapshot.data?.titles, id]);
 
+  // Número da parcela pela ordem de vencimento (após repactuação os números gravados ficam salteados)
+  const installmentOrder = useMemo(
+    () =>
+      new Map(
+        planTitles
+          .filter((t) => t.status !== "cancelado" && !/entrada/i.test(t.description || "") && !isFreeBalance(t))
+          .sort((a, b) => (a.due_date || "").localeCompare(b.due_date || ""))
+          .map((t, i) => [t.id, i + 1] as [string, number]),
+      ),
+    [planTitles],
+  );
+
   const treatmentPayments = useMemo(() => {
     if (!financeSnapshot.data?.payments || planTitles.length === 0) return [];
     const titleMap = new Map(planTitles.map((t) => [t.id, t]));
@@ -141,7 +153,10 @@ function TreatmentDetailPage() {
   }, [financeSnapshot.data?.payments, financeSnapshot.data?.accounts, planTitles]);
 
   const planFinancials = useMemo(() => {
-    const total = treatment ? Number(treatment.total_value || 0) : 0;
+    // Líquido (bruto - desconto): senão um plano com desconto nunca aparece quitado
+    const total = treatment
+      ? Math.max(0, Number(treatment.total_value || 0) - Number(treatment.discount || 0))
+      : 0;
     const paid = planTitles.reduce((acc, t) => acc + Number(t.paid_amount || 0), 0);
     const open = Math.max(0, total - paid);
     const hasFreeBalance = planTitles.some(
@@ -512,6 +527,7 @@ function TreatmentDetailPage() {
                 financials={planFinancials}
                 payments={treatmentPayments}
                 onOpenFinance={() => setTab("financeiro")}
+                installmentOrder={installmentOrder}
               />
             )}
             {(tab === "injetaveis" || tab === "medicacoes") && (
@@ -604,6 +620,7 @@ function ResumoTab({
   financials,
   payments,
   onOpenFinance,
+  installmentOrder,
 }: {
   treatment: DbRow;
   kpis: {
@@ -624,6 +641,7 @@ function ResumoTab({
   };
   payments: Array<DbRow & { title: DbRow; accountName?: string }>;
   onOpenFinance: () => void;
+  installmentOrder: Map<string, number>;
 }) {
   const cards = [
     {
@@ -752,7 +770,7 @@ function ResumoTab({
           ) : (
             <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
               {payments.map((p) => {
-                const methodStr = (p.method || "").toLowerCase();
+                const methodStr = (p.payment_method || "").toLowerCase();
                 const methodLabel =
                   methodStr === "pix"
                     ? "PIX"
@@ -764,15 +782,16 @@ function ResumoTab({
                           ? "Boleto"
                           : methodStr === "dinheiro"
                             ? "Dinheiro"
-                            : p.method || "Outro";
+                            : methodStr === "transferencia"
+                              ? "Transferência"
+                              : p.payment_method || "Outro";
 
-                const desc =
-                  p.title?.installment_number === 0 ||
-                  p.title?.description?.toLowerCase().includes("entrada")
-                    ? "Entrada do Plano"
-                    : p.title?.installment_number
-                      ? `Parcela ${p.title.installment_number}`
-                      : p.title?.description || "Pagamento";
+                const parcela = p.title?.id ? installmentOrder.get(p.title.id) : undefined;
+                const desc = /entrada/i.test(p.title?.description || "")
+                  ? "Entrada do Plano"
+                  : parcela
+                    ? `Parcela ${parcela} de ${installmentOrder.size}`
+                    : p.title?.description || "Pagamento";
 
                 return (
                   <div
