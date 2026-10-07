@@ -55,6 +55,12 @@ import { patientsService, companyService } from "@/services/api";
 import { getStoredLocalPatients, mergeWithLocalPatients } from "@/lib/local-patients";
 import { PatientModal } from "@/components/pacientes/PatientModal";
 import { todayLocal, formatDateOnly } from "@/lib/date-utils";
+import {
+  WeightGoalFields,
+  hasWeightGoal,
+  saveWeightGoal,
+  weightGoalForm,
+} from "@/features/acompanhamentos/WeightGoal";
 
 export const Route = createFileRoute("/_authenticated/acompanhamentos")({
   head: () => ({
@@ -1213,6 +1219,7 @@ function TreatmentManageModal({
     notes: treatment.notes || "",
   });
 
+  const [weightGoal, setWeightGoal] = useState(() => weightGoalForm(treatment));
   const { data: treatmentTitles = [] } = useQuery({
     queryKey: ["treatment-manage-titles", treatment.id],
     queryFn: async () => {
@@ -1492,6 +1499,15 @@ function TreatmentManageModal({
       toast.error("Erro ao salvar alterações: " + (error?.message || ""));
       return;
     }
+    // Meta de peso vai numa gravação separada: se o banco ainda não tem os campos, o resto salva
+    const goalBefore = weightGoalForm(treatment);
+    if (JSON.stringify(goalBefore) !== JSON.stringify(weightGoal)) {
+      try {
+        await saveWeightGoal(treatment.id, weightGoal);
+      } catch (err) {
+        toast.warning("A meta de peso não foi salva", { description: errorMessage(err) });
+      }
+    }
 
     // Configurar parcelas e entrada automaticamente no financeiro
     if (totalNum > 0) {
@@ -1682,6 +1698,12 @@ function TreatmentManageModal({
                 </select>
               </Field>
 
+              <div className="md:col-span-2 rounded-xl border border-border p-3">
+                <div className="mb-2 text-xs font-semibold text-foreground/80">
+                  Peso e meta <span className="font-normal text-muted-foreground">(opcional)</span>
+                </div>
+                <WeightGoalFields value={weightGoal} onChange={setWeightGoal} inputClass={inputCls} />
+              </div>
               <Field label="Intervalo de Retorno (dias)">
                 <select
                   className={inputCls}
@@ -2446,6 +2468,7 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
   });
 
   const { data: financialAccounts = [] } = useFinancialAccounts();
+  const [weightGoal, setWeightGoal] = useState(() => weightGoalForm());
   const [hasFinance, setHasFinance] = useState(true);
   const [financeForm, setFinanceForm] = useState({
     total: "",
@@ -2632,6 +2655,15 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
       setSaving(false);
       toast.error("Erro ao criar acompanhamento: " + (error?.message || ""));
       return;
+    }
+    if (hasWeightGoal(weightGoal)) {
+      try {
+        await saveWeightGoal(data.id, weightGoal);
+      } catch (err) {
+        toast.warning("Acompanhamento criado, mas a meta de peso não foi salva", {
+          description: errorMessage(err),
+        });
+      }
     }
 
     // Configurar parcelas e entrada automaticamente no financeiro
@@ -2929,6 +2961,12 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
                 <option value="365">365 dias (1 ano)</option>
               </select>
             </Field>
+            <div className="md:col-span-2 rounded-xl border border-border p-3">
+              <div className="mb-2 text-xs font-semibold text-foreground/80">
+                Peso e meta <span className="font-normal text-muted-foreground">(opcional)</span>
+              </div>
+              <WeightGoalFields value={weightGoal} onChange={setWeightGoal} inputClass={inputCls} />
+            </div>
             <Field label="Retorno automático (dias)">
               <select
                 className={inputCls}

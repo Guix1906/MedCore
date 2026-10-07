@@ -502,6 +502,7 @@ function TreatmentDetailPage() {
                 onOpenFinance={() => setTab("financeiro")}
                 installmentOrder={installmentOrder}
                 meds={meds}
+                onChanged={load}
                 paymentOverdue={planTitles
                   .filter((t) => !isFreeBalance(t) && t.due_date && t.due_date < localDate())
                   .reduce((s, t) => s + remaining(t), 0)}
@@ -597,6 +598,7 @@ function ResumoTab({
   installmentOrder,
   meds,
   paymentOverdue,
+  onChanged,
 }: {
   treatment: DbRow;
   kpis: {
@@ -620,6 +622,7 @@ function ResumoTab({
   installmentOrder: Map<string, number>;
   meds: DbRow[];
   paymentOverdue: number;
+  onChanged: () => void;
 }) {
   const today = localDate();
   const returnLate = !!kpis.nextReturn && kpis.nextReturn < today;
@@ -645,7 +648,7 @@ function ResumoTab({
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <div className="lg:col-span-2">
-        <TreatmentSummary treatment={treatment} meds={meds} paymentOverdue={paymentOverdue} />
+        <TreatmentSummary treatment={treatment} meds={meds} paymentOverdue={paymentOverdue} onChanged={onChanged} />
       </div>
 
       <div className="space-y-4">

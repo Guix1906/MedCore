@@ -249,6 +249,88 @@ async function callGeminiJson<T>(
   return result.data;
 }
 
+// ============== ANÁLISE DO PLANO DE ACOMPANHAMENTO ==============
+
+const PlanAnalysisSchema = z.object({
+  panorama: z.string(),
+  pontosAtencao: z.array(z.string()).max(8),
+  proximoRetorno: z.array(z.string()).max(6),
+});
+export type PlanAnalysis = z.infer<typeof PlanAnalysisSchema>;
+
+const PLAN_INSTRUCTION = `Você é um assistente clínico que resume, para o MÉDICO responsável, a situação de um plano de acompanhamento (ex.: emagrecimento com injetáveis). Leia os dados abaixo e devolva JSON com:
+- panorama: 2 a 4 frases em português, objetivas, sobre como o paciente está evoluindo no plano (prazo, peso x meta, adesão às aplicações, regularidade das evoluções e retornos).
+- pontosAtencao: até 6 itens curtos com o que merece atenção agora (ex.: retorno atrasado, aplicações perdidas, peso estagnado ou subindo, ausência de registros, protocolo terminando). Lista vazia se nada chamar atenção.
+- proximoRetorno: até 5 itens curtos do que avaliar ou registrar no próximo retorno.
+
+Regras:
+- Use SOMENTE os dados fornecidos. Nunca invente medidas, doses, sintomas ou resultados.
+- Quando faltar dado (ex.: sem peso registrado), diga que falta, sem supor valores.
+- Não faça diagnóstico nem prescreva; são sugestões de apoio à decisão do médico.
+- Responda somente o objeto JSON.`;
+
+export const analyzeTreatmentPlan = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((input: unknown) => z.object({ treatmentId: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    await assertCanEditRecords(context.supabase);
+    const sb = context.supabase as any;
+    const id = data.treatmentId;
+    // Leitura com a sessão do usuário (respeita as permissões do banco)
+    const [t, evo, meds, uses] = await Promise.all([
+      sb.from("treatments").select("*, patients(name)").eq("id", id).maybeSingle(),
+      sb
+        .from("treatment_evolutions")
+        .select("occurred_on, notes, weight_kg, parameters, next_step, is_return")
+        .eq("treatment_id", id)
+        .order("occurred_on", { ascending: true }),
+      sb
+        .from("treatment_medications")
+        .select("name, dose, unit, route, frequency, period, start_date, status")
+        .eq("treatment_id", id),
+      sb
+        .from("treatment_medication_uses")
+        .select("medication_name, dose, used_at")
+        .eq("treatment_id", id)
+        .order("used_at", { ascending: true }),
+    ]);
+    if (t.error || !t.data) throw new Error("Plano não encontrado.");
+    const plan = t.data;
+    const patientName: string | undefined = plan.patients?.name;
+    const today = new Date().toISOString().slice(0, 10);
+
+    const lines = [
+      `Hoje: ${today}`,
+      `Plano: ${plan.title} | status ${plan.status} | início ${plan.start_date} | fim previsto ${plan.end_date ?? "não definido"}`,
+      `Objetivo: ${plan.objective ?? "não informado"}`,
+      `Próximo retorno previsto: ${plan.next_return_date ?? "não definido"} (intervalo ${plan.return_days ?? "?"} dias)`,
+      `Peso inicial: ${plan.initial_weight_kg ?? "não informado"} | meta: ${plan.target_weight_kg ?? "não informada"} | altura: ${plan.height_cm ? `${plan.height_cm} cm` : "não informada"}`,
+      `Observações do plano: ${plan.notes ?? "nenhuma"}`,
+      "",
+      `Evoluções (${evo.data?.length ?? 0}):`,
+      ...(evo.data ?? []).map(
+        (e: any) =>
+          `- ${e.occurred_on}${e.is_return ? " [retorno]" : ""}${e.weight_kg != null ? ` peso ${e.weight_kg} kg` : ""}: ${e.notes ?? ""}${e.parameters ? ` | parâmetros: ${e.parameters}` : ""}${e.next_step ? ` | conduta: ${e.next_step}` : ""}`,
+      ),
+      "",
+      `Prescrições (${meds.data?.length ?? 0}):`,
+      ...(meds.data ?? []).map(
+        (m: any) =>
+          `- ${m.name} ${m.dose ?? ""}${m.unit ?? ""} ${m.route ?? ""} ${m.frequency ?? ""} início ${m.start_date ?? "?"} [${m.status}]`,
+      ),
+      "",
+      `Aplicações registradas (${uses.data?.length ?? 0}; [NÃO TOMOU]/[ADIADA]/[SUSPENSA] = não aplicada):`,
+      ...(uses.data ?? []).map((u: any) => `- ${String(u.used_at).slice(0, 10)} ${u.medication_name ?? ""} ${u.dose ?? ""}`),
+    ].join("\n");
+
+    return callGeminiJson(
+      "analyzeTreatmentPlan",
+      `${PLAN_INSTRUCTION}\n\nDados do plano:\n"""\n${minimizePhi(lines.slice(0, 18_000), patientName)}\n"""`,
+      PlanAnalysisSchema,
+      2048,
+    );
+  });
+
 export const transcribeConsultation = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: unknown) => InputSchema.parse(input))

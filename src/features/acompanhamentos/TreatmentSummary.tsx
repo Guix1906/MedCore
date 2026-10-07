@@ -1,17 +1,19 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { analyzeTreatmentPlan } from "@/services/ai.service";
 import {
   AlertTriangle,
   CheckCircle2,
   ClipboardList,
   Pill,
-  Scale,
+  Sparkles,
   Stethoscope,
   Syringe,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { DbRow } from "@/lib/types";
-import { currency, formatClinicalDate, localDate } from "./followup-utils";
+import { currency, errorMessage, formatClinicalDate, localDate } from "./followup-utils";
 import { useTreatmentMedicationUses } from "./use-treatment-medication-uses";
+import { WeightPanel } from "./WeightGoal";
 
 /**
  * Resumo clínico do plano para o médico: peso, adesão às aplicações, última evolução,
@@ -30,10 +32,13 @@ export default function TreatmentSummary({
   treatment,
   meds,
   paymentOverdue,
+  onChanged,
 }: {
   treatment: DbRow;
   meds: DbRow[];
   paymentOverdue: number;
+  /** Recarrega o plano depois de salvar a meta de peso. */
+  onChanged: () => void;
 }) {
   const id = treatment.id as string;
   // Mesma chave e formato da aba "Evolução & Fotos": o cache é compartilhado
@@ -59,6 +64,10 @@ export default function TreatmentSummary({
     },
   });
   const uses = useTreatmentMedicationUses(id);
+  // Análise sob demanda (custa uma chamada à IA): só roda quando o médico clica
+  const ai = useMutation({
+    mutationFn: () => analyzeTreatmentPlan({ data: { treatmentId: id } }),
+  });
 
   const today = localDate();
   const evolutions = (history.data?.evolutions ?? []) as DbRow[];
@@ -68,11 +77,14 @@ export default function TreatmentSummary({
   const weights = evolutions
     .filter((e) => e.weight_kg !== null && e.weight_kg !== undefined)
     .map((e) => ({ date: String(e.occurred_on), kg: Number(e.weight_kg) }));
-  const firstW = weights[weights.length - 1];
-  const lastW = weights[0];
-  const deltaKg = firstW && lastW && weights.length > 1 ? lastW.kg - firstW.kg : null;
-  const deltaPct = deltaKg !== null && firstW.kg > 0 ? (deltaKg / firstW.kg) * 100 : null;
-  const trend = weights.slice(0, 6).reverse();
+  // Base do alerta "peso subiu": peso inicial do plano, ou a primeira medida registrada
+  const baseKg =
+    treatment.initial_weight_kg != null ? Number(treatment.initial_weight_kg) : weights[weights.length - 1]?.kg;
+  const lastKg = weights[0]?.kg;
+  const deltaKg =
+    baseKg !== undefined && lastKg !== undefined && (treatment.initial_weight_kg != null || weights.length > 1)
+      ? lastKg - baseKg
+      : null;
 
   // Aplicações / uso de medicação
   const useList = (uses.data ?? []) as DbRow[];
@@ -175,10 +187,59 @@ export default function TreatmentSummary({
             </p>
           </div>
         </div>
-        <span className="rounded bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-          {evolutions.length} evolução(ões) · {returns} retorno(s) realizado(s)
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">
+            {evolutions.length} evolução(ões) · {returns} retorno(s)
+          </span>
+          <button
+            type="button"
+            disabled={ai.isPending}
+            onClick={() => ai.mutate()}
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-semibold text-primary transition hover:bg-primary/5 disabled:opacity-60 cursor-pointer"
+          >
+            <Sparkles size={13} />
+            {ai.isPending ? "Analisando..." : ai.data ? "Atualizar análise" : "Analisar com IA"}
+          </button>
+        </div>
       </div>
+
+      {/* Análise da IA: lê o plano inteiro (evoluções, peso, meta, aplicações) e resume para o médico */}
+      {ai.error && (
+        <p role="alert" className="rounded-lg bg-destructive/10 p-2.5 text-xs text-destructive">
+          {errorMessage(ai.error)}
+        </p>
+      )}
+      {ai.data && (
+        <section className="space-y-2 rounded-xl border border-primary/25 bg-primary/5 p-3.5 text-sm">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-semibold uppercase text-primary">Análise do plano</h4>
+            <span className="text-[11px] text-muted-foreground">
+              Gerado por IA · revise antes de usar
+            </span>
+          </div>
+          <p className="leading-relaxed text-foreground">{ai.data.panorama}</p>
+          {ai.data.pontosAtencao.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-foreground/80">Atenção</p>
+              <ul className="ml-4 list-disc space-y-0.5 text-foreground/90">
+                {ai.data.pontosAtencao.map((p) => (
+                  <li key={p}>{p}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {ai.data.proximoRetorno.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-foreground/80">Para o próximo retorno</p>
+              <ul className="ml-4 list-disc space-y-0.5 text-foreground/90">
+                {ai.data.proximoRetorno.map((p) => (
+                  <li key={p}>{p}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Pontos de atenção */}
       {!loading && (
@@ -213,52 +274,7 @@ export default function TreatmentSummary({
       )}
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        {/* Peso */}
-        <section className="rounded-xl border border-border-soft bg-muted/40 p-3.5 space-y-2">
-          <h4 className="flex items-center gap-1.5 text-xs font-semibold uppercase text-muted-foreground">
-            <Scale size={14} /> Peso
-          </h4>
-          {weights.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Nenhum peso registrado. Informe o peso ao salvar uma evolução.
-            </p>
-          ) : (
-            <>
-              <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-                <span className="text-2xl font-semibold tabular-nums text-foreground">{kg(lastW.kg)}</span>
-                {deltaKg !== null && (
-                  <span
-                    className={`text-sm font-semibold tabular-nums ${
-                      deltaKg < 0 ? "text-success" : deltaKg > 0 ? "text-warning" : "text-muted-foreground"
-                    }`}
-                  >
-                    {deltaKg > 0 ? "+" : ""}
-                    {kg(deltaKg)}
-                    {deltaPct !== null && ` (${deltaPct > 0 ? "+" : ""}${deltaPct.toFixed(1)}%)`}
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {firstW && weights.length > 1
-                  ? `Início ${kg(firstW.kg)} em ${formatClinicalDate(firstW.date)} · última medida ${formatClinicalDate(lastW.date)}`
-                  : `Medido em ${formatClinicalDate(lastW.date)}`}
-              </p>
-              {trend.length > 1 && (
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {trend.map((w) => (
-                    <span
-                      key={w.date + w.kg}
-                      className="rounded-md border border-border bg-card px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground"
-                      title={formatClinicalDate(w.date)}
-                    >
-                      {w.date.slice(8, 10)}/{w.date.slice(5, 7)} · {kg(w.kg)}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </section>
+        <WeightPanel treatment={treatment} weights={[...weights].reverse()} onChanged={onChanged} />
 
         {/* Aplicações */}
         <section className="rounded-xl border border-border-soft bg-muted/40 p-3.5 space-y-2">

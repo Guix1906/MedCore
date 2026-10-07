@@ -1682,6 +1682,9 @@ export type Database = {
           status: string;
           title: string;
           total_value: number;
+          initial_weight_kg: number | null;
+          target_weight_kg: number | null;
+          height_cm: number | null;
           updated_at: string;
         };
         Insert: {
@@ -1709,6 +1712,9 @@ export type Database = {
           status?: string;
           title: string;
           total_value?: number;
+          initial_weight_kg?: number | null;
+          target_weight_kg?: number | null;
+          height_cm?: number | null;
           updated_at?: string;
         };
         Update: {
@@ -1736,6 +1742,9 @@ export type Database = {
           status?: string;
           title?: string;
           total_value?: number;
+          initial_weight_kg?: number | null;
+          target_weight_kg?: number | null;
+          height_cm?: number | null;
           updated_at?: string;
         };
         Relationships: [
