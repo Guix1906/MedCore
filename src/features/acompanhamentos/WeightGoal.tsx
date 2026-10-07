@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { DbRow } from "@/lib/types";
 import { errorMessage, formatClinicalDate } from "./followup-utils";
+import { Chart, CHART_COLORS } from "@/components/ds/Chart";
 
 /**
  * Peso do plano: evolução (pesos das evoluções), meta, quanto falta e IMC.
@@ -96,7 +97,7 @@ export function hasWeightGoal(f: { initial: string; target: string; height: stri
   return !!(f.initial.trim() || f.target.trim() || f.height.trim());
 }
 
-/** Gráfico simples de evolução do peso com a linha da meta. */
+/** Evolução do peso (ApexCharts): área com gradiente, pontos de cada medida e linha da meta. */
 function WeightChart({
   points,
   target,
@@ -104,48 +105,65 @@ function WeightChart({
   points: { date: string; kg: number }[];
   target: number | null;
 }) {
-  if (points.length < 2) return null;
-  const W = 300;
-  const H = 70;
-  const values = [...points.map((p) => p.kg), ...(target ? [target] : [])];
-  const min = Math.min(...values) - 1;
-  const max = Math.max(...values) + 1;
-  const t0 = new Date(`${points[0].date}T12:00:00`).getTime();
-  const t1 = new Date(`${points[points.length - 1].date}T12:00:00`).getTime();
-  const x = (d: string) =>
-    t1 === t0 ? W / 2 : ((new Date(`${d}T12:00:00`).getTime() - t0) / (t1 - t0)) * (W - 8) + 4;
-  const y = (v: number) => H - 4 - ((v - min) / (max - min || 1)) * (H - 8);
-  const path = points.map((p) => `${x(p.date).toFixed(1)},${y(p.kg).toFixed(1)}`).join(" ");
+  if (points.length === 0) return null;
+  const ts = (d: string) => new Date(`${d}T12:00:00`).getTime();
+  const values = [...points.map((p) => p.kg), ...(target !== null ? [target] : [])];
+  const min = Math.floor(Math.min(...values) - 2);
+  const max = Math.ceil(Math.max(...values) + 2);
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="h-[70px] w-full" role="img" aria-label="Evolução do peso">
-      {target !== null && (
-        <>
-          <line
-            x1={0}
-            x2={W}
-            y1={y(target)}
-            y2={y(target)}
-            stroke="var(--success)"
-            strokeDasharray="4 4"
-            strokeWidth={1}
-          />
-          <text x={W - 2} y={y(target) - 3} textAnchor="end" fontSize="9" fill="var(--success)">
-            meta {kg(target)}
-          </text>
-        </>
-      )}
-      <polyline points={path} fill="none" stroke="var(--primary)" strokeWidth={2} />
-      {points.map((p) => (
-        <circle key={p.date + p.kg} cx={x(p.date)} cy={y(p.kg)} r={2.5} fill="var(--primary)">
-          <title>
-            {formatClinicalDate(p.date)}: {kg(p.kg)}
-          </title>
-        </circle>
-      ))}
-    </svg>
+    <Chart
+      type="area"
+      height={170}
+      summary={`Evolução do peso: ${points.map((p) => `${formatClinicalDate(p.date)} ${kg(p.kg)}`).join(", ")}${target !== null ? `; meta ${kg(target)}` : ""}`}
+      series={[{ name: "Peso", data: points.map((p) => ({ x: ts(p.date), y: p.kg })) }]}
+      options={{
+        colors: [CHART_COLORS.primary],
+        chart: { animations: { enabled: true, speed: 500 }, sparkline: { enabled: false } },
+        stroke: { curve: "smooth", width: 3 },
+        fill: {
+          type: "gradient",
+          gradient: { shadeIntensity: 1, opacityFrom: 0.35, opacityTo: 0.02, stops: [0, 90, 100] },
+        },
+        markers: { size: 4, strokeWidth: 2, strokeColors: "#fff", hover: { size: 6 } },
+        grid: { padding: { top: 0, right: 12, bottom: 0, left: 4 } },
+        xaxis: {
+          type: "datetime",
+          labels: { datetimeUTC: false, format: "dd/MM", style: { fontSize: "11px" } },
+          tooltip: { enabled: false },
+        },
+        yaxis: {
+          min,
+          max,
+          tickAmount: 4,
+          labels: { formatter: (v: number) => `${Math.round(v)} kg`, style: { fontSize: "11px" } },
+        },
+        tooltip: {
+          x: { format: "dd/MM/yyyy" },
+          y: { formatter: (v: number) => kg(v) },
+        },
+        annotations:
+          target !== null
+            ? {
+                yaxis: [
+                  {
+                    y: target,
+                    borderColor: CHART_COLORS.success,
+                    strokeDashArray: 5,
+                    label: {
+                      text: `Meta ${kg(target)}`,
+                      position: "left",
+                      textAnchor: "start",
+                      borderColor: "transparent",
+                      style: { background: "transparent", color: CHART_COLORS.success, fontSize: "11px", fontWeight: 600 },
+                    },
+                  },
+                ],
+              }
+            : undefined,
+      }}
+    />
   );
 }
-
 export function WeightPanel({
   treatment,
   weights,
@@ -233,48 +251,59 @@ export function WeightPanel({
           Sem peso registrado. Defina o peso inicial e a meta, e informe o peso ao salvar cada evolução.
         </p>
       ) : (
-        <>
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <span className="text-2xl font-semibold tabular-nums text-foreground">{kg(current)}</span>
-            {lost !== null && points.length > 1 && (
-              <span
-                className={`text-sm font-semibold tabular-nums ${lost > 0 ? "text-success" : lost < 0 ? "text-warning" : "text-muted-foreground"}`}
-              >
-                {lost > 0 ? `-${kg(lost)}` : lost < 0 ? `+${kg(-lost)}` : "sem variação"}
-              </span>
-            )}
+        // Números à esquerda e gráfico à direita: o bloco fica baixo e a página continua sem rolagem
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-[230px_1fr] md:items-center">
+          <div className="space-y-2">
+            <div>
+              <span className="text-2xl font-semibold tabular-nums text-foreground">{kg(current)}</span>
+              {lost !== null && points.length > 1 && (
+                <span
+                  className={`ml-2 text-sm font-semibold tabular-nums ${lost > 0 ? "text-success" : lost < 0 ? "text-warning" : "text-muted-foreground"}`}
+                >
+                  {lost > 0 ? `-${kg(lost)}` : lost < 0 ? `+${kg(-lost)}` : "sem variação"}
+                </span>
+              )}
+            </div>
             {target !== null && toGo !== null && (
-              <span className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 {toGo > 0 ? (
                   <>
-                    faltam <b className="text-foreground">{kg(toGo)}</b> para {kg(target)}
+                    faltam <b className="text-foreground">{kg(toGo)}</b> para a meta de {kg(target)}
                   </>
                 ) : (
-                  <b className="text-success">meta de {kg(target)} atingida</b>
+                  <b className="text-success">Meta de {kg(target)} atingida</b>
                 )}
-              </span>
+              </p>
+            )}
+            {goalPct !== null && (
+              <div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-success" style={{ width: `${goalPct}%` }} />
+                </div>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">{goalPct}% da meta</p>
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">
+              {baseline !== null && points.length > 1 && `Início ${kg(baseline)} · `}
+              {points.length} medida(s) · última {formatClinicalDate(points[points.length - 1].date)}
+            </p>
+            {bmi !== null && (
+              <p className="text-xs text-muted-foreground">
+                IMC <b className="text-foreground">{bmi.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}</b>{" "}
+                ({bmiLabel(bmi)})
+              </p>
             )}
           </div>
-          {goalPct !== null && (
-            <div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                <div className="h-full rounded-full bg-success" style={{ width: `${goalPct}%` }} />
-              </div>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">{goalPct}% da meta</p>
-            </div>
-          )}
-          <WeightChart points={points} target={target} />
-          <p className="text-xs text-muted-foreground">
-            {baseline !== null && points.length > 1 && `Início ${kg(baseline)} · `}
-            última medida {formatClinicalDate(points[points.length - 1].date)}
-            {bmi !== null && (
-              <>
-                {" "}· IMC <b className="text-foreground">{bmi.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}</b>{" "}
-                ({bmiLabel(bmi)})
-              </>
+          <div className="min-w-0">
+            {points.length > 1 || target !== null ? (
+              <WeightChart points={points} target={target} />
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                O gráfico aparece a partir da segunda medida (ou ao definir a meta).
+              </p>
             )}
-          </p>
-        </>
+          </div>
+        </div>
       )}
     </section>
   );

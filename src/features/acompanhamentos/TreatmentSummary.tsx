@@ -274,7 +274,9 @@ export default function TreatmentSummary({
       )}
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <WeightPanel treatment={treatment} weights={[...weights].reverse()} onChanged={onChanged} />
+        <div className="md:col-span-2">
+          <WeightPanel treatment={treatment} weights={[...weights].reverse()} onChanged={onChanged} />
+        </div>
 
         {/* Aplicações */}
         <section className="rounded-xl border border-border-soft bg-muted/40 p-3.5 space-y-2">
