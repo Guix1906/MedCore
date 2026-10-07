@@ -1673,6 +1673,12 @@ function TreatmentManageModal({
                   placeholder="Meta clínica, parâmetros a atingir, redução de peso, cicatrização..."
                 />
               </Field>
+              <div className="md:col-span-2 rounded-xl border border-border p-3">
+                <div className="mb-2 text-xs font-semibold text-foreground/80">
+                  Peso inicial e meta de peso
+                </div>
+                <WeightGoalFields value={weightGoal} onChange={setWeightGoal} inputClass={inputCls} />
+              </div>
 
               <Field label="Data de Início">
                 <input
@@ -1698,12 +1704,6 @@ function TreatmentManageModal({
                 </select>
               </Field>
 
-              <div className="md:col-span-2 rounded-xl border border-border p-3">
-                <div className="mb-2 text-xs font-semibold text-foreground/80">
-                  Peso e meta <span className="font-normal text-muted-foreground">(opcional)</span>
-                </div>
-                <WeightGoalFields value={weightGoal} onChange={setWeightGoal} inputClass={inputCls} />
-              </div>
               <Field label="Intervalo de Retorno (dias)">
                 <select
                   className={inputCls}
@@ -2939,6 +2939,12 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
                 placeholder="Meta clínica, parâmetros a atingir, redução de peso, cicatrização..."
               />
             </Field>
+            <div className="md:col-span-2 rounded-xl border border-border p-3">
+              <div className="mb-2 text-xs font-semibold text-foreground/80">
+                Peso inicial e meta de peso
+              </div>
+              <WeightGoalFields value={weightGoal} onChange={setWeightGoal} inputClass={inputCls} />
+            </div>
             <Field label="Data de início">
               <input
                 type="date"
@@ -2961,12 +2967,6 @@ function NewTreatmentModal({ onClose, onCreated }: { onClose: () => void; onCrea
                 <option value="365">365 dias (1 ano)</option>
               </select>
             </Field>
-            <div className="md:col-span-2 rounded-xl border border-border p-3">
-              <div className="mb-2 text-xs font-semibold text-foreground/80">
-                Peso e meta <span className="font-normal text-muted-foreground">(opcional)</span>
-              </div>
-              <WeightGoalFields value={weightGoal} onChange={setWeightGoal} inputClass={inputCls} />
-            </div>
             <Field label="Retorno automático (dias)">
               <select
                 className={inputCls}

@@ -1684,6 +1684,7 @@ export type Database = {
           total_value: number;
           initial_weight_kg: number | null;
           target_weight_kg: number | null;
+          weight_goal_change_kg: number | null;
           height_cm: number | null;
           updated_at: string;
         };
@@ -1714,6 +1715,7 @@ export type Database = {
           total_value?: number;
           initial_weight_kg?: number | null;
           target_weight_kg?: number | null;
+          weight_goal_change_kg?: number | null;
           height_cm?: number | null;
           updated_at?: string;
         };
@@ -1744,6 +1746,7 @@ export type Database = {
           total_value?: number;
           initial_weight_kg?: number | null;
           target_weight_kg?: number | null;
+          weight_goal_change_kg?: number | null;
           height_cm?: number | null;
           updated_at?: string;
         };

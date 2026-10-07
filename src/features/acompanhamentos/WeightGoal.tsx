@@ -8,13 +8,15 @@ import { Chart, CHART_COLORS } from "@/components/ds/Chart";
 
 /**
  * Peso do plano: evolução (pesos das evoluções), meta, quanto falta e IMC.
- * Peso inicial, meta e altura ficam no próprio plano (treatments).
+ * A meta é guardada como variação (perder/ganhar X kg); o peso-alvo em kg sai do
+ * peso inicial + variação, informado no cadastro do plano.
  */
 
-export type WeightGoalValues = {
-  initial_weight_kg: number | null;
-  target_weight_kg: number | null;
-  height_cm: number | null;
+export type WeightGoalForm = {
+  initial: string;
+  direction: "perder" | "ganhar";
+  change: string;
+  height: string;
 };
 
 const kg = (v: number) => `${v.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} kg`;
@@ -23,25 +25,43 @@ const num = (s: string) => {
   return s.trim() === "" ? null : Number.isFinite(n) ? n : NaN;
 };
 
-/** Valida e grava os campos de meta. Se o banco ainda não tem as colunas, explica o que falta. */
-export async function saveWeightGoal(treatmentId: string, form: { initial: string; target: string; height: string }) {
-  const values: WeightGoalValues = {
-    initial_weight_kg: num(form.initial),
-    target_weight_kg: num(form.target),
-    height_cm: num(form.height),
-  };
+/** Meta do plano: variação (kg, negativa = perder) e peso-alvo quando há peso inicial. */
+export function weightGoalOf(t?: DbRow | null) {
+  const initial = t?.initial_weight_kg != null ? Number(t.initial_weight_kg) : null;
+  const change = t?.weight_goal_change_kg != null ? Number(t.weight_goal_change_kg) : null;
+  const target =
+    initial !== null && change !== null
+      ? initial + change
+      : t?.target_weight_kg != null
+        ? Number(t.target_weight_kg)
+        : null;
+  return { initial, change, target };
+}
+
+/** Valida e grava peso inicial, meta e altura. Se o banco ainda não tem as colunas, explica o que falta. */
+export async function saveWeightGoal(treatmentId: string, form: WeightGoalForm) {
+  const initial = num(form.initial);
+  const amount = num(form.change);
+  const height = num(form.height);
   for (const [label, v, min, max] of [
-    ["Peso inicial", values.initial_weight_kg, 1, 700],
-    ["Meta de peso", values.target_weight_kg, 1, 700],
-    ["Altura", values.height_cm, 50, 250],
+    ["Peso inicial", initial, 1, 700],
+    ["Meta (kg)", amount, 0.1, 300],
+    ["Altura", height, 50, 250],
   ] as const) {
     if (v !== null && (Number.isNaN(v) || v < min || v > max)) throw new Error(`${label} inválido.`);
   }
+  const change = amount === null ? null : form.direction === "ganhar" ? amount : -amount;
+  const values = {
+    initial_weight_kg: initial,
+    weight_goal_change_kg: change,
+    target_weight_kg: initial !== null && change !== null ? Math.round((initial + change) * 100) / 100 : null,
+    height_cm: height,
+  };
   const { error } = await supabase.from("treatments").update(values).eq("id", treatmentId);
   if (error) {
     if (/column|schema cache/i.test(error.message))
       throw new Error(
-        "O banco ainda não tem os campos de meta de peso. Aplique a migração 20261007120000_treatment_weight_goal.sql no Supabase.",
+        "O banco ainda não tem o campo de meta de peso. Aplique a migração 20261007140000_treatment_weight_goal_change.sql no Supabase.",
       );
     throw error;
   }
@@ -56,45 +76,92 @@ export function bmiLabel(bmi: number) {
   return "obesidade grau III";
 }
 
-/** Campos peso inicial / meta / altura (usados no cadastro, na edição e no resumo). */
+/** Campos peso inicial / meta (perder ou ganhar X kg) / altura: cadastro, edição e resumo. */
 export function WeightGoalFields({
   value,
   onChange,
   inputClass,
 }: {
-  value: { initial: string; target: string; height: string };
-  onChange: (v: { initial: string; target: string; height: string }) => void;
+  value: WeightGoalForm;
+  onChange: (v: WeightGoalForm) => void;
   inputClass: string;
 }) {
-  const field = (key: "initial" | "target" | "height", label: string, ph: string) => (
-    <label className="block text-xs font-medium text-muted-foreground">
-      {label}
-      <input
-        inputMode="decimal"
-        className={`${inputClass} mt-1`}
-        placeholder={ph}
-        value={value[key]}
-        onChange={(e) => onChange({ ...value, [key]: e.target.value })}
-      />
-    </label>
-  );
+  const initial = num(value.initial);
+  const amount = num(value.change);
+  const preview =
+    initial && amount && !Number.isNaN(initial) && !Number.isNaN(amount)
+      ? initial + (value.direction === "ganhar" ? amount : -amount)
+      : null;
   return (
-    <div className="grid grid-cols-3 gap-2">
-      {field("initial", "Peso inicial (kg)", "Ex.: 92,5")}
-      {field("target", "Meta (kg)", "Ex.: 78")}
-      {field("height", "Altura (cm)", "Ex.: 168")}
+    <div className="space-y-1.5">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1.4fr_1fr]">
+        <label className="block text-xs font-medium text-muted-foreground">
+          Peso inicial (kg)
+          <input
+            inputMode="decimal"
+            className={`${inputClass} mt-1`}
+            placeholder="Ex.: 92,5"
+            value={value.initial}
+            onChange={(e) => onChange({ ...value, initial: e.target.value })}
+          />
+        </label>
+        <label className="block text-xs font-medium text-muted-foreground">
+          Meta de peso
+          <div className="mt-1 flex gap-1.5">
+            <select
+              aria-label="Perder ou ganhar"
+              className={`${inputClass} w-[96px] shrink-0`}
+              value={value.direction}
+              onChange={(e) => onChange({ ...value, direction: e.target.value as WeightGoalForm["direction"] })}
+            >
+              <option value="perder">Perder</option>
+              <option value="ganhar">Ganhar</option>
+            </select>
+            <input
+              inputMode="decimal"
+              aria-label="Quilos da meta"
+              className={inputClass}
+              placeholder="kg (ex.: 15)"
+              value={value.change}
+              onChange={(e) => onChange({ ...value, change: e.target.value })}
+            />
+          </div>
+        </label>
+        <label className="block text-xs font-medium text-muted-foreground">
+          Altura (cm)
+          <input
+            inputMode="decimal"
+            className={`${inputClass} mt-1`}
+            placeholder="Ex.: 168"
+            value={value.height}
+            onChange={(e) => onChange({ ...value, height: e.target.value })}
+          />
+        </label>
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        {preview !== null
+          ? `Peso-alvo: ${kg(preview)}`
+          : amount
+            ? "Informe o peso inicial para calcular o peso-alvo."
+            : "Ex.: perder 15 kg. O peso-alvo é calculado a partir do peso inicial."}
+      </p>
     </div>
   );
 }
 
-export const weightGoalForm = (t?: DbRow | null) => ({
-  initial: t?.initial_weight_kg != null ? String(t.initial_weight_kg).replace(".", ",") : "",
-  target: t?.target_weight_kg != null ? String(t.target_weight_kg).replace(".", ",") : "",
-  height: t?.height_cm != null ? String(t.height_cm).replace(".", ",") : "",
-});
+export const weightGoalForm = (t?: DbRow | null): WeightGoalForm => {
+  const g = weightGoalOf(t);
+  const fmt = (n: number) => String(Math.round(n * 100) / 100).replace(".", ",");
+  return {
+    initial: g.initial !== null ? fmt(g.initial) : "",
+    direction: g.change !== null && g.change > 0 ? "ganhar" : "perder",
+    change: g.change !== null ? fmt(Math.abs(g.change)) : "",
+    height: t?.height_cm != null ? fmt(Number(t.height_cm)) : "",
+  };
+};
 
-export function hasWeightGoal(f: { initial: string; target: string; height: string }) {
-  return !!(f.initial.trim() || f.target.trim() || f.height.trim());
+export function hasWeightGoal(f: WeightGoalForm) {
+  return !!(f.initial.trim() || f.change.trim() || f.height.trim());
 }
 
 /** Evolução do peso (ApexCharts): área com gradiente, pontos de cada medida e linha da meta. */
@@ -178,8 +245,7 @@ export function WeightPanel({
   const [form, setForm] = useState(() => weightGoalForm(treatment));
   const [busy, setBusy] = useState(false);
 
-  const initial = treatment.initial_weight_kg != null ? Number(treatment.initial_weight_kg) : null;
-  const target = treatment.target_weight_kg != null ? Number(treatment.target_weight_kg) : null;
+  const { initial, change: goalChange, target } = weightGoalOf(treatment);
   const height = treatment.height_cm != null ? Number(treatment.height_cm) : null;
 
   // Série: peso inicial na data de início + pesos registrados nas evoluções
@@ -190,7 +256,10 @@ export function WeightPanel({
   const baseline = points[0]?.kg ?? null;
   const current = points.length ? points[points.length - 1].kg : null;
   const lost = baseline !== null && current !== null ? baseline - current : null;
-  const toGo = target !== null && current !== null ? current - target : null;
+  // Quanto falta, no sentido da meta (perder: atual - alvo; ganhar: alvo - atual)
+  const gaining = target !== null && baseline !== null && target > baseline;
+  const toGo =
+    target !== null && current !== null ? (gaining ? target - current : current - target) : null;
   const goalTotal = baseline !== null && target !== null ? baseline - target : null;
   const goalPct =
     goalTotal && lost !== null && goalTotal !== 0 ? Math.max(0, Math.min(100, Math.round((lost / goalTotal) * 100))) : null;
@@ -224,7 +293,11 @@ export function WeightPanel({
           }}
           className="text-xs font-semibold text-primary hover:underline cursor-pointer"
         >
-          {editing ? "Cancelar" : target !== null || initial !== null ? "Editar meta" : "Definir meta"}
+          {editing
+            ? "Cancelar"
+            : target !== null || initial !== null || goalChange !== null
+              ? "Editar meta"
+              : "Definir meta"}
         </button>
       </div>
 
@@ -247,9 +320,18 @@ export function WeightPanel({
           </div>
         </div>
       ) : current === null ? (
-        <p className="text-sm text-muted-foreground">
-          Sem peso registrado. Defina o peso inicial e a meta, e informe o peso ao salvar cada evolução.
-        </p>
+        <div className="space-y-1 text-sm">
+          {goalChange !== null && (
+            <p className="text-foreground">
+              Meta: <b>{goalChange < 0 ? "perder" : "ganhar"} {kg(Math.abs(goalChange))}</b>
+            </p>
+          )}
+          <p className="text-muted-foreground">
+            {goalChange !== null
+              ? "Informe o peso inicial em \"Editar meta\" para calcular o peso-alvo e acompanhar no gráfico."
+              : "Sem peso registrado. Defina o peso inicial e a meta, e informe o peso ao salvar cada evolução."}
+          </p>
+        </div>
       ) : (
         // Números à esquerda e gráfico à direita: o bloco fica baixo e a página continua sem rolagem
         <div className="grid grid-cols-1 gap-3 md:grid-cols-[230px_1fr] md:items-center">
