@@ -56,7 +56,13 @@ const PERIOD_LABEL: Record<string, string> = {
 
 function cleanDose(raw?: string | null) {
   if (!raw) return "";
-  return raw.replace("[NÃO TOMOU]", "").replace("[SUSPENSA]", "").replace("[ADIADA]", "").trim();
+  return raw
+    .replace("[NÃO TOMOU]", "")
+    .replace("[SUSPENSA]", "")
+    .replace("[ADIADA]", "")
+    .trim()
+    .replace(/(\d)\.0\b/g, "$1") // "5.0 mg" -> "5 mg"
+    .replace(/(\d)\.(\d)/g, "$1,$2"); // "7.5 mg" -> "7,5 mg"
 }
 
 const isAppliedUse = (u: DbRow) =>
@@ -803,8 +809,16 @@ function ProtocolCard({
   });
 
   const appliedCount = rows.filter((r) => r.state === "aplicada").length;
-  const late = rows.filter((r) => r.state === "atrasada");
-  const next = rows.find((r) => r.state === "atrasada" || r.state === "hoje" || r.state === "prevista");
+  const pending = (r: (typeof rows)[number]) =>
+    r.state === "atrasada" || r.state === "hoje" || r.state === "prevista";
+  // Próxima = primeira pendente depois da última aplicada (semana pulada lá atrás não é "a próxima");
+  // as puladas entram no aviso de atraso abaixo
+  let lastAppliedIdx = -1;
+  rows.forEach((r, i) => {
+    if (r.state === "aplicada" || r.state === "ocorrencia") lastAppliedIdx = i;
+  });
+  const next = rows.slice(lastAppliedIdx + 1).find(pending) ?? rows.find(pending);
+  const late = rows.filter((r) => r.state === "atrasada" && r !== next);
   const allSuspended = rows.every((r) => r.suspended);
   const mgs = rows.map((r) => mgNumber(r.w.dose)).filter(Number.isFinite);
   const range =
@@ -988,10 +1002,13 @@ function ProtocolCard({
             </button>
           )}
         </div>
-        {late.length > 1 && (
+        {late.length > 0 && (
           <p className="flex items-center gap-1.5 text-xs text-warning">
-            <AlertCircle size={13} /> {late.length} semanas passadas sem registro (semanas{" "}
-            {late.map((r) => r.n).join(", ")}).
+            <AlertCircle size={13} />
+            {late.length === 1
+              ? `Semana ${late[0].n} (${formatClinicalDate(late[0].date)}) ficou sem registro.`
+              : `${late.length} semanas passadas sem registro (semanas ${late.map((r) => r.n).join(", ")}).`}{" "}
+            Registre, marque como não tomada ou remova.
           </p>
         )}
 
