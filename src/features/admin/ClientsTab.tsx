@@ -14,14 +14,26 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toAdminError } from "./admin-api";
 import {
   createClientUser,
   listClients,
   saveClient,
   setClientStatus,
+  setClientUserPassword,
+  updateClientUser,
   type ClientData,
+  type ClientRole,
   type ClientStatus,
+  type ClientUser,
+  type ClientUserStatus,
   type PlatformClient,
 } from "./platform-api";
 
@@ -41,6 +53,7 @@ const fmtDate = (v: string | null) => (v ? new Date(v).toLocaleDateString("pt-BR
 type Dialogs =
   | { kind: "client"; client: PlatformClient | null }
   | { kind: "user"; client: PlatformClient }
+  | { kind: "editUser"; client: PlatformClient; user: ClientUser }
   | { kind: "status"; client: PlatformClient; status: ClientStatus }
   | null;
 
@@ -174,18 +187,27 @@ export function ClientsTab() {
                 {c.users.length === 0 ? (
                   <p className="text-xs text-muted-foreground">Nenhum usuário. Use “Usuário” para criar o acesso.</p>
                 ) : (
-                  <ul className="space-y-0.5 text-sm">
+                  <ul className="divide-y divide-border-soft text-sm">
                     {c.users.map((u) => (
-                      <li key={u.memberId} className="flex flex-wrap gap-x-2 text-foreground">
-                        <span className="font-medium">{u.fullName}</span>
-                        <span className="text-muted-foreground">{u.email}</span>
-                        <span className="text-muted-foreground">· {u.role ?? "sem perfil"}</span>
-                        <span className="text-muted-foreground">
-                          · {u.status === "active" ? "ativo" : u.status === "suspended" ? "suspenso" : u.status}
-                        </span>
-                        <span className="text-muted-foreground">
-                          · {u.lastSignInAt ? `último acesso ${fmtDate(u.lastSignInAt)}` : "nunca acessou"}
-                        </span>
+                      <li key={u.memberId} className="flex flex-wrap items-center justify-between gap-2 py-1">
+                        <div className="flex min-w-0 flex-wrap gap-x-2 text-foreground">
+                          <span className="font-medium">{u.fullName}</span>
+                          <span className="text-muted-foreground">{u.email}</span>
+                          <span className="text-muted-foreground">· {u.role ?? "sem perfil"}</span>
+                          <span className={u.status === "active" ? "text-muted-foreground" : "text-warning"}>
+                            · {u.status === "active" ? "ativo" : u.status === "suspended" ? "suspenso" : u.status}
+                          </span>
+                          <span className="text-muted-foreground">
+                            · {u.lastSignInAt ? `último acesso ${fmtDate(u.lastSignInAt)}` : "nunca acessou"}
+                          </span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setDialog({ kind: "editUser", client: c, user: u })}
+                        >
+                          <Pencil aria-hidden="true" /> Editar
+                        </Button>
                       </li>
                     ))}
                   </ul>
@@ -204,6 +226,14 @@ export function ClientsTab() {
       />
       {dialog?.kind === "user" && (
         <UserDialog client={dialog.client} onClose={() => setDialog(null)} onDone={refresh} />
+      )}
+      {dialog?.kind === "editUser" && (
+        <EditUserDialog
+          client={dialog.client}
+          user={dialog.user}
+          onClose={() => setDialog(null)}
+          onDone={refresh}
+        />
       )}
       {dialog?.kind === "status" && (
         <StatusChangeDialog
@@ -410,6 +440,7 @@ function UserDialog({
   onDone: () => void;
 }) {
   const [user, setUser] = useState({ fullName: "", email: "", password: "" });
+  const [roleId, setRoleId] = useState(() => defaultRoleId(client.roles));
   const [busy, setBusy] = useState(false);
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -417,7 +448,7 @@ function UserDialog({
     if (user.password.length < 8) return toast.error("A senha deve ter no mínimo 8 caracteres.");
     setBusy(true);
     try {
-      const r = await createClientUser({ companyId: client.id, ...user });
+      const r = await createClientUser({ companyId: client.id, ...user, roleId: roleId || null });
       toast.success(`Acesso criado: ${r.email}`, {
         description:
           [
@@ -442,11 +473,11 @@ function UserDialog({
           <DialogHeader>
             <DialogTitle>Novo usuário · {client.name}</DialogTitle>
             <DialogDescription>
-              Entra como Proprietário desta empresa. Os demais usuários o próprio cliente cadastra na
-              Administração dele.
+              Acesso a {client.name}: vê somente os dados desta empresa.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
+            <RoleSelect id="nu-role" roles={client.roles} value={roleId} onChange={setRoleId} />
             <div className="space-y-1">
               <Label htmlFor="nu-name">Nome</Label>
               <Input id="nu-name" value={user.fullName} onChange={(e) => setUser({ ...user, fullName: e.target.value })} />
@@ -481,6 +512,173 @@ function UserDialog({
             </Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function defaultRoleId(roles: ClientRole[]) {
+  return (roles.find((r) => r.isOwner) ?? roles[0])?.id ?? "";
+}
+
+function RoleSelect({
+  id,
+  roles,
+  value,
+  onChange,
+}: {
+  id: string;
+  roles: ClientRole[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label htmlFor={id}>Perfil de acesso</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger id={id}>
+          <SelectValue placeholder="Escolha o perfil" />
+        </SelectTrigger>
+        <SelectContent>
+          {roles.map((r) => (
+            <SelectItem key={r.id} value={r.id}>
+              {r.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+const USER_STATUS: { value: ClientUserStatus; label: string }[] = [
+  { value: "active", label: "Ativo" },
+  { value: "suspended", label: "Suspenso (sem acesso)" },
+  { value: "removed", label: "Removido da empresa" },
+];
+
+function EditUserDialog({
+  client,
+  user,
+  onClose,
+  onDone,
+}: {
+  client: PlatformClient;
+  user: ClientUser;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [fullName, setFullName] = useState(user.fullName);
+  const [roleId, setRoleId] = useState(user.roleId ?? defaultRoleId(client.roles));
+  const [status, setStatus] = useState<ClientUserStatus>(
+    user.status === "suspended" ? "suspended" : "active",
+  );
+  const [reason, setReason] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const needsReason = status !== "active";
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (needsReason && reason.trim().length < 5) return toast.error("Informe o motivo (mínimo 5 caracteres).");
+    setBusy(true);
+    try {
+      await updateClientUser({ memberId: user.memberId, fullName, roleId: roleId || null, status, reason });
+      toast.success(
+        status === "removed" ? `${user.fullName} removido de ${client.name}.` : "Usuário atualizado.",
+      );
+      onDone();
+      onClose();
+    } catch (err) {
+      toast.error(toAdminError(err).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const changePassword = async () => {
+    if (password.length < 8) return toast.error("A senha deve ter no mínimo 8 caracteres.");
+    setBusy(true);
+    try {
+      await setClientUserPassword(user.memberId, password);
+      toast.success(`Senha de ${user.email ?? user.fullName} redefinida.`);
+      setPassword("");
+    } catch (err) {
+      toast.error(toAdminError(err).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[92vh] max-w-md overflow-y-auto">
+        <form onSubmit={save} className="space-y-4">
+          <DialogHeader>
+            <DialogTitle>Editar usuário · {client.name}</DialogTitle>
+            <DialogDescription>{user.email}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor="eu-name">Nome</Label>
+              <Input id="eu-name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+            </div>
+            <RoleSelect id="eu-role" roles={client.roles} value={roleId} onChange={setRoleId} />
+            <div className="space-y-1">
+              <Label htmlFor="eu-status">Situação</Label>
+              <Select value={status} onValueChange={(v) => setStatus(v as ClientUserStatus)}>
+                <SelectTrigger id="eu-status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {USER_STATUS.map((s) => (
+                    <SelectItem key={s.value} value={s.value}>
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {user.status === "suspended" && user.statusReason && (
+                <p className="text-xs text-warning">Suspenso: {user.statusReason}</p>
+              )}
+            </div>
+            {needsReason && (
+              <div className="space-y-1">
+                <Label htmlFor="eu-reason">Motivo (obrigatório)</Label>
+                <Textarea id="eu-reason" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
+              Voltar
+            </Button>
+            <Button type="submit" variant={status === "removed" ? "destructive" : "default"} disabled={busy}>
+              {busy ? "Salvando…" : status === "removed" ? "Remover usuário" : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </form>
+
+        {!user.isPlatformAdmin && (
+          <section className="space-y-2 border-t border-border pt-4">
+            <h4 className="text-sm font-semibold text-foreground">Redefinir senha</h4>
+            <div className="flex gap-2">
+              <Input
+                type="password"
+                autoComplete="new-password"
+                placeholder="Nova senha (mín. 8)"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <Button type="button" variant="outline" onClick={() => void changePassword()} disabled={busy}>
+                Trocar senha
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              A pessoa passa a entrar com a nova senha. Avise-a por um canal seguro.
+            </p>
+          </section>
+        )}
       </DialogContent>
     </Dialog>
   );

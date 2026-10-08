@@ -14,9 +14,15 @@ export type ClientUser = {
   email: string | null;
   fullName: string;
   status: string;
+  statusReason: string | null;
   role: string | null;
+  roleId: string | null;
+  isOwner: boolean;
+  isPlatformAdmin: boolean;
   lastSignInAt: string | null;
 };
+
+export type ClientRole = { id: string; name: string; key: string | null; isOwner: boolean };
 
 export type PlatformClient = {
   id: string;
@@ -35,6 +41,7 @@ export type PlatformClient = {
   statusChangedAt: string | null;
   createdAt: string | null;
   users: ClientUser[];
+  roles: ClientRole[];
 };
 
 export type ClientData = {
@@ -101,9 +108,17 @@ export async function listClients(): Promise<PlatformClient[]> {
           email: s(x.email),
           fullName: s(x.full_name) ?? "Usuário",
           status: String(x.status ?? ""),
+          statusReason: s(x.status_reason),
           role: s(x.role),
+          roleId: s(x.role_id),
+          isOwner: x.is_owner === true,
+          isPlatformAdmin: x.is_platform_admin === true,
           lastSignInAt: s(x.last_sign_in_at),
         };
+      }),
+      roles: (Array.isArray(r.roles) ? r.roles : []).map((v) => {
+        const x = (v ?? {}) as Record<string, unknown>;
+        return { id: String(x.id), name: s(x.name) ?? "Perfil", key: s(x.key), isOwner: x.is_owner === true };
       }),
     };
   });
@@ -119,12 +134,15 @@ export async function createClientUser(input: {
   email: string;
   password: string;
   fullName: string;
+  /** Sem perfil: Proprietário */
+  roleId?: string | null;
 }) {
   const r = await rpc<Record<string, unknown>>("platform_create_client_user", {
     p_company_id: input.companyId,
     p_email: input.email.trim(),
     p_password: input.password,
     p_full_name: input.fullName.trim(),
+    ...(input.roleId ? { p_role_id: input.roleId } : {}),
   });
   return {
     email: String(r?.email ?? input.email),
@@ -134,6 +152,28 @@ export async function createClientUser(input: {
       (n): n is string => typeof n === "string",
     ),
   };
+}
+
+export type ClientUserStatus = "active" | "suspended" | "removed";
+
+export async function updateClientUser(input: {
+  memberId: string;
+  fullName: string;
+  roleId: string | null;
+  status: ClientUserStatus;
+  reason?: string;
+}) {
+  await rpc("platform_update_client_user", {
+    p_member_id: input.memberId,
+    p_full_name: input.fullName.trim() || null,
+    p_role_id: input.roleId,
+    p_status: input.status,
+    p_reason: input.reason?.trim() || null,
+  });
+}
+
+export async function setClientUserPassword(memberId: string, password: string) {
+  await rpc("platform_set_client_user_password", { p_member_id: memberId, p_password: password });
 }
 
 export async function setClientStatus(companyId: string, status: ClientStatus, reason?: string) {
