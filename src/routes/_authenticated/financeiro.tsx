@@ -18,6 +18,7 @@ import BankReconciliation from "@/features/finance/BankReconciliation";
 import CategoriesManager from "@/features/finance/CategoriesManager";
 import NewTitle from "@/features/finance/NewTitle";
 import PaymentHistory from "@/features/finance/PaymentHistory";
+import ServiceRevenue from "@/features/finance/ServiceRevenue";
 import { OperationLock } from "@/features/finance/OperationForm";
 import { toast } from "sonner";
 import {
@@ -131,6 +132,8 @@ function FinanceiroPage() {
                       onReceive={(item) => setSelected(item.id)}
                       onDelete={(id) => setCancelId(id)}
                     />
+                  ) : search.tab === "servicos" ? (
+                    <ServiceRevenue finance={data} />
                   ) : (
                     <BankReconciliation
                       finance={data}

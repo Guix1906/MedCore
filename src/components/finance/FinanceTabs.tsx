@@ -4,15 +4,17 @@ import {
   ArrowUpRight,
   CheckCheck,
   LineChart,
+  PieChart,
   Tags,
 } from "lucide-react";
 import { UnderlineTabs } from "@/components/ui-app/UnderlineTabs";
 
-export type FinanceTabId = "fluxo" | "pagar" | "receber" | "conciliacao" | "categorias";
+export type FinanceTabId = "fluxo" | "pagar" | "receber" | "servicos" | "conciliacao" | "categorias";
 export const financeTabs: { id: FinanceTabId; label: string; icon: ElementType }[] = [
   { id: "fluxo", label: "Fluxo de Caixa", icon: LineChart },
   { id: "pagar", label: "Contas a Pagar", icon: ArrowUpRight },
   { id: "receber", label: "Contas a Receber", icon: ArrowDownLeft },
+  { id: "servicos", label: "Serviços", icon: PieChart },
   { id: "conciliacao", label: "Conciliação OFX", icon: CheckCheck },
   { id: "categorias", label: "Categorias", icon: Tags },
 ];

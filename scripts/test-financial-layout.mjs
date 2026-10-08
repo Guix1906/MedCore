@@ -96,7 +96,7 @@ assert.throws(() => availableCashFlow(cash, ops, '2026-02-30', '2026-09-30'));
 assert.throws(() => availableCashFlow(cash, ops, '2026-09-01', '2026-09-30', 'cards'));
 assert.equal(availableCashFlow({ accounts: [], payments: [], transfers: [] }, { entries: [] }, '2026-09-01', '2026-09-30').opening, null);
 
-assert.deepEqual(financeTabs.map((t) => t.id), ['fluxo', 'pagar', 'receber', 'conciliacao', 'categorias']);
+assert.deepEqual(financeTabs.map((t) => t.id), ['fluxo', 'pagar', 'receber', 'servicos', 'conciliacao', 'categorias']);
 assert.equal(resolveFinanceTab(undefined), 'fluxo');
 assert.equal(resolveFinanceTab('extrato'), 'fluxo');
 assert.equal(resolveFinanceTab('planos'), 'receber');
