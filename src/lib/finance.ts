@@ -111,6 +111,8 @@ export function calcCashFlow(
   period: "day" | "week" | "month" | "year",
   limit?: number,
   customRange?: [Date, Date],
+  /** Períodos futuros na janela recente: o previsto (contas a receber/pagar) vence à frente. */
+  ahead = 0,
 ): CashFlowDay[] {
   const paid = (r: Transaction) => r.status === "pago" || r.status === "concluido";
   const pending = (r: Transaction) => r.status === "pendente" || r.status === "vencido";
@@ -138,7 +140,7 @@ export function calcCashFlow(
     const keys: string[] = [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    for (let i = limit! - 1; i >= 0; i--) {
+    for (let i = limit! - 1; i >= -ahead; i--) {
       const d = new Date(today);
       if (period === "day") {
         d.setDate(today.getDate() - i);
@@ -239,12 +241,16 @@ export function calcCashFlow(
           ]),
         ).sort();
 
+  // Saldo = realizado acumulado na janela. Saldo previsto = realizado + tudo que ainda vai
+  // entrar/sair até aquele período (acumulado), como no financeiro.
   let running = 0;
+  let pendingRunning = 0;
   return finalKeys.map((key) => {
     const a = activeData[key] ?? { entradas: 0, saidas: 0 };
     const pr = pendingRData[key] || 0;
     const pd = pendingDData[key] || 0;
     running += a.entradas - a.saidas;
+    pendingRunning += pr - pd;
     const saldo = running;
     return {
       date: key,
@@ -254,7 +260,7 @@ export function calcCashFlow(
       saidas: a.saidas,
       saidasPrev: pd,
       saldo,
-      saldoPrev: saldo + pr - pd,
+      saldoPrev: saldo + pendingRunning,
     };
   });
 }

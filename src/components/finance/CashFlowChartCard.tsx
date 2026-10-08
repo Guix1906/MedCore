@@ -38,8 +38,11 @@ const PERIODS: [CashFlowPeriod, string][] = [
   ["year", "Anual"],
 ];
 
-// Janela fixa por agrupamento: 5 últimos dias, semana vigente, 2 últimos meses, ano vigente.
-const RECENT_LIMIT: Record<CashFlowPeriod, number> = { day: 5, week: 1, month: 2, year: 1 };
+// Janela por agrupamento (passado + atual, e à frente para o previsto aparecer):
+// dias: 3 antes, hoje e 3 depois; semanas: anterior, atual e 2 próximas;
+// meses: anterior, atual e 2 próximos; anos: atual e o próximo.
+const RECENT_LIMIT: Record<CashFlowPeriod, number> = { day: 4, week: 2, month: 2, year: 1 };
+const AHEAD: Record<CashFlowPeriod, number> = { day: 3, week: 2, month: 2, year: 1 };
 
 const BRL =(v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -84,6 +87,7 @@ export function CashFlowChartCard({
     period,
     useRange ? undefined : RECENT_LIMIT[period],
     useRange ? range : undefined,
+    useRange ? 0 : AHEAD[period],
   );
   const [detail, setDetail] = useState<{ series: number; index: number } | null>(null);
   const detailRows = useMemo(() => {
