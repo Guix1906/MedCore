@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from "react";
 import type { ElementType } from "react";
-import { Database, History, RefreshCw, ShieldCheck, Users } from "lucide-react";
+import { Building2, Database, History, RefreshCw, ShieldCheck, Users } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { SkeletonTable } from "@/components/ui-app";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -9,12 +10,15 @@ import { buildActor, useAdminOverview, useAdminRefresh } from "./admin-helpers";
 import { AuditTab } from "./AuditTab";
 import { RolesTab } from "./RolesTab";
 import { UsersTab } from "./UsersTab";
+import { ClientsTab } from "./ClientsTab";
+import { fetchIsPlatformAdmin } from "./platform-api";
 import type { AdminTab } from "./permissions";
 
 const TABS: { id: AdminTab; label: string; icon: ElementType }[] = [
   { id: "usuarios", label: "Usuários", icon: Users },
   { id: "perfis", label: "Perfis e permissões", icon: ShieldCheck },
   { id: "auditoria", label: "Auditoria", icon: History },
+  { id: "clientes", label: "Clientes", icon: Building2 },
 ];
 
 export default function AdminPage({
@@ -29,11 +33,17 @@ export default function AdminPage({
   const overview = useAdminOverview(companyId);
   const refresh = useAdminRefresh(companyId);
   const actor = useMemo(() => (overview.data ? buildActor(overview.data) : null), [overview.data]);
+  // Clientes da plataforma: só para o administrador da plataforma (dono do MedCore)
+  const platform = useQuery({ queryKey: ["is-platform-admin"], queryFn: fetchIsPlatformAdmin, staleTime: 5 * 60_000 });
+  const isPlatformAdmin = platform.data === true;
+  // Enquanto confere, mantém a aba Clientes aberta (sem isso, voltaria para Usuários)
+  const showClients = isPlatformAdmin || (platform.isPending && tab === "clientes");
 
   const available = TABS.filter((item) => {
-    if (!actor) return item.id === "usuarios";
+    if (!actor) return item.id === "usuarios" || (item.id === "clientes" && showClients);
     if (item.id === "usuarios") return actor.canViewUsers;
     if (item.id === "perfis") return actor.canViewUsers || actor.canManageRoles;
+    if (item.id === "clientes") return showClients;
     return actor.canViewAudit;
   });
   const current = available.some((item) => item.id === tab)
@@ -56,7 +66,7 @@ export default function AdminPage({
             Administração
           </p>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            Usuários e permissões
+            {current === "clientes" ? "Clientes da plataforma" : "Usuários e permissões"}
           </h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
             {overview.data?.company.name ?? access.companyName ?? "Clínica"} · quem acessa o MedCore
@@ -144,6 +154,7 @@ export default function AdminPage({
             <RolesTab overview={overview.data} actor={actor} onRefresh={refresh} />
           )}
           {current === "auditoria" && actor.canViewAudit && <AuditTab overview={overview.data} />}
+          {current === "clientes" && isPlatformAdmin && <ClientsTab />}
         </>
       ) : null}
     </div>

@@ -557,10 +557,10 @@ export function firstAllowedRoute(has: (key: PermissionKey) => boolean): string 
   return MODULE_ROUTES.find((rule) => rule.any.some(has))?.path ?? null;
 }
 
-export type AdminTab = "usuarios" | "perfis" | "auditoria";
+export type AdminTab = "usuarios" | "perfis" | "auditoria" | "clientes";
 
 export function resolveAdminTab(value: unknown): AdminTab {
-  return value === "perfis" || value === "auditoria" ? value : "usuarios";
+  return value === "perfis" || value === "auditoria" || value === "clientes" ? value : "usuarios";
 }
 
 export const AUDIT_ACTION_LABEL: Record<string, string> = {

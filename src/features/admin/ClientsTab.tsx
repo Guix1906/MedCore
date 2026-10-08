@@ -1,0 +1,548 @@
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { Building2, Pencil, Search, UserPlus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { toAdminError } from "./admin-api";
+import {
+  createClientUser,
+  listClients,
+  saveClient,
+  setClientStatus,
+  type ClientData,
+  type ClientStatus,
+  type PlatformClient,
+} from "./platform-api";
+
+/**
+ * Clientes da plataforma (cada cliente = uma empresa com dados separados). Só o administrador
+ * da plataforma vê esta aba. Mostra dados cadastrais e usuários, nunca dados clínicos.
+ */
+
+const STATUS: Record<ClientStatus, { label: string; cls: string }> = {
+  active: { label: "Ativo", cls: "bg-success/10 text-success" },
+  paused: { label: "Pausado", cls: "bg-warning/15 text-warning" },
+  cancelled: { label: "Cancelado", cls: "bg-destructive/10 text-destructive" },
+};
+
+const fmtDate = (v: string | null) => (v ? new Date(v).toLocaleDateString("pt-BR") : "—");
+
+type Dialogs =
+  | { kind: "client"; client: PlatformClient | null }
+  | { kind: "user"; client: PlatformClient }
+  | { kind: "status"; client: PlatformClient; status: ClientStatus }
+  | null;
+
+export function ClientsTab() {
+  const qc = useQueryClient();
+  const clients = useQuery({ queryKey: ["platform-clients"], queryFn: listClients });
+  const [search, setSearch] = useState("");
+  const [dialog, setDialog] = useState<Dialogs>(null);
+  const refresh = () => qc.invalidateQueries({ queryKey: ["platform-clients"] });
+
+  const list = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const all = clients.data ?? [];
+    if (!q) return all;
+    return all.filter((c) =>
+      [c.name, c.legalName, c.document, c.contactName, c.email, ...c.users.map((u) => u.email)]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q)),
+    );
+  }, [clients.data, search]);
+
+  const counts = useMemo(() => {
+    const all = clients.data ?? [];
+    return {
+      active: all.filter((c) => c.status === "active").length,
+      paused: all.filter((c) => c.status === "paused").length,
+      cancelled: all.filter((c) => c.status === "cancelled").length,
+    };
+  }, [clients.data]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-sm text-muted-foreground">
+          <b className="text-foreground">{counts.active}</b> ativo(s) ·{" "}
+          <b className="text-foreground">{counts.paused}</b> pausado(s) ·{" "}
+          <b className="text-foreground">{counts.cancelled}</b> cancelado(s). Cada cliente tem os
+          próprios dados, separados dos demais.
+        </div>
+        <Button onClick={() => setDialog({ kind: "client", client: null })}>
+          <Building2 aria-hidden="true" /> Novo cliente
+        </Button>
+      </div>
+
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar empresa, CNPJ, responsável ou e-mail…"
+          className="pl-9"
+        />
+      </div>
+
+      {clients.isPending ? (
+        <p className="text-sm text-muted-foreground">Carregando clientes…</p>
+      ) : clients.error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {toAdminError(clients.error).message}
+        </p>
+      ) : list.length === 0 ? (
+        <p className="py-10 text-center text-sm text-muted-foreground">Nenhum cliente encontrado.</p>
+      ) : (
+        <div className="space-y-3">
+          {list.map((c) => (
+            <article key={c.id} className="rounded-xl border border-border bg-card p-4 shadow-2xs">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-base font-semibold text-foreground">{c.name}</h3>
+                    <span className={`rounded px-2 py-0.5 text-[11px] font-semibold ${STATUS[c.status].cls}`}>
+                      {STATUS[c.status].label}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-sm text-muted-foreground">
+                    {[c.legalName, c.document && `CNPJ/CPF ${c.document}`].filter(Boolean).join(" · ") ||
+                      "Sem razão social / documento"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {[c.contactName, c.phone, c.email].filter(Boolean).join(" · ") || "Sem contato cadastrado"}
+                  </p>
+                  {(c.address || c.city) && (
+                    <p className="text-sm text-muted-foreground">
+                      {[c.address, [c.city, c.state].filter(Boolean).join("/")].filter(Boolean).join(" · ")}
+                    </p>
+                  )}
+                  {c.status !== "active" && c.statusReason && (
+                    <p className="mt-1 text-xs text-warning">
+                      {STATUS[c.status].label} em {fmtDate(c.statusChangedAt)}: {c.statusReason}
+                    </p>
+                  )}
+                  <p className="mt-1 text-xs text-muted-foreground">Cliente desde {fmtDate(c.createdAt)}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setDialog({ kind: "client", client: c })}>
+                    <Pencil aria-hidden="true" /> Editar
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setDialog({ kind: "user", client: c })}>
+                    <UserPlus aria-hidden="true" /> Usuário
+                  </Button>
+                  {c.status === "active" ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setDialog({ kind: "status", client: c, status: "paused" })}
+                      >
+                        Pausar
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-destructive"
+                        onClick={() => setDialog({ kind: "status", client: c, status: "cancelled" })}
+                      >
+                        Cancelar
+                      </Button>
+                    </>
+                  ) : (
+                    <Button size="sm" onClick={() => setDialog({ kind: "status", client: c, status: "active" })}>
+                      Reativar
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-3 border-t border-border-soft pt-2">
+                <p className="mb-1 text-xs font-semibold text-muted-foreground">
+                  Usuários ({c.users.length})
+                </p>
+                {c.users.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Nenhum usuário. Use “Usuário” para criar o acesso.</p>
+                ) : (
+                  <ul className="space-y-0.5 text-sm">
+                    {c.users.map((u) => (
+                      <li key={u.memberId} className="flex flex-wrap gap-x-2 text-foreground">
+                        <span className="font-medium">{u.fullName}</span>
+                        <span className="text-muted-foreground">{u.email}</span>
+                        <span className="text-muted-foreground">· {u.role ?? "sem perfil"}</span>
+                        <span className="text-muted-foreground">
+                          · {u.status === "active" ? "ativo" : u.status === "suspended" ? "suspenso" : u.status}
+                        </span>
+                        <span className="text-muted-foreground">
+                          · {u.lastSignInAt ? `último acesso ${fmtDate(u.lastSignInAt)}` : "nunca acessou"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      <ClientDialog
+        open={dialog?.kind === "client"}
+        client={dialog?.kind === "client" ? dialog.client : null}
+        onClose={() => setDialog(null)}
+        onDone={refresh}
+      />
+      {dialog?.kind === "user" && (
+        <UserDialog client={dialog.client} onClose={() => setDialog(null)} onDone={refresh} />
+      )}
+      {dialog?.kind === "status" && (
+        <StatusChangeDialog
+          client={dialog.client}
+          status={dialog.status}
+          onClose={() => setDialog(null)}
+          onDone={refresh}
+        />
+      )}
+    </div>
+  );
+}
+
+const EMPTY: Required<ClientData> = {
+  name: "",
+  legal_name: "",
+  document: "",
+  contact_name: "",
+  phone: "",
+  email: "",
+  address: "",
+  city: "",
+  state: "",
+  notes: "",
+};
+
+function ClientDialog({
+  open,
+  client,
+  onClose,
+  onDone,
+}: {
+  open: boolean;
+  client: PlatformClient | null;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto">
+        {open && <ClientForm key={client?.id ?? "novo"} client={client} onClose={onClose} onDone={onDone} />}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ClientForm({
+  client,
+  onClose,
+  onDone,
+}: {
+  client: PlatformClient | null;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const isNew = !client;
+  const [data, setData] = useState<Required<ClientData>>(() =>
+    client
+      ? {
+          name: client.name,
+          legal_name: client.legalName ?? "",
+          document: client.document ?? "",
+          contact_name: client.contactName ?? "",
+          phone: client.phone ?? "",
+          email: client.email ?? "",
+          address: client.address ?? "",
+          city: client.city ?? "",
+          state: client.state ?? "",
+          notes: client.notes ?? "",
+        }
+      : EMPTY,
+  );
+  const [user, setUser] = useState({ fullName: "", email: "", password: "" });
+  const [busy, setBusy] = useState(false);
+  const set = (k: keyof ClientData) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setData({ ...data, [k]: e.target.value });
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!data.name.trim()) return toast.error("Informe o nome da empresa.");
+    if (isNew) {
+      if (!user.email.trim() || !user.fullName.trim()) return toast.error("Informe nome e e-mail do usuário.");
+      if (user.password.length < 8) return toast.error("A senha deve ter no mínimo 8 caracteres.");
+    }
+    setBusy(true);
+    try {
+      const id = await saveClient(client?.id ?? null, data);
+      if (isNew) {
+        const r = await createClientUser({ companyId: id, ...user });
+        toast.success(`Cliente criado. Acesso: ${r.email}`, {
+          description: r.existingAccount
+            ? "Este e-mail já tinha conta: ele entra com a senha que já usava."
+            : "Entra com a senha definida, já como Proprietário da própria empresa.",
+        });
+      } else {
+        toast.success("Dados do cliente salvos.");
+      }
+      onDone();
+      onClose();
+    } catch (err) {
+      toast.error(toAdminError(err).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const field = (k: keyof ClientData, label: string, ph = "", className = "") => (
+    <div className={`space-y-1 ${className}`}>
+      <Label htmlFor={`c-${k}`}>{label}</Label>
+      <Input id={`c-${k}`} value={data[k]} onChange={set(k)} placeholder={ph} />
+    </div>
+  );
+
+  return (
+    <form onSubmit={submit} className="space-y-4">
+      <DialogHeader>
+        <DialogTitle>{isNew ? "Novo cliente" : `Editar ${client?.name}`}</DialogTitle>
+        <DialogDescription>
+          {isNew
+            ? "Cria a empresa com dados separados dos demais clientes e o primeiro acesso (Proprietário)."
+            : "Dados cadastrais do cliente."}
+        </DialogDescription>
+      </DialogHeader>
+
+      <section className="space-y-3">
+        <h4 className="text-sm font-semibold text-foreground">Empresa</h4>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {field("name", "Nome da empresa *", "Ex.: Clínica Senyor", "sm:col-span-2")}
+          {field("legal_name", "Razão social")}
+          {field("document", "CNPJ / CPF")}
+          {field("contact_name", "Responsável")}
+          {field("phone", "Telefone")}
+          {field("email", "E-mail da empresa", "", "sm:col-span-2")}
+          {field("address", "Endereço", "", "sm:col-span-2")}
+          {field("city", "Cidade")}
+          {field("state", "UF")}
+          <div className="space-y-1 sm:col-span-2">
+            <Label htmlFor="c-notes">Observações</Label>
+            <Textarea id="c-notes" rows={2} value={data.notes} onChange={set("notes")} />
+          </div>
+        </div>
+      </section>
+
+      {isNew && (
+        <section className="space-y-3 rounded-lg border border-border p-3">
+          <h4 className="text-sm font-semibold text-foreground">Primeiro usuário (Proprietário)</h4>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1 sm:col-span-2">
+              <Label htmlFor="u-name">Nome *</Label>
+              <Input id="u-name" value={user.fullName} onChange={(e) => setUser({ ...user, fullName: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="u-email">E-mail de acesso *</Label>
+              <Input
+                id="u-email"
+                type="email"
+                autoComplete="off"
+                value={user.email}
+                onChange={(e) => setUser({ ...user, email: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="u-pass">Senha (mín. 8) *</Label>
+              <Input
+                id="u-pass"
+                type="password"
+                autoComplete="new-password"
+                value={user.password}
+                onChange={(e) => setUser({ ...user, password: e.target.value })}
+              />
+            </div>
+          </div>
+        </section>
+      )}
+
+      <DialogFooter className="gap-2">
+        <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
+          Voltar
+        </Button>
+        <Button type="submit" disabled={busy}>
+          {busy ? "Salvando…" : isNew ? "Criar cliente" : "Salvar"}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
+function UserDialog({
+  client,
+  onClose,
+  onDone,
+}: {
+  client: PlatformClient;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [user, setUser] = useState({ fullName: "", email: "", password: "" });
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user.email.trim() || !user.fullName.trim()) return toast.error("Informe nome e e-mail.");
+    if (user.password.length < 8) return toast.error("A senha deve ter no mínimo 8 caracteres.");
+    setBusy(true);
+    try {
+      const r = await createClientUser({ companyId: client.id, ...user });
+      toast.success(`Acesso criado: ${r.email}`, {
+        description: r.existingAccount ? "E-mail já tinha conta: entra com a senha que já usava." : undefined,
+      });
+      onDone();
+      onClose();
+    } catch (err) {
+      toast.error(toAdminError(err).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <form onSubmit={submit} className="space-y-4">
+          <DialogHeader>
+            <DialogTitle>Novo usuário · {client.name}</DialogTitle>
+            <DialogDescription>
+              Entra como Proprietário desta empresa. Os demais usuários o próprio cliente cadastra na
+              Administração dele.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor="nu-name">Nome</Label>
+              <Input id="nu-name" value={user.fullName} onChange={(e) => setUser({ ...user, fullName: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="nu-email">E-mail de acesso</Label>
+              <Input
+                id="nu-email"
+                type="email"
+                autoComplete="off"
+                value={user.email}
+                onChange={(e) => setUser({ ...user, email: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="nu-pass">Senha (mín. 8)</Label>
+              <Input
+                id="nu-pass"
+                type="password"
+                autoComplete="new-password"
+                value={user.password}
+                onChange={(e) => setUser({ ...user, password: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
+              Voltar
+            </Button>
+            <Button type="submit" disabled={busy}>
+              {busy ? "Criando…" : "Criar acesso"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function StatusChangeDialog({
+  client,
+  status,
+  onClose,
+  onDone,
+}: {
+  client: PlatformClient;
+  status: ClientStatus;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const copy = {
+    paused: {
+      title: "Pausar cliente",
+      text: "Todos os usuários deste cliente perdem o acesso em até um minuto. Os dados ficam guardados e voltam ao reativar.",
+      action: "Pausar",
+    },
+    cancelled: {
+      title: "Cancelar cliente",
+      text: "Todos os usuários perdem o acesso. Os dados ficam guardados (não são apagados) e o cliente pode ser reativado.",
+      action: "Cancelar cliente",
+    },
+    active: {
+      title: "Reativar cliente",
+      text: "Os usuários que estavam ativos antes da pausa voltam a acessar.",
+      action: "Reativar",
+    },
+  }[status];
+  const needsReason = status !== "active";
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (needsReason && reason.trim().length < 5) return toast.error("Informe o motivo (mínimo 5 caracteres).");
+    setBusy(true);
+    try {
+      await setClientStatus(client.id, status, reason);
+      toast.success(`${client.name}: ${copy.action.toLowerCase()} concluído.`);
+      onDone();
+      onClose();
+    } catch (err) {
+      toast.error(toAdminError(err).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <form onSubmit={submit} className="space-y-4">
+          <DialogHeader>
+            <DialogTitle>
+              {copy.title} · {client.name}
+            </DialogTitle>
+            <DialogDescription>{copy.text}</DialogDescription>
+          </DialogHeader>
+          {needsReason && (
+            <div className="space-y-1">
+              <Label htmlFor="st-reason">Motivo (obrigatório)</Label>
+              <Textarea id="st-reason" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
+              Voltar
+            </Button>
+            <Button type="submit" variant={status === "active" ? "default" : "destructive"} disabled={busy}>
+              {busy ? "Salvando…" : copy.action}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
