@@ -195,8 +195,8 @@ BEGIN
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON public.%I', t);
     EXECUTE format('CREATE POLICY tenant_isolation ON public.%I AS RESTRICTIVE FOR ALL TO public
-                    USING (company_id = ANY ((SELECT public.my_tenant_ids())))
-                    WITH CHECK (company_id = ANY ((SELECT public.my_tenant_ids())))', t);
+                    USING (company_id = (SELECT public.current_tenant_id()))
+                    WITH CHECK (company_id = (SELECT public.current_tenant_id()))', t);
   END LOOP;
 END $$;
 
