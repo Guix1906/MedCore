@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/dialog";
 import { errorMessage, formatClinicalDate, localDate } from "./followup-utils";
 import { useTreatmentMedicationUses } from "./use-treatment-medication-uses";
+import { getFinancialSnapshot, refreshFinance } from "@/features/finance/finance-api";
+import { setTitleServiceType } from "@/features/finance/service-types";
 import { CheckCircle2, AlertTriangle, XCircle, Clock, Pill, Syringe } from "lucide-react";
 
 const input = "w-full rounded-lg border border-border p-2 text-sm";
@@ -34,6 +36,35 @@ const emptyForm = (medication?: MedicationPreset) => ({
   item: "",
   quantity: "1",
 });
+
+/** Cria a cobrança da aplicação (receita do paciente do plano, tipo Medicações). */
+async function chargeApplication(
+  treatmentId: string,
+  c: { name: string; dose: string; amount: number; date: string; companyId: string | null },
+) {
+  const { data: plan, error: planErr } = await supabase
+    .from("treatments")
+    .select("patient_id, patients(name)")
+    .eq("id", treatmentId)
+    .maybeSingle();
+  if (planErr) throw planErr;
+  const id = crypto.randomUUID();
+  const label = c.name.replace(/\s+\(Sem\.\s*\d+\)$/, "");
+  const { error } = await supabase.rpc("create_financial_title", {
+    p_id: id,
+    p_type: "receita",
+    p_amount: Math.round(c.amount * 100) / 100,
+    p_due_date: c.date,
+    p_description: `Aplicação de ${label}${c.dose ? ` ${c.dose}` : ""}`,
+    p_category: "Medicações",
+    p_patient_id: (plan as any)?.patient_id ?? null,
+    p_payer_name: (plan as any)?.patients?.name ?? null,
+    p_competence_date: `-01`,
+    p_company_id: c.companyId,
+  });
+  if (error) throw error;
+  await setTitleServiceType(id, "medicacoes").catch(() => undefined);
+}
 
 const QUICK_REASONS = [
   "Esquecimento do paciente",
@@ -65,6 +96,8 @@ export default function MedicationUsePanel({
     "tomou",
   );
   const [form, setForm] = useState(() => emptyForm(medication));
+  // Medicação da clínica pode gerar cobrança (receita do tipo Medicações)
+  const [charge, setCharge] = useState({ on: false, amount: "" });
   const query = useQuery({
     queryKey: ["treatment-medication-uses", treatmentId, "options"],
     queryFn: async () => {
@@ -110,6 +143,13 @@ export default function MedicationUsePanel({
       return;
     }
 
+    const chargeAmount = Number(String(charge.amount).replace(/\./g, "").replace(",", "."));
+    const willCharge = !isNonAdmin && !!form.item && charge.on;
+    if (willCharge && !(chargeAmount > 0)) {
+      toast.error("Informe o valor a cobrar pela aplicação.");
+      return;
+    }
+
     let finalDose = form.dose.trim();
     if (statusType === "nao_tomou") {
       finalDose = `[NÃO TOMOU] ${finalDose}`;
@@ -132,6 +172,31 @@ export default function MedicationUsePanel({
         p_quantity: !isNonAdmin && form.item ? quantity : null,
       });
       if (error) throw error;
+      if (willCharge) {
+        try {
+          await chargeApplication(treatmentId, {
+            name: query.data?.meds.find((m) => m.id === form.medication)?.name || medication?.name || "Medicação",
+            dose: form.dose.trim(),
+            amount: chargeAmount,
+            date: form.usedAt.slice(0, 10),
+            // Mesma clínica que os outros lançamentos (primeiro escopo com permissão de lançar)
+            companyId:
+              (
+                await qc.fetchQuery({
+                  queryKey: ["financial-snapshot"],
+                  queryFn: getFinancialSnapshot,
+                  staleTime: 60_000,
+                })
+              ).scopes.find((s) => s.can_create)?.id ?? null,
+          });
+          void refreshFinance(qc);
+        } catch (err) {
+          toast.warning("Aplicação registrada, mas a cobrança não foi gerada", {
+            description: `. Lance pelo Financeiro (Nova receita › Medicações).`,
+          });
+        }
+        setCharge({ on: false, amount: "" });
+      }
       requestId.current = crypto.randomUUID();
       setForm(emptyForm(medication));
       setStatusType("tomou");
@@ -342,6 +407,33 @@ export default function MedicationUsePanel({
                   onChange={(e) => setForm({ ...form, quantity: e.target.value })}
                 />
               </label>
+            ) : null}
+            {form.item ? (
+              <div className="sm:col-span-2 space-y-2 rounded-lg border border-border-soft bg-muted/40 p-2.5">
+                <label className="flex items-center gap-2 text-sm font-medium text-foreground/80 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={charge.on}
+                    onChange={(e) => setCharge({ ...charge, on: e.target.checked })}
+                  />
+                  Cobrar esta aplicação do paciente
+                </label>
+                {charge.on && (
+                  <label className="block text-sm font-medium text-foreground/80">
+                    Valor (R$)
+                    <input
+                      inputMode="decimal"
+                      className={input}
+                      placeholder="Ex.: 450,00"
+                      value={charge.amount}
+                      onChange={(e) => setCharge({ ...charge, amount: e.target.value })}
+                    />
+                    <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                      Gera uma receita em Contas a Receber, no tipo de serviço "Medicações".
+                    </span>
+                  </label>
+                )}
+              </div>
             ) : (
               <div className="text-xs text-muted-foreground self-center bg-muted/60 p-2.5 rounded-lg border border-border-soft">
                 Sem consumo de estoque da clínica (administração domiciliar ou frasco do paciente).

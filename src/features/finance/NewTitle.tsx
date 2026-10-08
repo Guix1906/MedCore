@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { FinanceSnapshot, FinancialTitle } from "./finance-schema";
+import { SERVICE_TYPES, setTitleServiceType, type ServiceType } from "./service-types";
 import { refreshFinance } from "./finance-api";
 import { CategoryModal } from "./CategoriesManager";
 import { getFinanceCategories } from "./finance-categories";
@@ -91,6 +92,8 @@ export default function NewTitle({
   const [category, setCategory] = useState(isExpense ? "Despesas Gerais e Administrativas" : "Consultas e Atendimentos");
   const [payer, setPayer] = useState("");
   const [patient, setPatient] = useState("");
+  // Tipo de serviço da receita (aba Serviços): obrigatório em receitas
+  const [serviceType, setServiceType] = useState<ServiceType | "">("");
 
   // Opção de Baixa Imediata (já paga / recebida hoje à vista)
   const [isPaidNow, setIsPaidNow] = useState(defaultPaidNow ?? false);
@@ -155,6 +158,10 @@ export default function NewTitle({
       toast.error("Por favor, selecione uma categoria.");
       return;
     }
+    if (!isExpense && !serviceType) {
+      toast.error("Selecione o tipo de serviço da receita.");
+      return;
+    }
 
     setBusy(true);
     try {
@@ -177,6 +184,17 @@ export default function NewTitle({
         p_payer_name: resolvedPayer,
       });
       if (titleError) throw titleError;
+      if (!isExpense && serviceType) {
+        try {
+          await setTitleServiceType(titleId, serviceType);
+        } catch (err) {
+          toast.warning("Receita criada sem o tipo de serviço", {
+            description: /function|schema cache/i.test(errorMessage(err))
+              ? "Aplique a migração 20261008120000_transaction_service_type.sql no Supabase."
+              : errorMessage(err),
+          });
+        }
+      }
 
       // Se o usuário marcou como já pago, registra a baixa no mesmo fluxo do Financeiro
       if (isPaidNow && !isFutureDate) {
@@ -298,6 +316,30 @@ export default function NewTitle({
             />
           </div>
 
+          {!isExpense && (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-foreground">
+                Tipo de serviço <span className="text-destructive">*</span>
+              </Label>
+              <div className="flex flex-wrap gap-1.5">
+                {SERVICE_TYPES.filter((s) => s.id !== "planos").map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setServiceType(s.id)}
+                    aria-pressed={serviceType === s.id}
+                    className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition cursor-pointer ${
+                      serviceType === s.id
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {/* 2. VALOR E VENCIMENTO LADO A LADO */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div className="space-y-1.5">

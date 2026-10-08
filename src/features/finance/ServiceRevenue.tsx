@@ -1,51 +1,16 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { Chart, CHART_COLORS } from "@/components/ds/Chart";
+import { Chart } from "@/components/ds/Chart";
 import { currency } from "@/features/acompanhamentos/followup-utils";
-import { getTitleEventKey } from "./finance-api";
-import type { FinanceSnapshot, FinancialTitle } from "./finance-schema";
+import type { FinanceSnapshot } from "./finance-schema";
+import { SERVICE_TYPES as TYPES, loadServiceTypeExtras, serviceTypeOf, type ServiceType } from "./service-types";
 
 /**
  * Faturamento por tipo de serviço (consultas, planos, implantes, medicações...): quantidade,
  * valor faturado e recebido no período, com gráfico. Base: lançamentos de receita não
  * cancelados, na data do serviço (data do lançamento; sem ela, o vencimento).
  */
-
-type ServiceType =
-  | "consultas"
-  | "planos"
-  | "implantes"
-  | "medicacoes"
-  | "procedimentos"
-  | "exames"
-  | "outros";
-
-const TYPES: { id: ServiceType; label: string; color: string }[] = [
-  { id: "consultas", label: "Consultas", color: CHART_COLORS.primary },
-  { id: "planos", label: "Planos de acompanhamento", color: CHART_COLORS.secondary },
-  { id: "implantes", label: "Implantes", color: CHART_COLORS.success },
-  { id: "medicacoes", label: "Medicações", color: CHART_COLORS.warning },
-  { id: "procedimentos", label: "Procedimentos", color: CHART_COLORS.danger },
-  { id: "exames", label: "Exames", color: CHART_COLORS.primarySoft },
-  { id: "outros", label: "Outros", color: CHART_COLORS.neutral },
-];
-
-const norm = (s: string | null | undefined) =>
-  (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-
-/** Classifica o lançamento pelo vínculo (plano / agendamento) e pelo texto da categoria e descrição. */
-export function serviceTypeOf(t: FinancialTitle): ServiceType {
-  const text = `${norm(t.category)} ${norm(t.description)}`;
-  if (/implante/.test(text)) return "implantes";
-  if (t.treatment_id) return "planos";
-  if (/medica|injet|tirzepatida|semaglutida|mounjaro|ozempic|wegovy|saxenda|aplicac|soro|vitamina/.test(text))
-    return "medicacoes";
-  if (/exame|laudo/.test(text)) return "exames";
-  if (/procedimento|cirurgi|botox|preenchimento/.test(text)) return "procedimentos";
-  if (getTitleEventKey(t) || /consulta|retorno|avaliac|telemedicina|teleconsulta|atendimento/.test(text))
-    return "consultas";
-  return "outros";
-}
 
 type Mode = "dia" | "mes" | "ano";
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -73,14 +38,28 @@ export default function ServiceRevenue({ finance }: { finance: FinanceSnapshot }
     setRef(d);
   };
 
+  // Tipo gravado em cada receita e serviço escolhido no agendamento de origem
+  const extras = useQuery({
+    queryKey: ["service-type-extras", finance.titles.length],
+    queryFn: () => loadServiceTypeExtras(finance.titles),
+    staleTime: 60_000,
+  });
+
   // Lançamentos de receita do período, já com o tipo de serviço
   const rows = useMemo(
     () =>
       finance.titles
         .filter((t) => t.type === "receita" && t.status !== "cancelado")
-        .map((t) => ({ t, type: serviceTypeOf(t), day: (t.date || t.due_date || "").slice(0, 10) }))
+        .map((t) => ({
+          t,
+          type: serviceTypeOf(t, {
+            explicit: extras.data?.explicit.get(t.id),
+            procedureName: extras.data?.procedureByTitle.get(t.id),
+          }),
+          day: (t.date || t.due_date || "").slice(0, 10),
+        }))
         .filter((r) => r.day && r.day >= start && r.day <= end),
-    [finance.titles, start, end],
+    [finance.titles, start, end, extras.data],
   );
 
   const summary = useMemo(() => {
@@ -294,8 +273,8 @@ export default function ServiceRevenue({ finance }: { finance: FinanceSnapshot }
             </tfoot>
           </table>
           <p className="mt-2 text-[11px] text-muted-foreground">
-            Planos contam uma vez por plano (entrada e parcelas). O tipo vem do vínculo do lançamento
-            (plano ou agendamento) e do nome da categoria/descrição.
+            Planos contam uma vez por plano (entrada e parcelas). O tipo vem do lançamento, do serviço
+            escolhido no agendamento ou do vínculo com o plano.
           </p>
         </section>
       </div>
