@@ -294,9 +294,14 @@ function ClientForm({
       if (isNew) {
         const r = await createClientUser({ companyId: id, ...user });
         toast.success(`Cliente criado. Acesso: ${r.email}`, {
-          description: r.existingAccount
-            ? "Este e-mail já tinha conta: ele entra com a senha que já usava."
-            : "Entra com a senha definida, já como Proprietário da própria empresa.",
+          description: [
+            r.existingAccount
+              ? "Este e-mail já tinha conta: ele entra com a senha que já usava."
+              : "Entra com a senha definida, já como Proprietário da própria empresa.",
+            removedNote(r.removedFrom),
+          ]
+            .filter(Boolean)
+            .join(" "),
         });
       } else {
         toast.success("Dados do cliente salvos.");
@@ -391,6 +396,10 @@ function ClientForm({
   );
 }
 
+function removedNote(names: string[]) {
+  return names.length > 0 ? `Removido de: ${names.join(", ")}.` : "";
+}
+
 function UserDialog({
   client,
   onClose,
@@ -410,7 +419,13 @@ function UserDialog({
     try {
       const r = await createClientUser({ companyId: client.id, ...user });
       toast.success(`Acesso criado: ${r.email}`, {
-        description: r.existingAccount ? "E-mail já tinha conta: entra com a senha que já usava." : undefined,
+        description:
+          [
+            r.existingAccount ? "E-mail já tinha conta: entra com a senha que já usava." : "",
+            removedNote(r.removedFrom),
+          ]
+            .filter(Boolean)
+            .join(" ") || undefined,
       });
       onDone();
       onClose();

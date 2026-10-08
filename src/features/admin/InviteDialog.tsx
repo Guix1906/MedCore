@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Eye, EyeOff, KeyRound, Mail, Sparkles, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ import {
   type AdminOverview,
 } from "./admin-api";
 import { isOwnerRole, roleDisplayName, type ActorContext } from "./admin-helpers";
+import { fetchIsPlatformAdmin } from "./platform-api";
 import { effectivePermissions, isSubset, isValidEmail, normalizeEmail } from "./permissions";
 
 const NONE = "__none__";
@@ -110,6 +112,13 @@ function InviteForm({
   const freeProfessionals = overview.professionals.filter(
     (p) => p.active && !p.linkedUserId && !takenDoctors.has(p.id),
   );
+
+  const platform = useQuery({
+    queryKey: ["is-platform-admin"],
+    queryFn: fetchIsPlatformAdmin,
+    staleTime: 5 * 60_000,
+  });
+  const isPlatformAdmin = platform.data === true;
 
   const [mode, setMode] = useState<"direct" | "invite">("direct");
   const [requestId] = useState(newRequestId);
@@ -223,6 +232,13 @@ function InviteForm({
             : "A pessoa recebe um link de acesso por e-mail para cadastrar a própria senha."}
         </DialogDescription>
       </DialogHeader>
+
+      <p className="rounded-lg border border-warning/25 bg-warning/10 px-3 py-2 text-xs text-warning">
+        Este usuário entra na equipe de <strong>{overview.company.name}</strong> e vê os dados
+        dela.
+        {isPlatformAdmin &&
+          " Para uma clínica separada, use Administração › Clientes › Novo cliente."}
+      </p>
 
       <div className="flex rounded-lg border border-border bg-muted p-1 text-xs">
         <button

@@ -126,7 +126,14 @@ export async function createClientUser(input: {
     p_password: input.password,
     p_full_name: input.fullName.trim(),
   });
-  return { email: String(r?.email ?? input.email), existingAccount: r?.existing_account === true };
+  return {
+    email: String(r?.email ?? input.email),
+    existingAccount: r?.existing_account === true,
+    // Clínicas de que o e-mail saiu (ele passa a ver só este cliente)
+    removedFrom: (Array.isArray(r?.removed_from) ? r.removed_from : []).filter(
+      (n): n is string => typeof n === "string",
+    ),
+  };
 }
 
 export async function setClientStatus(companyId: string, status: ClientStatus, reason?: string) {

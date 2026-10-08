@@ -324,10 +324,9 @@ function ClinicSettings() {
   const [msg, setMsg] = useState("");
 
   const { data: initialSettings } = useQuery({
-    queryKey: ["clinic-settings"],
+    queryKey: ["clinic-settings", companyId],
     staleTime: 10 * 60_000,
     gcTime: 30 * 60_000,
-    placeholderData: (prev) => prev,
     queryFn: async () => {
       try {
         const phpData = await companyService.getClinicSettings();
