@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Building2, Pencil, Search, UserPlus } from "lucide-react";
+import { Building2, Pencil, Search, Trash2, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -54,6 +54,7 @@ type Dialogs =
   | { kind: "client"; client: PlatformClient | null }
   | { kind: "user"; client: PlatformClient }
   | { kind: "editUser"; client: PlatformClient; user: ClientUser }
+  | { kind: "deleteUser"; client: PlatformClient; user: ClientUser }
   | { kind: "status"; client: PlatformClient; status: ClientStatus }
   | null;
 
@@ -201,13 +202,23 @@ export function ClientsTab() {
                             · {u.lastSignInAt ? `último acesso ${fmtDate(u.lastSignInAt)}` : "nunca acessou"}
                           </span>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDialog({ kind: "editUser", client: c, user: u })}
-                        >
-                          <Pencil aria-hidden="true" /> Editar
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setDialog({ kind: "editUser", client: c, user: u })}
+                          >
+                            <Pencil aria-hidden="true" /> Editar
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => setDialog({ kind: "deleteUser", client: c, user: u })}
+                          >
+                            <Trash2 aria-hidden="true" /> Excluir
+                          </Button>
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -229,6 +240,14 @@ export function ClientsTab() {
       )}
       {dialog?.kind === "editUser" && (
         <EditUserDialog
+          client={dialog.client}
+          user={dialog.user}
+          onClose={() => setDialog(null)}
+          onDone={refresh}
+        />
+      )}
+      {dialog?.kind === "deleteUser" && (
+        <DeleteUserDialog
           client={dialog.client}
           user={dialog.user}
           onClose={() => setDialog(null)}
@@ -679,6 +698,68 @@ function EditUserDialog({
             </p>
           </section>
         )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteUserDialog({
+  client,
+  user,
+  onClose,
+  onDone,
+}: {
+  client: PlatformClient;
+  user: ClientUser;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await updateClientUser({
+        memberId: user.memberId,
+        fullName: "",
+        roleId: user.roleId,
+        status: "removed",
+        reason: reason.trim().length >= 5 ? reason : "Excluído pela administração da plataforma",
+      });
+      toast.success(`${user.fullName} excluído de ${client.name}.`);
+      onDone();
+      onClose();
+    } catch (err) {
+      toast.error(toAdminError(err).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <form onSubmit={submit} className="space-y-4">
+          <DialogHeader>
+            <DialogTitle>Excluir usuário · {client.name}</DialogTitle>
+            <DialogDescription>
+              <b>{user.fullName}</b> ({user.email}) perde o acesso a {client.name} na hora. Os
+              registros que essa pessoa fez na clínica continuam guardados.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1">
+            <Label htmlFor="du-reason">Motivo (opcional)</Label>
+            <Textarea id="du-reason" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
+              Voltar
+            </Button>
+            <Button type="submit" variant="destructive" disabled={busy}>
+              {busy ? "Excluindo…" : "Excluir usuário"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
