@@ -243,7 +243,7 @@ export function TreatmentReportDialog({
   );
 }
 
-type ReportData = {
+export type ReportData = {
   treatment: DbRow;
   meds: DbRow[];
   planTitles: FinancialTitle[];
@@ -257,9 +257,24 @@ type ReportData = {
   withFinance: boolean;
 };
 
-function ReportDocument({ data }: { data: ReportData }) {
+const INK = "#1f2937";
+const MUTED = "#6b7280";
+const LINE = "#e5e7eb";
+const GOOD = "#059669";
+const BAD = "#dc2626";
+const WARN = "#d97706";
+
+/** Mistura a cor com branco (0 = cor, 1 = branco), para fundos suaves no tom da clínica. */
+const tint = (hex: string, amount: number) => {
+  const n = parseInt(hex.slice(1), 16);
+  const mix = (c: number) => Math.round(c + (255 - c) * amount);
+  return `rgb(${mix((n >> 16) & 255)} ${mix((n >> 8) & 255)} ${mix(n & 255)})`;
+};
+
+export function ReportDocument({ data }: { data: ReportData }) {
   const { treatment: t, meds, planTitles, financials, evolutions, statuses, uses, clinic, patient, photos } = data;
   const color = clinic.color ?? "#2c7f86";
+  const soft = tint(color, 0.9);
   const today = localDate();
 
   // Prazo
@@ -267,18 +282,21 @@ function ReportDocument({ data }: { data: ReportData }) {
   const passed = Math.max(0, days(t.start_date, today));
   const progress = total > 0 ? Math.min(100, Math.round((passed / total) * 100)) : 0;
   const remainingDays = Math.max(0, total - passed);
+  const returnLate = t.status === "em_andamento" && !!t.next_return_date && t.next_return_date <= today;
 
   // Peso
   const weights = evolutions
     .filter((e) => e.weight_kg != null)
-    .map((e) => ({ date: String(e.occurred_on), kg: Number(e.weight_kg) }))
+    .map((e) => ({ date: String(e.occurred_on).slice(0, 10), kg: Number(e.weight_kg) }))
     .reverse();
   const goal = weightGoalOf(t);
-  const startKg = goal.initial ?? weights[0]?.kg ?? null;
   if (goal.initial != null && (!weights.length || weights[0].date > String(t.start_date).slice(0, 10)))
     weights.unshift({ date: String(t.start_date).slice(0, 10), kg: goal.initial });
+  const startKg = weights[0]?.kg ?? goal.initial ?? null;
   const currentKg = weights.length ? weights[weights.length - 1].kg : null;
-  const lost = startKg != null && currentKg != null ? currentKg - startKg : null;
+  const delta = startKg != null && currentKg != null ? currentKg - startKg : null;
+  const wantsLoss = goal.target != null && startKg != null ? goal.target < startKg : true;
+  const deltaGood = delta == null ? null : wantsLoss ? delta <= 0 : delta >= 0;
   const goalPct =
     goal.target != null && startKg != null && currentKg != null && goal.target !== startKg
       ? Math.max(0, Math.min(100, Math.round(((startKg - currentKg) / (startKg - goal.target)) * 100)))
@@ -317,8 +335,8 @@ function ReportDocument({ data }: { data: ReportData }) {
       const current = [...sorted].reverse().find((r) => r.start_date && String(r.start_date) <= today) ?? sorted[0];
       rows.unshift({
         name,
-        dose: `${current.dose ?? ""}${current.unit || ""} (sem. ${current._w} de ${sorted[sorted.length - 1]._w})`,
-        freq: "Semanal",
+        dose: `${current.dose ?? ""}${current.unit || ""}`,
+        freq: `Semanal · sem. ${current._w} de ${sorted[sorted.length - 1]._w}`,
         period: "Injetável",
       });
     }
@@ -326,290 +344,408 @@ function ReportDocument({ data }: { data: ReportData }) {
   })();
 
   const titles = planTitles.filter((x) => x.status !== "cancelado" && !isFreeBalance(x));
+  const paidCount = titles.filter((x) => Number(x.paid_amount || 0) >= Number(x.amount || 0)).length;
   const overdue = titles.filter(
     (x) => x.due_date && x.due_date < today && Number(x.paid_amount || 0) < Number(x.amount || 0),
   );
+  const paidPct = financials.total > 0 ? Math.min(100, Math.round((financials.paid / financials.total) * 100)) : 0;
 
-  const section = "mt-6 break-inside-avoid";
-  const h2 = "mb-2 border-b pb-1 text-[13px] font-bold uppercase tracking-wide";
-  const card = "rounded-lg border border-neutral-200 p-3";
-  const label = "text-[10px] font-semibold uppercase text-neutral-500";
-  const value = "text-[15px] font-bold text-neutral-900";
+  const history = [
+    ...evolutions.slice(0, 6).map((e) => ({
+      date: String(e.occurred_on),
+      tag: e.is_return ? "Retorno" : "Evolução",
+      text: `${e.notes}${e.next_step ? ` · Próximo passo: ${e.next_step}` : ""}`,
+      extra: e.weight_kg ? kg(Number(e.weight_kg)) : "",
+    })),
+    ...statuses.slice(0, 4).map((s) => ({
+      date: String(s.created_at),
+      tag: STATUS[s.status] ?? s.status,
+      text: String(s.justification ?? ""),
+      extra: "",
+    })),
+  ].sort((a, b) => b.date.localeCompare(a.date));
+
+  const showFinance = data.withFinance && financials.total > 0;
+  let n = 0;
+  const num = () => String(++n).padStart(2, "0");
 
   return (
-    <article className="treatment-report bg-white p-8 text-[12px] leading-relaxed text-neutral-800">
-      {/* Cabeçalho */}
-      <header className="flex items-start justify-between gap-6 border-b-4 pb-4" style={{ borderColor: color }}>
-        <div className="flex items-center gap-4">
-          <img
-            src={clinic.logo ?? "/assets/dr-jonatas-bandeira-logo.png"}
-            alt={clinic.name || "Clínica"}
-            className="h-14 max-w-[180px] object-contain"
-          />
-          <div>
-            <h1 className="text-[20px] font-bold leading-tight" style={{ color }}>
-              Resumo do plano
-            </h1>
-            <p className="text-neutral-500">{clinic.name}</p>
+    <article
+      className="treatment-report bg-white text-[11.5px] leading-relaxed"
+      style={{ color: INK, fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif" }}
+    >
+      {/* Faixa de cabeçalho na cor da clínica */}
+      <header
+        className="px-8 pb-6 pt-7 text-white"
+        style={{
+          background: `linear-gradient(135deg, color-mix(in srgb, ${color} 78%, black) 0%, ${color} 55%, ${tint(color, 0.22)} 100%)`,
+        }}
+      >
+        <div className="flex items-start justify-between gap-6">
+          <div className="flex items-center gap-4">
+            <div className="grid h-16 w-[150px] place-items-center rounded-xl bg-white px-3 py-2 shadow-sm">
+              <img
+                src={clinic.logo ?? "/assets/dr-jonatas-bandeira-logo.png"}
+                alt={clinic.name || "Clínica"}
+                className="max-h-12 max-w-full object-contain"
+              />
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/75">
+                Resumo do acompanhamento
+              </p>
+              <h1 className="text-[22px] font-bold leading-tight">{t.patients?.name ?? "Paciente"}</h1>
+              <p className="text-[12px] text-white/85">{t.title}</p>
+            </div>
           </div>
-        </div>
-        <div className="text-right text-[11px] text-neutral-500">
-          Emitido em {dt(today)}
-          <div
-            className="mt-1 inline-block rounded px-2 py-0.5 text-[11px] font-bold text-white"
-            style={{ background: color }}
-          >
-            {STATUS[t.status] ?? t.status}
+          <div className="shrink-0 text-right">
+            <span className="inline-block rounded-full bg-white px-3 py-1 text-[11px] font-bold" style={{ color }}>
+              {STATUS[t.status] ?? t.status}
+            </span>
+            <p className="mt-2 text-[10px] text-white/80">Emitido em {dt(today)}</p>
+            {clinic.name && <p className="text-[10px] text-white/80">{clinic.name}</p>}
           </div>
         </div>
       </header>
 
-      {/* Identificação */}
-      <section className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1">
-        <Info k="Paciente" v={t.patients?.name ?? "—"} />
-        <Info k="Plano" v={t.title} />
-        <Info
-          k="Cidade"
-          v={[patient.city, patient.state].filter(Boolean).join(" / ") || "—"}
-        />
-        <Info k="Médico(a)" v={t.doctors?.name ? `Dr(a). ${t.doctors.name}` : "—"} />
+      <div className="px-8 pb-8">
+        {/* Identificação */}
+        <section className="-mt-px grid grid-cols-4 border-b" style={{ borderColor: LINE }}>
+          <Field label="Cidade" value={[patient.city, patient.state].filter(Boolean).join(" / ") || "—"} />
+          <Field label="Médico(a)" value={t.doctors?.name ? `Dr(a). ${t.doctors.name}` : "—"} />
+          <Field label="Início" value={dt(t.start_date)} />
+          <Field label="Término previsto" value={dt(t.end_date)} />
+        </section>
         {t.objective && (
-          <div className="col-span-2">
-            <Info k="Objetivo" v={t.objective} />
-          </div>
+          <p className="mt-3 rounded-lg px-3 py-2 text-[11.5px]" style={{ background: soft }}>
+            <b style={{ color }}>Objetivo: </b>
+            {t.objective}
+          </p>
         )}
-      </section>
 
-      {/* Visão geral */}
-      <section className={section}>
-        <h2 className={h2} style={{ color, borderColor: color }}>
-          Visão geral
-        </h2>
-        <div className="grid grid-cols-4 gap-2">
-          <div className={card}>
-            <div className={label}>Início</div>
-            <div className={value}>{dt(t.start_date)}</div>
-          </div>
-          <div className={card}>
-            <div className={label}>Término</div>
-            <div className={value}>{dt(t.end_date)}</div>
-          </div>
-          <div className={card}>
-            <div className={label}>Próximo retorno</div>
-            <div className={value}>{dt(t.next_return_date)}</div>
-          </div>
-          <div className={card}>
-            <div className={label}>Dias restantes</div>
-            <div className={value}>{t.status === "em_andamento" ? remainingDays : "—"}</div>
-          </div>
-        </div>
-        <div className="mt-3">
-          <div className="mb-1 flex justify-between text-[11px] font-semibold text-neutral-600">
-            <span>Prazo do plano concluído</span>
-            <span>
-              {progress}% · {passed} de {total} dias
-            </span>
-          </div>
-          <div className="h-3 overflow-hidden rounded-full bg-neutral-200">
-            <div className="h-full rounded-full" style={{ width: `${progress}%`, background: color }} />
-          </div>
-        </div>
-      </section>
+        {/* Indicadores principais */}
+        <section className="mt-5 grid grid-cols-4 gap-3 break-inside-avoid">
+          <Kpi
+            ring={progress}
+            color={color}
+            title="Prazo do plano"
+            value={`${progress}%`}
+            sub={t.status === "em_andamento" ? `${remainingDays} dias restantes` : `${passed} de ${total} dias`}
+          />
+          <Kpi
+            ring={goalPct}
+            color={deltaGood === false ? BAD : GOOD}
+            title="Peso"
+            value={delta != null ? `${delta > 0 ? "+" : ""}${kg(delta)}` : "—"}
+            sub={goalPct != null ? `${goalPct}% da meta` : currentKg != null ? `Atual ${kg(currentKg)}` : "Sem pesagens"}
+          />
+          <Kpi
+            ring={adherence}
+            color={adherence != null && adherence < 80 ? WARN : color}
+            title="Adesão"
+            value={adherence != null ? `${adherence}%` : "—"}
+            sub={uses.length ? `${applied.length} de ${uses.length} aplicações` : "Sem aplicações"}
+          />
+          {showFinance ? (
+            <Kpi
+              ring={paidPct}
+              color={overdue.length ? BAD : GOOD}
+              title="Financeiro"
+              value={`${paidPct}% pago`}
+              sub={overdue.length ? `${overdue.length} parcela(s) em atraso` : `Em aberto ${brl(financials.open)}`}
+            />
+          ) : (
+            <Kpi
+              ring={null}
+              color={returnLate ? BAD : color}
+              title="Próximo retorno"
+              value={dt(t.next_return_date)}
+              sub={returnLate ? "Retorno vencido" : t.return_days ? `A cada ${t.return_days} dias` : ""}
+            />
+          )}
+        </section>
 
-      {/* Peso */}
-      {(weights.length > 0 || goal.target != null) && (
-        <section className={section}>
-          <h2 className={h2} style={{ color, borderColor: color }}>
-            Evolução de peso
-          </h2>
-          <div className="grid grid-cols-[1fr_190px] gap-3">
-            <div className={card}>
-              {weights.length >= 2 ? (
-                <WeightChart points={weights} target={goal.target} color={color} />
+        {/* Peso */}
+        {(weights.length > 0 || goal.target != null) && (
+          <section className="mt-7 break-inside-avoid">
+            <SectionTitle n={num()} title="Evolução de peso" color={color} />
+            <div className="grid grid-cols-[1fr_168px] gap-4">
+              <div className="rounded-xl border p-3" style={{ borderColor: LINE }}>
+                {weights.length >= 2 ? (
+                  <WeightChart points={weights} target={goal.target} color={color} />
+                ) : (
+                  <Empty text="Registre pelo menos duas pesagens nas evoluções para ver o gráfico." />
+                )}
+              </div>
+              <div className="space-y-2">
+                <Mini label="Peso inicial" value={startKg != null ? kg(startKg) : "—"} />
+                <Mini label="Peso atual" value={currentKg != null ? kg(currentKg) : "—"} strong />
+                <Mini label="Meta" value={goal.target != null ? kg(goal.target) : "—"} tone={GOOD} />
+                <Mini
+                  label={goal.target != null && currentKg != null ? "Falta para a meta" : "Variação"}
+                  value={
+                    goal.target != null && currentKg != null
+                      ? kg(Math.abs(currentKg - goal.target))
+                      : delta != null
+                        ? kg(delta)
+                        : "—"
+                  }
+                />
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Aplicações e medicações */}
+        <section className="mt-7 break-inside-avoid">
+          <SectionTitle n={num()} title="Medicações e aplicações" color={color} />
+          <div className="grid grid-cols-[1fr_168px] gap-4">
+            <div className="rounded-xl border p-3" style={{ borderColor: LINE }}>
+              {uses.length > 0 ? (
+                <UsesChart uses={uses} color={color} />
               ) : (
-                <p className="py-10 text-center text-neutral-500">
-                  Registre pelo menos duas pesagens nas evoluções para ver o gráfico.
-                </p>
+                <Empty text="Nenhuma aplicação registrada ainda." />
               )}
             </div>
             <div className="space-y-2">
-              <Stat label="Peso inicial" v={startKg != null ? kg(startKg) : "—"} />
-              <Stat label="Peso atual" v={currentKg != null ? kg(currentKg) : "—"} />
-              <Stat label="Meta" v={goal.target != null ? kg(goal.target) : "—"} />
-              <Stat
-                label="Variação"
-                v={lost != null ? `${lost > 0 ? "+" : ""}${kg(lost)}` : "—"}
-                tone={lost != null && lost < 0 ? "#059669" : lost ? "#dc2626" : undefined}
-              />
-              {goalPct != null && (
-                <div className={card}>
-                  <div className={label}>Meta atingida</div>
-                  <div className="mt-1 h-2 overflow-hidden rounded-full bg-neutral-200">
-                    <div className="h-full rounded-full" style={{ width: `${goalPct}%`, background: color }} />
-                  </div>
-                  <div className="mt-0.5 text-[13px] font-bold">{goalPct}%</div>
-                </div>
-              )}
+              <Mini label="Aplicações feitas" value={String(applied.length)} strong />
+              <Mini label="Não realizadas" value={String(missed.length)} tone={missed.length ? BAD : undefined} />
+              <Mini label="Previstas sem registro" value={String(overdueScheduled)} tone={overdueScheduled ? WARN : undefined} />
+              <Mini label="Medicações ativas" value={String(medRows.length)} />
             </div>
           </div>
-        </section>
-      )}
-
-      {/* Aplicações e medicações */}
-      <section className={section}>
-        <h2 className={h2} style={{ color, borderColor: color }}>
-          Medicações e aplicações
-        </h2>
-        <div className="grid grid-cols-[1fr_190px] gap-3">
-          <div className={card}>
-            {uses.length > 0 ? (
-              <UsesChart uses={uses} color={color} />
-            ) : (
-              <p className="py-8 text-center text-neutral-500">Nenhuma aplicação registrada ainda.</p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <Stat label="Aplicações feitas" v={String(applied.length)} />
-            <Stat label="Não realizadas" v={String(missed.length)} tone={missed.length ? "#dc2626" : undefined} />
-            <Stat label="Adesão" v={adherence != null ? `${adherence}%` : "—"} />
-            {overdueScheduled > 0 && <Stat label="Previstas sem registro" v={String(overdueScheduled)} tone="#d97706" />}
-          </div>
-        </div>
-        {medRows.length > 0 && (
-          <table className="mt-3 w-full border-collapse text-[11px]">
-            <thead>
-              <tr className="text-left text-neutral-500">
-                <th className="border-b py-1 pr-2">Medicação</th>
-                <th className="border-b py-1 pr-2">Dose</th>
-                <th className="border-b py-1 pr-2">Frequência</th>
-                <th className="border-b py-1">Período</th>
-              </tr>
-            </thead>
-            <tbody>
-              {medRows.map((m, i) => (
-                <tr key={i} className="odd:bg-neutral-50">
-                  <td className="py-1 pr-2 font-semibold">{m.name}</td>
-                  <td className="py-1 pr-2">{m.dose}</td>
-                  <td className="py-1 pr-2">{m.freq}</td>
-                  <td className="py-1">{m.period}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
-
-      {/* Financeiro */}
-      {data.withFinance && financials.total > 0 && (
-        <section className={section}>
-          <h2 className={h2} style={{ color, borderColor: color }}>
-            Financeiro do plano
-          </h2>
-          <div className="grid grid-cols-[170px_1fr] items-center gap-4">
-            <Donut paid={financials.paid} total={financials.total} color={color} />
-            <div className="grid grid-cols-2 gap-2">
-              <Stat label="Valor contratado" v={brl(financials.total)} />
-              <Stat label="Desconto" v={brl(Number(t.discount || 0))} />
-              <Stat label="Pago" v={brl(financials.paid)} tone="#059669" />
-              <Stat label="Em aberto" v={brl(financials.open)} tone={financials.open ? "#d97706" : undefined} />
-              <Stat
-                label="Parcelas"
-                v={`${titles.filter((x) => Number(x.paid_amount || 0) >= Number(x.amount || 0)).length} de ${titles.length} pagas`}
-              />
-              <Stat
-                label="Próximo vencimento"
-                v={financials.nextDueDate ? dt(financials.nextDueDate) : "—"}
-                tone={overdue.length ? "#dc2626" : undefined}
-              />
+          {medRows.length > 0 && (
+            <div className="mt-3 overflow-hidden rounded-xl border" style={{ borderColor: LINE }}>
+              <table className="w-full border-collapse text-[11px]">
+                <thead>
+                  <tr style={{ background: soft }}>
+                    {["Medicação", "Dose", "Frequência", "Tipo"].map((h) => (
+                      <th key={h} className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide" style={{ color }}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {medRows.map((m, i) => (
+                    <tr key={i} style={{ borderTop: `1px solid ${LINE}`, background: i % 2 ? "#fafafa" : "#fff" }}>
+                      <td className="px-3 py-1.5 font-semibold">{m.name}</td>
+                      <td className="px-3 py-1.5">{m.dose}</td>
+                      <td className="px-3 py-1.5">{m.freq}</td>
+                      <td className="px-3 py-1.5" style={{ color: MUTED }}>
+                        {m.period}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </div>
-          {overdue.length > 0 && (
-            <p className="mt-2 rounded bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-700">
-              {overdue.length} parcela(s) em atraso.
-            </p>
           )}
         </section>
-      )}
 
-      {/* Histórico */}
-      {(evolutions.length > 0 || statuses.length > 0) && (
-        <section className={section}>
-          <h2 className={h2} style={{ color, borderColor: color }}>
-            Histórico do acompanhamento
-          </h2>
-          <ul className="space-y-1.5">
-            {[
-              ...evolutions.slice(0, 6).map((e) => ({
-                date: String(e.occurred_on),
-                text: `${e.is_return ? "Retorno: " : ""}${e.notes}${e.weight_kg ? ` (peso ${kg(Number(e.weight_kg))})` : ""}${e.next_step ? ` · Próximo passo: ${e.next_step}` : ""}`,
-              })),
-              ...statuses.slice(0, 4).map((s) => ({
-                date: String(s.created_at),
-                text: `Plano ${STATUS[s.status]?.toLowerCase() ?? s.status}: ${s.justification}`,
-              })),
-            ]
-              .sort((a, b) => b.date.localeCompare(a.date))
-              .map((h, i) => (
-                <li key={i} className="flex gap-3 break-inside-avoid">
-                  <span className="w-16 shrink-0 font-semibold text-neutral-500">{dt(h.date)}</span>
-                  <span className="whitespace-pre-wrap">{h.text}</span>
+        {/* Financeiro */}
+        {showFinance && (
+          <section className="mt-7 break-inside-avoid">
+            <SectionTitle n={num()} title="Financeiro do plano" color={color} />
+            <div className="grid grid-cols-[180px_1fr] items-center gap-5 rounded-xl border p-4" style={{ borderColor: LINE }}>
+              <Donut pct={paidPct} color={color} />
+              <div>
+                <div className="grid grid-cols-3 gap-2">
+                  <Mini label="Contratado" value={brl(financials.total)} strong />
+                  <Mini label="Pago" value={brl(financials.paid)} tone={GOOD} />
+                  <Mini label="Em aberto" value={brl(financials.open)} tone={financials.open ? WARN : undefined} />
+                  <Mini label="Desconto" value={brl(Number(t.discount || 0))} />
+                  <Mini label="Parcelas pagas" value={`${paidCount} de ${titles.length}`} />
+                  <Mini
+                    label="Próximo vencimento"
+                    value={financials.nextDueDate ? dt(financials.nextDueDate) : "—"}
+                    tone={overdue.length ? BAD : undefined}
+                  />
+                </div>
+                {overdue.length > 0 && (
+                  <p className="mt-2 rounded-lg px-3 py-1.5 text-[11px] font-semibold" style={{ background: "#fef2f2", color: BAD }}>
+                    {overdue.length} parcela(s) em atraso.
+                  </p>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Histórico */}
+        {history.length > 0 && (
+          <section className="mt-7 break-inside-avoid">
+            <SectionTitle n={num()} title="Histórico do acompanhamento" color={color} />
+            <ol className="relative ml-1.5 border-l-2 pl-5" style={{ borderColor: tint(color, 0.7) }}>
+              {history.map((h, i) => (
+                <li key={i} className="relative pb-3 last:pb-0 break-inside-avoid">
+                  <span
+                    className="absolute -left-[27px] top-1 size-3 rounded-full border-2 bg-white"
+                    style={{ borderColor: color }}
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold">{dt(h.date)}</span>
+                    <span className="rounded-full px-2 py-0.5 text-[9.5px] font-bold uppercase" style={{ background: soft, color }}>
+                      {h.tag}
+                    </span>
+                    {h.extra && <span style={{ color: MUTED }}>{h.extra}</span>}
+                  </div>
+                  <p className="mt-0.5 whitespace-pre-wrap" style={{ color: "#374151" }}>
+                    {h.text}
+                  </p>
                 </li>
               ))}
-          </ul>
-        </section>
-      )}
+            </ol>
+          </section>
+        )}
 
-      {/* Fotos */}
-      {photos.length > 0 && (
-        <section className={section}>
-          <h2 className={h2} style={{ color, borderColor: color }}>
-            Fotos de evolução
-          </h2>
-          <div className="grid grid-cols-4 gap-2">
-            {photos.map((p, i) => (
-              <figure key={i} className="break-inside-avoid">
-                {p.url && <img src={p.url} alt={p.title} className="h-40 w-full rounded object-cover" />}
-                <figcaption className="mt-0.5 text-[10px] text-neutral-500">
-                  {p.title} · {dt(p.date)}
-                </figcaption>
-              </figure>
-            ))}
+        {/* Fotos */}
+        {photos.length > 0 && (
+          <section className="mt-7 break-inside-avoid">
+            <SectionTitle n={num()} title="Fotos de evolução" color={color} />
+            <div className="grid grid-cols-4 gap-3">
+              {photos.map((p, i) => (
+                <figure key={i} className="overflow-hidden rounded-xl border break-inside-avoid" style={{ borderColor: LINE }}>
+                  {p.url && <img src={p.url} alt={p.title} className="h-40 w-full object-cover" />}
+                  <figcaption className="px-2 py-1 text-[10px]" style={{ color: MUTED }}>
+                    <b style={{ color: INK }}>{p.title}</b> · {dt(p.date)}
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Assinatura */}
+        <footer className="mt-12 flex items-end justify-between break-inside-avoid">
+          <div className="w-64 pt-1 text-center text-[11px]" style={{ borderTop: `1px solid #9ca3af`, color: "#4b5563" }}>
+            {t.doctors?.name ? `Dr(a). ${t.doctors.name}` : "Responsável"}
           </div>
-        </section>
-      )}
-
-      {/* Assinatura */}
-      <footer className="mt-12 flex items-end justify-between break-inside-avoid">
-        <div className="w-64 border-t border-neutral-400 pt-1 text-center text-[11px] text-neutral-600">
-          {t.doctors?.name ? `Dr(a). ${t.doctors.name}` : "Responsável"}
-        </div>
-        <div className="text-[10px] text-neutral-400">Gerado pelo MedCore · {dt(today)}</div>
-      </footer>
+          <div className="text-right text-[9.5px]" style={{ color: "#9ca3af" }}>
+            {clinic.name && <div>{clinic.name}</div>}
+            Gerado pelo MedCore em {dt(today)}
+          </div>
+        </footer>
+      </div>
     </article>
   );
 }
 
-function Info({ k, v }: { k: string; v: string }) {
+function SectionTitle({ n, title, color }: { n: string; title: string; color: string }) {
   return (
-    <p>
-      <span className="font-semibold text-neutral-500">{k}: </span>
-      <span className="font-semibold text-neutral-900">{v}</span>
-    </p>
+    <div className="mb-3 flex items-center gap-2.5">
+      <span
+        className="grid size-6 place-items-center rounded-md text-[10px] font-bold text-white"
+        style={{ background: color }}
+      >
+        {n}
+      </span>
+      <h2 className="text-[13.5px] font-bold" style={{ color: INK }}>
+        {title}
+      </h2>
+      <span className="h-px flex-1" style={{ background: LINE }} />
+    </div>
   );
 }
 
-function Stat({ label, v, tone }: { label: string; v: string; tone?: string }) {
+function Field({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-neutral-200 px-3 py-1.5">
-      <div className="text-[10px] font-semibold uppercase text-neutral-500">{label}</div>
-      <div className="text-[14px] font-bold" style={tone ? { color: tone } : undefined}>
-        {v}
+    <div className="py-3 pr-3">
+      <div className="text-[9.5px] font-semibold uppercase tracking-wide" style={{ color: MUTED }}>
+        {label}
+      </div>
+      <div className="truncate text-[12px] font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function Mini({ label, value, tone, strong }: { label: string; value: string; tone?: string; strong?: boolean }) {
+  return (
+    <div className="rounded-lg border px-3 py-1.5" style={{ borderColor: LINE }}>
+      <div className="text-[9.5px] font-semibold uppercase tracking-wide" style={{ color: MUTED }}>
+        {label}
+      </div>
+      <div className={strong ? "text-[14px] font-bold" : "text-[13px] font-semibold"} style={tone ? { color: tone } : undefined}>
+        {value}
       </div>
     </div>
   );
 }
 
-/** Linha do peso no tempo, com a meta tracejada. */
+function Empty({ text }: { text: string }) {
+  return (
+    <p className="grid h-40 place-items-center px-6 text-center text-[11px]" style={{ color: MUTED }}>
+      {text}
+    </p>
+  );
+}
+
+/** Indicador com anel de progresso (ring = null mostra só o número). */
+function Kpi({
+  ring,
+  color,
+  title,
+  value,
+  sub,
+}: {
+  ring: number | null;
+  color: string;
+  title: string;
+  value: string;
+  sub: string;
+}) {
+  const r = 17;
+  const c = 2 * Math.PI * r;
+  return (
+    <div className="flex items-center gap-3 rounded-xl border p-3" style={{ borderColor: LINE }}>
+      {ring != null && (
+        <svg viewBox="0 0 44 44" className="size-11 shrink-0" aria-hidden="true">
+          <circle cx="22" cy="22" r={r} fill="none" stroke={LINE} strokeWidth="5" />
+          <circle
+            cx="22"
+            cy="22"
+            r={r}
+            fill="none"
+            stroke={color}
+            strokeWidth="5"
+            strokeLinecap="round"
+            strokeDasharray={`${(c * Math.max(0, Math.min(100, ring))) / 100} ${c}`}
+            transform="rotate(-90 22 22)"
+          />
+        </svg>
+      )}
+      <div className="min-w-0">
+        <div className="text-[9.5px] font-semibold uppercase tracking-wide" style={{ color: MUTED }}>
+          {title}
+        </div>
+        <div className="text-[15px] font-bold leading-tight" style={{ color }}>
+          {value}
+        </div>
+        <div className="truncate text-[10px]" style={{ color: MUTED }}>
+          {sub}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Curva suave (Catmull-Rom → Bézier) passando pelos pontos. */
+function smoothPath(pts: [number, number][]) {
+  if (pts.length < 3) return pts.map((p, i) => `${i ? "L" : "M"}${p[0]},${p[1]}`).join(" ");
+  let d = `M${pts[0][0]},${pts[0][1]}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] ?? pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] ?? p2;
+    const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+    const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+    d += ` C${c1[0].toFixed(1)},${c1[1].toFixed(1)} ${c2[0].toFixed(1)},${c2[1].toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+  }
+  return d;
+}
+
+/** Peso no tempo: curva com área em degradê, rótulo em cada pesagem e meta tracejada. */
 function WeightChart({
   points,
   target,
@@ -619,60 +755,94 @@ function WeightChart({
   target: number | null;
   color: string;
 }) {
-  const W = 480;
-  const H = 190;
-  const pad = { l: 40, r: 12, t: 12, b: 26 };
+  const W = 500;
+  const H = 210;
+  const pad = { l: 34, r: 16, t: 22, b: 28 };
   const vals = [...points.map((p) => p.kg), ...(target != null ? [target] : [])];
-  const min = Math.floor(Math.min(...vals) - 1);
-  const max = Math.ceil(Math.max(...vals) + 1);
+  const span = Math.max(4, Math.max(...vals) - Math.min(...vals));
+  const min = Math.floor(Math.min(...vals) - span * 0.15);
+  const max = Math.ceil(Math.max(...vals) + span * 0.15);
   const t0 = new Date(points[0].date).getTime();
   const t1 = Math.max(t0 + 1, new Date(points[points.length - 1].date).getTime());
   const x = (d: string) => pad.l + ((new Date(d).getTime() - t0) / (t1 - t0)) * (W - pad.l - pad.r);
   const y = (v: number) => pad.t + ((max - v) / (max - min || 1)) * (H - pad.t - pad.b);
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => min + (max - min) * f);
-  const path = points.map((p, i) => `${i ? "L" : "M"}${x(p.date).toFixed(1)},${y(p.kg).toFixed(1)}`).join(" ");
-  const area = `${path} L${x(points[points.length - 1].date).toFixed(1)},${H - pad.b} L${pad.l},${H - pad.b} Z`;
-  const labelEvery = Math.max(1, Math.ceil(points.length / 6));
+  const step = Math.max(1, Math.round((max - min) / 4));
+  const ticks: number[] = [];
+  for (let v = min; v <= max; v += step) ticks.push(v);
+  const pts = points.map((p) => [x(p.date), y(p.kg)] as [number, number]);
+  const line = smoothPath(pts);
+  const area = `${line} L${pts[pts.length - 1][0].toFixed(1)},${H - pad.b} L${pts[0][0].toFixed(1)},${H - pad.b} Z`;
+  const showAll = points.length <= 8;
+  const labelEvery = Math.max(1, Math.ceil(points.length / 7));
+  const gid = `wg-${color.slice(1)}`;
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Gráfico de evolução do peso">
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <text x={pad.l - 4} y={10} textAnchor="end" fontSize="8.5" fill={MUTED}>
+        kg
+      </text>
       {ticks.map((v) => (
         <g key={v}>
-          <line x1={pad.l} x2={W - pad.r} y1={y(v)} y2={y(v)} stroke="#e5e5e5" />
-          <text x={pad.l - 6} y={y(v) + 3} textAnchor="end" fontSize="9" fill="#737373">
-            {v.toFixed(0)}
+          <line x1={pad.l} x2={W - pad.r} y1={y(v)} y2={y(v)} stroke={LINE} strokeDasharray="3 4" />
+          <text x={pad.l - 6} y={y(v) + 3} textAnchor="end" fontSize="9" fill={MUTED}>
+            {v}
           </text>
         </g>
       ))}
+      <line x1={pad.l} x2={W - pad.r} y1={H - pad.b} y2={H - pad.b} stroke="#d1d5db" />
       {target != null && (
         <g>
-          <line x1={pad.l} x2={W - pad.r} y1={y(target)} y2={y(target)} stroke="#059669" strokeDasharray="5 4" strokeWidth={1.5} />
-          <text x={W - pad.r} y={y(target) - 4} textAnchor="end" fontSize="9" fontWeight="bold" fill="#059669">
+          <line x1={pad.l} x2={W - pad.r} y1={y(target)} y2={y(target)} stroke={GOOD} strokeDasharray="6 4" strokeWidth={1.5} />
+          <rect x={W - pad.r - 78} y={y(target) - 17} width={78} height={14} rx={7} fill={GOOD} />
+          <text x={W - pad.r - 39} y={y(target) - 7} textAnchor="middle" fontSize="8.5" fontWeight="700" fill="#fff">
             Meta {target.toLocaleString("pt-BR")} kg
           </text>
         </g>
       )}
-      <path d={area} fill={color} opacity={0.1} />
-      <path d={path} fill="none" stroke={color} strokeWidth={2.5} strokeLinejoin="round" />
-      {points.map((p, i) => (
-        <g key={i}>
-          <circle cx={x(p.date)} cy={y(p.kg)} r={3.5} fill="#fff" stroke={color} strokeWidth={2} />
-          {(i === 0 || i === points.length - 1) && (
-            <text x={x(p.date)} y={y(p.kg) - 8} textAnchor="middle" fontSize="9" fontWeight="bold" fill="#262626">
-              {p.kg.toLocaleString("pt-BR")}
-            </text>
-          )}
-          {(i % labelEvery === 0 || i === points.length - 1) && (
-            <text x={x(p.date)} y={H - 8} textAnchor="middle" fontSize="9" fill="#737373">
-              {dtShort(p.date)}
-            </text>
-          )}
-        </g>
-      ))}
+      <path d={area} fill={`url(#${gid})`} />
+      <path d={line} fill="none" stroke={color} strokeWidth={2.75} strokeLinecap="round" strokeLinejoin="round" />
+      {points.map((p, i) => {
+        const last = i === points.length - 1;
+        const first = i === 0;
+        return (
+          <g key={i}>
+            <circle cx={pts[i][0]} cy={pts[i][1]} r={last ? 5 : 3.5} fill={last ? color : "#fff"} stroke={color} strokeWidth={2} />
+            {(showAll || first || last) && (
+              <text
+                x={pts[i][0]}
+                y={pts[i][1] - 9}
+                textAnchor={first ? "start" : last ? "end" : "middle"}
+                fontSize="9"
+                fontWeight={first || last ? 700 : 500}
+                fill={INK}
+              >
+                {p.kg.toLocaleString("pt-BR")}
+              </text>
+            )}
+            {(i % labelEvery === 0 || last) && (
+              <text
+                x={pts[i][0]}
+                y={H - 10}
+                textAnchor={first ? "start" : last ? "end" : "middle"}
+                fontSize="9"
+                fill={MUTED}
+              >
+                {dtShort(p.date)}
+              </text>
+            )}
+          </g>
+        );
+      })}
     </svg>
   );
 }
 
-/** Aplicações por semana (últimas 12): feitas e não realizadas, empilhadas. */
+/** Aplicações por semana (últimas 12): feitas e não realizadas, com o total sobre a barra. */
 function UsesChart({ uses, color }: { uses: DbRow[]; color: string }) {
   const weekStart = (iso: string) => {
     const d = new Date(`${iso.slice(0, 10)}T12:00:00`);
@@ -688,76 +858,96 @@ function UsesChart({ uses, color }: { uses: DbRow[]; color: string }) {
     map.set(k, v);
   }
   const weeks = [...map.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-12);
-  const W = 480;
-  const H = 170;
-  const pad = { l: 26, r: 8, t: 10, b: 26 };
-  const max = Math.max(1, ...weeks.map(([, v]) => v.ok + v.miss));
-  const bw = (W - pad.l - pad.r) / weeks.length;
-  const y = (v: number) => ((H - pad.t - pad.b) * v) / max;
+  const W = 500;
+  const H = 165;
+  const pad = { l: 24, r: 8, t: 18, b: 28 };
+  const max = Math.max(2, ...weeks.map(([, v]) => v.ok + v.miss));
+  const slot = (W - pad.l - pad.r) / Math.max(weeks.length, 6);
+  const bw = Math.min(30, slot * 0.58);
+  const h = (v: number) => ((H - pad.t - pad.b) * v) / max;
+  const base = H - pad.b;
+  const ticks = [0, Math.round(max / 2), max];
   return (
     <div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Gráfico de aplicações por semana">
-        {[0, Math.ceil(max / 2), max].map((v) => (
+        {ticks.map((v) => (
           <g key={v}>
-            <line x1={pad.l} x2={W - pad.r} y1={H - pad.b - y(v)} y2={H - pad.b - y(v)} stroke="#e5e5e5" />
-            <text x={pad.l - 5} y={H - pad.b - y(v) + 3} textAnchor="end" fontSize="9" fill="#737373">
+            <line x1={pad.l} x2={W - pad.r} y1={base - h(v)} y2={base - h(v)} stroke={LINE} strokeDasharray={v ? "3 4" : undefined} />
+            <text x={pad.l - 6} y={base - h(v) + 3} textAnchor="end" fontSize="9" fill={MUTED}>
               {v}
             </text>
           </g>
         ))}
         {weeks.map(([k, v], i) => {
-          const x = pad.l + i * bw + bw * 0.2;
-          const w = bw * 0.6;
+          const cx = pad.l + slot * i + slot / 2;
+          const x = cx - bw / 2;
+          const okH = h(v.ok);
+          const missH = h(v.miss);
           return (
             <g key={k}>
-              <rect x={x} y={H - pad.b - y(v.ok)} width={w} height={y(v.ok)} rx={2} fill={color} />
+              {v.ok > 0 && <rect x={x} y={base - okH} width={bw} height={okH} rx={4} fill={color} />}
               {v.miss > 0 && (
-                <rect x={x} y={H - pad.b - y(v.ok + v.miss)} width={w} height={y(v.miss)} rx={2} fill="#f87171" />
+                <rect x={x} y={base - okH - missH - (v.ok ? 1.5 : 0)} width={bw} height={missH} rx={4} fill="#f87171" />
               )}
-              <text x={x + w / 2} y={H - 9} textAnchor="middle" fontSize="9" fill="#737373">
+              <text x={cx} y={base - okH - missH - 5} textAnchor="middle" fontSize="9" fontWeight="700" fill={INK}>
+                {v.ok + v.miss}
+              </text>
+              <text x={cx} y={H - 10} textAnchor="middle" fontSize="8.5" fill={MUTED}>
                 {dtShort(k)}
               </text>
             </g>
           );
         })}
       </svg>
-      <div className="mt-1 flex gap-4 text-[10px] text-neutral-600">
-        <span className="inline-flex items-center gap-1">
-          <span className="inline-block size-2.5 rounded-sm" style={{ background: color }} /> Feitas
+      <div className="mt-1 flex items-center gap-4 pl-6 text-[10px]" style={{ color: MUTED }}>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-block size-2.5 rounded-full" style={{ background: color }} /> Feitas
         </span>
-        <span className="inline-flex items-center gap-1">
-          <span className="inline-block size-2.5 rounded-sm bg-red-400" /> Não realizadas
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-block size-2.5 rounded-full bg-red-400" /> Não realizadas
         </span>
-        <span className="text-neutral-400">por semana</span>
+        <span>· por semana</span>
       </div>
     </div>
   );
 }
 
-/** Rosca: quanto do valor contratado já foi pago. */
-function Donut({ paid, total, color }: { paid: number; total: number; color: string }) {
-  const pct = total > 0 ? Math.min(1, paid / total) : 0;
-  const r = 60;
+/** Rosca do valor pago, com pontas arredondadas e legenda. */
+function Donut({ pct, color }: { pct: number; color: string }) {
+  const r = 58;
   const c = 2 * Math.PI * r;
   return (
-    <svg viewBox="0 0 160 160" className="w-full" role="img" aria-label="Gráfico pago e em aberto">
-      <circle cx="80" cy="80" r={r} fill="none" stroke="#fde68a" strokeWidth="20" />
-      <circle
-        cx="80"
-        cy="80"
-        r={r}
-        fill="none"
-        stroke={color}
-        strokeWidth="20"
-        strokeDasharray={`${c * pct} ${c}`}
-        transform="rotate(-90 80 80)"
-      />
-      <text x="80" y="78" textAnchor="middle" fontSize="24" fontWeight="bold" fill="#171717">
-        {Math.round(pct * 100)}%
-      </text>
-      <text x="80" y="96" textAnchor="middle" fontSize="10" fill="#737373">
-        pago
-      </text>
-    </svg>
+    <div>
+      <svg viewBox="0 0 160 160" className="mx-auto w-[150px]" role="img" aria-label={`${pct}% pago`}>
+        <circle cx="80" cy="80" r={r} fill="none" stroke="#fde7c3" strokeWidth="18" />
+        {pct > 0 && (
+          <circle
+            cx="80"
+            cy="80"
+            r={r}
+            fill="none"
+            stroke={color}
+            strokeWidth="18"
+            strokeLinecap="round"
+            strokeDasharray={`${(c * pct) / 100} ${c}`}
+            transform="rotate(-90 80 80)"
+          />
+        )}
+        <text x="80" y="80" textAnchor="middle" fontSize="28" fontWeight="800" fill={INK}>
+          {pct}%
+        </text>
+        <text x="80" y="98" textAnchor="middle" fontSize="10.5" fill={MUTED}>
+          pago
+        </text>
+      </svg>
+      <div className="mt-1 flex justify-center gap-3 text-[10px]" style={{ color: MUTED }}>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block size-2.5 rounded-full" style={{ background: color }} /> Pago
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block size-2.5 rounded-full" style={{ background: "#fde7c3" }} /> Em aberto
+        </span>
+      </div>
+    </div>
   );
 }
