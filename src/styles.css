@@ -550,21 +550,15 @@ a:focus:not(:focus-visible) {
     --aurora-3: #2a3a3b;
   }
   /* Logo colorida do cliente: sem o filtro que pinta de branco. */
-  /* Logo com fundo próprio: cartão branco puro (igual ao fundo da imagem, sem "quadro dentro
-     do quadro"), logo maior, sombra suave e anel fino. */
+  /* Logo com fundo branco próprio (ex.: JPG): inverte (fundo vira preto, desenho vira claro)
+     e "screen" some com o preto sobre o painel: fica só o desenho em branco, como nas logos
+     transparentes, sem cartão. */
   .auth-plate-logo[data-original] {
-    filter: none;
+    filter: grayscale(1) invert(1) contrast(1.6) brightness(1.15);
+    mix-blend-mode: screen;
     opacity: 1;
-    /* !important: vence as classes de tamanho do <img> (camada utilities) */
-    width: min(82%, 440px) !important;
-    max-height: 320px !important;
-    padding: 2rem 2.5rem;
-    border-radius: 1.75rem;
-    background: #fff;
-    box-shadow:
-      0 0 0 1px rgb(255 255 255 / 35%),
-      0 1px 2px rgb(0 0 0 / 8%),
-      0 30px 60px -28px rgb(0 0 0 / 55%);
+    /* Esses arquivos costumam ter margem branca larga: amplia para ocupar o painel */
+    transform: scale(1.45);
   }
   .auth-card h1 {
     color: var(--auth-ink);

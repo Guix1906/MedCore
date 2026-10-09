@@ -601,7 +601,8 @@ function BrandingSection({
               onChange={(e) => setBrand({ ...brand, logo_white: e.target.checked })}
               className="size-4 accent-primary"
             />
-            Mostrar a logo em branco no painel colorido (desmarque para manter as cores da logo)
+            A logo tem fundo transparente (PNG/SVG). Desmarque se ela tiver fundo branco (ex.: JPG): o
+            sistema remove o fundo. Nos dois casos ela aparece em branco sobre o painel.
           </label>
         </div>
         {color("primary", "Cor principal")}
@@ -632,7 +633,7 @@ function BrandingSection({
             style={
               brand.logo_white
                 ? { filter: "brightness(0) invert(1)" }
-                : { background: "#fff", padding: "12px 18px", borderRadius: 16, boxShadow: "0 12px 28px -14px rgb(0 0 0 / 50%)" }
+                : { filter: "grayscale(1) invert(1) contrast(1.6) brightness(1.15)", mixBlendMode: "screen" }
             }
           />
         ) : (
