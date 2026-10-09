@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ClinicaRouteImport } from './routes/$clinica'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedAcompanhamentosRouteImport } from './routes/_authenticated/acompanhamentos'
@@ -29,6 +30,11 @@ import { Route as AuthenticatedAcompanhamentosIdRouteImport } from './routes/_au
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ClinicaRoute = ClinicaRouteImport.update({
+  id: '/$clinica',
+  path: '/$clinica',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
@@ -112,6 +118,7 @@ const AuthenticatedAcompanhamentosIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/$clinica': typeof ClinicaRoute
   '/auth': typeof AuthRoute
   '/acompanhamentos': typeof AuthenticatedAcompanhamentosRouteWithChildren
   '/admin': typeof AuthenticatedAdminRoute
@@ -129,6 +136,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/$clinica': typeof ClinicaRoute
   '/auth': typeof AuthRoute
   '/acompanhamentos': typeof AuthenticatedAcompanhamentosRouteWithChildren
   '/admin': typeof AuthenticatedAdminRoute
@@ -148,6 +156,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/$clinica': typeof ClinicaRoute
   '/auth': typeof AuthRoute
   '/_authenticated/acompanhamentos': typeof AuthenticatedAcompanhamentosRouteWithChildren
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
@@ -167,6 +176,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/$clinica'
     | '/auth'
     | '/acompanhamentos'
     | '/admin'
@@ -184,6 +194,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/$clinica'
     | '/auth'
     | '/acompanhamentos'
     | '/admin'
@@ -202,6 +213,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_authenticated'
+    | '/$clinica'
     | '/auth'
     | '/_authenticated/acompanhamentos'
     | '/_authenticated/admin'
@@ -221,6 +233,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  ClinicaRoute: typeof ClinicaRoute
   AuthRoute: typeof AuthRoute
 }
 
@@ -231,6 +244,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/$clinica': {
+      id: '/$clinica'
+      path: '/$clinica'
+      fullPath: '/$clinica'
+      preLoaderRoute: typeof ClinicaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated': {
@@ -392,6 +412,7 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  ClinicaRoute: ClinicaRoute,
   AuthRoute: AuthRoute,
 }
 export const routeTree = rootRouteImport

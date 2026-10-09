@@ -40,8 +40,19 @@ export type PlatformClient = {
   statusReason: string | null;
   statusChangedAt: string | null;
   createdAt: string | null;
+  branding: ClientBranding;
   users: ClientUser[];
   roles: ClientRole[];
+};
+
+/** Identidade visual da tela de login do cliente (meedcore.vercel.app/<slug>). */
+export type ClientBranding = {
+  slug: string;
+  logo_url: string;
+  logo_white: boolean;
+  primary: string;
+  secondary: string;
+  tagline: string;
 };
 
 export type ClientData = {
@@ -100,6 +111,14 @@ export async function listClients(): Promise<PlatformClient[]> {
       statusReason: s(r.status_reason),
       statusChangedAt: s(r.status_changed_at),
       createdAt: s(r.created_at),
+      branding: {
+        slug: s(r.slug) ?? "",
+        logo_url: s(r.brand_logo_url) ?? "",
+        logo_white: r.brand_logo_white !== false,
+        primary: s(r.brand_primary) ?? "",
+        secondary: s(r.brand_secondary) ?? "",
+        tagline: s(r.brand_tagline) ?? "",
+      },
       users: (Array.isArray(r.users) ? r.users : []).map((u) => {
         const x = (u ?? {}) as Record<string, unknown>;
         return {
@@ -127,6 +146,32 @@ export async function listClients(): Promise<PlatformClient[]> {
 export async function saveClient(id: string | null, data: ClientData): Promise<string> {
   const r = await rpc<string>("platform_save_client", { p_id: id, p_data: data });
   return String(r);
+}
+
+export async function saveClientBranding(companyId: string, data: ClientBranding) {
+  await rpc("platform_save_client_branding", { p_company_id: companyId, p_data: data });
+}
+
+/** Envia a logo para o bucket público e devolve o endereço da imagem. */
+export async function uploadClientLogo(companyId: string, file: File): Promise<string> {
+  const ext = (file.name.split(".").pop() ?? "png").toLowerCase().replace(/[^a-z0-9]/g, "") || "png";
+  const path = `${companyId}/logo-${Date.now()}.${ext}`;
+  const { error } = await supabase.storage
+    .from("client-branding")
+    .upload(path, file, { contentType: file.type, upsert: false });
+  if (error) throw toAdminError(error);
+  return supabase.storage.from("client-branding").getPublicUrl(path).data.publicUrl;
+}
+
+/** Sugestão de endereço a partir do nome: "Clínica Senyor" → "clinica-senyor". */
+export function slugify(name: string) {
+  return name
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 50);
 }
 
 export async function createClientUser(input: {

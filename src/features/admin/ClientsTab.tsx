@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Building2, Pencil, Search, Trash2, UserPlus } from "lucide-react";
+import { Building2, Copy, ExternalLink, Pencil, Search, Trash2, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,9 +26,13 @@ import {
   createClientUser,
   listClients,
   saveClient,
+  saveClientBranding,
   setClientStatus,
   setClientUserPassword,
+  slugify,
   updateClientUser,
+  uploadClientLogo,
+  type ClientBranding,
   type ClientData,
   type ClientRole,
   type ClientStatus,
@@ -147,6 +151,35 @@ export function ClientsTab() {
                     </p>
                   )}
                   <p className="mt-1 text-xs text-muted-foreground">Cliente desde {fmtDate(c.createdAt)}</p>
+                  {c.branding.slug ? (
+                    <div className="mt-1 flex flex-wrap items-center gap-1 text-xs">
+                      <span className="text-muted-foreground">Login:</span>
+                      <a
+                        href={loginUrl(c.branding.slug)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+                      >
+                        {loginUrl(c.branding.slug)} <ExternalLink className="size-3" aria-hidden="true" />
+                      </a>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2"
+                        onClick={() =>
+                          void navigator.clipboard
+                            .writeText(loginUrl(c.branding.slug))
+                            .then(() => toast.success("Link copiado."))
+                        }
+                      >
+                        <Copy aria-hidden="true" /> Copiar
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Sem tela de login própria. Use “Editar” para definir logo, cores e link.
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" size="sm" onClick={() => setDialog({ kind: "client", client: c })}>
@@ -325,6 +358,12 @@ function ClientForm({
         }
       : EMPTY,
   );
+  const [brand, setBrand] = useState<ClientBranding>(() => ({ ...EMPTY_BRAND, ...client?.branding }));
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const logoPreview = useMemo(() => (logoFile ? URL.createObjectURL(logoFile) : brand.logo_url), [logoFile, brand.logo_url]);
+  useEffect(() => () => {
+    if (logoFile) URL.revokeObjectURL(logoPreview);
+  }, [logoFile, logoPreview]);
   const [user, setUser] = useState({ fullName: "", email: "", password: "" });
   const [busy, setBusy] = useState(false);
   const set = (k: keyof ClientData) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -337,9 +376,14 @@ function ClientForm({
       if (!user.email.trim() || !user.fullName.trim()) return toast.error("Informe nome e e-mail do usuário.");
       if (user.password.length < 8) return toast.error("A senha deve ter no mínimo 8 caracteres.");
     }
+    const slug = brand.slug.trim() || slugify(data.name);
+    if (slug && !/^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$/.test(slug))
+      return toast.error("Endereço do login: só letras minúsculas, números e hífen (3 a 50).");
     setBusy(true);
     try {
       const id = await saveClient(client?.id ?? null, data);
+      const logo_url = logoFile ? await uploadClientLogo(id, logoFile) : brand.logo_url;
+      await saveClientBranding(id, { ...brand, slug, logo_url });
       if (isNew) {
         const r = await createClientUser({ companyId: id, ...user });
         toast.success(`Cliente criado. Acesso: ${r.email}`, {
@@ -401,6 +445,14 @@ function ClientForm({
         </div>
       </section>
 
+      <BrandingSection
+        brand={brand}
+        setBrand={setBrand}
+        slugHint={slugify(data.name)}
+        logoPreview={logoPreview}
+        onLogo={setLogoFile}
+      />
+
       {isNew && (
         <section className="space-y-3 rounded-lg border border-border p-3">
           <h4 className="text-sm font-semibold text-foreground">Primeiro usuário (Proprietário)</h4>
@@ -442,6 +494,147 @@ function ClientForm({
         </Button>
       </DialogFooter>
     </form>
+  );
+}
+
+const EMPTY_BRAND: ClientBranding = {
+  slug: "",
+  logo_url: "",
+  logo_white: true,
+  primary: "#2c7f86",
+  secondary: "#3f9ea3",
+  tagline: "",
+};
+
+export function loginUrl(slug: string) {
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://meedcore.vercel.app";
+  return `${origin}/${slug}`;
+}
+
+/** Logo, cores e frase da tela de login do cliente, com prévia do painel da marca. */
+function BrandingSection({
+  brand,
+  setBrand,
+  slugHint,
+  logoPreview,
+  onLogo,
+}: {
+  brand: ClientBranding;
+  setBrand: (b: ClientBranding) => void;
+  slugHint: string;
+  logoPreview: string;
+  onLogo: (f: File | null) => void;
+}) {
+  const slug = brand.slug || slugHint;
+  const color = (k: "primary" | "secondary", label: string) => (
+    <div className="space-y-1">
+      <Label htmlFor={`b-${k}`}>{label}</Label>
+      <div className="flex gap-2">
+        <input
+          type="color"
+          aria-label={label}
+          value={brand[k] || "#2c7f86"}
+          onChange={(e) => setBrand({ ...brand, [k]: e.target.value })}
+          className="h-9 w-12 cursor-pointer rounded border border-border bg-transparent"
+        />
+        <Input
+          id={`b-${k}`}
+          value={brand[k]}
+          maxLength={7}
+          onChange={(e) => setBrand({ ...brand, [k]: e.target.value.trim().toLowerCase() })}
+          placeholder="#2c7f86"
+        />
+      </div>
+    </div>
+  );
+  return (
+    <section className="space-y-3 rounded-lg border border-border p-3">
+      <h4 className="text-sm font-semibold text-foreground">Identidade visual da tela de login</h4>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="space-y-1 sm:col-span-2">
+          <Label htmlFor="b-slug">Endereço do login</Label>
+          <div className="flex items-center rounded-md border border-input pl-3 text-sm">
+            <span className="shrink-0 text-muted-foreground">meedcore.vercel.app/</span>
+            <input
+              id="b-slug"
+              value={brand.slug}
+              placeholder={slugHint || "nomedaclinica"}
+              onChange={(e) => setBrand({ ...brand, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") })}
+              className="h-9 min-w-0 flex-1 bg-transparent pr-3 outline-none"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">Em branco: usa o nome da empresa ({slugHint || "—"}).</p>
+        </div>
+        <div className="space-y-1 sm:col-span-2">
+          <Label htmlFor="b-logo">Logo (PNG, SVG, JPG ou WebP, até 2 MB)</Label>
+          <Input
+            id="b-logo"
+            type="file"
+            accept="image/png,image/svg+xml,image/jpeg,image/webp"
+            onChange={(e) => {
+              const f = e.target.files?.[0] ?? null;
+              if (f && f.size > 2 * 1024 * 1024) {
+                toast.error("A logo deve ter no máximo 2 MB.");
+                e.target.value = "";
+                return;
+              }
+              onLogo(f);
+            }}
+          />
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={brand.logo_white}
+              onChange={(e) => setBrand({ ...brand, logo_white: e.target.checked })}
+              className="size-4 accent-primary"
+            />
+            Mostrar a logo em branco no painel colorido (desmarque para manter as cores da logo)
+          </label>
+        </div>
+        {color("primary", "Cor principal")}
+        {color("secondary", "Cor de destaque")}
+        <div className="space-y-1 sm:col-span-2">
+          <Label htmlFor="b-tagline">Frase abaixo da logo</Label>
+          <Input
+            id="b-tagline"
+            maxLength={200}
+            value={brand.tagline}
+            onChange={(e) => setBrand({ ...brand, tagline: e.target.value })}
+            placeholder="Ex.: Cuidado com precisão, do primeiro atendimento ao acompanhamento."
+          />
+        </div>
+      </div>
+      {/* Prévia do painel da marca e do botão Entrar com as cores escolhidas */}
+      <div
+        className="flex flex-col items-center gap-3 rounded-xl p-5 text-center"
+        style={{
+          background: `linear-gradient(150deg, color-mix(in srgb, ${brand.primary || "#2c7f86"} 82%, black) 0%, ${brand.primary || "#2c7f86"} 55%, ${brand.secondary || brand.primary || "#3f9ea3"} 100%)`,
+        }}
+      >
+        {logoPreview ? (
+          <img
+            src={logoPreview}
+            alt="Prévia da logo"
+            className="max-h-20 max-w-[70%] object-contain"
+            style={brand.logo_white ? { filter: "brightness(0) invert(1)" } : undefined}
+          />
+        ) : (
+          <span className="text-sm text-white/80">Sem logo: aparece a do consultório padrão</span>
+        )}
+        {brand.tagline && <p className="text-xs text-white/80">{brand.tagline}</p>}
+        <span
+          className="rounded-full px-6 py-2 text-sm font-semibold text-white shadow"
+          style={{ background: `linear-gradient(135deg, ${brand.secondary || brand.primary} 0%, ${brand.primary} 100%)` }}
+        >
+          Entrar
+        </span>
+      </div>
+      {slug && (
+        <p className="text-xs text-muted-foreground">
+          Link do cliente: <b className="text-foreground">{loginUrl(slug)}</b>
+        </p>
+      )}
+    </section>
   );
 }
 

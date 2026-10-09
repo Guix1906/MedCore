@@ -501,6 +501,58 @@ a:focus:not(:focus-visible) {
   .dark .auth-canvas::before {
     background: linear-gradient(155deg, #0d1314 0%, #101718 100%);
   }
+  /* Login de um cliente: as duas cores cadastradas na aba Clientes (--brand e --brand-2)
+     substituem o teal mantendo o mesmo desenho (painel, botão, aurora e sombras). */
+  .auth-canvas[data-brand] {
+    --primary: var(--brand);
+    --ring: var(--brand-2);
+    --auth-plate: linear-gradient(
+      150deg,
+      color-mix(in srgb, var(--brand) 82%, black) 0%,
+      var(--brand) 55%,
+      var(--brand-2) 100%
+    );
+    --auth-card-shadow:
+      0 1px 2px rgb(29 43 44 / 5%),
+      0 30px 60px -30px color-mix(in srgb, var(--brand) 28%, transparent);
+    --auth-plate-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 18%), 0 2px 6px rgb(16 42 44 / 10%),
+      0 44px 90px -40px color-mix(in srgb, var(--brand) 55%, transparent);
+    --auth-cta: linear-gradient(135deg, var(--brand-2) 0%, var(--brand) 100%);
+    --auth-cta-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 20%),
+      0 12px 24px -12px color-mix(in srgb, var(--brand) 65%, transparent);
+    --auth-cta-shadow-hover:
+      inset 0 1px 0 rgb(255 255 255 / 24%),
+      0 18px 32px -14px color-mix(in srgb, var(--brand) 75%, transparent);
+    --aurora-1: color-mix(in srgb, var(--brand) 45%, white);
+    --aurora-2: color-mix(in srgb, var(--brand-2) 25%, white);
+    --aurora-3: #e9e2d4;
+  }
+  .dark .auth-canvas[data-brand] {
+    --primary: color-mix(in srgb, var(--brand) 70%, white);
+    --ring: color-mix(in srgb, var(--brand) 70%, white);
+    --auth-plate: linear-gradient(
+      150deg,
+      color-mix(in srgb, var(--brand) 45%, black) 0%,
+      color-mix(in srgb, var(--brand) 62%, black) 60%,
+      color-mix(in srgb, var(--brand-2) 70%, black) 100%
+    );
+    --auth-halo: color-mix(in srgb, var(--brand-2) 14%, transparent);
+    --auth-cta-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 18%),
+      0 12px 26px -12px color-mix(in srgb, var(--brand-2) 50%, transparent);
+    --auth-cta-shadow-hover:
+      inset 0 1px 0 rgb(255 255 255 / 22%),
+      0 18px 34px -14px color-mix(in srgb, var(--brand-2) 60%, transparent);
+    --aurora-1: color-mix(in srgb, var(--brand) 60%, black);
+    --aurora-2: color-mix(in srgb, var(--brand) 40%, black);
+    --aurora-3: #2a3a3b;
+  }
+  /* Logo colorida do cliente: sem o filtro que pinta de branco. */
+  .auth-plate-logo[data-original] {
+    filter: none;
+  }
   .auth-card h1 {
     color: var(--auth-ink);
   }

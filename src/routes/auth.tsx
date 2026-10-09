@@ -10,6 +10,12 @@ import { invalidateAuthRouteCache } from "@/routes/_authenticated/route";
 import { qk } from "@/lib/query-keys";
 import { getSiteOrigin } from "@/services/site-origin";
 import {
+  DEFAULT_BRANDING,
+  LAST_CLINIC_KEY,
+  brandingStyle,
+  type LoginBranding,
+} from "@/features/branding/login-branding";
+import {
   ArrowRight,
   Eye,
   EyeOff,
@@ -21,7 +27,7 @@ import {
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
-type AuthSearch = { redirect?: string; modo?: "convite" | "nova-senha" };
+export type AuthSearch ={ redirect?: string; modo?: "convite" | "nova-senha" };
 type AuthMode = "signin" | "signup" | "forgot" | "password";
 
 
@@ -54,10 +60,7 @@ function errorMessage(error: unknown) {
 }
 
 export const Route = createFileRoute("/auth")({
-  validateSearch: (search: Record<string, unknown>): AuthSearch => ({
-    redirect: safeRedirectPath(search.redirect) ?? undefined,
-    modo: search.modo === "convite" || search.modo === "nova-senha" ? search.modo : undefined,
-  }),
+  validateSearch: validateAuthSearch,
   loader: async () => {
     try {
       const origin = await getSiteOrigin();
@@ -155,9 +158,70 @@ function GoogleIcon() {
 }
 
 function AuthPage() {
+  const search = Route.useSearch();
+  const router = useRouter();
+  // Quem entrou pelo link de um cliente volta para a tela daquele cliente (ex.: ao sair).
+  useEffect(() => {
+    if (search.modo) return;
+    let slug: string | null = null;
+    try {
+      slug = window.localStorage.getItem(LAST_CLINIC_KEY);
+    } catch {
+      return;
+    }
+    if (slug && /^[a-z0-9-]{3,50}$/.test(slug)) {
+      const query = search.redirect ? `?redirect=${encodeURIComponent(search.redirect)}` : "";
+      router.history.replace(`/${slug}${query}`);
+    }
+  }, [router, search.modo, search.redirect]);
+  return <AuthScreen search={search} branding={DEFAULT_BRANDING} />;
+}
+
+export function validateAuthSearch(search: Record<string, unknown>): AuthSearch {
+  return {
+    redirect: safeRedirectPath(search.redirect) ?? undefined,
+    modo: search.modo === "convite" || search.modo === "nova-senha" ? search.modo : undefined,
+  };
+}
+
+/** Logo do cliente; sem logo cadastrada, a do consultório Dr. Jonatas Bandeira. */
+function ClinicLogo({
+  branding,
+  sizes,
+  className,
+  plate,
+}: {
+  branding: LoginBranding;
+  sizes: string;
+  className: string;
+  plate?: boolean;
+}) {
+  if (branding.logoUrl) {
+    return (
+      <img
+        src={branding.logoUrl}
+        alt={branding.name}
+        draggable={false}
+        data-original={plate && !branding.logoWhite ? "" : undefined}
+        className={className}
+      />
+    );
+  }
+  return (
+    <img
+      src="/assets/dr-jonatas-bandeira-logo@2x.png"
+      srcSet="/assets/dr-jonatas-bandeira-logo.png 800w, /assets/dr-jonatas-bandeira-logo@2x.png 1600w, /assets/dr-jonatas-bandeira-logo@3x.png 2400w"
+      sizes={sizes}
+      alt={DEFAULT_BRANDING.name}
+      draggable={false}
+      className={className}
+    />
+  );
+}
+
+export function AuthScreen({ search, branding }: { search: AuthSearch; branding: LoginBranding }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const search = Route.useSearch();
   const target = search.redirect ?? "/dashboard";
   const [mode, setMode] = useState<AuthMode>(search.modo ? "password" : "signin");
   const [email, setEmail] = useState("");
@@ -377,7 +441,11 @@ function AuthPage() {
   };
 
   return (
-    <div className="auth-canvas grid min-h-dvh lg:grid-cols-2">
+    <div
+      className="auth-canvas grid min-h-dvh lg:grid-cols-2"
+      data-brand={brandingStyle(branding) ? "" : undefined}
+      style={brandingStyle(branding)}
+    >
       <div className="aurora-container auth-aurora" aria-hidden="true">
         <div className="aurora-wave aurora-1" />
         <div className="aurora-wave aurora-2" />
@@ -390,17 +458,17 @@ function AuthPage() {
             style={cardHeight ? { height: cardHeight, aspectRatio: "auto" } : undefined}
           >
             <div className="relative flex flex-col items-center gap-6 text-center">
-              <img
-                src="/assets/dr-jonatas-bandeira-logo@2x.png"
-                srcSet="/assets/dr-jonatas-bandeira-logo.png 800w, /assets/dr-jonatas-bandeira-logo@2x.png 1600w, /assets/dr-jonatas-bandeira-logo@3x.png 2400w"
+              <ClinicLogo
+                branding={branding}
+                plate
                 sizes="(max-width: 1280px) 520px, 640px"
-                alt="Dr. Jonatas Bandeira - Nutrologia"
-                draggable={false}
-                className="auth-plate-logo w-[88%] max-w-[520px] select-none object-contain"
+                className="auth-plate-logo max-h-[260px] w-[88%] max-w-[520px] select-none object-contain"
               />
-              <p className="max-w-[22rem] text-[15px] leading-relaxed text-white/80">
-                Cuidado nutrológico com precisão, do primeiro atendimento ao acompanhamento.
-              </p>
+              {branding.tagline && (
+                <p className="max-w-[22rem] text-[15px] leading-relaxed text-white/80">
+                  {branding.tagline}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -409,12 +477,9 @@ function AuthPage() {
         <div className="relative w-full max-w-[440px]">
         <div ref={cardRef} className="auth-card auth-edge auth-rise w-full max-w-[440px] rounded-[28px] p-6 [animation-delay:120ms] sm:px-10 sm:py-9">
           <div className="mb-6 flex flex-col items-center text-center">
-            <img
-              src="/assets/dr-jonatas-bandeira-logo@2x.png"
-              srcSet="/assets/dr-jonatas-bandeira-logo.png 800w, /assets/dr-jonatas-bandeira-logo@2x.png 1600w, /assets/dr-jonatas-bandeira-logo@3x.png 2400w"
+            <ClinicLogo
+              branding={branding}
               sizes="(max-width: 640px) 260px, 340px"
-              alt="Dr. Jonatas Bandeira - Nutrologia"
-              draggable={false}
               className="mb-6 h-24 sm:h-28 w-auto max-w-[85%] select-none object-contain drop-shadow-sm lg:hidden"
             />
             <div key={mode} className="auth-swap">
@@ -664,7 +729,10 @@ function AuthPage() {
         {/* Rodapé fora do fluxo: o cartão fica centralizado na mesma linha do painel da marca. */}
         <div className="absolute left-0 right-0 top-full mt-6 flex items-center justify-center gap-2 text-center text-xs text-foreground/70">
           <BrandSymbol size="small" interactive={false} className="[&_img]:size-4" />
-          <span>MedCore © {new Date().getFullYear()} · Consultório Dr. Jonatas Bandeira</span>
+          <span>
+            MedCore © {new Date().getFullYear()} ·{" "}
+            {branding.slug ? branding.name : "Consultório Dr. Jonatas Bandeira"}
+          </span>
         </div>
         </div>
       </main>
