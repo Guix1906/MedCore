@@ -109,9 +109,9 @@ const ALL_CITIES = "__todas";
 /** Opção do seletor de cidade: nome à esquerda, quantidade de planos num selo à direita. */
 function CityOption({ name, count, muted }: { name: string; count: number; muted?: boolean }) {
   return (
-    <span className="flex w-full min-w-[170px] items-center justify-between gap-3">
-      <span className={`truncate ${muted ? "italic text-muted-foreground" : ""}`}>{name}</span>
-      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-primary">
+    <span className="flex w-full min-w-[160px] items-center justify-between gap-3">
+      <span className={`min-w-0 truncate ${muted ? "italic text-muted-foreground" : ""}`}>{name}</span>
+      <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold leading-none tabular-nums text-primary">
         {count}
       </span>
     </span>
@@ -611,12 +611,15 @@ function AcompanhamentosPage() {
               >
                 <SelectTrigger
                   aria-label="Filtrar por cidade"
-                  className={`h-10 w-[220px] rounded-xl bg-card text-sm ${cityFilter ? "border-primary text-primary" : ""}`}
+                  className={`h-10 w-[240px] gap-2 rounded-xl bg-card text-sm ${cityFilter ? "border-primary" : ""}`}
                 >
-                  <span className="flex min-w-0 items-center gap-2">
+                  {/* div (não span): o gatilho aplica line-clamp aos spans filhos e quebraria a linha */}
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
                     <MapPin size={15} className="shrink-0 text-muted-foreground" />
-                    <SelectValue />
-                  </span>
+                    <div className="min-w-0 flex-1 text-left">
+                      <SelectValue />
+                    </div>
+                  </div>
                 </SelectTrigger>
                 <SelectContent className="max-h-[340px] rounded-xl">
                   <SelectItem value={ALL_CITIES} className="rounded-lg py-2">
