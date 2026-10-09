@@ -102,11 +102,18 @@ type ListSearch = {
 };
 
 const NO_CITY = "Sem cidade";
-/** Cidade do paciente do plano, normalizada para agrupar ("teresina " = "Teresina"). */
+const LOWER_WORDS = new Set(["de", "da", "do", "das", "dos", "e"]);
+/** Cidade do paciente do plano, normalizada: "barra do corda " = "Barra do Corda". */
 const cityOf = (t: Treatment) => {
-  const c = (t.patients?.city ?? "").trim().replace(/\s+/g, " ");
-  return c ? c.charAt(0).toLocaleUpperCase("pt-BR") + c.slice(1) : NO_CITY;
+  const c = (t.patients?.city ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR");
+  if (!c) return NO_CITY;
+  return c
+    .split(" ")
+    .map((w, i) => (i > 0 && LOWER_WORDS.has(w) ? w : w.charAt(0).toLocaleUpperCase("pt-BR") + w.slice(1)))
+    .join(" ");
 };
+/** Chave sem acento: "Grajau" e "Grajaú" são a mesma cidade. */
+const cityKey = (c: string) => c.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 const sameCity = (a: string, b: string) =>
   a.localeCompare(b, "pt-BR", { sensitivity: "base" }) === 0;
 const SORT_LABEL: Record<(typeof SORTS)[number], string> = {
@@ -314,8 +321,10 @@ function AcompanhamentosPage() {
     for (const r of rows) {
       if (!passesStatus(r)) continue;
       const city = cityOf(r);
-      const key = city.toLocaleLowerCase("pt-BR");
+      const key = cityKey(city);
       const c = map.get(key) ?? { city, total: 0, ativos: 0 };
+      // Entre as grafias da mesma cidade, mostra a acentuada ("Grajaú")
+      if (city !== c.city && city.normalize("NFD").length > c.city.normalize("NFD").length) c.city = city;
       c.total++;
       if (r.status === "em_andamento") c.ativos++;
       map.set(key, c);
@@ -558,51 +567,6 @@ function AcompanhamentosPage() {
           ))}
         </div>
 
-        {/* Planos por cidade: cada cidade filtra a lista (clicar de novo limpa) */}
-        {cityCounts.length > 0 && (
-          <section aria-label="Planos por cidade" className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <h2 className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase text-muted-foreground">
-                <MapPin size={13} /> Planos por cidade
-              </h2>
-              {cityFilter && (
-                <button
-                  type="button"
-                  onClick={() => setSearch({ cidade: undefined })}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline cursor-pointer"
-                >
-                  Ver todas as cidades <X size={12} />
-                </button>
-              )}
-            </div>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {cityCounts.map((c) => {
-                const active = !!cityFilter && sameCity(c.city, cityFilter);
-                return (
-                  <button
-                    key={c.city}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => setSearch({ cidade: active ? undefined : c.city })}
-                    className={`shrink-0 rounded-xl border bg-card px-3.5 py-2 text-left shadow-2xs transition cursor-pointer hover:border-primary/40 ${
-                      active ? "border-primary ring-2 ring-primary/20" : "border-border/80"
-                    } ${c.city === NO_CITY ? "border-dashed" : ""}`}
-                  >
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-sm font-semibold text-foreground">{c.city}</span>
-                      <span className="text-lg font-semibold tabular-nums text-primary">{c.total}</span>
-                    </div>
-                    <div className="text-[11px] text-muted-foreground">
-                      {c.total === 1 ? "plano" : "planos"}
-                      {c.ativos > 0 && c.ativos !== c.total ? ` · ${c.ativos} em andamento` : ""}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        )}
-
         {/* Barra de Filtros e Busca */}
         <div className="space-y-2.5">
           <div className="flex flex-wrap items-center gap-2">
@@ -619,6 +583,33 @@ function AcompanhamentosPage() {
                 className="w-full h-10 pl-10 pr-3 rounded-xl bg-card border border-border focus:border-primary outline-none text-sm transition"
               />
             </div>
+            {/* Cidade: cada opção mostra quantos planos há nela (respeita o filtro de situação) */}
+            {cityCounts.length > 0 && (
+              <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <MapPin size={14} aria-hidden="true" />
+                Cidade
+                <select
+                  value={
+                    cityFilter
+                      ? (cityCounts.find((c) => sameCity(c.city, cityFilter))?.city ?? cityFilter)
+                      : ""
+                  }
+                  onChange={(e) => setSearch({ cidade: e.target.value || undefined })}
+                  className={`h-10 max-w-[230px] rounded-xl border bg-card px-2.5 text-sm text-foreground outline-none focus:border-primary cursor-pointer ${
+                    cityFilter ? "border-primary" : "border-border"
+                  }`}
+                >
+                  <option value="">
+                    Todas · {cityCounts.reduce((s, c) => s + c.total, 0)} planos
+                  </option>
+                  {cityCounts.map((c) => (
+                    <option key={c.city} value={c.city}>
+                      {c.city} · {c.total}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
               Ordenar
               <select
