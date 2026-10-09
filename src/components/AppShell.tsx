@@ -52,8 +52,6 @@ import {
   Monitor,
   Moon,
   Package,
-  PanelLeftClose,
-  PanelLeftOpen,
   Plus,
   Search,
   Settings,
@@ -160,8 +158,8 @@ export default function AppShell({ children }: { children: ReactNode; title?: st
   const { user, profile, loading, isAuthenticated } = useAuth();
   const { access, can } = usePermissions();
   const { preference: themePreference, setPreference: setThemePreference } = useTheme();
-  const [pinned, setPinned] = useState(true);
-  const [sidebarReady, setSidebarReady] = useState(false);
+  // Menu lateral sempre recolhido (só ícones); os submenus abrem ao passar o mouse.
+  const pinned = false;
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -196,28 +194,6 @@ export default function AppShell({ children }: { children: ReactNode; title?: st
       if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
     };
   }, []);
-
-  useEffect(() => {
-    if (pinned) setActiveFlyoutId(null);
-  }, [pinned]);
-
-  useEffect(() => {
-    try {
-      setPinned(window.localStorage.getItem("medcore:sidebar-pinned") !== "0");
-    } catch (error) {
-      console.warn("Não foi possível recuperar a preferência do menu.", error);
-    }
-    setSidebarReady(true);
-  }, []);
-
-  useEffect(() => {
-    if (!sidebarReady) return;
-    try {
-      window.localStorage.setItem("medcore:sidebar-pinned", pinned ? "1" : "0");
-    } catch (error) {
-      console.warn("Não foi possível guardar a preferência do menu.", error);
-    }
-  }, [pinned, sidebarReady]);
 
   useEffect(() => {
     macPlatform = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
@@ -416,16 +392,6 @@ export default function AppShell({ children }: { children: ReactNode; title?: st
         className="sticky top-0 z-(--z-header) flex h-16 items-center justify-between gap-2 border-b border-transparent bg-glass px-3 glass-blur transition-[border-color,box-shadow] duration-200 ease-(--ease-apple) data-[scrolled]:border-hairline data-[scrolled]:shadow-[0_10px_30px_-24px_rgb(29_29_31/0.45)] md:px-5"
       >
         <div className="flex min-w-0 items-center gap-2 md:gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="hidden rounded-full md:inline-flex"
-            onClick={() => setPinned((value) => !value)}
-            aria-label={pinned ? "Recolher menu" : "Expandir menu"}
-            aria-expanded={pinned}
-          >
-            {pinned ? <PanelLeftClose /> : <PanelLeftOpen />}
-          </Button>
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
               <Button
