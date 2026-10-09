@@ -42,6 +42,7 @@ import {
   FileDown,
 } from "lucide-react";
 import { TreatmentReportDialog } from "@/features/acompanhamentos/TreatmentReport";
+import { ReturnDialog } from "@/features/acompanhamentos/ReturnDialog";
 import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
 import { supabase } from "@/integrations/supabase/client";
@@ -101,6 +102,7 @@ function TreatmentDetailPage() {
   );
   const [loading, setLoading] = useState(true);
   const [reportOpen, setReportOpen] = useState(false);
+  const [returnOpen, setReturnOpen] = useState(false);
 
   useEffect(() => {
     if (search.tab && ["resumo", "injetaveis", "medicacoes", "evolucao", "financeiro"].includes(search.tab)) {
@@ -417,6 +419,19 @@ function TreatmentDetailPage() {
               </button>
               {treatment.status === "em_andamento" && (
                 <button
+                  onClick={() => setReturnOpen(true)}
+                  className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-semibold transition cursor-pointer ${
+                    treatment.next_return_date && treatment.next_return_date <= localDate()
+                      ? "border-destructive/40 text-destructive hover:bg-destructive/10"
+                      : "border-border text-foreground/80 hover:bg-muted"
+                  }`}
+                  title="Registrar retorno ou marcar a data do próximo"
+                >
+                  <CalIcon size={14} /> Retorno
+                </button>
+              )}
+              {treatment.status === "em_andamento" && (
+                <button
                   onClick={() => setStatus("pausado")}
                   className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-warning transition hover:bg-warning/10 cursor-pointer"
                 >
@@ -480,6 +495,18 @@ function TreatmentDetailPage() {
           })}
         </div>
 
+        {returnOpen && (
+          <ReturnDialog
+            treatment={treatment as any}
+            onClose={() => setReturnOpen(false)}
+            onSaved={() => {
+              queryClient.invalidateQueries({ queryKey: ["treatments-list"] });
+              queryClient.invalidateQueries({ queryKey: ["treatment-evolutions", id] });
+              queryClient.invalidateQueries({ queryKey: ["treatment-alerts"] });
+              load();
+            }}
+          />
+        )}
         {reportOpen && (
           <TreatmentReportDialog
             open

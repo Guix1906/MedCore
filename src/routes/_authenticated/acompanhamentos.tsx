@@ -50,6 +50,8 @@ import AppShell from "@/components/AppShell";
 import { confirmDialog } from "@/components/app/confirm-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ReturnDialog } from "@/features/acompanhamentos/ReturnDialog";
 import { refreshFinance, getFinancialSnapshot } from "@/features/finance/finance-api";
 import { isFreeBalance, remaining } from "@/features/finance/finance-math";
 import { patientsService, companyService } from "@/services/api";
@@ -102,6 +104,19 @@ type ListSearch = {
 };
 
 const NO_CITY = "Sem cidade";
+const ALL_CITIES = "__todas";
+
+/** Opção do seletor de cidade: nome à esquerda, quantidade de planos num selo à direita. */
+function CityOption({ name, count, muted }: { name: string; count: number; muted?: boolean }) {
+  return (
+    <span className="flex w-full min-w-[170px] items-center justify-between gap-3">
+      <span className={`truncate ${muted ? "italic text-muted-foreground" : ""}`}>{name}</span>
+      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-primary">
+        {count}
+      </span>
+    </span>
+  );
+}
 const LOWER_WORDS = new Set(["de", "da", "do", "das", "dos", "e"]);
 /** Cidade do paciente do plano, normalizada: "barra do corda " = "Barra do Corda". */
 const cityOf = (t: Treatment) => {
@@ -220,6 +235,7 @@ function AcompanhamentosPage() {
   const setViewMode = (view: "cards" | "kanban") => setSearch({ view });
   const [openNew, setOpenNew] = useState(false);
   const [selectedTreatment, setSelectedTreatment] = useState<Treatment | null>(null);
+  const [returnFor, setReturnFor] = useState<Treatment | null>(null);
 
   const {
     data: rows = [],
@@ -585,30 +601,35 @@ function AcompanhamentosPage() {
             </div>
             {/* Cidade: cada opção mostra quantos planos há nela (respeita o filtro de situação) */}
             {cityCounts.length > 0 && (
-              <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                <MapPin size={14} aria-hidden="true" />
-                Cidade
-                <select
-                  value={
-                    cityFilter
-                      ? (cityCounts.find((c) => sameCity(c.city, cityFilter))?.city ?? cityFilter)
-                      : ""
-                  }
-                  onChange={(e) => setSearch({ cidade: e.target.value || undefined })}
-                  className={`h-10 max-w-[230px] rounded-xl border bg-card px-2.5 text-sm text-foreground outline-none focus:border-primary cursor-pointer ${
-                    cityFilter ? "border-primary" : "border-border"
-                  }`}
+              <Select
+                value={
+                  cityFilter
+                    ? (cityCounts.find((c) => sameCity(c.city, cityFilter))?.city ?? cityFilter)
+                    : ALL_CITIES
+                }
+                onValueChange={(v) => setSearch({ cidade: v === ALL_CITIES ? undefined : v })}
+              >
+                <SelectTrigger
+                  aria-label="Filtrar por cidade"
+                  className={`h-10 w-[220px] rounded-xl bg-card text-sm ${cityFilter ? "border-primary text-primary" : ""}`}
                 >
-                  <option value="">
-                    Todas · {cityCounts.reduce((s, c) => s + c.total, 0)} planos
-                  </option>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <MapPin size={15} className="shrink-0 text-muted-foreground" />
+                    <SelectValue />
+                  </span>
+                </SelectTrigger>
+                <SelectContent className="max-h-[340px] rounded-xl">
+                  <SelectItem value={ALL_CITIES} className="rounded-lg py-2">
+                    <CityOption name="Todas as cidades" count={cityCounts.reduce((s, c) => s + c.total, 0)} />
+                  </SelectItem>
+                  <div className="my-1 h-px bg-border" />
                   {cityCounts.map((c) => (
-                    <option key={c.city} value={c.city}>
-                      {c.city} · {c.total}
-                    </option>
+                    <SelectItem key={c.city} value={c.city} className="rounded-lg py-2">
+                      <CityOption name={c.city} count={c.total} muted={c.city === NO_CITY} />
+                    </SelectItem>
                   ))}
-                </select>
-              </label>
+                </SelectContent>
+              </Select>
             )}
             <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
               Ordenar
@@ -845,6 +866,24 @@ function AcompanhamentosPage() {
                         {/* Footer do Card com Ações Rápidas */}
                         <div className="mt-4 pt-3 border-t border-border-soft flex items-center justify-between">
                           <div className="flex items-center gap-2">
+                            {t.status === "em_andamento" && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setReturnFor(t);
+                                }}
+                                className={`h-7.5 px-2.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1 transition cursor-pointer ${
+                                  isReturnLate(t)
+                                    ? "bg-destructive/10 text-destructive hover:bg-destructive/15"
+                                    : "bg-primary/10 text-primary hover:bg-primary/15"
+                                }`}
+                                title="Registrar retorno ou marcar a data do próximo"
+                              >
+                                <CalIcon size={13} />
+                                <span>Retorno</span>
+                              </button>
+                            )}
                             {t.patients?.phone && (
                               <button
                                 type="button"
@@ -1020,6 +1059,10 @@ function AcompanhamentosPage() {
       </div>
 
       {openNew && <NewTreatmentModal onClose={() => setOpenNew(false)} onCreated={load} />}
+
+      {returnFor && (
+        <ReturnDialog treatment={returnFor} onClose={() => setReturnFor(null)} onSaved={load} />
+      )}
 
       {selectedTreatment && (
         <TreatmentManageModal
