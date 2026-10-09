@@ -28,7 +28,17 @@ export const DEFAULT_BRANDING: LoginBranding = {
   tagline: "Cuidado nutrológico com precisão, do primeiro atendimento ao acompanhamento.",
 };
 
-export const LAST_CLINIC_KEY = "medcore:last-clinic";
+/** Tela de login (slug) por onde o usuário entrou; só é gravada ao entrar pelo link do cliente. */
+export const LAST_CLINIC_KEY = "medcore:login-clinic";
+
+// Versão anterior gravava ao só abrir o link do cliente e prendia o /auth nele: descarta
+if (typeof window !== "undefined") {
+  try {
+    window.localStorage.removeItem("medcore:last-clinic");
+  } catch {
+    /* navegador sem armazenamento */
+  }
+}
 
 const HEX = /^#[0-9a-f]{6}$/i;
 const s = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);

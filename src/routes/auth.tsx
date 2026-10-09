@@ -341,6 +341,14 @@ export function AuthScreen({ search, branding }: { search: AuthSearch; branding:
         invalidateAuthRouteCache();
         // Nada do usuário anterior (outra clínica) pode sobrar na memória desta sessão
         clearUserScopedData(queryClient);
+        // Lembra a tela de login usada: quem entrou pelo link do cliente volta a ela ao sair;
+        // quem entrou pelo login geral (/auth) não é mais redirecionado.
+        try {
+          if (branding.slug) window.localStorage.setItem(LAST_CLINIC_KEY, branding.slug);
+          else window.localStorage.removeItem(LAST_CLINIC_KEY);
+        } catch {
+          /* navegador sem armazenamento */
+        }
         if (authSession) {
           queryClient.setQueryData(["auth", "session"], authSession);
         }

@@ -1,7 +1,6 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
-import { useEffect } from "react";
 import { AuthScreen, validateAuthSearch } from "@/routes/auth";
-import { LAST_CLINIC_KEY, fetchLoginBranding } from "@/features/branding/login-branding";
+import { fetchLoginBranding } from "@/features/branding/login-branding";
 
 /**
  * Login com a identidade visual de um cliente: meedcore.vercel.app/<slug>.
@@ -36,13 +35,5 @@ export const Route = createFileRoute("/$clinica")({
 function ClinicLoginPage() {
   const { branding } = Route.useLoaderData();
   const search = Route.useSearch();
-  // Ao sair do sistema, /auth traz a pessoa de volta para esta tela.
-  useEffect(() => {
-    try {
-      if (branding.slug) window.localStorage.setItem(LAST_CLINIC_KEY, branding.slug);
-    } catch {
-      /* navegador sem armazenamento: segue sem lembrar */
-    }
-  }, [branding.slug]);
   return <AuthScreen search={search} branding={branding} />;
 }
