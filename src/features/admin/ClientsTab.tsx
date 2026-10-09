@@ -632,7 +632,7 @@ function BrandingSection({
             style={
               brand.logo_white
                 ? { filter: "brightness(0) invert(1)" }
-                : { background: "rgb(255 255 255 / 94%)", padding: "10px 14px", borderRadius: 14 }
+                : { background: "#fff", padding: "12px 18px", borderRadius: 16, boxShadow: "0 12px 28px -14px rgb(0 0 0 / 50%)" }
             }
           />
         ) : (
