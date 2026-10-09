@@ -43,6 +43,7 @@ import {
   UserPlus,
   ChevronDown,
   Check,
+  MapPin,
 } from "lucide-react";
 import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
@@ -82,6 +83,7 @@ export const Route = createFileRoute("/_authenticated/acompanhamentos")({
       filtro: pick(search.filtro, QUICK_FILTERS),
       ordem: pick(search.ordem, SORTS),
       view: pick(search.view, ["cards", "kanban"] as const),
+      cidade: typeof search.cidade === "string" && search.cidade ? search.cidade : undefined,
     };
   },
   component: AcompanhamentosPage,
@@ -96,7 +98,17 @@ type ListSearch = {
   filtro?: (typeof QUICK_FILTERS)[number];
   ordem?: (typeof SORTS)[number];
   view?: "cards" | "kanban";
+  cidade?: string;
 };
+
+const NO_CITY = "Sem cidade";
+/** Cidade do paciente do plano, normalizada para agrupar ("teresina " = "Teresina"). */
+const cityOf = (t: Treatment) => {
+  const c = (t.patients?.city ?? "").trim().replace(/\s+/g, " ");
+  return c ? c.charAt(0).toLocaleUpperCase("pt-BR") + c.slice(1) : NO_CITY;
+};
+const sameCity = (a: string, b: string) =>
+  a.localeCompare(b, "pt-BR", { sensitivity: "base" }) === 0;
 const SORT_LABEL: Record<(typeof SORTS)[number], string> = {
   retorno: "Próximo retorno",
   prazo: "Fim do protocolo",
@@ -127,7 +139,7 @@ export type Treatment = {
   next_return_date: string | null;
   notes: string | null;
   created_at: string;
-  patients?: { name: string; phone?: string | null } | null;
+  patients?: { name: string; phone?: string | null; city?: string | null } | null;
   doctors?: { name: string } | null;
 };
 
@@ -215,7 +227,7 @@ function AcompanhamentosPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("treatments")
-        .select("*, patients(name, phone), doctors(name)")
+        .select("*, patients(name, phone, city), doctors(name)")
         .order("created_at", { ascending: false });
       if (error) throw error;
       const list = data as Treatment[];
@@ -228,7 +240,7 @@ function AcompanhamentosPage() {
           if (match) {
             return {
               ...t,
-              patients: { name: match.name, phone: match.phone },
+              patients: { name: match.name, phone: match.phone, city: (match as { city?: string | null }).city ?? null },
             };
           }
         }
@@ -290,9 +302,36 @@ function AcompanhamentosPage() {
     atrasado: isPaymentLate,
   };
 
+  const cityFilter = search.cidade;
+  // Mesmos filtros da lista, menos a cidade: base da contagem "Planos por cidade"
+  const passesStatus = (r: Treatment) => {
+    if (quickFilter) return quickTests[quickFilter](r);
+    return viewMode === "kanban" || statusFilter === "todos" || r.status === statusFilter;
+  };
+
+  const cityCounts = useMemo(() => {
+    const map = new Map<string, { city: string; total: number; ativos: number }>();
+    for (const r of rows) {
+      if (!passesStatus(r)) continue;
+      const city = cityOf(r);
+      const key = city.toLocaleLowerCase("pt-BR");
+      const c = map.get(key) ?? { city, total: 0, ativos: 0 };
+      c.total++;
+      if (r.status === "em_andamento") c.ativos++;
+      map.set(key, c);
+    }
+    return [...map.values()].sort(
+      (a, b) =>
+        Number(a.city === NO_CITY) - Number(b.city === NO_CITY) ||
+        b.total - a.total ||
+        a.city.localeCompare(b.city, "pt-BR"),
+    );
+  }, [rows, statusFilter, quickFilter, viewMode, treatmentPaymentsMap]);
+
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     const list = rows.filter((r) => {
+      if (cityFilter && !sameCity(cityOf(r), cityFilter)) return false;
       // Atalho de situação substitui o filtro de status (já considera só planos ativos)
       if (quickFilter) {
         if (!quickTests[quickFilter](r)) return false;
@@ -307,7 +346,8 @@ function AcompanhamentosPage() {
       return (
         r.title.toLowerCase().includes(s) ||
         r.patients?.name?.toLowerCase().includes(s) ||
-        r.doctors?.name?.toLowerCase().includes(s)
+        r.doctors?.name?.toLowerCase().includes(s) ||
+        r.patients?.city?.toLowerCase().includes(s)
       );
     });
     const byDate = (a: string | null, b: string | null) => (a || "9999").localeCompare(b || "9999");
@@ -320,7 +360,7 @@ function AcompanhamentosPage() {
             ? byDate(a.end_date, b.end_date)
             : byDate(a.next_return_date, b.next_return_date),
     );
-  }, [rows, q, statusFilter, quickFilter, sortBy, viewMode, treatmentPaymentsMap]);
+  }, [rows, q, statusFilter, quickFilter, sortBy, viewMode, treatmentPaymentsMap, cityFilter]);
 
   const multipleDoctors = useMemo(
     () => new Set(rows.map((r) => r.doctor_id).filter(Boolean)).size > 1,
@@ -518,6 +558,51 @@ function AcompanhamentosPage() {
           ))}
         </div>
 
+        {/* Planos por cidade: cada cidade filtra a lista (clicar de novo limpa) */}
+        {cityCounts.length > 0 && (
+          <section aria-label="Planos por cidade" className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <h2 className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase text-muted-foreground">
+                <MapPin size={13} /> Planos por cidade
+              </h2>
+              {cityFilter && (
+                <button
+                  type="button"
+                  onClick={() => setSearch({ cidade: undefined })}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline cursor-pointer"
+                >
+                  Ver todas as cidades <X size={12} />
+                </button>
+              )}
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {cityCounts.map((c) => {
+                const active = !!cityFilter && sameCity(c.city, cityFilter);
+                return (
+                  <button
+                    key={c.city}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setSearch({ cidade: active ? undefined : c.city })}
+                    className={`shrink-0 rounded-xl border bg-card px-3.5 py-2 text-left shadow-2xs transition cursor-pointer hover:border-primary/40 ${
+                      active ? "border-primary ring-2 ring-primary/20" : "border-border/80"
+                    } ${c.city === NO_CITY ? "border-dashed" : ""}`}
+                  >
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-sm font-semibold text-foreground">{c.city}</span>
+                      <span className="text-lg font-semibold tabular-nums text-primary">{c.total}</span>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      {c.total === 1 ? "plano" : "planos"}
+                      {c.ativos > 0 && c.ativos !== c.total ? ` · ${c.ativos} em andamento` : ""}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
         {/* Barra de Filtros e Busca */}
         <div className="space-y-2.5">
           <div className="flex flex-wrap items-center gap-2">
@@ -640,6 +725,9 @@ function AcompanhamentosPage() {
                               </div>
                               <div className="text-sm text-muted-foreground truncate mt-0.5">
                                 {t.title}
+                              </div>
+                              <div className="mt-0.5 inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                <MapPin size={11} /> {cityOf(t)}
                               </div>
                             </div>
                           </div>

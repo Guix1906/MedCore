@@ -39,7 +39,9 @@ import {
   ChevronRight,
   ExternalLink,
   Syringe,
+  FileDown,
 } from "lucide-react";
+import { TreatmentReportDialog } from "@/features/acompanhamentos/TreatmentReport";
 import { toast } from "sonner";
 import AppShell from "@/components/AppShell";
 import { supabase } from "@/integrations/supabase/client";
@@ -98,6 +100,7 @@ function TreatmentDetailPage() {
     search.tab === "medicacoes" ? "injetaveis" : search.tab || "resumo",
   );
   const [loading, setLoading] = useState(true);
+  const [reportOpen, setReportOpen] = useState(false);
 
   useEffect(() => {
     if (search.tab && ["resumo", "injetaveis", "medicacoes", "evolucao", "financeiro"].includes(search.tab)) {
@@ -406,11 +409,11 @@ function TreatmentDetailPage() {
                 <FileText size={14} /> Prontuário
               </Link>
               <button
-                onClick={sendWhatsAppSchedule}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-success transition hover:bg-success/10 cursor-pointer"
-                title="Enviar cronograma pelo WhatsApp"
+                onClick={() => setReportOpen(true)}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-primary transition hover:bg-primary/10 cursor-pointer"
+                title="Gerar o resumo do plano em PDF, com gráficos"
               >
-                <Send size={13} /> Cronograma
+                <FileDown size={14} /> Resumo do plano
               </button>
               {treatment.status === "em_andamento" && (
                 <button
@@ -476,6 +479,17 @@ function TreatmentDetailPage() {
             );
           })}
         </div>
+
+        {reportOpen && (
+          <TreatmentReportDialog
+            open
+            onClose={() => setReportOpen(false)}
+            treatment={treatment}
+            meds={meds}
+            planTitles={planTitles}
+            financials={planFinancials}
+          />
+        )}
 
         {/* Conteúdo das Abas */}
         <AnimatePresence mode="wait">

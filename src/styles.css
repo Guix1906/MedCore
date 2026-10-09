@@ -1242,3 +1242,28 @@ a:focus:not(:focus-visible) {
     animation: none !important;
   }
 }
+
+/* Resumo do plano em PDF: na impressão, só o relatório aparece (folha A4, cores fiéis). */
+.print-report-root {
+  display: none;
+}
+@media print {
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+  body.printing-report > *:not(.print-report-root) {
+    display: none !important;
+  }
+  body.printing-report .print-report-root {
+    display: block;
+  }
+  body.printing-report {
+    background: #fff !important;
+  }
+  .print-report-root .treatment-report {
+    padding: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
