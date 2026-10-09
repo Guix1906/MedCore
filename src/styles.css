@@ -552,6 +552,11 @@ a:focus:not(:focus-visible) {
   /* Logo colorida do cliente: sem o filtro que pinta de branco. */
   .auth-plate-logo[data-original] {
     filter: none;
+    opacity: 1;
+    padding: 1.25rem 1.5rem;
+    border-radius: 1.5rem;
+    background: rgb(255 255 255 / 94%);
+    box-shadow: 0 18px 40px -20px rgb(0 0 0 / 45%);
   }
   .auth-card h1 {
     color: var(--auth-ink);

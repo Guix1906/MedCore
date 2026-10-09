@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toAdminError } from "./admin-api";
+import { extractLogoPalette } from "@/features/branding/extract-palette";
 import {
   createClientUser,
   listClients,
@@ -520,7 +521,7 @@ function BrandingSection({
   onLogo,
 }: {
   brand: ClientBranding;
-  setBrand: (b: ClientBranding) => void;
+  setBrand: React.Dispatch<React.SetStateAction<ClientBranding>>;
   slugHint: string;
   logoPreview: string;
   onLogo: (f: File | null) => void;
@@ -579,8 +580,20 @@ function BrandingSection({
                 return;
               }
               onLogo(f);
+              if (!f) return;
+              void extractLogoPalette(f)
+                .then((p) => {
+                  setBrand((b) => ({ ...b, primary: p.primary, secondary: p.secondary, logo_white: p.logoWhite }));
+                  toast.success("Identidade visual detectada pela logo.", {
+                    description: "Cores e estilo da logo aplicados. Ajuste abaixo se quiser.",
+                  });
+                })
+                .catch(() => toast.error("Não consegui ler as cores da logo. Escolha as cores manualmente."));
             }}
           />
+          <p className="text-xs text-muted-foreground">
+            Ao enviar a logo, as cores e o estilo da tela são definidos automaticamente a partir dela.
+          </p>
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <input
               type="checkbox"
@@ -616,7 +629,11 @@ function BrandingSection({
             src={logoPreview}
             alt="Prévia da logo"
             className="max-h-20 max-w-[70%] object-contain"
-            style={brand.logo_white ? { filter: "brightness(0) invert(1)" } : undefined}
+            style={
+              brand.logo_white
+                ? { filter: "brightness(0) invert(1)" }
+                : { background: "rgb(255 255 255 / 94%)", padding: "10px 14px", borderRadius: 14 }
+            }
           />
         ) : (
           <span className="text-sm text-white/80">Sem logo: aparece a do consultório padrão</span>
