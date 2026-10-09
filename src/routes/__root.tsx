@@ -17,6 +17,8 @@ import SmoothScroll from "@/components/motion/SmoothScroll";
 import { useTheme } from "@/hooks/use-theme";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import { purgeLocalClinicalData } from "@/lib/legacy-local-data";
+import { clearUserScopedData } from "@/lib/clear-user-data";
+import { getStoredUser } from "@/services/api/api-client";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -225,10 +227,22 @@ function RootComponent() {
   }, []);
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+    // Dados de uma clínica nunca podem aparecer para o usuário de outra: ao sair ou ao trocar
+    // de usuário, apaga todo o cache (não basta invalidar: a tela mostraria os dados antigos
+    // enquanto recarrega) e o perfil guardado no navegador.
+    let lastUserId: string | null = null;
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      const userId = session?.user.id ?? null;
+      const switched = !!userId && !!lastUserId && userId !== lastUserId;
+      const stored = getStoredUser();
+      if (event === "SIGNED_OUT" || switched || (userId && stored?.id && stored.id !== userId)) {
+        clearUserScopedData(queryClient);
+      }
+      if (userId) lastUserId = userId;
+      else if (event === "SIGNED_OUT") lastUserId = null;
       if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
       router.invalidate();
-      if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
+      if (event !== "SIGNED_OUT" && !switched) queryClient.invalidateQueries();
     });
     return () => sub.subscription.unsubscribe();
   }, [router, queryClient]);

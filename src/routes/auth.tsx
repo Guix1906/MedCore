@@ -9,6 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { invalidateAuthRouteCache } from "@/routes/_authenticated/route";
 import { qk } from "@/lib/query-keys";
 import { getSiteOrigin } from "@/services/site-origin";
+import { clearUserScopedData } from "@/lib/clear-user-data";
 import {
   DEFAULT_BRANDING,
   LAST_CLINIC_KEY,
@@ -338,15 +339,11 @@ export function AuthScreen({ search, branding }: { search: AuthSearch; branding:
         if (error) throw error;
         const authSession = sbData.session;
         invalidateAuthRouteCache();
+        // Nada do usuário anterior (outra clínica) pode sobrar na memória desta sessão
+        clearUserScopedData(queryClient);
         if (authSession) {
           queryClient.setQueryData(["auth", "session"], authSession);
         }
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ["auth"] }),
-          queryClient.invalidateQueries({ queryKey: qk.access.all() }),
-          queryClient.invalidateQueries({ queryKey: ["active-company"] }),
-          queryClient.invalidateQueries({ queryKey: ["company-members"] }),
-        ]);
         toast.success("Bem-vindo de volta ao MedCore!");
         await router.invalidate();
         goToTarget();

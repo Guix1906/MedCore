@@ -65,6 +65,11 @@ export function deleteStoredLocalPatient(id: string): void {
   }
 }
 
+/** Esvazia os pacientes em memória (troca de usuário/clínica). */
+export function clearStoredLocalPatients(): void {
+  inMemoryPatientsMap.clear();
+}
+
 export function mergeWithLocalPatients<T extends { id: string }>(remotePatients: T[]): T[] {
   const local = Array.from(inMemoryPatientsMap.values()) as unknown as T[];
   if (!local.length) return remotePatients;
